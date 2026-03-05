@@ -1,15 +1,18 @@
-import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
-import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { ConfigService } from '@nestjs/config';
+import { NestFactory, Reflector } from '@nestjs/core';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import helmet from 'helmet';
 import { AppModule } from './app.module';
+import { HttpExceptionFilter } from './common/filters/http-exception.filter';
+import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { cors: false });
+  const configService = app.get(ConfigService);
 
-  // Global prefix
-  app.setGlobalPrefix('api/v1');
+  app.use(helmet());
 
-  // Validation
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -18,25 +21,32 @@ async function bootstrap() {
     }),
   );
 
-  // CORS
+  app.useGlobalFilters(new HttpExceptionFilter());
+  app.useGlobalInterceptors(new ResponseInterceptor(),);
+
   app.enableCors({
-    origin: process.env.ALLOWED_ORIGINS?.split(',') || '*',
+    origin: (configService.get<string>('ALLOWED_ORIGINS', 'http://localhost:3000') || '')
+      .split(',')
+      .map((item) => item.trim()),
     credentials: true,
   });
 
-  // Swagger docs
-  const config = new DocumentBuilder()
-    .setTitle('Kilimanjaro Auth Service')
-    .setDescription('Authentication & Authorization API')
-    .setVersion('1.0')
-    .addBearerAuth()
-    .build();
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/docs', app, document);
+  app.setGlobalPrefix('api/v1');
 
-  const port = process.env.PORT || 3001;
+  if (configService.get<string>('NODE_ENV') !== 'production') {
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle('Kilimanjaro Auth Service')
+      .setDescription('Authentication and authorization service')
+      .setVersion('1.0.0')
+      .addBearerAuth()
+      .build();
+
+    const document = SwaggerModule.createDocument(app, swaggerConfig);
+    SwaggerModule.setup('auth/docs', app, document);
+  }
+
+  const port = Number(configService.get<string>('PORT', '3001'));
   await app.listen(port);
-  console.log(`🔐 Auth Service running on port ${port}`);
 }
 
 bootstrap();

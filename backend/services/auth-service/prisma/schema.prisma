@@ -1,14 +1,13 @@
 generator client {
-  provider = "prisma-client-js"
-  output   = "../node_modules/.prisma/auth-client"
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  schemas  = ["auth"]
 }
-
-// ─── Enums ────────────────────────────────────────────────────────────────────
 
 enum Role {
   SYSTEM_ADMIN
@@ -21,67 +20,101 @@ enum Role {
   TEACHER
   PARENT
   STUDENT
+
+  @@schema("auth")
 }
 
-enum LoginType {
-  EMAIL
-  REGISTRATION_NUMBER
-}
+enum AuditAction {
+  LOGIN_SUCCESS
+  LOGIN_FAILED
+  LOGOUT
+  TOKEN_REFRESHED
+  PASSWORD_RESET_REQUESTED
+  PASSWORD_RESET_COMPLETED
+  PASSWORD_CHANGED
+  ACCOUNT_LOCKED
+  ACCOUNT_UNLOCKED
+  USER_CREATED
+  USER_DEACTIVATED
+  USER_ACTIVATED
+  USER_ROLE_CHANGED
 
-// ─── Models ───────────────────────────────────────────────────────────────────
+  @@schema("auth")
+}
 
 model User {
-  id                 String    @id @default(uuid())
-  email              String?   @unique  // null for students
-  registrationNumber String?   @unique  // only for students
-  passwordHash       String
-  role               Role
-  loginType          LoginType
-  schoolId           String
-  isActive           Boolean   @default(true)
-  isEmailVerified    Boolean   @default(false)
-  lastLoginAt        DateTime?
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
+  id                   String               @id @default(uuid())
+  email                String?              @unique
+  registrationNumber   String?              @unique
+  passwordHash         String
+  role                 Role
+  firstName            String
+  lastName             String
+  phoneNumber          String?
+  isActive             Boolean              @default(true)
+  isEmailVerified      Boolean              @default(false)
+  failedLoginAttempts  Int                  @default(0)
+  lockedUntil          DateTime?
+  lastLoginAt          DateTime?
+  lastLoginIp          String?
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  createdBy            String?
+  refreshTokens        RefreshToken[]
+  passwordResetTokens  PasswordResetToken[]
+  auditLogs            AuditLog[]
 
-  refreshTokens RefreshToken[]
-  auditLogs     AuditLog[]
-
+  @@index([role, isActive])
+  @@index([createdAt])
   @@map("users")
+  @@schema("auth")
 }
 
 model RefreshToken {
-  id        String   @id @default(uuid())
-  token     String   @unique
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  expiresAt DateTime
-  isRevoked Boolean  @default(false)
-  createdAt DateTime @default(now())
+  id         String   @id @default(uuid())
+  tokenHash  String   @unique
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  ipAddress  String?
+  userAgent  String?
+  isRevoked  Boolean  @default(false)
 
+  @@index([userId, isRevoked])
+  @@index([expiresAt])
   @@map("refresh_tokens")
-}
-
-model AuditLog {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  action    String   // e.g. LOGIN, LOGOUT, PASSWORD_CHANGE, TOKEN_REFRESH
-  ipAddress String?
-  userAgent String?
-  meta      Json?
-  createdAt DateTime @default(now())
-
-  @@map("audit_logs")
+  @@schema("auth")
 }
 
 model PasswordResetToken {
-  id        String   @id @default(uuid())
-  email     String
-  token     String   @unique
-  expiresAt DateTime
-  isUsed    Boolean  @default(false)
-  createdAt DateTime @default(now())
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  otpHash    String
+  expiresAt  DateTime
+  isUsed     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  ipAddress  String?
 
+  @@index([userId, isUsed])
+  @@index([expiresAt])
   @@map("password_reset_tokens")
+  @@schema("auth")
+}
+
+model AuditLog {
+  id         String       @id @default(uuid())
+  userId     String?
+  user       User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action     AuditAction
+  ipAddress  String?
+  userAgent  String?
+  metadata   Json?
+  createdAt  DateTime     @default(now())
+
+  @@index([userId])
+  @@index([action, createdAt])
+  @@map("audit_logs")
+  @@schema("auth")
 }

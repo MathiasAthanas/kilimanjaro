@@ -1,19 +1,21 @@
-import { IsEmail, IsOptional, IsString, MinLength } from 'class-validator';
-import { ApiPropertyOptional, ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsEmail, IsOptional, IsString, MinLength, ValidateIf } from 'class-validator';
 
 export class LoginDto {
-  @ApiPropertyOptional({ description: 'Email (all roles except students)' })
+  @ApiPropertyOptional()
+  @ValidateIf((o: LoginDto) => !o.registrationNumber)
   @IsEmail()
   @IsOptional()
   email?: string;
 
-  @ApiPropertyOptional({ description: 'Registration number (students only)' })
+  @ApiPropertyOptional()
+  @ValidateIf((o: LoginDto) => !o.email)
   @IsString()
   @IsOptional()
-  regNumber?: string;
+  registrationNumber?: string;
 
   @ApiProperty()
   @IsString()
-  @MinLength(6)
+  @MinLength(8)
   password: string;
 }

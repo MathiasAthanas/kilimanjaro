@@ -22,5 +22,14 @@
       "@kilimanjaro/utils": ["../../shared/utils/index.ts"],
       "@kilimanjaro/contracts": ["../../shared/contracts/index.ts"]
     }
-  }
+  },
+  "exclude": [
+    "dist",
+    "node_modules",
+    "src/tokens/**",
+    "src/common/guards/**",
+    "src/common/decorators/**",
+    "src/auth/jwt.strategy.ts",
+    "src/auth/audit.service.ts"
+  ]
 }

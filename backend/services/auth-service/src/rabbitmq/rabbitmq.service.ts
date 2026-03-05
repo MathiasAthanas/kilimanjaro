@@ -1,42 +1,41 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as amqplib from 'amqplib';
-import { Queue } from '@kilimanjaro/types';
 
 @Injectable()
 export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
-  private connection: amqplib.Connection;
-  private channel: amqplib.Channel;
   private readonly logger = new Logger(RabbitMQService.name);
+  private connection: amqplib.ChannelModel;
+  private channel: amqplib.Channel;
+  private readonly exchange = 'auth.events';
 
-  constructor(private config: ConfigService) {}
+  constructor(private readonly configService: ConfigService) {}
 
-  async onModuleInit() {
+  async onModuleInit(): Promise<void> {
     try {
-      const url = this.config.get<string>('RABBITMQ_URL', 'amqp://localhost:5672');
+      const url = this.configService.get<string>('RABBITMQ_URL', 'amqp://localhost:5672');
       this.connection = await amqplib.connect(url);
       this.channel = await this.connection.createChannel();
-
-      // Assert all queues this service will publish to
-      await this.channel.assertQueue(Queue.AUTH_EVENTS, { durable: true });
-      await this.channel.assertQueue(Queue.NOTIFICATION, { durable: true });
-
-      this.logger.log('✅ RabbitMQ connected');
+      await this.channel.assertExchange(this.exchange, 'topic', { durable: true });
+      this.logger.log('RabbitMQ connected');
     } catch (error) {
-      this.logger.error('❌ RabbitMQ connection failed', error);
+      this.logger.warn(`RabbitMQ unavailable; publishing disabled (${(error as Error).message})`);
     }
   }
 
-  async onModuleDestroy() {
+  async onModuleDestroy(): Promise<void> {
     await this.channel?.close();
     await this.connection?.close();
   }
 
-  publish<T>(queue: Queue, event: string, data: T): void {
-    const message = JSON.stringify({ event, data, timestamp: new Date() });
-    this.channel?.sendToQueue(queue, Buffer.from(message), {
+  async publish(routingKey: string, payload: Record<string, unknown>): Promise<void> {
+    if (!this.channel) {
+      return;
+    }
+
+    this.channel.publish(this.exchange, routingKey, Buffer.from(JSON.stringify(payload)), {
+      contentType: 'application/json',
       persistent: true,
     });
-    this.logger.debug(`📤 Published [${event}] to ${queue}`);
   }
 }

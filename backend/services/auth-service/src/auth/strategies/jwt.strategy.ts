@@ -2,23 +2,40 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
-import { UsersService } from '../../users/users.service';
-import { JwtPayload } from '@kilimanjaro/types';
+import { RedisService } from '../../redis/redis.service';
+
+interface JwtPayload {
+  sub: string;
+  role: string;
+  email: string | null;
+  registrationNumber: string | null;
+  jti: string;
+  exp?: number;
+  iat?: number;
+}
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor(config: ConfigService, private users: UsersService) {
+  constructor(
+    configService: ConfigService,
+    private readonly redisService: RedisService,
+  ) {
+    const publicKey = (configService.get<string>('JWT_PUBLIC_KEY') || '').replace(/\\n/g, '\n');
+
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
-      secretOrKey: config.get('JWT_ACCESS_SECRET'),
+      ignoreExpiration: false,
+      secretOrKey: publicKey,
+      algorithms: ['RS256'],
     });
   }
 
-  async validate(payload: JwtPayload) {
-    const user = await this.users.findById(payload.sub);
-    if (!user || !user.isActive) {
-      throw new UnauthorizedException('User not found or inactive');
+  async validate(payload: JwtPayload): Promise<JwtPayload> {
+    const blacklisted = await this.redisService.get(`auth:blacklist:jti:${payload.jti}`);
+    if (blacklisted) {
+      throw new UnauthorizedException('Token has been revoked');
     }
-    return payload; // attached to req.user
+
+    return payload;
   }
 }

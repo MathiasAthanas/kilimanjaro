@@ -4,26 +4,47 @@ import { PassportModule } from '@nestjs/passport';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
-import { JwtStrategy } from './jwt.strategy';
 import { UsersModule } from '../users/users.module';
-import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import { RolesGuard } from '../common/guards/roles.guard';
+import { PrismaModule } from '../prisma/prisma.module';
+import { RedisModule } from '../redis/redis.module';
+import { AuditModule } from '../audit/audit.module';
+import { RabbitMqModule } from '../rabbitmq/rabbitmq.module';
+import { JwtStrategy } from './strategies/jwt.strategy';
+import { LocalStrategy } from './strategies/local.strategy';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { RolesGuard } from './guards/roles.guard';
+import { InternalApiGuard } from './guards/internal-api.guard';
 
 @Module({
   imports: [
-    UsersModule,
+    ConfigModule,
     PassportModule,
+    PrismaModule,
+    UsersModule,
+    RedisModule,
+    AuditModule,
+    RabbitMqModule,
     JwtModule.registerAsync({
-      imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        secret: config.get('JWT_SECRET'),
-        signOptions: { expiresIn: config.get('JWT_EXPIRES_IN', '15m') },
+      useFactory: (configService: ConfigService) => ({
+        privateKey: (configService.get<string>('JWT_PRIVATE_KEY') || '').replace(/\\n/g, '\n'),
+        publicKey: (configService.get<string>('JWT_PUBLIC_KEY') || '').replace(/\\n/g, '\n'),
+        signOptions: {
+          algorithm: 'RS256',
+          expiresIn: configService.get<string>('JWT_ACCESS_EXPIRES_IN', '15m'),
+        },
       }),
     }),
   ],
+  providers: [
+    AuthService,
+    JwtStrategy,
+    LocalStrategy,
+    JwtAuthGuard,
+    RolesGuard,
+    InternalApiGuard,
+  ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, JwtAuthGuard, RolesGuard],
-  exports: [AuthService, JwtAuthGuard, RolesGuard],
+  exports: [AuthService, JwtAuthGuard, RolesGuard, InternalApiGuard],
 })
 export class AuthModule {}
