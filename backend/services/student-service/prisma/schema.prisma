@@ -1,11 +1,434 @@
 generator client {
   provider = "prisma-client-js"
-  output   = "../node_modules/.prisma/student-client"
+  previewFeatures = ["multiSchema"]
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  schemas  = ["students"]
 }
 
-// TODO: Add student models here
+enum Gender {
+  MALE
+  FEMALE
+
+  @@schema("students")
+}
+
+enum StudentStatus {
+  ACTIVE
+  GRADUATED
+  TRANSFERRED
+  SUSPENDED
+  EXPELLED
+  DECEASED
+
+  @@schema("students")
+}
+
+enum GuardianRelationship {
+  FATHER
+  MOTHER
+  GUARDIAN
+  SIBLING
+  OTHER
+
+  @@schema("students")
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+
+  @@schema("students")
+}
+
+enum DisciplineCategory {
+  MISCONDUCT
+  BULLYING
+  CHEATING
+  ABSENTEEISM
+  VIOLENCE
+  PROPERTY_DAMAGE
+  DISRESPECT
+  OTHER
+
+  @@schema("students")
+}
+
+enum DisciplineSeverity {
+  MINOR
+  MODERATE
+  SEVERE
+
+  @@schema("students")
+}
+
+enum TrendDirection {
+  IMPROVING
+  DECLINING
+  STABLE
+  VOLATILE
+  INSUFFICIENT_DATA
+
+  @@schema("students")
+}
+
+enum AlertType {
+  CHRONIC_UNDERPERFORMER
+  SUDDEN_DECLINE
+  RAPID_IMPROVEMENT
+  AT_RISK
+  FAILURE_RISK
+  CONSISTENT_EXCELLENCE
+  VOLATILE_PERFORMANCE
+  ATTENDANCE_IMPACT
+  RECOVERED
+  CONSECUTIVE_DECLINE
+
+  @@schema("students")
+}
+
+enum AlertSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+
+  @@schema("students")
+}
+
+enum PairingSuggestedBy {
+  SYSTEM
+  TEACHER
+  HOD
+  PRINCIPAL
+
+  @@schema("students")
+}
+
+enum PairingStatus {
+  SUGGESTED
+  ACTIVE
+  COMPLETED
+  REJECTED
+  EXPIRED
+
+  @@schema("students")
+}
+
+model Student {
+  id                 String                @id @default(uuid())
+  registrationNumber String                @unique
+  authUserId         String                @unique
+  firstName          String
+  middleName         String?
+  lastName           String
+  dateOfBirth        DateTime
+  gender             Gender
+  nationality        String                @default("Tanzanian")
+  profilePhotoUrl    String?
+  status             StudentStatus         @default(ACTIVE)
+  admissionDate      DateTime
+  graduationDate     DateTime?
+  transferDate       DateTime?
+  transferSchool     String?
+  notes              String?
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+  createdBy          String
+  enrolments         Enrolment[]
+  parentLinks        StudentGuardianLink[]
+  attendanceRecords  AttendanceRecord[]
+  disciplineRecords  DisciplineRecord[]
+  performanceSnapshots PerformanceSnapshot[]
+  performanceTrends  PerformanceTrend[]
+  performanceAlerts  PerformanceAlert[]
+  pairingsAsStudent  PeerPairing[]         @relation("PairingsStudent")
+  pairingsAsPeer     PeerPairing[]         @relation("PairingsPeer")
+
+  @@schema("students")
+}
+
+model Guardian {
+  id          String                @id @default(uuid())
+  authUserId  String                @unique
+  firstName   String
+  lastName    String
+  relationship GuardianRelationship
+  phoneNumber String
+  email       String?
+  occupation  String?
+  address     String?
+  createdAt   DateTime              @default(now())
+  studentLinks StudentGuardianLink[]
+
+  @@schema("students")
+}
+
+model StudentGuardianLink {
+  id         String   @id @default(uuid())
+  studentId  String
+  guardianId String
+  isPrimary  Boolean  @default(false)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  unlinkedAt DateTime?
+  student    Student  @relation(fields: [studentId], references: [id])
+  guardian   Guardian @relation(fields: [guardianId], references: [id])
+
+  @@unique([studentId, guardianId])
+  @@index([guardianId, isActive])
+  @@schema("students")
+}
+
+model AcademicYear {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  startDate DateTime
+  endDate   DateTime
+  isCurrent Boolean  @default(false)
+  createdAt DateTime @default(now())
+  terms     Term[]
+  classes   Class[]
+  enrolments Enrolment[]
+  snapshots PerformanceSnapshot[]
+
+  @@schema("students")
+}
+
+model Term {
+  id             String   @id @default(uuid())
+  academicYearId String
+  name           String
+  startDate      DateTime
+  endDate        DateTime
+  isCurrent      Boolean  @default(false)
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id])
+  enrolments     Enrolment[]
+  attendance     AttendanceRecord[]
+  snapshots      PerformanceSnapshot[]
+  pairings       PeerPairing[]
+
+  @@unique([academicYearId, name])
+  @@schema("students")
+}
+
+model Class {
+  id             String   @id @default(uuid())
+  name           String
+  level          Int
+  stream         String?
+  academicYearId String
+  classTeacherId String?
+  capacity       Int      @default(40)
+  createdAt      DateTime @default(now())
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id])
+  enrolments     Enrolment[]
+  attendance     AttendanceRecord[]
+  snapshots      PerformanceSnapshot[]
+  pairings       PeerPairing[]
+
+  @@unique([name, stream, academicYearId])
+  @@schema("students")
+}
+
+model Enrolment {
+  id             String   @id @default(uuid())
+  studentId      String
+  classId        String
+  academicYearId String
+  termId         String?
+  enrolledAt     DateTime @default(now())
+  isActive       Boolean  @default(true)
+  promotedFrom   String?
+  promotedAt     DateTime?
+  student        Student  @relation(fields: [studentId], references: [id])
+  class          Class    @relation(fields: [classId], references: [id])
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id])
+  term           Term?    @relation(fields: [termId], references: [id])
+
+  @@unique([studentId, classId, academicYearId])
+  @@index([studentId, isActive])
+  @@index([classId, isActive])
+  @@schema("students")
+}
+
+model AttendanceRecord {
+  id         String   @id @default(uuid())
+  studentId  String
+  classId    String
+  date       DateTime @db.Date
+  termId     String
+  status     AttendanceStatus
+  markedById String
+  note       String?
+  createdAt  DateTime @default(now())
+  student    Student  @relation(fields: [studentId], references: [id])
+  class      Class    @relation(fields: [classId], references: [id])
+  term       Term     @relation(fields: [termId], references: [id])
+
+  @@unique([studentId, date, classId])
+  @@index([studentId, date])
+  @@schema("students")
+}
+
+model DisciplineRecord {
+  id                        String   @id @default(uuid())
+  studentId                 String
+  incidentDate              DateTime
+  category                  DisciplineCategory
+  severity                  DisciplineSeverity
+  description               String
+  actionTaken               String
+  reportedById              String
+  resolvedAt                DateTime?
+  resolutionNote            String?
+  requiresParentNotification Boolean @default(true)
+  createdAt                 DateTime @default(now())
+  student                   Student  @relation(fields: [studentId], references: [id])
+
+  @@index([studentId, createdAt])
+  @@schema("students")
+}
+
+model PerformanceSnapshot {
+  id                  String   @id @default(uuid())
+  studentId           String
+  subjectId           String
+  subjectName         String
+  classId             String
+  termId              String
+  academicYearId      String
+  score               Float
+  grade               String
+  assessmentBreakdown Json
+  rank                Int?
+  totalStudentsInClass Int?
+  teacherId           String
+  createdAt           DateTime @default(now())
+  student             Student  @relation(fields: [studentId], references: [id])
+  class               Class    @relation(fields: [classId], references: [id])
+  term                Term     @relation(fields: [termId], references: [id])
+  academicYear        AcademicYear @relation(fields: [academicYearId], references: [id])
+  alerts              PerformanceAlert[]
+
+  @@unique([studentId, subjectId, termId])
+  @@index([studentId, subjectId])
+  @@index([teacherId])
+  @@schema("students")
+}
+
+model PerformanceTrend {
+  id                      String   @id @default(uuid())
+  studentId               String
+  subjectId               String
+  subjectName             String
+  currentScore            Float
+  previousScore           Float?
+  averageScore            Float
+  highestScore            Float
+  lowestScore             Float
+  trendDirection          TrendDirection
+  trendSlope              Float?
+  consecutiveDeclines     Int      @default(0)
+  consecutiveImprovements Int      @default(0)
+  termCount               Int
+  lastUpdatedAt           DateTime @updatedAt
+  student                 Student  @relation(fields: [studentId], references: [id])
+
+  @@unique([studentId, subjectId])
+  @@index([subjectId])
+  @@schema("students")
+}
+
+model PerformanceAlert {
+  id                  String   @id @default(uuid())
+  studentId           String
+  subjectId           String
+  subjectName         String
+  alertType           AlertType
+  severity            AlertSeverity
+  message             String
+  triggeredBySnapshotId String
+  currentScore        Float
+  thresholdValue      Float
+  trendSlope          Float?
+  isResolved          Boolean  @default(false)
+  resolvedAt          DateTime?
+  resolvedById        String?
+  resolutionNote      String?
+  notificationSentAt  DateTime?
+  createdAt           DateTime @default(now())
+  student             Student  @relation(fields: [studentId], references: [id])
+  triggeredBySnapshot PerformanceSnapshot @relation(fields: [triggeredBySnapshotId], references: [id])
+
+  @@index([studentId, isResolved])
+  @@index([alertType, isResolved])
+  @@index([subjectId, isResolved])
+  @@schema("students")
+}
+
+model PeerPairing {
+  id                   String   @id @default(uuid())
+  studentId            String
+  peerId               String
+  subjectId            String
+  subjectName          String
+  classId              String
+  termId               String
+  suggestedBy          PairingSuggestedBy
+  status               PairingStatus
+  reason               String
+  studentScoreAtPairing Float
+  peerScoreAtPairing   Float
+  outcomeScore         Float?
+  outcomeDelta         Float?
+  activatedAt          DateTime?
+  completedAt          DateTime?
+  expiresAt            DateTime
+  createdAt            DateTime @default(now())
+  student              Student  @relation("PairingsStudent", fields: [studentId], references: [id])
+  peer                 Student  @relation("PairingsPeer", fields: [peerId], references: [id])
+  class                Class    @relation(fields: [classId], references: [id])
+  term                 Term     @relation(fields: [termId], references: [id])
+
+  @@index([studentId, status])
+  @@index([subjectId, status])
+  @@index([peerId, status])
+  @@schema("students")
+}
+
+model PerformanceEngineConfig {
+  id                           String   @id @default(uuid())
+  failureThreshold             Float    @default(40.0)
+  atRiskThreshold              Float    @default(50.0)
+  excellenceThreshold          Float    @default(80.0)
+  suddenDeclineThreshold       Float    @default(15.0)
+  rapidImprovementThreshold    Float    @default(15.0)
+  chronicUnderperformanceTerms Int      @default(3)
+  consecutiveDeclineTerms      Int      @default(2)
+  peerSuggestionMinPeerScore   Float    @default(75.0)
+  peerSuggestionMaxScoreGap    Float    @default(40.0)
+  peerSuggestionSameClass      Boolean  @default(true)
+  volatilityStdDevThreshold    Float    @default(20.0)
+  analysisEnabled              Boolean  @default(true)
+  autoNotifyTeacher            Boolean  @default(true)
+  autoNotifyAcademicDept       Boolean  @default(true)
+  autoNotifyParent             Boolean  @default(false)
+  updatedAt                    DateTime @updatedAt
+  updatedBy                    String?
+
+  @@schema("students")
+}
+
+model RegistrationSequence {
+  year      Int    @id
+  nextValue Int    @default(1)
+  updatedAt DateTime @updatedAt
+
+  @@schema("students")
+}
