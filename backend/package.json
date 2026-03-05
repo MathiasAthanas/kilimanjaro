@@ -1,0 +1,26 @@
+{
+  "name": "kilimanjaro-schools",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "services/*",
+    "shared/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "dev:gateway": "npm run dev --workspace=services/api-gateway",
+    "dev:auth": "npm run dev --workspace=services/auth-service",
+    "dev:student": "npm run dev --workspace=services/student-service",
+    "dev:academic": "npm run dev --workspace=services/academic-service",
+    "dev:finance": "npm run dev --workspace=services/finance-service",
+    "dev:notification": "npm run dev --workspace=services/notification-service",
+    "dev:analytics": "npm run dev --workspace=services/analytics-service"
+  },
+  "devDependencies": {
+    "turbo": "^2.0.0",
+    "typescript": "^5.4.0"
+  }
+}

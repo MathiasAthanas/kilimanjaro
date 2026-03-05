@@ -1,0 +1,87 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/auth-client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum Role {
+  SYSTEM_ADMIN
+  BOARD_DIRECTOR
+  MANAGING_DIRECTOR
+  PRINCIPAL
+  ACADEMIC_QA
+  FINANCE
+  HEAD_OF_DEPARTMENT
+  TEACHER
+  PARENT
+  STUDENT
+}
+
+enum LoginType {
+  EMAIL
+  REGISTRATION_NUMBER
+}
+
+// ─── Models ───────────────────────────────────────────────────────────────────
+
+model User {
+  id                 String    @id @default(uuid())
+  email              String?   @unique  // null for students
+  registrationNumber String?   @unique  // only for students
+  passwordHash       String
+  role               Role
+  loginType          LoginType
+  schoolId           String
+  isActive           Boolean   @default(true)
+  isEmailVerified    Boolean   @default(false)
+  lastLoginAt        DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  refreshTokens RefreshToken[]
+  auditLogs     AuditLog[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  isRevoked Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@map("refresh_tokens")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  action    String   // e.g. LOGIN, LOGOUT, PASSWORD_CHANGE, TOKEN_REFRESH
+  ipAddress String?
+  userAgent String?
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  @@map("audit_logs")
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  email     String
+  token     String   @unique
+  expiresAt DateTime
+  isUsed    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@map("password_reset_tokens")
+}

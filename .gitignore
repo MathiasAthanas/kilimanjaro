@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+.env.local
+.turbo/
+*.log
+coverage/
+.DS_Store
+docs/
+.qoder/
+backend/_invalid_scaffold/
