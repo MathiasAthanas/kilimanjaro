@@ -1,43 +1,81 @@
-import { Injectable, UnauthorizedException, Logger, HttpException } from '@nestjs/common';
+import { HttpException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
 import { firstValueFrom } from 'rxjs';
-import { SERVICE_URLS } from '@kilimanjaro/types';
 
 @Injectable()
 export class GatewayService {
   private readonly logger = new Logger(GatewayService.name);
 
   constructor(
-    private http: HttpService,
-    private config: ConfigService,
+    private readonly http: HttpService,
+    private readonly config: ConfigService,
+    private readonly jwtService: JwtService,
   ) {}
 
-  // ─── Validate token with Auth Service ────────────────────────────────────────
+  async validateToken(token: string): Promise<{ user: { id: string; role: string; isActive: boolean }; payload: any }> {
+    const publicKey = (this.config.get<string>('JWT_PUBLIC_KEY') || '').replace(/\\n/g, '\n');
+    if (!publicKey) {
+      throw new UnauthorizedException('JWT public key is not configured');
+    }
 
-  async validateToken(token: string): Promise<any> {
+    let payload: any;
     try {
-      const authUrl = this.config.get('AUTH_SERVICE_URL', SERVICE_URLS.AUTH);
-      const response = await firstValueFrom(
-        this.http.post(`${authUrl}/api/v1/auth/validate`, { token }),
-      );
-      return response.data.data;
+      payload = this.jwtService.verify(token, {
+        publicKey,
+        algorithms: ['RS256'],
+      });
     } catch {
       throw new UnauthorizedException('Invalid or expired token');
     }
-  }
 
-  // ─── Proxy request to a downstream service ───────────────────────────────────
+    const authUrl = this.config.get<string>('AUTH_SERVICE_URL') || 'http://localhost:3001';
+    const internalApiKey = this.config.get<string>('INTERNAL_API_KEY');
+
+    if (!internalApiKey) {
+      throw new UnauthorizedException('Internal API key is not configured');
+    }
+
+    const headers = { 'x-internal-api-key': internalApiKey };
+
+    try {
+      const jtiResponse = await firstValueFrom(
+        this.http.get(`${authUrl}/api/v1/auth/internal/validate-jti/${payload.jti}`, { headers }),
+      );
+
+      const isBlacklisted = Boolean(jtiResponse?.data?.data?.blacklisted);
+      if (isBlacklisted) {
+        throw new UnauthorizedException('Token has been revoked');
+      }
+
+      const userResponse = await firstValueFrom(
+        this.http.get(`${authUrl}/api/v1/auth/internal/user/${payload.sub}`, { headers }),
+      );
+
+      const user = userResponse?.data?.data;
+      if (!user?.isActive) {
+        throw new UnauthorizedException('Account is inactive');
+      }
+
+      return { user, payload };
+    } catch (error) {
+      if (error instanceof UnauthorizedException) {
+        throw error;
+      }
+      throw new UnauthorizedException('Token validation failed');
+    }
+  }
 
   async proxy(
     serviceUrl: string,
     path: string,
     method: string,
     body?: any,
-    headers?: Record<string, string>,
+    headers?: Record<string, string | undefined>,
   ): Promise<any> {
     const url = `${serviceUrl}${path}`;
-    this.logger.debug(`Proxying ${method.toUpperCase()} → ${url}`);
+    this.logger.debug(`Proxying ${method.toUpperCase()} -> ${url}`);
 
     try {
       const response = await firstValueFrom(
@@ -47,7 +85,7 @@ export class GatewayService {
           data: body,
           headers: {
             'Content-Type': 'application/json',
-            ...headers,
+            ...(headers || {}),
           },
         }),
       );
@@ -61,12 +99,12 @@ export class GatewayService {
 
   getServiceUrl(service: string): string {
     const urls: Record<string, string> = {
-      auth: this.config.get('AUTH_SERVICE_URL', SERVICE_URLS.AUTH),
-      student: this.config.get('STUDENT_SERVICE_URL', SERVICE_URLS.STUDENT),
-      academic: this.config.get('ACADEMIC_SERVICE_URL', SERVICE_URLS.ACADEMIC),
-      finance: this.config.get('FINANCE_SERVICE_URL', SERVICE_URLS.FINANCE),
-      notification: this.config.get('NOTIFICATION_SERVICE_URL', SERVICE_URLS.NOTIFICATION),
-      analytics: this.config.get('ANALYTICS_SERVICE_URL', SERVICE_URLS.ANALYTICS),
+      auth: this.config.get<string>('AUTH_SERVICE_URL') || 'http://localhost:3001',
+      student: this.config.get<string>('STUDENT_SERVICE_URL') || 'http://localhost:3002',
+      academic: this.config.get<string>('ACADEMIC_SERVICE_URL') || 'http://localhost:3003',
+      finance: this.config.get<string>('FINANCE_SERVICE_URL') || 'http://localhost:3004',
+      notification: this.config.get<string>('NOTIFICATION_SERVICE_URL') || 'http://localhost:3005',
+      analytics: this.config.get<string>('ANALYTICS_SERVICE_URL') || 'http://localhost:3006',
     };
     return urls[service];
   }

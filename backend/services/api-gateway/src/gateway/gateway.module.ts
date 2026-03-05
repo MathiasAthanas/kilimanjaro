@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { HttpModule } from '@nestjs/axios';
+import { JwtModule } from '@nestjs/jwt';
 import {
   AuthProxyController,
   StudentProxyController,
@@ -12,7 +13,7 @@ import { GatewayService } from './gateway.service';
 import { AuthGuard } from '../common/guards/auth.guard';
 
 @Module({
-  imports: [HttpModule],
+  imports: [HttpModule, JwtModule.register({})],
   controllers: [
     AuthProxyController,
     StudentProxyController,

@@ -1,38 +1,73 @@
-import {
-  Controller, All, Req, Res, UseGuards, Param,
-} from '@nestjs/common';
-import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
-import { Request, Response } from 'express';
+import { All, Controller, Req, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { Request } from 'express';
 import { GatewayService } from './gateway.service';
 import { AuthGuard } from '../common/guards/auth.guard';
 import { Public } from '../common/decorators/public.decorator';
 
-// ─── Auth Routes (public — no JWT required) ───────────────────────────────────
+function buildHeaders(req: Request): Record<string, string> {
+  const auth = req.headers['authorization'];
+  const user = (req as any).user as { id?: string; role?: string } | undefined;
+  const payload = (req as any).jwtPayload as { sub?: string; role?: string; schoolId?: string } | undefined;
+
+  const headers: Record<string, string> = {};
+
+  if (typeof auth === 'string') {
+    headers.Authorization = auth;
+  }
+  if (user?.id || payload?.sub) {
+    headers['x-user-id'] = String(user?.id || payload?.sub);
+  }
+  if (user?.role || payload?.role) {
+    headers['x-user-role'] = String(user?.role || payload?.role);
+  }
+  if (payload?.schoolId) {
+    headers['x-school-id'] = String(payload.schoolId);
+  }
+
+  return headers;
+}
 
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthProxyController {
-  constructor(private gateway: GatewayService) {}
+  constructor(private readonly gateway: GatewayService) {}
 
   @All('login')
   @Public()
   async login(@Req() req: Request) {
-    return this.gateway.proxy(
-      this.gateway.getServiceUrl('auth'),
-      '/api/v1/auth/login',
-      req.method,
-      req.body,
-    );
+    return this.gateway.proxy(this.gateway.getServiceUrl('auth'), req.originalUrl, req.method, req.body);
   }
 
   @All('refresh')
   @Public()
   async refresh(@Req() req: Request) {
+    return this.gateway.proxy(this.gateway.getServiceUrl('auth'), req.originalUrl, req.method, req.body);
+  }
+
+  @All('password-reset/request')
+  @Public()
+  async resetRequest(@Req() req: Request) {
+    return this.gateway.proxy(this.gateway.getServiceUrl('auth'), req.originalUrl, req.method, req.body);
+  }
+
+  @All('password-reset/complete')
+  @Public()
+  async resetComplete(@Req() req: Request) {
+    return this.gateway.proxy(this.gateway.getServiceUrl('auth'), req.originalUrl, req.method, req.body);
+  }
+
+  @All('internal/*')
+  @Public()
+  async internal(@Req() req: Request) {
     return this.gateway.proxy(
       this.gateway.getServiceUrl('auth'),
-      '/api/v1/auth/refresh',
+      req.originalUrl,
       req.method,
       req.body,
+      {
+        'x-internal-api-key': String(req.headers['x-internal-api-key'] || ''),
+      },
     );
   }
 
@@ -40,120 +75,107 @@ export class AuthProxyController {
   @UseGuards(AuthGuard)
   @ApiBearerAuth()
   async proxyAuth(@Req() req: Request) {
-    const path = req.path;
-    const token = req.headers['authorization'];
     return this.gateway.proxy(
       this.gateway.getServiceUrl('auth'),
-      `/api/v1${path}`,
+      req.originalUrl,
       req.method,
       req.body,
-      token ? { Authorization: token } : {},
+      buildHeaders(req),
     );
   }
 }
-
-// ─── Student Routes ───────────────────────────────────────────────────────────
 
 @ApiTags('Students')
 @Controller('students')
 @UseGuards(AuthGuard)
 @ApiBearerAuth()
 export class StudentProxyController {
-  constructor(private gateway: GatewayService) {}
+  constructor(private readonly gateway: GatewayService) {}
 
   @All('*')
   async proxy(@Req() req: Request) {
-    const path = req.path;
     return this.gateway.proxy(
       this.gateway.getServiceUrl('student'),
-      `/api/v1${path}`,
+      req.originalUrl,
       req.method,
       req.body,
-      { Authorization: req.headers['authorization'] as string },
+      buildHeaders(req),
     );
   }
 }
-
-// ─── Academic Routes ──────────────────────────────────────────────────────────
 
 @ApiTags('Academics')
 @Controller('academics')
 @UseGuards(AuthGuard)
 @ApiBearerAuth()
 export class AcademicProxyController {
-  constructor(private gateway: GatewayService) {}
+  constructor(private readonly gateway: GatewayService) {}
 
   @All('*')
   async proxy(@Req() req: Request) {
     return this.gateway.proxy(
       this.gateway.getServiceUrl('academic'),
-      `/api/v1${req.path}`,
+      req.originalUrl,
       req.method,
       req.body,
-      { Authorization: req.headers['authorization'] as string },
+      buildHeaders(req),
     );
   }
 }
-
-// ─── Finance Routes ───────────────────────────────────────────────────────────
 
 @ApiTags('Finance')
 @Controller('finance')
 @UseGuards(AuthGuard)
 @ApiBearerAuth()
 export class FinanceProxyController {
-  constructor(private gateway: GatewayService) {}
+  constructor(private readonly gateway: GatewayService) {}
 
   @All('*')
   async proxy(@Req() req: Request) {
     return this.gateway.proxy(
       this.gateway.getServiceUrl('finance'),
-      `/api/v1${req.path}`,
+      req.originalUrl,
       req.method,
       req.body,
-      { Authorization: req.headers['authorization'] as string },
+      buildHeaders(req),
     );
   }
 }
-
-// ─── Analytics Routes ─────────────────────────────────────────────────────────
 
 @ApiTags('Analytics')
 @Controller('analytics')
 @UseGuards(AuthGuard)
 @ApiBearerAuth()
 export class AnalyticsProxyController {
-  constructor(private gateway: GatewayService) {}
+  constructor(private readonly gateway: GatewayService) {}
 
   @All('*')
   async proxy(@Req() req: Request) {
     return this.gateway.proxy(
       this.gateway.getServiceUrl('analytics'),
-      `/api/v1${req.path}`,
+      req.originalUrl,
       req.method,
       req.body,
-      { Authorization: req.headers['authorization'] as string },
+      buildHeaders(req),
     );
   }
 }
-
-// ─── Notification Routes ──────────────────────────────────────────────────────
 
 @ApiTags('Notifications')
 @Controller('notifications')
 @UseGuards(AuthGuard)
 @ApiBearerAuth()
 export class NotificationProxyController {
-  constructor(private gateway: GatewayService) {}
+  constructor(private readonly gateway: GatewayService) {}
 
   @All('*')
   async proxy(@Req() req: Request) {
     return this.gateway.proxy(
       this.gateway.getServiceUrl('notification'),
-      `/api/v1${req.path}`,
+      req.originalUrl,
       req.method,
       req.body,
-      { Authorization: req.headers['authorization'] as string },
+      buildHeaders(req),
     );
   }
 }
