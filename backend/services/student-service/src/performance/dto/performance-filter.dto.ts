@@ -24,6 +24,7 @@ export class PerformanceFilterDto {
   teacherId?: string;
 
   @IsOptional()
+  @Type(() => Boolean)
   isResolved?: boolean;
 
   @IsOptional()

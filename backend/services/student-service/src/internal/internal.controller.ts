@@ -1,5 +1,5 @@
 import { Controller, Get, Param, UseGuards } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { InternalApiGuard } from '../common/guards/internal-api.guard';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
@@ -14,6 +14,7 @@ export class InternalController {
   ) {}
 
   @Get('by-auth/:authUserId')
+  @ApiOperation({ summary: 'Get student mapping by auth user id' })
   async byAuth(@Param('authUserId') authUserId: string) {
     const student = await this.prisma.student.findUnique({
       where: { authUserId },
@@ -39,6 +40,7 @@ export class InternalController {
   }
 
   @Get('guardian-by-auth/:authUserId')
+  @ApiOperation({ summary: 'Get guardian mapping by auth user id' })
   async guardianByAuth(@Param('authUserId') authUserId: string) {
     const guardian = await this.prisma.guardian.findUnique({
       where: { authUserId },
@@ -61,6 +63,7 @@ export class InternalController {
   }
 
   @Get('class/:classId/student-ids')
+  @ApiOperation({ summary: 'Get active class student ids' })
   async classStudentIds(@Param('classId') classId: string) {
     const cacheKey = `class:${classId}:student-ids`;
     const cached = await this.redis.get<string[]>(cacheKey);

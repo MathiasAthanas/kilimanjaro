@@ -29,6 +29,15 @@ interface SnapshotPayload {
   teacherId: string;
 }
 
+interface EngineRunStats {
+  estimatedRecords: number;
+  studentsProcessed: number;
+  alertsCreated: number;
+  alertsResolved: number;
+  pairingsCreated: number;
+  durationMs: number;
+}
+
 @Injectable()
 export class PerformanceEngineService {
   private readonly logger = new Logger(PerformanceEngineService.name);
@@ -69,7 +78,13 @@ export class PerformanceEngineService {
     await this.redis.del('engine:config', 'performance:school:summary');
     await this.redis.delByPattern('performance:class:*:summary');
     await this.redis.delByPattern('performance:*:trends');
+    await this.redis.delByPattern('performance:*:alerts:active');
     return updated;
+  }
+
+  private async invalidatePerformanceCache(studentId: string): Promise<void> {
+    await this.redis.del(`performance:${studentId}:trends`, `performance:${studentId}:alerts:active`, 'performance:school:summary');
+    await this.redis.delByPattern('performance:class:*:summary');
   }
 
   async ingestSnapshot(payload: SnapshotPayload): Promise<void> {
@@ -93,10 +108,7 @@ export class PerformanceEngineService {
 
     await this.analyzeStudentSubject(payload.studentId, payload.subjectId, snapshot.id);
     await this.recordPairingOutcome(payload.studentId, payload.subjectId, payload.score);
-
-    await this.redis.del(`performance:${payload.studentId}:trends`);
-    await this.redis.del('performance:school:summary');
-    await this.redis.delByPattern('performance:class:*:summary');
+    await this.invalidatePerformanceCache(payload.studentId);
   }
 
   private countConsecutiveDirection(scores: number[], direction: 'up' | 'down'): number {
@@ -113,7 +125,11 @@ export class PerformanceEngineService {
     return count;
   }
 
-  async analyzeStudentSubject(studentId: string, subjectId: string, triggeredBySnapshotId?: string): Promise<void> {
+  async analyzeStudentSubject(studentId: string, subjectId: string, triggeredBySnapshotId?: string): Promise<{
+    alertsCreated: number;
+    alertsResolved: number;
+    pairingsCreated: number;
+  }> {
     const [config, student, snapshots] = await Promise.all([
       this.getEngineConfig(),
       this.prisma.student.findUnique({ where: { id: studentId } }),
@@ -125,7 +141,7 @@ export class PerformanceEngineService {
     ]);
 
     if (!student || snapshots.length === 0) {
-      return;
+      return { alertsCreated: 0, alertsResolved: 0, pairingsCreated: 0 };
     }
 
     const scores = snapshots.map((snapshot) => snapshot.score);
@@ -195,7 +211,7 @@ export class PerformanceEngineService {
 
     const triggerSnapshotId = triggeredBySnapshotId ?? currentSnapshot.id;
 
-    const createdAlerts = await this.evaluateAlerts({
+    const alertResult = await this.evaluateAlerts({
       config,
       student,
       snapshots,
@@ -207,7 +223,10 @@ export class PerformanceEngineService {
       triggerSnapshotId,
       subjectId,
       subjectName: currentSnapshot.subjectName,
+      teacherId: currentSnapshot.teacherId,
     });
+
+    let pairingsCreated = 0;
 
     const highRiskTypes: AlertType[] = [
       AlertType.FAILURE_RISK,
@@ -216,18 +235,32 @@ export class PerformanceEngineService {
       AlertType.SUDDEN_DECLINE,
     ];
 
-    for (const alert of createdAlerts) {
+    for (const alert of alertResult.createdAlerts) {
       if (highRiskTypes.includes(alert.alertType)) {
-        await this.suggestPeerPairing({
+        const pairing = await this.suggestPeerPairing({
           studentId,
           subjectId,
           subjectName: alert.subjectName,
           classId: currentSnapshot.classId,
           termId: currentSnapshot.termId,
           studentScore: currentScore,
+          teacherId: currentSnapshot.teacherId,
         });
+
+        if (pairing?.id) {
+          pairingsCreated += 1;
+          await this.publishAlert(alert.id, pairing.id);
+        }
       }
     }
+
+    await this.invalidatePerformanceCache(studentId);
+
+    return {
+      alertsCreated: alertResult.createdCount,
+      alertsResolved: alertResult.resolvedCount,
+      pairingsCreated,
+    };
   }
 
   private async evaluateAlerts(input: {
@@ -242,7 +275,12 @@ export class PerformanceEngineService {
     triggerSnapshotId: string;
     subjectId: string;
     subjectName: string;
-  }): Promise<Array<{ id: string; alertType: AlertType; subjectName: string }>> {
+    teacherId: string;
+  }): Promise<{
+    createdAlerts: Array<{ id: string; alertType: AlertType; subjectName: string }>;
+    createdCount: number;
+    resolvedCount: number;
+  }> {
     const {
       config,
       student,
@@ -260,12 +298,24 @@ export class PerformanceEngineService {
     const name = `${student.firstName} ${student.lastName}`;
     const lastN = snapshots.slice(-Math.max(config.chronicUnderperformanceTerms, 3));
 
+    const existingUnresolvedRiskCount = await this.prisma.performanceAlert.count({
+      where: {
+        studentId: student.id,
+        subjectId,
+        isResolved: false,
+        alertType: {
+          in: [AlertType.AT_RISK, AlertType.CHRONIC_UNDERPERFORMER, AlertType.FAILURE_RISK],
+        },
+      },
+    });
+
     const conditions: Array<{
       type: AlertType;
       active: boolean;
       severity: AlertSeverity;
       thresholdValue: number;
       message: string;
+      positive?: boolean;
     }> = [
       {
         type: AlertType.FAILURE_RISK,
@@ -327,6 +377,7 @@ export class PerformanceEngineService {
           typeof previousScore === 'number'
             ? `${name} improved by ${(currentScore - previousScore).toFixed(1)} points in ${subjectName} this term from ${previousScore.toFixed(1)}% to ${currentScore.toFixed(1)}%`
             : `${name} improved rapidly in ${subjectName}`,
+        positive: true,
       },
       {
         type: AlertType.CONSISTENT_EXCELLENCE,
@@ -335,29 +386,25 @@ export class PerformanceEngineService {
           lastN.slice(-3).every((snapshot) => snapshot.score >= config.excellenceThreshold),
         severity: AlertSeverity.LOW,
         thresholdValue: config.excellenceThreshold,
-        message: `${name} has sustained excellent performance in ${subjectName}`,
+        message: `${name} has maintained excellent performance in ${subjectName} for 3 consecutive terms`,
+        positive: true,
       },
       {
         type: AlertType.RECOVERED,
         active:
+          typeof previousScore === 'number' &&
+          previousScore < config.atRiskThreshold &&
           currentScore >= config.atRiskThreshold &&
-          (await this.prisma.performanceAlert.count({
-            where: {
-              studentId: student.id,
-              subjectId,
-              isResolved: false,
-              alertType: {
-                in: [AlertType.AT_RISK, AlertType.CHRONIC_UNDERPERFORMER, AlertType.FAILURE_RISK],
-              },
-            },
-          })) > 0,
+          existingUnresolvedRiskCount > 0,
         severity: AlertSeverity.LOW,
         thresholdValue: config.atRiskThreshold,
-        message: `${name} has recovered and is now above risk threshold in ${subjectName}`,
+        message: `${name} has recovered in ${subjectName}, now scoring ${currentScore.toFixed(1)}%`,
+        positive: true,
       },
     ];
 
     const createdAlerts: Array<{ id: string; alertType: AlertType; subjectName: string }> = [];
+    let resolvedCount = 0;
 
     for (const condition of conditions) {
       const unresolved = await this.prisma.performanceAlert.findFirst({
@@ -394,11 +441,12 @@ export class PerformanceEngineService {
           where: { id: unresolved.id },
           data: { isResolved: true, resolvedAt: new Date(), resolvedById: 'SYSTEM' },
         });
+        resolvedCount += 1;
       }
     }
 
     if (conditions.find((condition) => condition.type === AlertType.RECOVERED)?.active) {
-      await this.prisma.performanceAlert.updateMany({
+      const result = await this.prisma.performanceAlert.updateMany({
         where: {
           studentId: student.id,
           subjectId,
@@ -409,19 +457,31 @@ export class PerformanceEngineService {
         },
         data: { isResolved: true, resolvedAt: new Date(), resolvedById: 'SYSTEM' },
       });
+      resolvedCount += result.count;
     }
 
-    return createdAlerts;
+    return {
+      createdAlerts,
+      createdCount: createdAlerts.length,
+      resolvedCount,
+    };
   }
 
-  private async publishAlert(alertId: string): Promise<void> {
-    const alert = await this.prisma.performanceAlert.findUnique({
-      where: { id: alertId },
-      include: {
-        student: true,
-        triggeredBySnapshot: true,
-      },
-    });
+  private async publishAlert(alertId: string, pairingId?: string): Promise<void> {
+    const [config, alert] = await Promise.all([
+      this.getEngineConfig(),
+      this.prisma.performanceAlert.findUnique({
+        where: { id: alertId },
+        include: {
+          student: true,
+          triggeredBySnapshot: {
+            include: {
+              class: true,
+            },
+          },
+        },
+      }),
+    ]);
 
     if (!alert) {
       return;
@@ -436,11 +496,23 @@ export class PerformanceEngineService {
       severity: alert.severity,
       message: alert.message,
       teacherId: alert.triggeredBySnapshot.teacherId,
+      academicDeptNotify: Boolean(config.autoNotifyAcademicDept),
+      parentNotify:
+        (alert.severity === AlertSeverity.CRITICAL || alert.severity === AlertSeverity.HIGH)
+          ? Boolean(config.autoNotifyParent)
+          : false,
+      pairingId: pairingId ?? null,
     };
 
-    if (alert.severity === AlertSeverity.CRITICAL || alert.severity === AlertSeverity.HIGH) {
+    if (alert.severity === AlertSeverity.CRITICAL || alert.severity === AlertSeverity.HIGH || alert.severity === AlertSeverity.MEDIUM) {
       await this.rabbitMq.publish('performance.alert.created', payload);
-    } else if (alert.alertType === AlertType.RAPID_IMPROVEMENT || alert.alertType === AlertType.CONSISTENT_EXCELLENCE || alert.alertType === AlertType.RECOVERED) {
+    }
+
+    if (
+      alert.alertType === AlertType.RAPID_IMPROVEMENT ||
+      alert.alertType === AlertType.CONSISTENT_EXCELLENCE ||
+      alert.alertType === AlertType.RECOVERED
+    ) {
       await this.rabbitMq.publish('performance.alert.positive', payload);
     }
   }
@@ -450,52 +522,54 @@ export class PerformanceEngineService {
     return Math.max(0, Math.min(1, normalized));
   }
 
-  async suggestPeerPairing(input: {
-    studentId: string;
+  private async buildPeerCandidates(input: {
     subjectId: string;
-    subjectName: string;
-    classId: string;
     termId: string;
+    studentId: string;
     studentScore: number;
-  }): Promise<void> {
-    const config = await this.getEngineConfig();
-
-    const existingActivePairing = await this.prisma.peerPairing.findFirst({
-      where: {
-        studentId: input.studentId,
-        subjectId: input.subjectId,
-        status: {
-          in: [PairingStatus.SUGGESTED, PairingStatus.ACTIVE],
-        },
-      },
-    });
-
-    if (existingActivePairing) {
-      return;
-    }
-
-    const candidateSnapshots = await this.prisma.performanceSnapshot.findMany({
+    classId: string;
+    classLevel?: number;
+    excludeClassId?: string;
+    peerSuggestionMinPeerScore: number;
+    peerSuggestionMaxScoreGap: number;
+  }): Promise<Array<{ peerId: string; score: number; candidateScore: number; reason: string }>> {
+    const termSnapshots = await this.prisma.performanceSnapshot.findMany({
       where: {
         subjectId: input.subjectId,
+        termId: input.termId,
         studentId: { not: input.studentId },
-        score: { gte: config.peerSuggestionMinPeerScore },
-        ...(config.peerSuggestionSameClass ? { classId: input.classId } : {}),
+        score: { gte: input.peerSuggestionMinPeerScore },
+        ...(input.excludeClassId ? { classId: { not: input.excludeClassId } } : { classId: input.classId }),
+        ...(input.classLevel !== undefined
+          ? {
+              class: {
+                level: input.classLevel,
+              },
+            }
+          : {}),
       },
-      orderBy: { createdAt: 'desc' },
+      include: {
+        student: true,
+      },
+      orderBy: { score: 'desc' },
     });
 
-    const latestByStudent = new Map<string, (typeof candidateSnapshots)[number]>();
-    for (const snapshot of candidateSnapshots) {
+    const latestByStudent = new Map<string, (typeof termSnapshots)[number]>();
+    for (const snapshot of termSnapshots) {
       if (!latestByStudent.has(snapshot.studentId)) {
         latestByStudent.set(snapshot.studentId, snapshot);
       }
     }
 
-    const candidates: Array<{ peerId: string; score: number; candidateScore: number }> = [];
+    const candidates: Array<{ peerId: string; score: number; candidateScore: number; reason: string }> = [];
 
     for (const snapshot of latestByStudent.values()) {
+      if (snapshot.student.status !== StudentStatus.ACTIVE) {
+        continue;
+      }
+
       const gap = snapshot.score - input.studentScore;
-      if (gap > config.peerSuggestionMaxScoreGap) {
+      if (gap > input.peerSuggestionMaxScoreGap) {
         continue;
       }
 
@@ -504,9 +578,7 @@ export class PerformanceEngineService {
           studentId: input.studentId,
           peerId: snapshot.studentId,
           subjectId: input.subjectId,
-          status: {
-            in: [PairingStatus.SUGGESTED, PairingStatus.ACTIVE],
-          },
+          status: PairingStatus.ACTIVE,
         },
       });
 
@@ -524,17 +596,74 @@ export class PerformanceEngineService {
       const trendScore = this.normalizeTrendScore(linearRegressionSlope(peerScores)) * 100;
       const finalScore = (0.5 * snapshot.score) + (0.3 * consistencyScore) + (0.2 * trendScore);
 
-      candidates.push({ peerId: snapshot.studentId, score: snapshot.score, candidateScore: finalScore });
+      candidates.push({
+        peerId: snapshot.studentId,
+        score: snapshot.score,
+        candidateScore: finalScore,
+        reason: `Top scorer in ${snapshot.subjectName} with consistent trend`,
+      });
+    }
+
+    return candidates.sort((a, b) => b.candidateScore - a.candidateScore);
+  }
+
+  async suggestPeerPairing(input: {
+    studentId: string;
+    subjectId: string;
+    subjectName: string;
+    classId: string;
+    termId: string;
+    studentScore: number;
+    teacherId: string;
+  }): Promise<{ id: string } | null> {
+    const config = await this.getEngineConfig();
+
+    const existingActivePairing = await this.prisma.peerPairing.findFirst({
+      where: {
+        studentId: input.studentId,
+        subjectId: input.subjectId,
+        status: {
+          in: [PairingStatus.SUGGESTED, PairingStatus.ACTIVE],
+        },
+      },
+    });
+
+    if (existingActivePairing) {
+      return null;
+    }
+
+    const studentClass = await this.prisma.class.findUnique({ where: { id: input.classId } });
+
+    let candidates = await this.buildPeerCandidates({
+      subjectId: input.subjectId,
+      termId: input.termId,
+      studentId: input.studentId,
+      studentScore: input.studentScore,
+      classId: input.classId,
+      peerSuggestionMinPeerScore: config.peerSuggestionMinPeerScore,
+      peerSuggestionMaxScoreGap: config.peerSuggestionMaxScoreGap,
+    });
+
+    if (candidates.length === 0 && config.peerSuggestionSameClass && studentClass) {
+      candidates = await this.buildPeerCandidates({
+        subjectId: input.subjectId,
+        termId: input.termId,
+        studentId: input.studentId,
+        studentScore: input.studentScore,
+        classId: input.classId,
+        classLevel: studentClass.level,
+        excludeClassId: input.classId,
+        peerSuggestionMinPeerScore: config.peerSuggestionMinPeerScore,
+        peerSuggestionMaxScoreGap: config.peerSuggestionMaxScoreGap,
+      });
     }
 
     if (candidates.length === 0) {
       this.logger.warn(`No eligible peer candidates for student ${input.studentId} / subject ${input.subjectId}`);
-      return;
+      return null;
     }
 
-    candidates.sort((a, b) => b.candidateScore - a.candidateScore);
     const best = candidates[0];
-
     const term = await this.prisma.term.findUnique({ where: { id: input.termId } });
 
     const pairing = await this.prisma.peerPairing.create({
@@ -547,20 +676,29 @@ export class PerformanceEngineService {
         termId: input.termId,
         suggestedBy: PairingSuggestedBy.SYSTEM,
         status: PairingStatus.SUGGESTED,
-        reason: `High performer suggested by engine for ${input.subjectName}`,
+        reason: best.reason,
         studentScoreAtPairing: input.studentScore,
         peerScoreAtPairing: best.score,
         expiresAt: term?.endDate ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      },
+      include: {
+        student: true,
+        peer: true,
       },
     });
 
     await this.rabbitMq.publish('performance.pairing.suggested', {
       pairingId: pairing.id,
       studentId: pairing.studentId,
+      studentName: `${pairing.student.firstName} ${pairing.student.lastName}`,
       peerId: pairing.peerId,
+      peerName: `${pairing.peer.firstName} ${pairing.peer.lastName}`,
       subjectName: pairing.subjectName,
       reason: pairing.reason,
+      teacherId: input.teacherId,
     });
+
+    return { id: pairing.id };
   }
 
   async recordPairingOutcome(studentId: string, subjectId: string, score: number): Promise<void> {
@@ -588,6 +726,10 @@ export class PerformanceEngineService {
       },
     });
 
+    if (delta > 0) {
+      this.logger.log(`Pairing ${pairing.id} produced positive outcome delta ${delta.toFixed(2)}`);
+    }
+
     await this.rabbitMq.publish('pairing.outcome.recorded', {
       pairingId: pairing.id,
       studentId,
@@ -596,45 +738,97 @@ export class PerformanceEngineService {
     });
   }
 
-  async runScope(scope: 'student' | 'class' | 'all', studentId?: string, classId?: string): Promise<{ estimatedRecords: number }> {
+  async runScope(scope: 'student' | 'class' | 'all', studentId?: string, classId?: string): Promise<EngineRunStats> {
+    const start = Date.now();
+
+    const config = await this.getEngineConfig();
+    if (!config.analysisEnabled) {
+      return {
+        estimatedRecords: 0,
+        studentsProcessed: 0,
+        alertsCreated: 0,
+        alertsResolved: 0,
+        pairingsCreated: 0,
+        durationMs: Date.now() - start,
+      };
+    }
+
+    let pairs: Array<{ studentId: string; subjectId: string }> = [];
+
     if (scope === 'student' && studentId) {
       const snapshots = await this.prisma.performanceSnapshot.findMany({
         where: { studentId },
         distinct: ['subjectId'],
         select: { subjectId: true },
       });
-
-      await Promise.all(snapshots.map((item) => this.analyzeStudentSubject(studentId, item.subjectId)));
-      return { estimatedRecords: snapshots.length };
-    }
-
-    if (scope === 'class' && classId) {
-      const pairs = await this.prisma.performanceSnapshot.findMany({
+      pairs = snapshots.map((item) => ({ studentId, subjectId: item.subjectId }));
+    } else if (scope === 'class' && classId) {
+      pairs = await this.prisma.performanceSnapshot.findMany({
         where: { classId },
         distinct: ['studentId', 'subjectId'],
         select: { studentId: true, subjectId: true },
       });
-
-      for (const pair of pairs) {
-        await this.analyzeStudentSubject(pair.studentId, pair.subjectId);
-      }
-
-      return { estimatedRecords: pairs.length };
+    } else {
+      pairs = await this.prisma.performanceSnapshot.findMany({
+        distinct: ['studentId', 'subjectId'],
+        select: { studentId: true, subjectId: true },
+      });
     }
 
-    const pairs = await this.prisma.performanceSnapshot.findMany({
-      distinct: ['studentId', 'subjectId'],
-      select: { studentId: true, subjectId: true },
-    });
+    let alertsCreated = 0;
+    let alertsResolved = 0;
+    let pairingsCreated = 0;
 
     for (const pair of pairs) {
-      await this.analyzeStudentSubject(pair.studentId, pair.subjectId);
+      const stats = await this.analyzeStudentSubject(pair.studentId, pair.subjectId);
+      alertsCreated += stats.alertsCreated;
+      alertsResolved += stats.alertsResolved;
+      pairingsCreated += stats.pairingsCreated;
     }
 
-    return { estimatedRecords: pairs.length };
+    const studentsProcessed = new Set(pairs.map((item) => item.studentId)).size;
+    return {
+      estimatedRecords: pairs.length,
+      studentsProcessed,
+      alertsCreated,
+      alertsResolved,
+      pairingsCreated,
+      durationMs: Date.now() - start,
+    };
+  }
+
+  async runScopeAsync(scope: 'student' | 'class' | 'all', studentId?: string, classId?: string): Promise<number> {
+    const estimate =
+      scope === 'student' && studentId
+        ? await this.prisma.performanceSnapshot.count({ where: { studentId } })
+        : scope === 'class' && classId
+          ? await this.prisma.performanceSnapshot.count({ where: { classId } })
+          : await this.prisma.performanceSnapshot.count();
+
+    setImmediate(async () => {
+      try {
+        const stats = await this.runScope(scope, studentId, classId);
+        await this.rabbitMq.publish('engine.analysis.completed', {
+          studentsProcessed: stats.studentsProcessed,
+          alertsCreated: stats.alertsCreated,
+          alertsResolved: stats.alertsResolved,
+          pairingsCreated: stats.pairingsCreated,
+          duration: stats.durationMs,
+        });
+      } catch (error) {
+        this.logger.error('Async engine run failed', error as Error);
+      }
+    });
+
+    return estimate;
   }
 
   async expireStalePairings(): Promise<number> {
+    const config = await this.getEngineConfig();
+    if (!config.analysisEnabled) {
+      return 0;
+    }
+
     const result = await this.prisma.peerPairing.updateMany({
       where: {
         status: { in: [PairingStatus.SUGGESTED, PairingStatus.ACTIVE] },
@@ -647,6 +841,11 @@ export class PerformanceEngineService {
   }
 
   async weeklyDigest(): Promise<void> {
+    const config = await this.getEngineConfig();
+    if (!config.analysisEnabled) {
+      return;
+    }
+
     const alerts = await this.prisma.performanceAlert.findMany({
       where: {
         isResolved: false,
@@ -654,6 +853,16 @@ export class PerformanceEngineService {
       },
       include: {
         triggeredBySnapshot: true,
+      },
+    });
+
+    const pairings = await this.prisma.peerPairing.findMany({
+      where: {
+        status: { in: [PairingStatus.SUGGESTED, PairingStatus.ACTIVE] },
+      },
+      include: {
+        student: true,
+        peer: true,
       },
     });
 
@@ -675,11 +884,23 @@ export class PerformanceEngineService {
           severity: alert.severity,
           type: alert.alertType,
         })),
+        pairings: pairings.filter((pairing) => teacherAlerts.some((alert) => alert.studentId === pairing.studentId)),
       });
     }
+
+    await this.rabbitMq.publish('performance.weekly.digest', {
+      audience: 'ACADEMIC_QA',
+      alerts: alerts.length,
+      pairings: pairings.length,
+    });
   }
 
   async attendanceCorrelationCheck(): Promise<void> {
+    const config = await this.getEngineConfig();
+    if (!config.analysisEnabled) {
+      return;
+    }
+
     const students = await this.prisma.student.findMany({
       where: { status: StudentStatus.ACTIVE },
       select: { id: true },

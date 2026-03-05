@@ -13,6 +13,7 @@ import { RabbitMqService } from '../rabbitmq/rabbitmq.service';
 import { PerformanceFilterDto } from './dto/performance-filter.dto';
 import { CreatePairingDto } from './dto/create-pairing.dto';
 import { UpdatePairingStatusDto } from './dto/update-pairing-status.dto';
+import { buildPageMeta, paginate } from '../common/helpers/pagination.helper';
 
 @Injectable()
 export class PerformanceService {
@@ -55,9 +56,14 @@ export class PerformanceService {
       return cached;
     }
 
+    const alertsCacheKey = `performance:${studentId}:alerts:active`;
+    const cachedAlerts = await this.redis.get<unknown[]>(alertsCacheKey);
+
     const [trends, alerts, pairings, snapshots] = await Promise.all([
       this.prisma.performanceTrend.findMany({ where: { studentId } }),
-      this.prisma.performanceAlert.findMany({ where: { studentId, isResolved: false } }),
+      cachedAlerts
+        ? Promise.resolve(cachedAlerts)
+        : this.prisma.performanceAlert.findMany({ where: { studentId, isResolved: false } }),
       this.prisma.peerPairing.findMany({
         where: { studentId, status: { in: [PairingStatus.SUGGESTED, PairingStatus.ACTIVE] } },
       }),
@@ -78,6 +84,7 @@ export class PerformanceService {
 
     const payload = { trends, alerts, pairings, chartData };
     await this.redis.set(cacheKey, payload, 900);
+    await this.redis.set(alertsCacheKey, alerts, 300);
     return payload;
   }
 
@@ -111,6 +118,7 @@ export class PerformanceService {
   }
 
   async alerts(filters: PerformanceFilterDto, user: { id: string; role: string }): Promise<unknown> {
+    const paging = paginate(filters.page, filters.limit);
     const where: Prisma.PerformanceAlertWhereInput = {
       alertType: filters.alertType,
       severity: filters.severity,
@@ -133,14 +141,24 @@ export class PerformanceService {
       ];
     }
 
-    return this.prisma.performanceAlert.findMany({
-      where,
-      include: {
-        student: true,
-        triggeredBySnapshot: true,
-      },
-      orderBy: [{ severity: 'desc' }, { createdAt: 'desc' }],
-    });
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.performanceAlert.findMany({
+        where,
+        include: {
+          student: true,
+          triggeredBySnapshot: true,
+        },
+        orderBy: [{ severity: 'desc' }, { createdAt: 'desc' }],
+        skip: paging.skip,
+        take: paging.take,
+      }),
+      this.prisma.performanceAlert.count({ where }),
+    ]);
+
+    return {
+      items,
+      meta: buildPageMeta(paging.page, paging.limit, total),
+    };
   }
 
   async alertsByClass(classId: string, user: { id: string; role: string }): Promise<unknown> {
@@ -180,7 +198,35 @@ export class PerformanceService {
     return grouped;
   }
 
-  async resolveAlert(alertId: string, resolutionNote: string | undefined, resolvedById: string): Promise<unknown> {
+  async resolveAlert(
+    alertId: string,
+    resolutionNote: string | undefined,
+    resolvedById: string,
+    requesterRole?: string,
+  ): Promise<unknown> {
+    if (requesterRole === 'TEACHER') {
+      const alert = await this.prisma.performanceAlert.findUnique({
+        where: { id: alertId },
+        include: {
+          triggeredBySnapshot: {
+            include: {
+              class: true,
+            },
+          },
+        },
+      });
+
+      if (!alert) {
+        throw new NotFoundException('Alert not found');
+      }
+
+      const isSubjectTeacher = alert.triggeredBySnapshot.teacherId === resolvedById;
+      const isClassTeacher = alert.triggeredBySnapshot.class.classTeacherId === resolvedById;
+      if (!isSubjectTeacher && !isClassTeacher) {
+        throw new ForbiddenException('Teacher cannot resolve alerts outside scope');
+      }
+    }
+
     return this.prisma.performanceAlert.update({
       where: { id: alertId },
       data: {

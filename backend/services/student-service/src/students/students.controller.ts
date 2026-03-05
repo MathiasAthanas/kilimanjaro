@@ -8,7 +8,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { StudentsService } from './students.service';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -43,18 +43,21 @@ export class StudentsController {
   @Post()
   @Roles('SYSTEM_ADMIN', 'PRINCIPAL')
   @ApiOperation({ summary: 'Enroll a new student' })
+  @ApiResponse({ status: 201, description: 'Student enrolled successfully' })
   async create(@Body() dto: CreateStudentDto, @CurrentUser() user?: RequestUser) {
     return this.studentsService.create(dto, user?.id || 'system');
   }
 
   @Get()
   @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'ACADEMIC_QA', 'FINANCE', 'HEAD_OF_DEPARTMENT', 'TEACHER')
+  @ApiOperation({ summary: 'Paginated list of students with filters' })
   async list(@Query() query: ListStudentsDto) {
     return this.studentsService.list(query);
   }
 
   @Get('registration/:registrationNumber')
   @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'ACADEMIC_QA', 'FINANCE', 'HEAD_OF_DEPARTMENT', 'TEACHER')
+  @ApiOperation({ summary: 'Lookup student by registration number' })
   async byRegistration(@Param('registrationNumber') registrationNumber: string) {
     return this.studentsService.findByRegistration(registrationNumber);
   }
@@ -70,6 +73,7 @@ export class StudentsController {
     'PARENT',
     'STUDENT',
   )
+  @ApiOperation({ summary: 'Get full student profile' })
   async byId(@Param('id') id: string, @CurrentUser() user?: RequestUser) {
     if (user) {
       await this.assertScopedAccess(user, id);
@@ -79,18 +83,21 @@ export class StudentsController {
 
   @Patch(':id([0-9a-fA-F-]{36})')
   @Roles('SYSTEM_ADMIN', 'PRINCIPAL')
+  @ApiOperation({ summary: 'Update student profile' })
   async update(@Param('id') id: string, @Body() dto: UpdateStudentDto) {
     return this.studentsService.update(id, dto);
   }
 
   @Patch(':id([0-9a-fA-F-]{36})/status')
   @Roles('SYSTEM_ADMIN', 'PRINCIPAL')
+  @ApiOperation({ summary: 'Change student status and publish status event' })
   async status(@Param('id') id: string, @Body() dto: ChangeStatusDto, @CurrentUser() user?: RequestUser) {
     return this.studentsService.changeStatus(id, dto, user?.id || 'system');
   }
 
   @Post(':id([0-9a-fA-F-]{36})/promote')
   @Roles('SYSTEM_ADMIN', 'PRINCIPAL')
+  @ApiOperation({ summary: 'Promote student to new class and academic year' })
   async promote(@Param('id') id: string, @Body() dto: PromoteStudentDto, @CurrentUser() user?: RequestUser) {
     return this.studentsService.promote(id, dto, user?.id || 'system');
   }

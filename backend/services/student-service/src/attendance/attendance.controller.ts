@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AttendanceService } from './attendance.service';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -17,6 +17,7 @@ export class AttendanceController {
 
   @Post('attendance')
   @Roles('TEACHER', 'HEAD_OF_DEPARTMENT', 'PRINCIPAL')
+  @ApiOperation({ summary: 'Mark attendance in bulk for a class/date' })
   async mark(@Body() dto: MarkAttendanceDto, @CurrentUser() user?: RequestUser) {
     return this.attendanceService.mark(dto, user?.id || 'system');
   }
@@ -31,6 +32,7 @@ export class AttendanceController {
     'TEACHER',
     'PARENT',
   )
+  @ApiOperation({ summary: 'List attendance records with attendance rate' })
   async list(@Query() query: AttendanceFilterDto, @CurrentUser() user?: RequestUser) {
     return this.attendanceService.list(query, user);
   }
@@ -46,6 +48,7 @@ export class AttendanceController {
     'PARENT',
     'STUDENT',
   )
+  @ApiOperation({ summary: 'Per-term attendance summary for a student' })
   async summary(@Param('studentId') studentId: string, @CurrentUser() user?: RequestUser) {
     return this.attendanceService.summary(studentId, user);
   }

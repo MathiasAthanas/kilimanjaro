@@ -31,6 +31,7 @@ export class DisciplineService {
       studentId: record.studentId,
       category: record.category,
       severity: record.severity,
+      requiresParentNotification: record.requiresParentNotification,
     });
 
     return record;

@@ -1,5 +1,5 @@
 import { Controller, Get } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Public } from '../common/decorators/public.decorator';
 import { HealthService } from './health.service';
 
@@ -10,6 +10,7 @@ export class HealthController {
 
   @Get('health')
   @Public()
+  @ApiOperation({ summary: 'Student service health check' })
   check() {
     return this.healthService.check();
   }

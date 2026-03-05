@@ -17,16 +17,18 @@ export class PerformanceSchedulerService {
     const start = Date.now();
     this.logger.log('Nightly full analysis started');
 
-    const { estimatedRecords } = await this.engine.runScope('all');
+    const stats = await this.engine.runScope('all');
 
     const duration = Date.now() - start;
-    this.logger.log(`Nightly full analysis completed in ${duration}ms`);
+    this.logger.log(
+      `Nightly full analysis completed in ${duration}ms students=${stats.studentsProcessed} alertsCreated=${stats.alertsCreated} alertsResolved=${stats.alertsResolved} pairings=${stats.pairingsCreated}`,
+    );
 
     await this.rabbitMq.publish('engine.analysis.completed', {
-      studentsProcessed: estimatedRecords,
-      alertsCreated: 0,
-      alertsResolved: 0,
-      pairingsCreated: 0,
+      studentsProcessed: stats.studentsProcessed,
+      alertsCreated: stats.alertsCreated,
+      alertsResolved: stats.alertsResolved,
+      pairingsCreated: stats.pairingsCreated,
       duration,
     });
   }

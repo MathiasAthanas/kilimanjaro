@@ -173,6 +173,8 @@ export class StudentsService {
     await this.rabbitMq.publish('student.enrolled', {
       studentId: (created as { id: string }).id,
       registrationNumber: (created as { registrationNumber: string }).registrationNumber,
+      classId: dto.classId,
+      academicYearId: dto.academicYearId,
       enrolledBy: actorId,
     });
 
@@ -308,7 +310,8 @@ export class StudentsService {
 
     await this.rabbitMq.publish('student.status.changed', {
       studentId: id,
-      status: dto.status,
+      previousStatus: student.status,
+      newStatus: dto.status,
       reason: dto.reason,
       effectiveDate: effectiveDate.toISOString(),
       changedBy: actorId,

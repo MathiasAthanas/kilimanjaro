@@ -60,7 +60,10 @@ export class AttendanceService {
   }
 
   async list(filters: AttendanceFilterDto, currentUser?: { id: string; role: string }): Promise<unknown> {
-    if (currentUser?.role === 'PARENT' && filters.studentId) {
+    if (currentUser?.role === 'PARENT') {
+      if (!filters.studentId) {
+        throw new ForbiddenException('Parent must provide studentId');
+      }
       const link = await this.prisma.studentGuardianLink.findFirst({
         where: {
           studentId: filters.studentId,
