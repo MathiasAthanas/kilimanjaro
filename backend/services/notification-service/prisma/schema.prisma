@@ -1,11 +1,180 @@
 generator client {
-  provider = "prisma-client-js"
-  output   = "../node_modules/.prisma/notification-client"
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  schemas  = ["notifications"]
 }
 
-// TODO: Add notification models here
+enum NotificationChannel {
+  SMS
+  EMAIL
+  PUSH
+  IN_APP
+
+  @@schema("notifications")
+}
+
+enum NotificationStatus {
+  QUEUED
+  SENDING
+  DELIVERED
+  FAILED
+  CANCELLED
+
+  @@schema("notifications")
+}
+
+enum AnnouncementPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+
+  @@schema("notifications")
+}
+
+enum AnnouncementStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHED
+  CANCELLED
+
+  @@schema("notifications")
+}
+
+enum DevicePlatform {
+  ANDROID
+  IOS
+  WEB
+
+  @@schema("notifications")
+}
+
+model NotificationTemplate {
+  id          String              @id @default(uuid())
+  eventType   String
+  channel     NotificationChannel
+  name        String
+  subject     String?
+  body        String
+  smsBody     String?
+  isActive    Boolean             @default(true)
+  language    String              @default("en")
+  variables   Json
+  createdById String
+  updatedById String?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  notifications Notification[]
+
+  @@unique([eventType, channel, language])
+  @@schema("notifications")
+}
+
+model Notification {
+  id                String              @id @default(uuid())
+  recipientId       String
+  recipientRole     String
+  recipientPhone    String?
+  recipientEmail    String?
+  channel           NotificationChannel
+  eventType         String
+  templateId        String?
+  subject           String?
+  body              String
+  status            NotificationStatus  @default(QUEUED)
+  attemptCount      Int                 @default(0)
+  lastAttemptAt     DateTime?
+  deliveredAt       DateTime?
+  failureReason     String?
+  externalMessageId String?
+  metadata          Json?
+  isRead            Boolean             @default(false)
+  readAt            DateTime?
+  sourceService     String
+  sourceEventId     String?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  template          NotificationTemplate? @relation(fields: [templateId], references: [id])
+  smsLogs           SmsDeliveryLog[]
+
+  @@index([recipientId, isRead])
+  @@index([status, channel])
+  @@index([eventType, createdAt])
+  @@index([sourceEventId])
+  @@schema("notifications")
+}
+
+model Announcement {
+  id             String                 @id @default(uuid())
+  title          String
+  body           String
+  authorId       String
+  authorRole     String
+  targetRoles    String[]
+  targetClassIds String[]
+  channels       NotificationChannel[]
+  priority       AnnouncementPriority   @default(NORMAL)
+  status         AnnouncementStatus     @default(DRAFT)
+  scheduledAt    DateTime?
+  publishedAt    DateTime?
+  expiresAt      DateTime?
+  attachmentUrl  String?
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+
+  @@index([status, scheduledAt])
+  @@schema("notifications")
+}
+
+model DeviceToken {
+  id         String         @id @default(uuid())
+  userId     String
+  token      String         @unique
+  platform   DevicePlatform
+  deviceInfo String?
+  isActive   Boolean        @default(true)
+  lastUsedAt DateTime       @default(now())
+  createdAt  DateTime       @default(now())
+
+  @@index([userId, isActive])
+  @@schema("notifications")
+}
+
+model NotificationPreference {
+  id        String              @id @default(uuid())
+  userId    String
+  eventType String
+  channel   NotificationChannel
+  isEnabled Boolean             @default(true)
+  updatedAt DateTime            @updatedAt
+
+  @@unique([userId, eventType, channel])
+  @@index([userId])
+  @@schema("notifications")
+}
+
+model SmsDeliveryLog {
+  id                String   @id @default(uuid())
+  notificationId    String
+  provider          String
+  phoneNumber       String
+  messageBody       String
+  requestPayload    Json
+  responsePayload   Json?
+  success           Boolean
+  externalMessageId String?
+  cost              String?
+  failureReason     String?
+  attemptNumber     Int
+  sentAt            DateTime @default(now())
+  notification      Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+
+  @@index([notificationId])
+  @@index([sentAt])
+  @@schema("notifications")
+}
