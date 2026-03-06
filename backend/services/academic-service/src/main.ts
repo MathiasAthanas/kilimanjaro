@@ -1,23 +1,49 @@
-import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
-import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { ConfigService } from '@nestjs/config';
+import { NestFactory } from '@nestjs/core';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import helmet from 'helmet';
 import { AppModule } from './app.module';
+import { HttpExceptionFilter } from './common/filters/http-exception.filter';
+import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  app.setGlobalPrefix('api/v1');
-  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
-  app.enableCors({ origin: process.env.ALLOWED_ORIGINS?.split(',') || '*', credentials: true });
+  const config = app.get(ConfigService);
 
-  const config = new DocumentBuilder()
-    .setTitle('Kilimanjaro academic-service')
-    .setVersion('1.0')
+  app.setGlobalPrefix('api/v1');
+  app.use(helmet());
+
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  );
+
+  app.useGlobalFilters(new HttpExceptionFilter());
+  app.useGlobalInterceptors(new ResponseInterceptor());
+
+  app.enableCors({
+    origin: (config.get<string>('ALLOWED_ORIGINS', 'http://localhost:3000') || '')
+      .split(',')
+      .map((item) => item.trim()),
+    credentials: true,
+  });
+
+  const swagger = new DocumentBuilder()
+    .setTitle('Kilimanjaro Academic Service')
+    .setDescription('Academic workflow, approvals, results, report cards and performance bridge')
+    .setVersion('1.0.0')
     .addBearerAuth()
     .build();
-  SwaggerModule.setup('api/docs', app, SwaggerModule.createDocument(app, config));
 
-  const port = process.env.PORT || 3003;
+  const document = SwaggerModule.createDocument(app, swagger);
+  SwaggerModule.setup('academics/docs', app, document);
+
+  const port = Number(config.get<string>('PORT', '3013'));
   await app.listen(port);
-  console.log(`🚀 academic-service running on port ${port}`);
 }
+
 bootstrap();

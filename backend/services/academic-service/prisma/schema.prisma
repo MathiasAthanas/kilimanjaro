@@ -1,11 +1,336 @@
 generator client {
-  provider = "prisma-client-js"
-  output   = "../node_modules/.prisma/academic-client"
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  schemas  = ["academics"]
 }
 
-// TODO: Add academic models here
+enum AssessmentStatus {
+  DRAFT
+  OPEN
+  MARKS_ENTERED
+  SUBMITTED
+  HOD_APPROVED
+  APPROVED
+  REJECTED
+  LOCKED
+
+  @@schema("academics")
+}
+
+enum ApprovalAction {
+  SUBMITTED
+  APPROVED
+  REJECTED
+  REOPENED
+  LOCKED
+  UNLOCKED
+  EDITED
+
+  @@schema("academics")
+}
+
+enum DayOfWeek {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+
+  @@schema("academics")
+}
+
+enum InterventionType {
+  ALERT_RESOLVED
+  ALERT_ESCALATED
+  PAIRING_ACTIVATED
+  PAIRING_REJECTED
+  MANUAL_PAIRING_CREATED
+  TEACHER_SUPPORT_GIVEN
+  PARENT_MEETING_SCHEDULED
+  ADDITIONAL_LESSONS_ASSIGNED
+  OTHER
+
+  @@schema("academics")
+}
+
+model Subject {
+  id            String         @id @default(uuid())
+  name          String
+  code          String         @unique
+  description   String?
+  isCompulsory  Boolean        @default(true)
+  isActive      Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  classSubjects ClassSubject[]
+  assessments   Assessment[]
+  timetable     Timetable[]
+
+  @@schema("academics")
+}
+
+model ClassSubject {
+  id             String           @id @default(uuid())
+  classId        String
+  subjectId      String
+  academicYearId String
+  teacherId      String
+  isActive       Boolean          @default(true)
+  createdAt      DateTime         @default(now())
+  subject        Subject          @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  assessments    Assessment[]
+  marks          Mark[]
+  termResults    TermResult[]
+  syllabus       SyllabusTracker[]
+
+  @@unique([classId, subjectId, academicYearId])
+  @@index([classId, academicYearId])
+  @@index([teacherId])
+  @@schema("academics")
+}
+
+model GradingScale {
+  id             String         @id @default(uuid())
+  name           String
+  academicYearId String
+  isActive       Boolean        @default(false)
+  createdAt      DateTime       @default(now())
+  grades         GradeBoundary[]
+
+  @@index([academicYearId, isActive])
+  @@schema("academics")
+}
+
+model GradeBoundary {
+  id             String       @id @default(uuid())
+  gradingScaleId String
+  grade          String
+  minScore       Float
+  maxScore       Float
+  points         Float
+  remark         String
+  isPassing      Boolean      @default(true)
+  gradingScale   GradingScale @relation(fields: [gradingScaleId], references: [id], onDelete: Cascade)
+
+  @@unique([gradingScaleId, grade])
+  @@index([gradingScaleId, minScore, maxScore])
+  @@schema("academics")
+}
+
+model AssessmentType {
+  id               String       @id @default(uuid())
+  name             String
+  code             String
+  weightPercentage Float
+  academicYearId   String
+  isActive         Boolean      @default(true)
+  createdAt        DateTime     @default(now())
+  assessments      Assessment[]
+
+  @@unique([code, academicYearId])
+  @@index([academicYearId, isActive])
+  @@schema("academics")
+}
+
+model Assessment {
+  id              String           @id @default(uuid())
+  classSubjectId  String
+  assessmentTypeId String
+  subjectId       String
+  classId         String
+  termId          String
+  academicYearId  String
+  name            String
+  maxScore        Float            @default(100)
+  date            DateTime?
+  status          AssessmentStatus @default(DRAFT)
+  submittedAt     DateTime?
+  submittedById   String?
+  approvedAt      DateTime?
+  approvedById    String?
+  rejectedAt      DateTime?
+  rejectedById    String?
+  rejectionReason String?
+  lockedAt        DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  classSubject    ClassSubject     @relation(fields: [classSubjectId], references: [id], onDelete: Cascade)
+  assessmentType  AssessmentType   @relation(fields: [assessmentTypeId], references: [id])
+  subject         Subject          @relation(fields: [subjectId], references: [id])
+  marks           Mark[]
+  approvalLogs    ApprovalLog[]
+
+  @@unique([classSubjectId, assessmentTypeId, termId])
+  @@index([classId, termId, status])
+  @@schema("academics")
+}
+
+model Mark {
+  id             String       @id @default(uuid())
+  assessmentId   String
+  classSubjectId String
+  studentId      String
+  score          Float
+  isAbsent       Boolean      @default(false)
+  note           String?
+  enteredById    String
+  enteredAt      DateTime     @default(now())
+  lastEditedById String?
+  lastEditedAt   DateTime?
+  isLocked       Boolean      @default(false)
+  assessment     Assessment   @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  classSubject   ClassSubject @relation(fields: [classSubjectId], references: [id], onDelete: Cascade)
+
+  @@unique([assessmentId, studentId])
+  @@index([studentId])
+  @@index([assessmentId])
+  @@schema("academics")
+}
+
+model TermResult {
+  id                   String      @id @default(uuid())
+  studentId            String
+  classId              String
+  classSubjectId       String
+  subjectId            String
+  subjectName          String
+  termId               String
+  academicYearId       String
+  assessmentScores     Json
+  weightedTotal        Float
+  grade                String
+  gradePoints          Float
+  remark               String
+  isPassing            Boolean
+  rank                 Int?
+  totalStudentsInClass Int?
+  teacherId            String
+  isPublished          Boolean     @default(false)
+  publishedAt          DateTime?
+  publishedById        String?
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+  classSubject         ClassSubject @relation(fields: [classSubjectId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, classSubjectId, termId])
+  @@index([studentId, termId])
+  @@index([classId, termId])
+  @@schema("academics")
+}
+
+model ReportCard {
+  id                   String    @id @default(uuid())
+  studentId            String
+  classId              String
+  termId               String
+  academicYearId       String
+  overallAverage       Float
+  overallGrade         String
+  overallPoints        Float
+  overallRemark        String
+  rank                 Int?
+  totalStudentsInClass Int?
+  subjectCount         Int
+  failingSubjectCount  Int
+  teacherComment       String?
+  principalComment     String?
+  principalSignedAt    DateTime?
+  principalSignedById  String?
+  pdfUrl               String?
+  pdfGeneratedAt       DateTime?
+  isPublished          Boolean   @default(false)
+  publishedAt          DateTime?
+  publishedById        String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@unique([studentId, termId])
+  @@index([classId, termId])
+  @@schema("academics")
+}
+
+model ApprovalLog {
+  id              String         @id @default(uuid())
+  assessmentId    String
+  action          ApprovalAction
+  performedById   String
+  performedByRole String
+  note            String?
+  createdAt       DateTime       @default(now())
+  assessment      Assessment     @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+
+  @@index([assessmentId, createdAt])
+  @@schema("academics")
+}
+
+model Timetable {
+  id             String    @id @default(uuid())
+  classId        String
+  subjectId      String
+  teacherId      String
+  termId         String
+  academicYearId String
+  dayOfWeek      DayOfWeek
+  startTime      String
+  endTime        String
+  room           String?
+  subject        Subject   @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@unique([classId, dayOfWeek, startTime, termId])
+  @@index([classId, termId])
+  @@schema("academics")
+}
+
+model SyllabusTracker {
+  id                   String       @id @default(uuid())
+  classSubjectId       String
+  termId               String
+  totalTopics          Int
+  coveredTopics        Int          @default(0)
+  completionPercentage Float        @default(0)
+  lastUpdatedById      String
+  notes                String?
+  updatedAt            DateTime     @updatedAt
+  classSubject         ClassSubject @relation(fields: [classSubjectId], references: [id], onDelete: Cascade)
+
+  @@unique([classSubjectId, termId])
+  @@schema("academics")
+}
+
+model AcademicIntervention {
+  id              String           @id @default(uuid())
+  alertId         String?
+  pairingId       String?
+  studentId       String
+  subjectId       String?
+  subjectName     String?
+  type            InterventionType
+  performedById   String
+  performedByRole String
+  note            String
+  outcome         String?
+  followUpDate    DateTime?
+  isFollowedUp    Boolean          @default(false)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([studentId])
+  @@index([performedById])
+  @@schema("academics")
+}
+
+model AcademicAuditLog {
+  id            String   @id @default(uuid())
+  action        String
+  performedById String
+  payload       Json
+  createdAt     DateTime @default(now())
+
+  @@index([performedById])
+  @@schema("academics")
+}
