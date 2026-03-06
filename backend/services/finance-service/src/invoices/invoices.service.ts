@@ -1,25 +1,52 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { FinancialAuditAction, InvoiceStatus, Prisma } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
-import { StudentClientService } from '../student-client/student-client.service';
-import { RedisService } from '../redis/redis.service';
-import { NumberSequenceService } from '../common/helpers/number-sequence.service';
+import { existsSync } from 'fs';
+import { join } from 'path';
 import { AuditService } from '../audit/audit.service';
-import { RabbitMqService } from '../rabbitmq/rabbitmq.service';
+import { AccessControlService } from '../common/helpers/access-control.service';
+import { NumberSequenceService } from '../common/helpers/number-sequence.service';
 import { RequestUser } from '../common/interfaces/request-user.interface';
-import { InvoicePdfService } from './invoice-pdf.service';
+import { PrismaService } from '../prisma/prisma.service';
+import { RabbitMqService } from '../rabbitmq/rabbitmq.service';
+import { RedisService } from '../redis/redis.service';
+import { StudentClientService } from '../student-client/student-client.service';
 import { GenerateInvoicesDto } from './dto/generate-invoices.dto';
+import { InvoicePdfService } from './invoice-pdf.service';
+
+type InvoiceGenerationJob = {
+  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED';
+  startedAt: string;
+  completedAt?: string;
+  result?: {
+    generated: number;
+    skipped: number;
+    failed: number;
+    invoiceIds: string[];
+  };
+  error?: string;
+};
 
 @Injectable()
 export class InvoicesService {
+  private static readonly generationJobs = new Map<string, InvoiceGenerationJob>();
+
   constructor(
     private readonly prisma: PrismaService,
+    private readonly configService: ConfigService,
     private readonly studentClient: StudentClientService,
     private readonly redis: RedisService,
     private readonly numberService: NumberSequenceService,
     private readonly audit: AuditService,
     private readonly rabbitMq: RabbitMqService,
     private readonly pdf: InvoicePdfService,
+    private readonly accessControl: AccessControlService,
   ) {}
 
   private unwrap<T>(payload: any): T {
@@ -83,7 +110,7 @@ export class InvoicesService {
 
     const subtotal = applicable.reduce((acc, item) => acc.plus(item.amount), new Prisma.Decimal(0));
     const total = subtotal;
-    const grace = Number(process.env.FEE_DUE_GRACE_DAYS || 14);
+    const grace = Number(this.configService.get<string>('FEE_DUE_GRACE_DAYS', '14'));
     const dueDate = new Date(Date.now() + grace * 24 * 60 * 60 * 1000);
     const invoiceNumber = await this.numberService.invoiceNumber(dto.termId.replace(/[^A-Za-z0-9]/g, '').toUpperCase());
 
@@ -158,45 +185,96 @@ export class InvoicesService {
     return withPdf;
   }
 
-  async generate(dto: GenerateInvoicesDto, user: RequestUser) {
-    const studentsPayload = dto.classIds?.length
-      ? await Promise.all(
-          dto.classIds.map((classId) =>
-            this.studentClient.get<any>('/api/v1/students', { classId, page: 1, limit: 2000 }, {
-              'X-User-Id': user.id,
-              'X-User-Role': user.role,
-            }),
-          ),
-        )
-      : [
-          await this.studentClient.get<any>('/api/v1/students', { page: 1, limit: 5000 }, {
-            'X-User-Id': user.id,
-            'X-User-Role': user.role,
-          }),
-        ];
+  private async runGenerationJob(jobId: string, dto: GenerateInvoicesDto, user: RequestUser): Promise<void> {
+    InvoicesService.generationJobs.set(jobId, {
+      status: 'RUNNING',
+      startedAt: new Date().toISOString(),
+    });
 
-    const students = studentsPayload.flatMap((payload) => this.unwrap<any>(payload)?.items || []);
+    try {
+      const studentsPayload = dto.classIds?.length
+        ? await Promise.all(
+            dto.classIds.map((classId) =>
+              this.studentClient.get<any>(
+                '/api/v1/students',
+                { classId, page: 1, limit: 2000 },
+                {
+                  'X-User-Id': user.id,
+                  'X-User-Role': user.role,
+                },
+              ),
+            ),
+          )
+        : [
+            await this.studentClient.get<any>(
+              '/api/v1/students',
+              { page: 1, limit: 5000 },
+              {
+                'X-User-Id': user.id,
+                'X-User-Role': user.role,
+              },
+            ),
+          ];
 
-    let generated = 0;
-    let skipped = 0;
-    let failed = 0;
-    const invoiceIds: string[] = [];
+      const students = studentsPayload.flatMap((payload) => this.unwrap<any>(payload)?.items || []);
 
-    for (const student of students) {
-      try {
-        const invoice = await this.generateInvoiceForStudent(student, dto, user);
-        if (invoice) {
-          generated += 1;
-          invoiceIds.push(invoice.id);
-        } else {
-          skipped += 1;
+      let generated = 0;
+      let skipped = 0;
+      let failed = 0;
+      const invoiceIds: string[] = [];
+
+      for (const student of students) {
+        try {
+          const invoice = await this.generateInvoiceForStudent(student, dto, user);
+          if (invoice) {
+            generated += 1;
+            invoiceIds.push(invoice.id);
+          } else {
+            skipped += 1;
+          }
+        } catch {
+          failed += 1;
         }
-      } catch {
-        failed += 1;
       }
-    }
 
-    return { generated, skipped, failed, invoiceIds, jobId: `invgen-${Date.now()}` };
+      InvoicesService.generationJobs.set(jobId, {
+        status: 'COMPLETED',
+        startedAt: InvoicesService.generationJobs.get(jobId)?.startedAt || new Date().toISOString(),
+        completedAt: new Date().toISOString(),
+        result: { generated, skipped, failed, invoiceIds },
+      });
+    } catch (error) {
+      InvoicesService.generationJobs.set(jobId, {
+        status: 'FAILED',
+        startedAt: InvoicesService.generationJobs.get(jobId)?.startedAt || new Date().toISOString(),
+        completedAt: new Date().toISOString(),
+        error: (error as Error).message,
+      });
+    }
+  }
+
+  async generate(dto: GenerateInvoicesDto, user: RequestUser) {
+    const jobId = `invgen-${Date.now()}`;
+    InvoicesService.generationJobs.set(jobId, {
+      status: 'PENDING',
+      startedAt: new Date().toISOString(),
+    });
+
+    void this.runGenerationJob(jobId, dto, user);
+
+    return {
+      jobId,
+      status: 'PENDING',
+      message: 'Invoice generation started in background',
+    };
+  }
+
+  getJob(jobId: string) {
+    const job = InvoicesService.generationJobs.get(jobId);
+    if (!job) {
+      throw new NotFoundException('Invoice generation job not found');
+    }
+    return { jobId, ...job };
   }
 
   async list(filters: any, user: RequestUser) {
@@ -204,6 +282,10 @@ export class InvoicesService {
     const limit = Math.min(100, Math.max(1, Number(filters.limit || 20)));
 
     if (['MANAGING_DIRECTOR', 'BOARD_DIRECTOR'].includes(user.role)) {
+      if (filters.studentId) {
+        throw new ForbiddenException('Director roles can only access aggregate finance data');
+      }
+
       const aggregate = await this.prisma.invoice.aggregate({
         _sum: { totalAmount: true, paidAmount: true, outstandingBalance: true },
         where: {
@@ -216,35 +298,98 @@ export class InvoicesService {
       return { aggregateOnly: true, ...aggregate };
     }
 
-    const where = {
-      studentId: filters.studentId,
-      classId: filters.classId,
-      termId: filters.termId,
-      academicYearId: filters.academicYearId,
-      status: filters.status,
-      invoiceNumber: filters.search ? { contains: filters.search, mode: 'insensitive' as const } : undefined,
-    };
+    let studentFilter: string | undefined = filters.studentId;
+
+    if (user.role === 'STUDENT') {
+      const ownStudentId = await this.accessControl.resolveStudentIdForAuthUser(user.id);
+      if (!ownStudentId) {
+        throw new ForbiddenException('Student profile not found');
+      }
+      if (studentFilter && studentFilter !== ownStudentId) {
+        throw new ForbiddenException('Student can only access own invoices');
+      }
+      studentFilter = ownStudentId;
+    }
+
+    if (user.role === 'PARENT') {
+      const studentIds = await this.accessControl.resolveGuardianStudentIds(user.id);
+      if (!studentIds.length) {
+        return [];
+      }
+
+      if (studentFilter && !studentIds.includes(studentFilter)) {
+        throw new ForbiddenException('Parent can only access own child invoices');
+      }
+
+      return this.prisma.invoice.findMany({
+        where: {
+          studentId: studentFilter || { in: studentIds },
+          classId: filters.classId,
+          termId: filters.termId,
+          academicYearId: filters.academicYearId,
+          status: filters.status,
+          invoiceNumber: filters.search ? { contains: filters.search, mode: 'insensitive' as const } : undefined,
+        },
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      });
+    }
 
     return this.prisma.invoice.findMany({
-      where,
+      where: {
+        studentId: studentFilter,
+        classId: filters.classId,
+        termId: filters.termId,
+        academicYearId: filters.academicYearId,
+        status: filters.status,
+        invoiceNumber: filters.search ? { contains: filters.search, mode: 'insensitive' as const } : undefined,
+      },
       orderBy: { createdAt: 'desc' },
       skip: (page - 1) * limit,
       take: limit,
     });
   }
 
-  async byId(id: string) {
+  async byId(id: string, user: RequestUser) {
+    if (['MANAGING_DIRECTOR', 'BOARD_DIRECTOR'].includes(user.role)) {
+      throw new ForbiddenException('Director roles can only access aggregate finance data');
+    }
+
     const invoice = await this.prisma.invoice.findUnique({ where: { id }, include: { lineItems: true, payments: true } });
     if (!invoice) throw new NotFoundException('Invoice not found');
+
+    if (user.role === 'PARENT') {
+      await this.accessControl.assertParentOwnsStudent(user.id, invoice.studentId);
+    }
+    if (user.role === 'STUDENT') {
+      await this.accessControl.assertStudentOwnsRecord(user.id, invoice.studentId);
+    }
+
     return invoice;
   }
 
-  byStudent(studentId: string) {
-    return this.prisma.invoice.findMany({ where: { studentId }, include: { lineItems: true, payments: true }, orderBy: { createdAt: 'desc' } });
+  async byStudent(studentId: string, user: RequestUser) {
+    if (['MANAGING_DIRECTOR', 'BOARD_DIRECTOR'].includes(user.role)) {
+      throw new ForbiddenException('Director roles can only access aggregate finance data');
+    }
+
+    if (user.role === 'PARENT') {
+      await this.accessControl.assertParentOwnsStudent(user.id, studentId);
+    }
+    if (user.role === 'STUDENT') {
+      await this.accessControl.assertStudentOwnsRecord(user.id, studentId);
+    }
+
+    return this.prisma.invoice.findMany({
+      where: { studentId },
+      include: { lineItems: true, payments: true },
+      orderBy: { createdAt: 'desc' },
+    });
   }
 
   async applyDiscount(id: string, discountAmount: string, discountReason: string, user: RequestUser) {
-    const invoice = await this.byId(id);
+    const invoice = await this.byId(id, user);
     const discount = this.decimal(discountAmount);
     if (discount.lt(0) || discount.gt(invoice.subtotal)) {
       throw new BadRequestException('Invalid discount amount');
@@ -279,7 +424,7 @@ export class InvoicesService {
   }
 
   async cancel(id: string, reason: string, user: RequestUser) {
-    const invoice = await this.byId(id);
+    const invoice = await this.byId(id, user);
     if (invoice.payments.some((p) => p.status === 'CONFIRMED')) {
       throw new ConflictException('Cannot cancel invoice with confirmed payment');
     }
@@ -307,7 +452,7 @@ export class InvoicesService {
   }
 
   async waive(id: string, reason: string, user: RequestUser) {
-    const invoice = await this.byId(id);
+    const invoice = await this.byId(id, user);
     const updated = await this.prisma.invoice.update({
       where: { id },
       data: {
@@ -331,6 +476,24 @@ export class InvoicesService {
     return updated;
   }
 
+  async getPdfFile(id: string, user: RequestUser) {
+    const invoice = await this.byId(id, user);
+    if (!invoice.pdfUrl) {
+      throw new NotFoundException('Invoice PDF not found');
+    }
+
+    const root = this.configService.get<string>('PDF_STORAGE_PATH', './storage');
+    const fullPath = join(root, invoice.pdfUrl);
+    if (!existsSync(fullPath)) {
+      throw new NotFoundException('Invoice PDF file missing on disk');
+    }
+
+    return {
+      fullPath,
+      fileName: `${invoice.invoiceNumber}.pdf`,
+    };
+  }
+
   async regeneratePdf(id: string) {
     const invoice = await this.prisma.invoice.findUnique({
       where: { id },
@@ -339,10 +502,14 @@ export class InvoicesService {
     if (!invoice) throw new NotFoundException('Invoice not found');
 
     const student = this.unwrap<any>(
-      await this.studentClient.get(`/api/v1/students/${invoice.studentId}`, {}, {
-        'X-User-Id': 'finance-service',
-        'X-User-Role': 'PRINCIPAL',
-      }),
+      await this.studentClient.get(
+        `/api/v1/students/${invoice.studentId}`,
+        {},
+        {
+          'X-User-Id': 'finance-service',
+          'X-User-Role': 'PRINCIPAL',
+        },
+      ),
     );
 
     const pdfUrl = await this.pdf.generate({

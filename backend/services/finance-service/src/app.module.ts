@@ -10,6 +10,7 @@ import { RabbitMqModule } from './rabbitmq/rabbitmq.module';
 import { RedisModule } from './redis/redis.module';
 import { StudentClientModule } from './student-client/student-client.module';
 import { IdentityMiddleware } from './common/middleware/identity.middleware';
+import { CommonModule } from './common/common.module';
 import { RolesGuard } from './common/guards/roles.guard';
 import { FeeCategoriesModule } from './fee-categories/fee-categories.module';
 import { FeeStructuresModule } from './fee-structures/fee-structures.module';
@@ -38,6 +39,7 @@ import { NumberSequenceService } from './common/helpers/number-sequence.service'
     ScheduleModule.forRoot(),
     PrismaModule,
     RedisModule,
+    CommonModule,
     RabbitMqModule,
     StudentClientModule,
     AuditModule,

@@ -1,9 +1,15 @@
-import { Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
+import { AccessControlService } from '../common/helpers/access-control.service';
+import { RequestUser } from '../common/interfaces/request-user.interface';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class ReportsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly accessControl: AccessControlService,
+  ) {}
 
   async collectionSummary(filters: { termId?: string; academicYearId?: string; classId?: string }) {
     const where = {
@@ -27,29 +33,31 @@ export class ReportsService {
       this.prisma.invoice.aggregate({ where: { ...where, status: 'OVERDUE' }, _sum: { outstandingBalance: true } }),
     ]);
 
-    const totalBilled = invoiceAgg._sum.totalAmount || 0;
-    const totalCollected = invoiceAgg._sum.paidAmount || 0;
-    const totalOutstanding = invoiceAgg._sum.outstandingBalance || 0;
+    const totalBilled = invoiceAgg._sum.totalAmount || new Prisma.Decimal(0);
+    const totalCollected = invoiceAgg._sum.paidAmount || new Prisma.Decimal(0);
+    const totalOutstanding = invoiceAgg._sum.outstandingBalance || new Prisma.Decimal(0);
+    const overdueAmount = overdueAmountAgg._sum.outstandingBalance || new Prisma.Decimal(0);
 
     return {
-      totalBilled,
-      totalCollected,
-      totalOutstanding,
-      collectionRate: Number(totalBilled) > 0 ? (Number(totalCollected) / Number(totalBilled)) * 100 : 0,
+      totalBilled: totalBilled.toString(),
+      totalCollected: totalCollected.toString(),
+      totalOutstanding: totalOutstanding.toString(),
+      collectionRate:
+        totalBilled.gt(0) ? totalCollected.div(totalBilled).mul(100).toDecimalPlaces(2).toString() : '0',
       byPaymentMethod: paymentAgg.map((row) => ({
         method: row.method,
-        totalAmount: row._sum.amount || 0,
+        totalAmount: (row._sum.amount || new Prisma.Decimal(0)).toString(),
         transactionCount: row._count._all,
       })),
       overdueCount,
-      overdueAmount: overdueAmountAgg._sum.outstandingBalance || 0,
+      overdueAmount: overdueAmount.toString(),
       byClass: [],
       byFeeCategory: [],
     };
   }
 
   async outstandingBalances(filters: { termId?: string; academicYearId?: string; classId?: string; minAmount?: string }) {
-    const min = filters.minAmount ? Number(filters.minAmount) : 0;
+    const min = filters.minAmount ? new Prisma.Decimal(filters.minAmount) : new Prisma.Decimal(0);
     const rows = await this.prisma.invoice.findMany({
       where: {
         termId: filters.termId,
@@ -93,7 +101,18 @@ export class ReportsService {
     });
   }
 
-  studentStatement(studentId: string, filters: { academicYearId?: string }) {
+  async studentStatement(studentId: string, filters: { academicYearId?: string }, user: RequestUser) {
+    if (['MANAGING_DIRECTOR', 'BOARD_DIRECTOR'].includes(user.role)) {
+      throw new ForbiddenException('Director roles can only access aggregate finance data');
+    }
+
+    if (user.role === 'PARENT') {
+      await this.accessControl.assertParentOwnsStudent(user.id, studentId);
+    }
+    if (user.role === 'STUDENT') {
+      await this.accessControl.assertStudentOwnsRecord(user.id, studentId);
+    }
+
     return this.prisma.invoice.findMany({
       where: {
         studentId,

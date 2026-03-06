@@ -1,5 +1,7 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Res } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+import { createReadStream } from 'fs';
+import { Response } from 'express';
 import { ROLES } from '../common/constants/roles';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -33,6 +35,12 @@ export class InvoicesController {
     return this.invoicesService.list(query, user!);
   }
 
+  @Get('jobs/:jobId')
+  @Roles(ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN)
+  jobStatus(@Param('jobId') jobId: string) {
+    return this.invoicesService.getJob(jobId);
+  }
+
   @Get(':id')
   @Roles(
     ROLES.FINANCE,
@@ -41,8 +49,8 @@ export class InvoicesController {
     ROLES.PARENT,
     ROLES.STUDENT,
   )
-  byId(@Param('id') id: string) {
-    return this.invoicesService.byId(id);
+  byId(@Param('id') id: string, @CurrentUser() user?: RequestUser) {
+    return this.invoicesService.byId(id, user!);
   }
 
   @Get('student/:studentId')
@@ -53,8 +61,8 @@ export class InvoicesController {
     ROLES.PARENT,
     ROLES.STUDENT,
   )
-  byStudent(@Param('studentId') studentId: string) {
-    return this.invoicesService.byStudent(studentId);
+  byStudent(@Param('studentId') studentId: string, @CurrentUser() user?: RequestUser) {
+    return this.invoicesService.byStudent(studentId, user!);
   }
 
   @Patch(':id/discount')
@@ -77,8 +85,11 @@ export class InvoicesController {
 
   @Get(':id/pdf')
   @Roles(ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.PARENT, ROLES.STUDENT)
-  pdf(@Param('id') id: string) {
-    return this.invoicesService.byId(id);
+  async pdf(@Param('id') id: string, @CurrentUser() user: RequestUser, @Res() res: Response) {
+    const file = await this.invoicesService.getPdfFile(id, user);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${file.fileName}"`);
+    createReadStream(file.fullPath).pipe(res);
   }
 
   @Post(':id/regenerate-pdf')

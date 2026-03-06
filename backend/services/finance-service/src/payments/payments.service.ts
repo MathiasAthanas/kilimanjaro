@@ -1,4 +1,4 @@
-import { createHmac } from 'crypto';
+import { createHmac, timingSafeEqual } from 'crypto';
 import {
   BadRequestException,
   ForbiddenException,
@@ -47,7 +47,12 @@ export class PaymentsService {
   private verifyWebhook(bodyRaw: string, signature: string): boolean {
     const secret = this.configService.get<string>('WEBHOOK_SECRET', '');
     const hash = createHmac('sha256', secret).update(bodyRaw).digest('hex');
-    return hash === signature;
+    const expected = Buffer.from(hash, 'hex');
+    const received = Buffer.from(signature || '', 'hex');
+    if (expected.length !== received.length) {
+      return false;
+    }
+    return timingSafeEqual(expected, received);
   }
 
   private async applyPaymentToInvoice(paymentId: string, actor: RequestUser) {
@@ -204,7 +209,7 @@ export class PaymentsService {
     return this.createManualPayment(dto, PaymentMethod.CASH, user);
   }
 
-  list(filters: any) {
+  list(filters: any, _user: RequestUser) {
     const page = Math.max(1, Number(filters.page || 1));
     const limit = Math.min(100, Math.max(1, Number(filters.limit || 20)));
     return this.prisma.payment.findMany({
@@ -227,7 +232,7 @@ export class PaymentsService {
     });
   }
 
-  pendingApprovals() {
+  pendingApprovals(_user: RequestUser) {
     return this.prisma.manualPaymentApproval.findMany({
       where: { decision: null },
       include: { payment: true },

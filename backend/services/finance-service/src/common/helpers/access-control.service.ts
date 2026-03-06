@@ -1,9 +1,13 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
+import { RedisService } from '../../redis/redis.service';
 import { StudentClientService } from '../../student-client/student-client.service';
 
 @Injectable()
 export class AccessControlService {
-  constructor(private readonly studentClient: StudentClientService) {}
+  constructor(
+    private readonly studentClient: StudentClientService,
+    private readonly redis: RedisService,
+  ) {}
 
   private unwrap<T>(payload: any): T {
     if (payload && typeof payload === 'object' && 'success' in payload && 'data' in payload) {
@@ -20,9 +24,17 @@ export class AccessControlService {
   }
 
   async resolveGuardianStudentIds(authUserId: string): Promise<string[]> {
+    const cacheKey = `finance:parent:${authUserId}:students`;
+    const cached = await this.redis.get<string[]>(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
     const payload = await this.studentClient.get<any>(`/students/internal/guardian-by-auth/${authUserId}`);
     const data = this.unwrap<any>(payload);
-    return data?.studentIds || [];
+    const ids = data?.studentIds || [];
+    await this.redis.set(cacheKey, ids, 300);
+    return ids;
   }
 
   async assertParentOwnsStudent(authUserId: string, studentId: string): Promise<void> {

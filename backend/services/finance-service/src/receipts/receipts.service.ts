@@ -1,22 +1,28 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { FinancialAuditAction } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
+import { existsSync } from 'fs';
+import { join } from 'path';
 import { AuditService } from '../audit/audit.service';
-import { RequestUser } from '../common/interfaces/request-user.interface';
+import { AccessControlService } from '../common/helpers/access-control.service';
 import { NumberSequenceService } from '../common/helpers/number-sequence.service';
-import { StudentClientService } from '../student-client/student-client.service';
+import { RequestUser } from '../common/interfaces/request-user.interface';
+import { PrismaService } from '../prisma/prisma.service';
 import { RabbitMqService } from '../rabbitmq/rabbitmq.service';
+import { StudentClientService } from '../student-client/student-client.service';
 import { ReceiptPdfService } from './receipt-pdf.service';
 
 @Injectable()
 export class ReceiptsService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly configService: ConfigService,
     private readonly audit: AuditService,
     private readonly numberService: NumberSequenceService,
     private readonly studentClient: StudentClientService,
     private readonly rabbitMq: RabbitMqService,
     private readonly pdfService: ReceiptPdfService,
+    private readonly accessControl: AccessControlService,
   ) {}
 
   private unwrap<T>(payload: any): T {
@@ -102,13 +108,59 @@ export class ReceiptsService {
     return receipt;
   }
 
-  list(filters: any) {
+  async list(filters: any, user: RequestUser) {
     const page = Math.max(1, Number(filters.page || 1));
     const limit = Math.min(100, Math.max(1, Number(filters.limit || 20)));
 
+    if (['MANAGING_DIRECTOR', 'BOARD_DIRECTOR'].includes(user.role)) {
+      throw new ForbiddenException('Director roles can only access aggregate finance data');
+    }
+
+    let studentFilter: string | undefined = filters.studentId;
+
+    if (user.role === 'STUDENT') {
+      const ownStudentId = await this.accessControl.resolveStudentIdForAuthUser(user.id);
+      if (!ownStudentId) {
+        throw new ForbiddenException('Student profile not found');
+      }
+      if (studentFilter && studentFilter !== ownStudentId) {
+        throw new ForbiddenException('Student can only access own receipts');
+      }
+      studentFilter = ownStudentId;
+    }
+
+    if (user.role === 'PARENT') {
+      const studentIds = await this.accessControl.resolveGuardianStudentIds(user.id);
+      if (!studentIds.length) {
+        return [];
+      }
+      if (studentFilter && !studentIds.includes(studentFilter)) {
+        throw new ForbiddenException('Parent can only access own child receipts');
+      }
+      studentFilter = studentFilter || undefined;
+
+      return this.prisma.receipt.findMany({
+        where: {
+          studentId: studentFilter || { in: studentIds },
+          termId: filters.termId,
+          method: filters.method,
+          issuedAt:
+            filters.startDate || filters.endDate
+              ? {
+                  gte: filters.startDate ? new Date(filters.startDate) : undefined,
+                  lte: filters.endDate ? new Date(filters.endDate) : undefined,
+                }
+              : undefined,
+        },
+        orderBy: { issuedAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      });
+    }
+
     return this.prisma.receipt.findMany({
       where: {
-        studentId: filters.studentId,
+        studentId: studentFilter,
         termId: filters.termId,
         method: filters.method,
         issuedAt:
@@ -125,14 +177,44 @@ export class ReceiptsService {
     });
   }
 
-  async byId(id: string) {
+  async byId(id: string, user: RequestUser) {
+    if (['MANAGING_DIRECTOR', 'BOARD_DIRECTOR'].includes(user.role)) {
+      throw new ForbiddenException('Director roles can only access aggregate finance data');
+    }
+
     const row = await this.prisma.receipt.findUnique({ where: { id } });
     if (!row) throw new NotFoundException('Receipt not found');
+
+    if (user.role === 'PARENT') {
+      await this.accessControl.assertParentOwnsStudent(user.id, row.studentId);
+    }
+    if (user.role === 'STUDENT') {
+      await this.accessControl.assertStudentOwnsRecord(user.id, row.studentId);
+    }
+
     return row;
   }
 
+  async getPdfFile(id: string, user: RequestUser) {
+    const receipt = await this.byId(id, user);
+    if (!receipt.pdfUrl) {
+      throw new NotFoundException('Receipt PDF not found');
+    }
+
+    const root = this.configService.get<string>('PDF_STORAGE_PATH', './storage');
+    const fullPath = join(root, receipt.pdfUrl);
+    if (!existsSync(fullPath)) {
+      throw new NotFoundException('Receipt PDF file missing on disk');
+    }
+
+    return {
+      fullPath,
+      fileName: `${receipt.receiptNumber}.pdf`,
+    };
+  }
+
   async void(id: string, voidReason: string, user: RequestUser) {
-    const existing = await this.byId(id);
+    const existing = await this.byId(id, user);
     const updated = await this.prisma.receipt.update({
       where: { id },
       data: {

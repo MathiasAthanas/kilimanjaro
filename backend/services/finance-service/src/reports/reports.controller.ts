@@ -1,7 +1,9 @@
 import { Controller, Get, Param, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { ROLES } from '../common/constants/roles';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
+import { RequestUser } from '../common/interfaces/request-user.interface';
 import { ReportsService } from './reports.service';
 
 @ApiTags('Finance - Reports')
@@ -16,7 +18,7 @@ export class ReportsController {
   }
 
   @Get('outstanding-balances')
-  @Roles(ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN, ROLES.MANAGING_DIRECTOR)
+  @Roles(ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN)
   outstanding(
     @Query('termId') termId?: string,
     @Query('academicYearId') academicYearId?: string,
@@ -34,12 +36,12 @@ export class ReportsController {
 
   @Get('student-statement/:studentId')
   @Roles(ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN, ROLES.PARENT, ROLES.STUDENT)
-  statement(@Param('studentId') studentId: string, @Query('academicYearId') academicYearId?: string) {
-    return this.reportsService.studentStatement(studentId, { academicYearId });
+  statement(@Param('studentId') studentId: string, @Query('academicYearId') academicYearId?: string, @CurrentUser() user?: RequestUser) {
+    return this.reportsService.studentStatement(studentId, { academicYearId }, user!);
   }
 
   @Get('fee-defaulters')
-  @Roles(ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN, ROLES.MANAGING_DIRECTOR)
+  @Roles(ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN)
   defaulters(@Query('termId') termId?: string, @Query('academicYearId') academicYearId?: string, @Query('daysOverdue') daysOverdue?: string) {
     return this.reportsService.feeDefaulters({ termId, academicYearId, daysOverdue });
   }

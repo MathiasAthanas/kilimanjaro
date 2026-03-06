@@ -19,7 +19,7 @@ export class PaymentsController {
   @Public()
   async mobileWebhook(@Req() req: any, @Headers('x-webhook-signature') signature: string, @Body() payload: any) {
     return this.paymentsService.mobileWebhook({
-      bodyRaw: JSON.stringify(payload),
+      bodyRaw: req.rawBody ? req.rawBody.toString('utf8') : JSON.stringify(payload),
       signature,
       payload,
     });
@@ -38,25 +38,25 @@ export class PaymentsController {
   }
 
   @Get()
-  @Roles(ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN, ROLES.MANAGING_DIRECTOR)
-  list(@Query() query: any) {
-    return this.paymentsService.list(query);
+  @Roles(ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN)
+  list(@Query() query: any, @CurrentUser() user?: RequestUser) {
+    return this.paymentsService.list(query, user!);
   }
 
   @Get('pending-approval')
-  @Roles(ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN, ROLES.MANAGING_DIRECTOR)
-  pending() {
-    return this.paymentsService.pendingApprovals();
+  @Roles(ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN)
+  pending(@CurrentUser() user?: RequestUser) {
+    return this.paymentsService.pendingApprovals(user!);
   }
 
   @Patch('approvals/:approvalId/approve')
-  @Roles(ROLES.PRINCIPAL, ROLES.MANAGING_DIRECTOR, ROLES.SYSTEM_ADMIN)
+  @Roles(ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN)
   approve(@Param('approvalId') approvalId: string, @CurrentUser() user?: RequestUser) {
     return this.paymentsService.approve(approvalId, user!);
   }
 
   @Patch('approvals/:approvalId/reject')
-  @Roles(ROLES.PRINCIPAL, ROLES.MANAGING_DIRECTOR, ROLES.SYSTEM_ADMIN)
+  @Roles(ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN)
   reject(@Param('approvalId') approvalId: string, @Body() dto: RejectApprovalDto, @CurrentUser() user?: RequestUser) {
     return this.paymentsService.reject(approvalId, dto.rejectionReason, user!);
   }
