@@ -31,6 +31,11 @@ export class DispatchWorkersService implements OnModuleInit, OnModuleDestroy {
   }
 
   async onModuleInit() {
+    if (this.config.get<string>('DISABLE_QUEUE_WORKERS', 'false') === 'true') {
+      this.logger.warn('Queue workers disabled by DISABLE_QUEUE_WORKERS=true');
+      return;
+    }
+
     const connection = this.connection();
 
     const smsWorker = new Worker(

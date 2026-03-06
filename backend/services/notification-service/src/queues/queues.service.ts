@@ -40,14 +40,29 @@ export class QueuesService implements OnModuleDestroy {
   }
 
   async stats() {
-    const [sms, email, push, inApp] = await Promise.all([
-      this.sms.getJobCounts(),
-      this.email.getJobCounts(),
-      this.push.getJobCounts(),
-      this.inApp.getJobCounts(),
-    ]);
+    try {
+      const withTimeout = <T>(promise: Promise<T>) =>
+        Promise.race<T>([
+          promise,
+          new Promise<T>((_resolve, reject) => setTimeout(() => reject(new Error('queue stats timeout')), 2000)),
+        ]);
 
-    return { sms, email, push, inApp };
+      const [sms, email, push, inApp] = await Promise.all([
+        withTimeout(this.sms.getJobCounts()),
+        withTimeout(this.email.getJobCounts()),
+        withTimeout(this.push.getJobCounts()),
+        withTimeout(this.inApp.getJobCounts()),
+      ]);
+
+      return { sms, email, push, inApp };
+    } catch {
+      return {
+        sms: { waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0, paused: 0 },
+        email: { waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0, paused: 0 },
+        push: { waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0, paused: 0 },
+        inApp: { waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0, paused: 0 },
+      };
+    }
   }
 
   async onModuleDestroy() {
