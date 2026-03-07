@@ -1,11 +1,410 @@
 generator client {
-  provider = "prisma-client-js"
-  output   = "../node_modules/.prisma/analytics-client"
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  schemas  = ["analytics", "students", "academics", "finance", "notifications"]
 }
 
-// TODO: Add analytics models here
+enum ReportType {
+  SCHOOL_OVERVIEW
+  CLASS_ACADEMIC
+  STUDENT_PROFILE
+  FINANCE_COLLECTION
+  OUTSTANDING_BALANCES
+  PERFORMANCE_ENGINE
+  ATTENDANCE_SUMMARY
+  TEACHER_PERFORMANCE
+  TERM_SUMMARY
+  ANNUAL_SUMMARY
+  BOARD_EXECUTIVE
+  CUSTOM
+
+  @@schema("analytics")
+}
+
+enum ReportStatus {
+  GENERATING
+  READY
+  FAILED
+
+  @@schema("analytics")
+}
+
+model DashboardSnapshot {
+  id           String   @id @default(uuid())
+  snapshotType String
+  scope        String
+  scopeId      String?
+  period       String
+  data         Json
+  computedAt   DateTime @default(now())
+  expiresAt    DateTime
+
+  @@unique([snapshotType, scope, scopeId, period])
+  @@index([snapshotType, scope])
+  @@index([expiresAt])
+  @@schema("analytics")
+}
+
+model KpiHistory {
+  id             String   @id @default(uuid())
+  kpiName         String
+  scope           String
+  value           Float
+  period          String
+  academicYearId  String?
+  termId          String?
+  recordedAt      DateTime @default(now())
+
+  @@unique([kpiName, scope, period])
+  @@index([kpiName, scope])
+  @@schema("analytics")
+}
+
+model GeneratedReport {
+  id              String      @id @default(uuid())
+  reportType      ReportType
+  title           String
+  scope           String
+  scopeId         String?
+  period          String?
+  academicYearId  String?
+  termId          String?
+  generatedById   String
+  generatedByRole String
+  parameters      Json
+  pdfUrl          String?
+  rowCount        Int?
+  status          ReportStatus @default(GENERATING)
+  createdAt       DateTime    @default(now())
+  completedAt     DateTime?
+
+  @@index([reportType, createdAt])
+  @@index([generatedById])
+  @@schema("analytics")
+}
+
+model MetricEvent {
+  id            String   @id @default(uuid())
+  eventType     String
+  sourceService String
+  payload       Json
+  processedAt   DateTime @default(now())
+
+  @@index([eventType, processedAt])
+  @@schema("analytics")
+}
+
+model Student {
+  id                 String   @id
+  registrationNumber String
+  firstName          String
+  lastName           String
+  gender             String
+  status             String
+  admissionDate      DateTime
+  dateOfBirth        DateTime
+  nationality        String
+  profilePhotoUrl    String?
+
+  @@schema("students")
+}
+
+model Enrolment {
+  id             String   @id
+  studentId      String
+  classId        String
+  academicYearId String
+  termId         String?
+  isActive       Boolean
+
+  @@schema("students")
+}
+
+model Class {
+  id             String @id
+  name           String
+  level          Int
+  stream         String?
+  academicYearId String
+  classTeacherId String?
+  capacity       Int
+
+  @@schema("students")
+}
+
+model AcademicYear {
+  id        String @id
+  name      String
+  isCurrent Boolean
+
+  @@schema("students")
+}
+
+model Term {
+  id             String @id
+  name           String
+  academicYearId String
+  isCurrent      Boolean
+
+  @@schema("students")
+}
+
+model AttendanceRecord {
+  id        String   @id
+  studentId String
+  classId   String
+  termId    String
+  date      DateTime
+  status    String
+
+  @@schema("students")
+}
+
+model DisciplineRecord {
+  id           String   @id
+  studentId    String
+  category     String
+  severity     String
+  incidentDate DateTime
+  actionTaken  String
+  resolvedAt   DateTime?
+
+  @@schema("students")
+}
+
+model PerformanceSnapshot {
+  id                  String @id
+  studentId           String
+  subjectId           String
+  subjectName         String
+  termId              String
+  academicYearId      String
+  score               Float
+  grade               String
+  rank                Int?
+  totalStudentsInClass Int?
+  teacherId           String
+
+  @@schema("students")
+}
+
+model PerformanceTrend {
+  id                      String @id
+  studentId               String
+  subjectId               String
+  subjectName             String
+  currentScore            Float
+  averageScore            Float
+  trendDirection          String
+  trendSlope              Float?
+  consecutiveDeclines     Int
+  consecutiveImprovements Int
+  termCount               Int
+
+  @@schema("students")
+}
+
+model PerformanceAlert {
+  id         String   @id
+  studentId  String
+  subjectId  String
+  subjectName String
+  alertType  String
+  severity   String
+  message    String
+  isResolved Boolean
+  createdAt  DateTime
+  resolvedAt DateTime?
+
+  @@schema("students")
+}
+
+model PeerPairing {
+  id                   String   @id
+  studentId            String
+  peerId               String
+  subjectId            String
+  subjectName          String
+  status               String
+  reason               String
+  studentScoreAtPairing Float
+  peerScoreAtPairing   Float
+  outcomeScore         Float?
+  outcomeDelta         Float?
+  createdAt            DateTime
+
+  @@schema("students")
+}
+
+model StudentGuardianLink {
+  id         String @id
+  studentId  String
+  guardianId String
+  isPrimary  Boolean
+
+  @@schema("students")
+}
+
+model Subject {
+  id   String @id
+  name String
+  code String
+
+  @@schema("academics")
+}
+
+model ClassSubject {
+  id             String @id
+  classId        String
+  subjectId      String
+  academicYearId String
+  teacherId      String
+
+  @@schema("academics")
+}
+
+model TermResult {
+  id                   String @id
+  studentId            String
+  classSubjectId       String
+  subjectId            String
+  subjectName          String
+  termId               String
+  academicYearId       String
+  weightedTotal        Float
+  grade                String
+  gradePoints          Float
+  isPassing            Boolean
+  rank                 Int?
+  totalStudentsInClass Int?
+  isPublished          Boolean
+
+  @@schema("academics")
+}
+
+model ReportCard {
+  id                   String @id
+  studentId            String
+  classId              String
+  termId               String
+  academicYearId       String
+  overallAverage       Float
+  overallGrade         String
+  rank                 Int?
+  totalStudentsInClass Int?
+  subjectCount         Int
+  failingSubjectCount  Int
+  isPublished          Boolean
+
+  @@schema("academics")
+}
+
+model Assessment {
+  id               String @id
+  classSubjectId   String
+  assessmentTypeId String
+  termId           String
+  status           String
+
+  @@schema("academics")
+}
+
+model SyllabusTracker {
+  id                   String @id
+  classSubjectId       String
+  termId               String
+  completionPercentage Float
+
+  @@schema("academics")
+}
+
+model AcademicIntervention {
+  id              String @id
+  studentId       String
+  subjectId       String?
+  type            String
+  performedById   String
+  performedByRole String
+  createdAt       DateTime
+  isFollowedUp    Boolean
+  note            String
+  outcome         String?
+  followUpDate    DateTime?
+
+  @@schema("academics")
+}
+
+model Invoice {
+  id                 String   @id
+  studentId          String
+  classId            String
+  termId             String
+  academicYearId     String
+  invoiceNumber      String
+  totalAmount        Decimal  @db.Decimal(12, 2)
+  paidAmount         Decimal  @db.Decimal(12, 2)
+  outstandingBalance Decimal  @db.Decimal(12, 2)
+  status             String
+  dueDate            DateTime
+
+  @@schema("finance")
+}
+
+model Payment {
+  id        String   @id
+  invoiceId String
+  studentId String
+  amount    Decimal  @db.Decimal(12, 2)
+  method    String
+  status    String
+  confirmedAt DateTime?
+  paidAt    DateTime?
+
+  @@schema("finance")
+}
+
+model FeeCategory {
+  id         String @id
+  name       String
+  code       String
+  isOptional Boolean
+
+  @@schema("finance")
+}
+
+model Receipt {
+  id        String   @id
+  studentId String
+  paymentId String
+  amount    Decimal  @db.Decimal(12, 2)
+  method    String
+  issuedAt  DateTime
+
+  @@schema("finance")
+}
+
+model Notification {
+  id         String   @id
+  recipientId String
+  channel    String
+  eventType  String
+  status     String
+  createdAt  DateTime
+
+  @@schema("notifications")
+}
+
+model Announcement {
+  id          String   @id
+  title       String
+  status      String
+  publishedAt DateTime?
+  targetRoles String[]
+
+  @@schema("notifications")
+}

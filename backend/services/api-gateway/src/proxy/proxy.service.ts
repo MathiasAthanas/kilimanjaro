@@ -29,17 +29,20 @@ export class ProxyService {
     if (normalized === '/auth') {
       return this.route('auth', urls.auth, path, '/auth');
     }
-    if (normalized.startsWith('/students/') || normalized === '/students') {
-      return this.route('student', urls.student, path, normalized);
+    if (normalized.startsWith('/students/') || normalized === '/students' || normalized.startsWith('/student/') || normalized === '/student') {
+      const canonical = normalized.replace(/^\/student(\/|$)/, '/students$1');
+      return this.route('student', urls.student, path, canonical);
     }
-    if (normalized.startsWith('/academics/') || normalized === '/academics') {
-      return this.route('academic', urls.academic, path, normalized);
+    if (normalized.startsWith('/academics/') || normalized === '/academics' || normalized.startsWith('/academic/') || normalized === '/academic') {
+      const canonical = normalized.replace(/^\/academic(\/|$)/, '/academics$1');
+      return this.route('academic', urls.academic, path, canonical);
     }
     if (normalized.startsWith('/finance/') || normalized === '/finance') {
       return this.route('finance', urls.finance, path, normalized);
     }
-    if (normalized.startsWith('/notifications/') || normalized === '/notifications') {
-      return this.route('notification', urls.notification, path, normalized);
+    if (normalized.startsWith('/notifications/') || normalized === '/notifications' || normalized.startsWith('/notification/') || normalized === '/notification') {
+      const canonical = normalized.replace(/^\/notification(\/|$)/, '/notifications$1');
+      return this.route('notification', urls.notification, path, canonical);
     }
     if (normalized.startsWith('/analytics/') || normalized === '/analytics') {
       return this.route('analytics', urls.analytics, path, normalized);
@@ -117,7 +120,8 @@ export class ProxyService {
     incomingPath: string,
     normalizedPath: string,
   ): ResolvedRoute {
-    const outboundPath = incomingPath.startsWith('/api/v1') ? incomingPath : `/api/v1${normalizedPath}`;
+    const needsVersionPrefix = serviceName !== 'student';
+    const outboundPath = needsVersionPrefix ? `/api/v1${normalizedPath}` : normalizedPath;
     return {
       serviceName,
       serviceUrl,

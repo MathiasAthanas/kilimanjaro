@@ -15,12 +15,12 @@ export class HealthService {
     const urls = getServiceUrls(this.configService);
 
     const checks = await Promise.all([
-      this.check(`${urls.auth}/health`),
-      this.check(`${urls.student}/health`),
-      this.check(`${urls.academic}/health`),
-      this.check(`${urls.finance}/health`),
-      this.check(`${urls.notification}/health`),
-      this.check(`${urls.analytics}/health`),
+      this.check(`${urls.auth}/api/v1/auth`),
+      this.check(`${urls.student}/students/health`),
+      this.check(`${urls.academic}/api/v1/academics/health`),
+      this.check(`${urls.finance}/api/v1/finance/health`),
+      this.check(`${urls.notification}/api/v1/notifications/health`),
+      this.check(`${urls.analytics}/api/v1/analytics/health`),
     ]);
 
     return {
@@ -40,7 +40,12 @@ export class HealthService {
 
   private async check(url: string): Promise<'reachable' | 'unreachable'> {
     try {
-      await firstValueFrom(this.httpService.get(url, { timeout: 3000 }));
+      await firstValueFrom(
+        this.httpService.get(url, {
+          timeout: 3000,
+          validateStatus: () => true,
+        }),
+      );
       return 'reachable';
     } catch {
       return 'unreachable';
