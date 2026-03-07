@@ -1,14 +1,23 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { ReportType } from '@prisma/client';
 import * as amqp from 'amqplib';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
+import { DownstreamService } from '../downstream/downstream.service';
+import { ReportsService } from '../reports/reports.service';
 
 @Injectable()
 export class RabbitMqConsumer implements OnModuleInit {
   private readonly logger = new Logger(RabbitMqConsumer.name);
 
-  constructor(private readonly config: ConfigService, private readonly prisma: PrismaService, private readonly redis: RedisService) {}
+  constructor(
+    private readonly config: ConfigService,
+    private readonly prisma: PrismaService,
+    private readonly redis: RedisService,
+    private readonly reportsService: ReportsService,
+    private readonly downstream: DownstreamService,
+  ) {}
 
   async onModuleInit() {
     await this.bootstrap().catch((error) => this.logger.warn(`RabbitMQ disabled: ${error.message}`));
@@ -63,6 +72,9 @@ export class RabbitMqConsumer implements OnModuleInit {
 
     if (eventType.includes('results.published') || eventType.includes('academic.results.finalized')) {
       await this.redis.delByPattern('analytics:academic:*');
+      if (eventType.includes('results.published')) {
+        await this.triggerTermEndReports(payload);
+      }
     }
 
     if (eventType.includes('finance.payment.recorded') || eventType.includes('payment.confirmed') || eventType.includes('finance.invoice.generated')) {
@@ -88,5 +100,45 @@ export class RabbitMqConsumer implements OnModuleInit {
         update: { value: Number(payload.value || 0), recordedAt: new Date() },
       });
     }
+  }
+
+  private async triggerTermEndReports(payload: any) {
+    const actor = { id: 'system', role: 'SYSTEM_ADMIN' } as const;
+    const reportInputs = [
+      { reportType: ReportType.SCHOOL_OVERVIEW, scope: 'school', academicYearId: payload.academicYearId, termId: payload.termId },
+      { reportType: ReportType.FINANCE_COLLECTION, scope: 'school', academicYearId: payload.academicYearId, termId: payload.termId },
+      { reportType: ReportType.PERFORMANCE_ENGINE, scope: 'school', academicYearId: payload.academicYearId, termId: payload.termId },
+    ];
+
+    for (const input of reportInputs) {
+      try {
+        await this.reportsService.generateReport(input as any, actor as any);
+      } catch (error: any) {
+        this.logger.warn(`Term-end auto report failed for ${input.reportType}: ${error.message}`);
+      }
+    }
+
+    await this.notifyTermEndReportReady(payload).catch((error: any) =>
+      this.logger.warn(`Term-end notification dispatch failed: ${error.message}`),
+    );
+  }
+
+  private async notifyTermEndReportReady(payload: any) {
+    const recipients = await this.downstream.authUsersByRole(['PRINCIPAL', 'ACADEMIC_QA']);
+    const recipientIds = [...new Set(recipients.map((item) => item.id))];
+    if (!recipientIds.length) {
+      this.logger.warn('No PRINCIPAL/ACADEMIC_QA recipients resolved for term-end notification');
+      return;
+    }
+
+    const termLabel = payload.termName || payload.termId || 'current term';
+    const yearLabel = payload.academicYearName || payload.academicYearId || 'current year';
+    await this.downstream.dispatchInternalNotification({
+      eventType: 'analytics.term_end_reports.ready',
+      sourceService: 'analytics-service',
+      recipientIds,
+      subject: 'Term-end analytics reports generated',
+      body: `Term-end reports are ready for ${termLabel} (${yearLabel}).`,
+    });
   }
 }

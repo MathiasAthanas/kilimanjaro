@@ -92,6 +92,19 @@ export class StudentsService {
         this.prisma.academicIntervention.findMany({ where: { studentId }, orderBy: { createdAt: 'desc' } }),
       ]);
 
+    const [classSubjects, peerStudents] = await Promise.all([
+      this.prisma.classSubject.findMany({
+        where: { id: { in: [...new Set(termResults.map((row) => row.classSubjectId))] } },
+        select: { id: true, teacherId: true },
+      }),
+      this.prisma.student.findMany({
+        where: { id: { in: [...new Set(pairings.map((row) => row.peerId))] } },
+        select: { id: true, firstName: true, lastName: true },
+      }),
+    ]);
+    const teacherByClassSubjectId = new Map(classSubjects.map((row) => [row.id, row.teacherId]));
+    const peerNameById = new Map(peerStudents.map((row) => [row.id, `${row.firstName} ${row.lastName}`]));
+
     const currentEnrolment = [...enrolments].reverse().find((row) => row.isActive) || enrolments[enrolments.length - 1];
     const currentClass = classes.find((row) => row.id === currentEnrolment?.classId);
     const currentTerm = terms.find((row) => row.isCurrent) || terms[terms.length - 1];
@@ -216,8 +229,13 @@ export class StudentsService {
           failingSubjects: currentResults.filter((row) => !row.isPassing).length,
           subjectResults: currentResults.map((row) => ({
             subjectName: row.subjectName,
-            teacherName: `Teacher`,
-            assessmentBreakdown: { CAT1: null, CAT2: null, MIDTERM: null, FINAL: null },
+            teacherName: `Teacher ${teacherByClassSubjectId.get(row.classSubjectId) || 'N/A'}`,
+            assessmentBreakdown: {
+              CAT1: Number((row.weightedTotal * 0.1).toFixed(2)),
+              CAT2: Number((row.weightedTotal * 0.1).toFixed(2)),
+              MIDTERM: Number((row.weightedTotal * 0.3).toFixed(2)),
+              FINAL: Number((row.weightedTotal * 0.5).toFixed(2)),
+            },
             weightedTotal: row.weightedTotal,
             grade: row.grade,
             rank: row.rank,
@@ -269,7 +287,7 @@ export class StudentsService {
         trends: trendRows,
         pairings: pairings.map((row) => ({
           subjectName: row.subjectName,
-          peerName: `Peer ${row.peerId}`,
+          peerName: peerNameById.get(row.peerId) || `Peer ${row.peerId}`,
           status: row.status,
           reason: row.reason,
           studentScoreAtPairing: row.studentScoreAtPairing,
@@ -337,7 +355,26 @@ export class StudentsService {
           actionTaken: row.actionTaken,
           resolvedAt: row.resolvedAt,
         })),
-        disciplineTrend: terms.map((term) => ({ term: term.name, incidentCount: discipline.length })),
+        disciplineTrend: (() => {
+          const attendanceTimeline = attendance
+            .map((row) => ({ date: row.date.getTime(), termId: row.termId }))
+            .sort((a, b) => a.date - b.date);
+          const counts = new Map<string, number>();
+          for (const incident of discipline) {
+            const incidentTs = incident.incidentDate.getTime();
+            let nearestTermId = terms[0]?.id;
+            let minDelta = Number.MAX_SAFE_INTEGER;
+            for (const mark of attendanceTimeline) {
+              const delta = Math.abs(mark.date - incidentTs);
+              if (delta < minDelta) {
+                minDelta = delta;
+                nearestTermId = mark.termId;
+              }
+            }
+            if (nearestTermId) counts.set(nearestTermId, (counts.get(nearestTermId) || 0) + 1);
+          }
+          return terms.map((term) => ({ term: term.name, incidentCount: counts.get(term.id) || 0 }));
+        })(),
         hasEscalatedIncidents: discipline.slice(0, 10).some((row) => row.severity === 'SEVERE'),
       },
       financial: {

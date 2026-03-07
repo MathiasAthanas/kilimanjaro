@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import { AuditAction, User } from '@prisma/client';
+import { AuditAction, Role, User } from '@prisma/client';
 import * as argon2 from 'argon2';
 import * as crypto from 'crypto';
 import { UsersService } from '../users/users.service';
@@ -321,6 +321,40 @@ export class AuthService {
   async getUserForGateway(userId: string) {
     const user = await this.usersService.findById(userId);
     return { id: user.id, role: user.role, isActive: user.isActive };
+  }
+
+  async getUsersByRoleInternal(rolesCsv: string) {
+    const roles = String(rolesCsv || '')
+      .split(',')
+      .map((item) => item.trim())
+      .filter((item): item is Role => Object.values(Role).includes(item as Role));
+
+    if (!roles.length) return { users: [] };
+
+    const users = await this.prisma.user.findMany({
+      where: { role: { in: roles }, isActive: true },
+      select: {
+        id: true,
+        role: true,
+        email: true,
+        phoneNumber: true,
+        firstName: true,
+        lastName: true,
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    return {
+      users: users.map((user) => ({
+        id: user.id,
+        authUserId: user.id,
+        role: user.role,
+        email: user.email,
+        phone: user.phoneNumber,
+        firstName: user.firstName,
+        lastName: user.lastName,
+      })),
+    };
   }
 
   async isJtiBlacklisted(jti: string): Promise<boolean> {

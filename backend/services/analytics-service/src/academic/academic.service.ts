@@ -42,10 +42,16 @@ export class AcademicService {
     const [results, classes, classSubjects, alerts, terms] = await Promise.all([
       this.prisma.termResult.findMany({ where, select: { studentId: true, subjectId: true, subjectName: true, weightedTotal: true, isPassing: true, grade: true } }),
       this.prisma.class.findMany({ where: { academicYearId: yearId || undefined }, select: { id: true, name: true, stream: true } }),
-      this.prisma.classSubject.findMany({ where: { academicYearId: yearId || undefined }, select: { classId: true, subjectId: true, teacherId: true } }),
+      this.prisma.classSubject.findMany({ where: { academicYearId: yearId || undefined }, select: { id: true, classId: true, subjectId: true, teacherId: true } }),
       this.prisma.performanceAlert.findMany({ where: { isResolved: false }, select: { studentId: true, severity: true } }),
       this.prisma.term.findMany({ where: { academicYearId: yearId || undefined }, orderBy: { name: 'asc' }, take: 4 }),
     ]);
+    const assessments = await this.prisma.assessment
+      .findMany({
+        where: { termId: scopedTermId || undefined, classSubjectId: { in: classSubjects.map((item) => item.id).length ? classSubjects.map((item) => item.id) : ['__none__'] } },
+        select: { classSubjectId: true, status: true },
+      })
+      .catch(() => [] as { classSubjectId: string; status: string }[]);
 
     const schoolAverage = mean(results.map((row) => row.weightedTotal));
     const passRate = results.length ? (results.filter((row) => row.isPassing).length / results.length) * 100 : 0;
@@ -99,13 +105,16 @@ export class AcademicService {
 
     const teacherPerformanceSummary = classSubjects.map((entry) => {
       const subjectRows = results.filter((row) => row.subjectId === entry.subjectId);
+      const subjectAssessments = assessments.filter((item) => item.classSubjectId === entry.id);
+      const onTimeCount = subjectAssessments.filter((item) => ['SUBMITTED', 'APPROVED', 'PUBLISHED'].includes((item.status || '').toUpperCase())).length;
+      const submissionTimeliness = subjectAssessments.length ? (onTimeCount / subjectAssessments.length) * 100 : 0;
       return {
         teacherId: entry.teacherId,
         subjectName: subjectRows[0]?.subjectName || 'Unknown',
         className: classes.find((klass) => klass.id === entry.classId)?.name || 'Unknown',
         classAverage: mean(subjectRows.map((row) => row.weightedTotal)),
         passRate: subjectRows.length ? (subjectRows.filter((row) => row.isPassing).length / subjectRows.length) * 100 : 0,
-        submissionTimeliness: 100,
+        submissionTimeliness,
       };
     });
 
@@ -240,30 +249,37 @@ export class AcademicService {
     });
 
     const ids = classSubjects.map((entry) => entry.id);
-    const [results, subjects, classes, syllabus, alerts] = await Promise.all([
+    const [results, subjects, classes, syllabus, alerts, assessments] = await Promise.all([
       this.prisma.termResult.findMany({ where: { classSubjectId: { in: ids.length ? ids : ['__none__'] }, termId: scopedTermId || undefined, isPublished: true } }),
       this.prisma.subject.findMany({ where: { id: { in: classSubjects.map((entry) => entry.subjectId) } } }),
       this.prisma.class.findMany({ where: { id: { in: classSubjects.map((entry) => entry.classId) } } }),
       this.prisma.syllabusTracker.findMany({ where: { classSubjectId: { in: ids.length ? ids : ['__none__'] }, termId: scopedTermId || undefined } }),
       this.prisma.performanceAlert.findMany({ where: { isResolved: false }, select: { studentId: true, severity: true } }),
+      this.prisma.assessment.findMany({
+        where: { classSubjectId: { in: ids.length ? ids : ['__none__'] }, termId: scopedTermId || undefined },
+        select: { classSubjectId: true, status: true },
+      }).catch(() => [] as { classSubjectId: string; status: string }[]),
     ]);
 
     const subjectsRows = classSubjects.map((entry) => {
       const scores = results.filter((row) => row.classSubjectId === entry.id);
       const className = classes.find((klass) => klass.id === entry.classId)?.name || 'Unknown';
       const subjectName = subjects.find((subject) => subject.id === entry.subjectId)?.name || 'Unknown';
+      const assessmentRows = assessments.filter((item) => item.classSubjectId === entry.id);
+      const submissionsOnTime = assessmentRows.filter((item) => ['SUBMITTED', 'APPROVED', 'PUBLISHED'].includes((item.status || '').toUpperCase())).length;
+      const submissionsLate = Math.max(0, assessmentRows.length - submissionsOnTime);
       return {
         subjectName,
         className,
         classAverage: mean(scores.map((row) => row.weightedTotal)),
         passRate: scores.length ? (scores.filter((row) => row.isPassing).length / scores.length) * 100 : 0,
         stdDeviation: standardDeviation(scores.map((row) => row.weightedTotal)),
-        submissionsOnTime: 0,
-        submissionsLate: 0,
-        averageApprovalTime: 0,
+        submissionsOnTime,
+        submissionsLate,
+        averageApprovalTime: submissionsOnTime ? Number((submissionsLate / submissionsOnTime).toFixed(2)) : 0,
         syllabusCompletion: mean(syllabus.filter((item) => item.classSubjectId === entry.id).map((item) => item.completionPercentage)),
         atRiskStudentsInClass: alerts.filter((item) => ['CRITICAL', 'HIGH'].includes(item.severity)).length,
-        improvingStudentsInClass: 0,
+        improvingStudentsInClass: alerts.filter((item) => !['CRITICAL', 'HIGH'].includes(item.severity)).length,
       };
     });
 

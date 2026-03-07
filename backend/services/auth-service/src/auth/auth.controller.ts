@@ -7,6 +7,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -119,5 +120,11 @@ export class AuthController {
   @Get('internal/user/:userId')
   async getUserForGateway(@Param('userId') userId: string) {
     return this.authService.getUserForGateway(userId);
+  }
+
+  @UseGuards(InternalApiGuard)
+  @Get('internal/users-by-role')
+  async getUsersByRole(@Query('roles') roles: string) {
+    return this.authService.getUsersByRoleInternal(roles || '');
   }
 }

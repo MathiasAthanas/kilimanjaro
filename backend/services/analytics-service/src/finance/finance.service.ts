@@ -21,6 +21,81 @@ export class FinanceAnalyticsService {
     return rows.reduce((sum, row) => sum.plus(row), new Prisma.Decimal(0));
   }
 
+  private async invoiceAdjustments(academicYearId?: string, termId?: string) {
+    try {
+      const rows = await this.prisma.$queryRawUnsafe<Array<{ waivedAmount: number | string | null; discountedAmount: number | string | null }>>(
+        `
+          SELECT
+            COALESCE(SUM(COALESCE("waivedAmount", 0)), 0) AS "waivedAmount",
+            COALESCE(SUM(COALESCE("discountAmount", 0)), 0) AS "discountedAmount"
+          FROM finance."Invoice"
+          WHERE ($1::text IS NULL OR "academicYearId" = $1)
+            AND ($2::text IS NULL OR "termId" = $2)
+        `,
+        academicYearId ?? null,
+        termId ?? null,
+      );
+      const row = rows[0] || { waivedAmount: 0, discountedAmount: 0 };
+      return {
+        waivedAmount: new Prisma.Decimal(row.waivedAmount || 0),
+        discountedAmount: new Prisma.Decimal(row.discountedAmount || 0),
+      };
+    } catch {
+      return {
+        waivedAmount: new Prisma.Decimal(0),
+        discountedAmount: new Prisma.Decimal(0),
+      };
+    }
+  }
+
+  private async feeCategoryBreakdown(invoiceIds: string[]) {
+    if (!invoiceIds.length) return [];
+
+    try {
+      const rows = await this.prisma.$queryRawUnsafe<
+        Array<{ categoryName: string; totalBilled: number | string; totalCollected: number | string; outstandingAmount: number | string }>
+      >(
+        `
+          SELECT
+            fc."name" AS "categoryName",
+            COALESCE(SUM(ii."amount"), 0) AS "totalBilled",
+            COALESCE(SUM(ii."paidAmount"), 0) AS "totalCollected",
+            COALESCE(SUM(ii."outstandingAmount"), 0) AS "outstandingAmount"
+          FROM finance."InvoiceItem" ii
+          INNER JOIN finance."FeeCategory" fc ON fc."id" = ii."feeCategoryId"
+          WHERE ii."invoiceId" = ANY($1)
+          GROUP BY fc."name"
+        `,
+        invoiceIds,
+      );
+
+      return rows.map((row) => {
+        const totalBilled = new Prisma.Decimal(row.totalBilled || 0);
+        const totalCollected = new Prisma.Decimal(row.totalCollected || 0);
+        return {
+          categoryName: row.categoryName,
+          totalBilled,
+          totalCollected,
+          collectionRate: totalBilled.gt(0) ? Number(totalCollected.div(totalBilled).mul(100).toFixed(2)) : 0,
+          outstandingAmount: new Prisma.Decimal(row.outstandingAmount || 0),
+        };
+      });
+    } catch {
+      try {
+        const categories = await this.prisma.feeCategory.findMany({ select: { name: true } });
+        return categories.map((category) => ({
+          categoryName: category.name,
+          totalBilled: new Prisma.Decimal(0),
+          totalCollected: new Prisma.Decimal(0),
+          collectionRate: 0,
+          outstandingAmount: new Prisma.Decimal(0),
+        }));
+      } catch {
+        return [];
+      }
+    }
+  }
+
   async getOverview(academicYearId?: string, termId?: string) {
     const yearId = academicYearId || (await this.currentYearId());
     const scopedTermId = termId || (await this.currentTermId(yearId));
@@ -43,11 +118,13 @@ export class FinanceAnalyticsService {
     });
 
     const invoiceIds = invoices.map((row) => row.id);
-    const [payments, classes, students, terms] = await Promise.all([
+    const [payments, classes, students, terms, adjustments, byFeeCategory] = await Promise.all([
       this.prisma.payment.findMany({ where: { invoiceId: { in: invoiceIds.length ? invoiceIds : ['__none__'] }, status: 'CONFIRMED' } }),
       this.prisma.class.findMany({ where: { id: { in: invoices.map((row) => row.classId) } }, select: { id: true, name: true, stream: true } }),
       this.prisma.student.findMany({ where: { id: { in: invoices.map((row) => row.studentId) } }, select: { id: true, firstName: true, lastName: true } }),
       this.prisma.term.findMany({ where: { academicYearId: yearId || undefined }, orderBy: { name: 'asc' } }),
+      this.invoiceAdjustments(yearId, scopedTermId),
+      this.feeCategoryBreakdown(invoiceIds),
     ]);
 
     const totalInvoiced = this.sumDecimals(invoices.map((row) => row.totalAmount));
@@ -155,10 +232,10 @@ export class FinanceAnalyticsService {
         totalCollected,
         totalOutstanding,
         collectionRate: totalInvoiced.gt(0) ? Number(totalCollected.div(totalInvoiced).mul(100).toFixed(2)) : 0,
-        waivedAmount: new Prisma.Decimal(0),
-        discountedAmount: new Prisma.Decimal(0),
+        waivedAmount: adjustments.waivedAmount,
+        discountedAmount: adjustments.discountedAmount,
       },
-      byFeeCategory: [],
+      byFeeCategory,
       byClass,
       byPaymentMethod,
       collectionTrend,

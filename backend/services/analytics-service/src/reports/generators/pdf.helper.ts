@@ -1,8 +1,23 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import PDFDocument from 'pdfkit';
+// pdfkit publishes a CommonJS constructor; require avoids default interop pitfalls.
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const PDFDocument = require('pdfkit');
 
-export async function createPdf(filePath: string, title: string, sections: Array<{ heading: string; rows: Array<[string, string | number | null]> }>) {
+type RowValue = string | number | null | undefined;
+type Section = {
+  heading: string;
+  rows: Array<[string, RowValue]>;
+  bullets?: string[];
+};
+
+const formatValue = (value: RowValue) => {
+  if (value === null || value === undefined || value === '') return '-';
+  if (typeof value === 'number' && Number.isFinite(value)) return Number(value.toFixed(2)).toString();
+  return String(value);
+};
+
+export async function createPdf(filePath: string, title: string, sections: Section[]) {
   await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
   const doc = new PDFDocument({ margin: 40 });
   const stream = fs.createWriteStream(filePath);
@@ -18,7 +33,13 @@ export async function createPdf(filePath: string, title: string, sections: Array
     doc.moveDown(0.3);
     doc.fontSize(10);
     for (const [label, value] of section.rows) {
-      doc.text(`${label}: ${value ?? '-'}`);
+      doc.text(`${label}: ${formatValue(value)}`);
+    }
+    if (section.bullets?.length) {
+      doc.moveDown(0.2);
+      for (const bullet of section.bullets) {
+        doc.text(`- ${bullet}`);
+      }
     }
     doc.moveDown();
   }

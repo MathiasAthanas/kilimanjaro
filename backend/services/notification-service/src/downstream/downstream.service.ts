@@ -38,12 +38,17 @@ export class DownstreamService {
 
   async authUser(userId: string): Promise<any | null> {
     const base = this.config.get<string>('AUTH_SERVICE_URL', 'http://localhost:3001');
-    return this.get<any>(base, `/auth/internal/user/${userId}`);
+    return (
+      (await this.get<any>(base, `/api/v1/auth/internal/user/${userId}`)) ||
+      (await this.get<any>(base, `/auth/internal/user/${userId}`))
+    );
   }
 
   async authUsersByRole(roles: string[]): Promise<any[] | null> {
     const base = this.config.get<string>('AUTH_SERVICE_URL', 'http://localhost:3001');
-    const data = await this.get<any>(base, '/auth/internal/users-by-role', { roles: roles.join(',') });
+    const data =
+      (await this.get<any>(base, '/api/v1/auth/internal/users-by-role', { roles: roles.join(',') })) ||
+      (await this.get<any>(base, '/auth/internal/users-by-role', { roles: roles.join(',') }));
     return data?.data || data?.users || data || [];
   }
 
