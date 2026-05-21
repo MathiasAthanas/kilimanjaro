@@ -264,22 +264,6 @@ export class UiController {
     }, warnings);
   }
 
-  @Get('admin/system/settings')
-  @Roles(...ADMIN_ROLES)
-  adminSystemSettings(): UiEnvelope {
-    return this.ui.envelope({
-      settings: {
-        academicYearMode: 'term-based',
-        authentication: { passwordPolicy: 'strong', mfaReady: false },
-        auditRetentionDays: 365,
-        notificationChannels: ['in_app', 'email', 'sms'],
-        exportFormats: ['pdf', 'xlsx', 'csv'],
-      },
-      writable: false,
-      nextEndpoint: 'PATCH /admin/system/settings',
-    });
-  }
-
   @Get('search')
   @Roles(...LEADERSHIP_ROLES)
   async search(@CurrentUser() user: GatewayUser, @Query('q') q = ''): Promise<UiEnvelope> {
