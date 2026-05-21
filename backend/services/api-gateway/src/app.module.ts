@@ -7,6 +7,7 @@ import { AuthModule } from './auth/auth.module';
 import { RedisModule } from './redis/redis.module';
 import { HealthModule } from './health/health.module';
 import { ProxyModule } from './proxy/proxy.module';
+import { UiModule } from './ui/ui.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { RolesGuard } from './auth/guards/roles.guard';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
@@ -29,6 +30,7 @@ import { validateEnv } from './config/env.validation';
     RedisModule,
     AuthModule,
     HealthModule,
+    UiModule,
     ProxyModule,
   ],
   providers: [
