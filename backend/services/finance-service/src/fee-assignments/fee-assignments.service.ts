@@ -1,5 +1,5 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { FinancialAuditAction } from '@prisma/client';
+import { FinancialAuditAction } from '../../generated/prisma';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { RequestUser } from '../common/interfaces/request-user.interface';

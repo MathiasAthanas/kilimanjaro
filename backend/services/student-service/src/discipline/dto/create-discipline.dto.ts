@@ -1,5 +1,5 @@
 import { IsBoolean, IsDateString, IsEnum, IsOptional, IsString } from 'class-validator';
-import { DisciplineCategory, DisciplineSeverity } from '@prisma/client';
+import { DisciplineCategory, DisciplineSeverity } from '../../../generated/prisma';
 
 export class CreateDisciplineDto {
   @IsString()

@@ -2,10 +2,9 @@
 
 ## Architecture
 
-Backend is a Turbo monorepo with NestJS microservices and shared internal packages.
-All client traffic is routed through `api-gateway`.
+Backend is a Turbo monorepo with NestJS microservices and shared internal packages. All client traffic should enter through `api-gateway`; downstream services should stay private on the VPS/internal network.
 
-## Services and Ports
+## Services And Ports
 
 | Service | Port | DB Schema |
 |---|---:|---|
@@ -17,96 +16,71 @@ All client traffic is routed through `api-gateway`.
 | notification-service | 3005 | notifications |
 | analytics-service | 3006 | analytics |
 
-## Backend Structure
+## Production Baseline
 
-```text
-backend/
-  services/
-    api-gateway/
-    auth-service/
-    student-service/
-    academic-service/
-    finance-service/
-    notification-service/
-    analytics-service/
-  shared/
-    contracts/
-    types/
-    utils/
-```
+- `npm run build` must pass from `backend`.
+- Prisma services generate isolated clients into `services/<service>/generated/prisma` during `prebuild`.
+- Production migrations use `prisma migrate deploy`; do not use `db push` or `migrate dev` on the VPS.
+- Gateway defaults, service defaults, PM2 configs, and `.env.example` files use the same `3000-3006` port map.
+- Swagger is disabled when `NODE_ENV=production`.
 
 ## Prerequisites
 
-- Node.js 18+
-- npm 9+
+- Node.js 22 LTS or 20 LTS
+- npm matching the root `packageManager`
 - PostgreSQL 15+
-- RabbitMQ 3.12+
 - Redis 7+
-- PM2 (`npm i -g pm2`)
+- RabbitMQ 3.12+
+- PM2
 
 ## Setup
-
-### 1. Install dependencies
 
 ```bash
 cd backend
 npm install
+npm run build
 ```
 
-### 2. Create database and schemas
+Create `.env` for each service from its `.env.example`. In production, missing required variables fail startup. Ensure `INTERNAL_API_KEY` matches across gateway and downstream services, and configure RSA JWT keys for auth/gateway.
 
-```sql
-CREATE DATABASE kilimanjaro;
-CREATE SCHEMA auth;
-CREATE SCHEMA students;
-CREATE SCHEMA academics;
-CREATE SCHEMA finance;
-CREATE SCHEMA notifications;
-CREATE SCHEMA analytics;
-```
+## Migrations
 
-### 3. Configure environment variables
-
-Create `.env` for each service and ensure shared secrets match across services, especially `JWT_ACCESS_SECRET`.
-
-### 4. Run Prisma migrations
+Run migrations from each service before starting PM2:
 
 ```bash
-cd services/auth-service && npx prisma migrate dev --name init
-cd ../student-service && npx prisma migrate dev --name init
-cd ../academic-service && npx prisma migrate dev --name init
-cd ../finance-service && npx prisma migrate dev --name init
-cd ../notification-service && npx prisma migrate dev --name init
-cd ../analytics-service && npx prisma migrate dev --name init
+cd backend/services/auth-service && npm run prisma:migrate
+cd ../student-service && npm run prisma:migrate
+cd ../academic-service && npm run prisma:migrate
+cd ../finance-service && npm run prisma:migrate
+cd ../notification-service && npm run prisma:migrate
+cd ../analytics-service && npm run prisma:migrate
 ```
 
 ## Running
-
-### Development (all services)
 
 ```bash
 cd backend
 npm run dev
 ```
 
-### Development (single service)
+Single service examples:
 
 ```bash
-cd backend
 npm run dev:gateway
 npm run dev:auth
 ```
 
-### Build and PM2 run
+Production with PM2:
 
 ```bash
 cd backend
 npm run build
 pm2 start ecosystem.config.js
+pm2 save
 ```
 
-## Notes
+## Remaining Risks
 
-- `api-gateway` maps routes in `services/api-gateway/src/proxy/proxy.service.ts`.
-- Most services are scaffolded with Prisma and `AppModule`; `auth-service` is currently the most feature-complete.
-- Invalid scaffold artifacts produced by brace-style folder commands are preserved under `backend/_invalid_scaffold/`.
+- `npm run test` currently verifies test-script wiring only; meaningful Jest coverage is still required before live production data.
+- Dependency audit still reports vulnerabilities; review with `npm audit` before deployment.
+- Integration contracts with the mobile app still need to be frozen endpoint-by-endpoint.

@@ -1,6 +1,6 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { GeneratedReport, ReportStatus, ReportType } from '@prisma/client';
+import { GeneratedReport, ReportStatus, ReportType } from '../../generated/prisma';
 import * as fs from 'fs';
 import * as path from 'path';
 import { RequestUser } from '../common/interfaces/request-user.interface';

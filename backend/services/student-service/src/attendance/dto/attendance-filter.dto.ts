@@ -1,6 +1,6 @@
 import { Type } from 'class-transformer';
 import { IsDateString, IsEnum, IsOptional, IsString, Min } from 'class-validator';
-import { AttendanceStatus } from '@prisma/client';
+import { AttendanceStatus } from '../../../generated/prisma';
 
 export class AttendanceFilterDto {
   @IsOptional()

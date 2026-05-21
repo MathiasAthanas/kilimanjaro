@@ -22,17 +22,19 @@ async function bootstrap() {
     credentials: true,
   });
 
-  const swagger = new DocumentBuilder()
-    .setTitle('Kilimanjaro Analytics Service')
-    .setDescription('Institutional analytics, reports and dashboards')
-    .setVersion('1.0.0')
-    .addBearerAuth()
-    .build();
+  if (config.get<string>('NODE_ENV') !== 'production') {
+    const swagger = new DocumentBuilder()
+      .setTitle('Kilimanjaro Analytics Service')
+      .setDescription('Institutional analytics, reports and dashboards')
+      .setVersion('1.0.0')
+      .addBearerAuth()
+      .build();
 
-  const document = SwaggerModule.createDocument(app, swagger);
-  SwaggerModule.setup('analytics/docs', app, document);
+    const document = SwaggerModule.createDocument(app, swagger);
+    SwaggerModule.setup('analytics/docs', app, document);
+  }
 
-  const port = Number(config.get<string>('PORT', '3416'));
+  const port = Number(config.get<string>('PORT', '3006'));
   await app.listen(port);
 }
 

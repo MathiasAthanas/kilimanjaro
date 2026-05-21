@@ -1,6 +1,6 @@
 import { Type } from 'class-transformer';
 import { IsArray, IsDateString, IsEnum, IsOptional, IsString } from 'class-validator';
-import { AnnouncementPriority, NotificationChannel } from '@prisma/client';
+import { AnnouncementPriority, NotificationChannel } from '../../../generated/prisma';
 
 export class CreateAnnouncementDto {
   @IsString()

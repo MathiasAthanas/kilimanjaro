@@ -6,7 +6,7 @@ import {
   Optional,
   forwardRef,
 } from '@nestjs/common';
-import { Prisma, TermResult } from '@prisma/client';
+import { Prisma, TermResult } from '../../generated/prisma';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { RabbitMqService } from '../rabbitmq/rabbitmq.service';

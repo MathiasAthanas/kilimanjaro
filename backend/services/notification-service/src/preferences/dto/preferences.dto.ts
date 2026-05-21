@@ -1,6 +1,6 @@
 import { IsArray, IsBoolean, IsEnum, IsString, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
-import { NotificationChannel } from '@prisma/client';
+import { NotificationChannel } from '../../../generated/prisma';
 
 class PreferenceItemDto {
   @IsString()

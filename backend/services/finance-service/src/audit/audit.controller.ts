@@ -1,6 +1,6 @@
 import { Controller, Get, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { FinancialAuditAction } from '@prisma/client';
+import { FinancialAuditAction } from '../../generated/prisma';
 import { ROLES } from '../common/constants/roles';
 import { Roles } from '../common/decorators/roles.decorator';
 import { AuditService } from './audit.service';

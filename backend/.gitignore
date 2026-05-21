@@ -1,0 +1,9 @@
+node_modules/
+services/*/node_modules/
+dist/
+services/*/dist/
+services/*/generated/prisma/
+.turbo/
+*.tsbuildinfo
+.env
+services/*/.env

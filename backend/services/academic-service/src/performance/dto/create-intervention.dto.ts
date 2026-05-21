@@ -1,5 +1,5 @@
 import { IsDateString, IsNotEmpty, IsOptional, IsString } from 'class-validator';
-import { InterventionType } from '@prisma/client';
+import { InterventionType } from '../../../generated/prisma';
 
 export class CreateInterventionDto {
   @IsOptional()

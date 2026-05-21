@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { ReportType } from '@prisma/client';
+import { ReportType } from '../../generated/prisma';
 import { ReportsService } from '../reports/reports.service';
 import { SnapshotsService } from '../snapshots/snapshots.service';
 

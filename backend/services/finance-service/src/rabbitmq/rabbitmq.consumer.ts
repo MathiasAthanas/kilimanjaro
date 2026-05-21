@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { RabbitMqService } from './rabbitmq.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { InvoiceStatus } from '@prisma/client';
+import { InvoiceStatus } from '../../generated/prisma';
 
 @Injectable()
 export class RabbitMqConsumer implements OnModuleInit {

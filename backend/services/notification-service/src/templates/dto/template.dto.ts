@@ -1,5 +1,5 @@
 import { IsBoolean, IsEnum, IsObject, IsOptional, IsString } from 'class-validator';
-import { NotificationChannel } from '@prisma/client';
+import { NotificationChannel } from '../../../generated/prisma';
 
 export class UpdateTemplateDto {
   @IsOptional()

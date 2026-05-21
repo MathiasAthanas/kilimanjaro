@@ -8,7 +8,7 @@ import {
   Prisma,
   StudentStatus,
   TrendDirection,
-} from '@prisma/client';
+} from '../../generated/prisma';
 import { PrismaService } from '../prisma/prisma.service';
 import { RabbitMqService } from '../rabbitmq/rabbitmq.service';
 import { RedisService } from '../redis/redis.service';

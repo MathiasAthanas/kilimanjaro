@@ -1,5 +1,5 @@
 import { IsEnum, IsOptional, IsString } from 'class-validator';
-import { DevicePlatform } from '@prisma/client';
+import { DevicePlatform } from '../../../generated/prisma';
 
 export class UpsertDeviceTokenDto {
   @IsString()

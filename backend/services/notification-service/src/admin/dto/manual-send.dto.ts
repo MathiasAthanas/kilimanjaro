@@ -1,5 +1,5 @@
 import { IsArray, IsEnum, IsOptional, IsString } from 'class-validator';
-import { NotificationChannel } from '@prisma/client';
+import { NotificationChannel } from '../../../generated/prisma';
 
 export class ManualSendDto {
   @IsArray()

@@ -1,4 +1,4 @@
-import { ReportType } from '@prisma/client';
+import { ReportType } from '../../generated/prisma';
 import { IsEnum, IsObject, IsOptional, IsString } from 'class-validator';
 
 export class GenerateReportDto {

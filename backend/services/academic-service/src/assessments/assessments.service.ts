@@ -7,7 +7,7 @@ import {
   Optional,
   forwardRef,
 } from '@nestjs/common';
-import { ApprovalAction, AssessmentStatus } from '@prisma/client';
+import { ApprovalAction, AssessmentStatus } from '../../generated/prisma';
 import { PrismaService } from '../prisma/prisma.service';
 import { StudentClientService } from '../student-client/student-client.service';
 import { RedisService } from '../redis/redis.service';

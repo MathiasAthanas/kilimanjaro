@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { FinancialAuditAction, InvoiceStatus, Prisma } from '@prisma/client';
+import { FinancialAuditAction, InvoiceStatus, Prisma } from '../../generated/prisma';
 import { existsSync } from 'fs';
 import { join } from 'path';
 import { AuditService } from '../audit/audit.service';

@@ -22,15 +22,17 @@ async function bootstrap() {
     credentials: true,
   });
 
-  const swagger = new DocumentBuilder()
-    .setTitle('Kilimanjaro Notification Service')
-    .setDescription('Outbound notifications: SMS, email, push and in-app')
-    .setVersion('1.0.0')
-    .addBearerAuth()
-    .build();
+  if (config.get<string>('NODE_ENV') !== 'production') {
+    const swagger = new DocumentBuilder()
+      .setTitle('Kilimanjaro Notification Service')
+      .setDescription('Outbound notifications: SMS, email, push and in-app')
+      .setVersion('1.0.0')
+      .addBearerAuth()
+      .build();
 
-  const document = SwaggerModule.createDocument(app, swagger);
-  SwaggerModule.setup('notifications/docs', app, document);
+    const document = SwaggerModule.createDocument(app, swagger);
+    SwaggerModule.setup('notifications/docs', app, document);
+  }
 
   await app.listen(Number(config.get<string>('PORT', '3005')));
 }

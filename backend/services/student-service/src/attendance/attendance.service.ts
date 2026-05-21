@@ -1,5 +1,5 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
-import { AttendanceStatus, Prisma } from '@prisma/client';
+import { AttendanceStatus, Prisma } from '../../generated/prisma';
 import { PrismaService } from '../prisma/prisma.service';
 import { RabbitMqService } from '../rabbitmq/rabbitmq.service';
 import { MarkAttendanceDto } from './dto/mark-attendance.dto';

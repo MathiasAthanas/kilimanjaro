@@ -1,6 +1,6 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { FinancialAuditAction } from '@prisma/client';
+import { FinancialAuditAction } from '../../generated/prisma';
 import { existsSync } from 'fs';
 import { join } from 'path';
 import { AuditService } from '../audit/audit.service';

@@ -6,7 +6,7 @@ import {
   PairingSuggestedBy,
   Prisma,
   TrendDirection,
-} from '@prisma/client';
+} from '../../generated/prisma';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { RabbitMqService } from '../rabbitmq/rabbitmq.service';

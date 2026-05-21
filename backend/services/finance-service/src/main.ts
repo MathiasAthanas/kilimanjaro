@@ -31,17 +31,19 @@ async function bootstrap() {
     credentials: true,
   });
 
-  const swagger = new DocumentBuilder()
-    .setTitle('Kilimanjaro Finance Service')
-    .setDescription('Finance operations, billing, payments, receipts, reports and assets')
-    .setVersion('1.0.0')
-    .addBearerAuth()
-    .build();
+  if (config.get<string>('NODE_ENV') !== 'production') {
+    const swagger = new DocumentBuilder()
+      .setTitle('Kilimanjaro Finance Service')
+      .setDescription('Finance operations, billing, payments, receipts, reports and assets')
+      .setVersion('1.0.0')
+      .addBearerAuth()
+      .build();
 
-  const document = SwaggerModule.createDocument(app, swagger);
-  SwaggerModule.setup('finance/docs', app, document);
+    const document = SwaggerModule.createDocument(app, swagger);
+    SwaggerModule.setup('finance/docs', app, document);
+  }
 
-  const port = Number(config.get<string>('PORT', '3014'));
+  const port = Number(config.get<string>('PORT', '3004'));
   await app.listen(port);
 }
 

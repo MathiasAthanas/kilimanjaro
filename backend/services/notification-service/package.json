@@ -3,13 +3,17 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
+    "dev": "nest start --watch",
     "start:dev": "nest start --watch",
+    "prebuild": "prisma generate",
     "build": "nest build",
-    "start:prod": "node dist/src/main.js",
+    "start:prod": "node dist/main.js",
     "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev",
+    "prisma:migrate": "prisma migrate deploy",
     "prisma:seed": "ts-node prisma/seed.ts",
-    "lint": "eslint src --ext .ts"
+    "lint": "eslint src --ext .ts",
+    "test": "jest --config jest.config.js --runInBand",
+    "test:cov": "jest --config jest.config.js --coverage --runInBand"
   },
   "dependencies": {
     "@nestjs/axios": "^3.1.3",

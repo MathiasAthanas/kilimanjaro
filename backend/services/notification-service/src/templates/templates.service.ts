@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { NotificationChannel } from '@prisma/client';
+import { NotificationChannel } from '../../generated/prisma';
 import { compileTemplateSafe } from '../common/helpers/handlebars.helper';
 import { PrismaService } from '../prisma/prisma.service';
 import { PreviewTemplateDto, TemplateQueryDto, UpdateTemplateDto } from './dto/template.dto';

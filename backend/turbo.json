@@ -11,6 +11,7 @@
       "persistent": true
     },
     "lint": { "outputs": [] },
-    "test": { "outputs": [] }
+    "test": { "outputs": [] },
+    "test:cov": { "outputs": ["coverage/**"] }
   }
 }

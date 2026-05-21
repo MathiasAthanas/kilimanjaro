@@ -23,10 +23,11 @@ import { ReportsModule } from './reports/reports.module';
 import { SchedulerAnalyticsModule } from './scheduler/scheduler.module';
 import { SnapshotsModule } from './snapshots/snapshots.module';
 import { StudentsModule } from './students/students.module';
+import { validateEnv } from './config/env.validation';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({ isGlobal: true, validate: validateEnv }),
     ThrottlerModule.forRoot({ throttlers: [{ ttl: Number(process.env.THROTTLE_TTL || 60), limit: Number(process.env.THROTTLE_LIMIT || 60) }] }),
     ScheduleModule.forRoot(),
     AppCommonModule,

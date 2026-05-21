@@ -1,5 +1,5 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
-import { Prisma, DisciplineCategory, DisciplineSeverity } from '@prisma/client';
+import { Prisma, DisciplineCategory, DisciplineSeverity } from '../../generated/prisma';
 import { PrismaService } from '../prisma/prisma.service';
 import { RabbitMqService } from '../rabbitmq/rabbitmq.service';
 import { CreateDisciplineDto } from './dto/create-discipline.dto';

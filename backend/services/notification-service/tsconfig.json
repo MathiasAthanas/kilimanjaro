@@ -6,6 +6,7 @@
     "allowSyntheticDefaultImports": true,
     "target": "ES2021",
     "sourceMap": true,
+    "rootDir": "./src",
     "outDir": "./dist",
     "baseUrl": "./",
     "skipLibCheck": true,
@@ -15,5 +16,7 @@
       "@kilimanjaro/utils": ["../../shared/utils/index.ts"],
       "@kilimanjaro/contracts": ["../../shared/contracts/index.ts"]
     }
-  }
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist", "test", "prisma", "generated", "**/*.spec.ts"]
 }

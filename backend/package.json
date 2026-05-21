@@ -2,6 +2,7 @@
   "name": "kilimanjaro-schools",
   "version": "1.0.0",
   "private": true,
+  "packageManager": "npm@11.4.2",
   "workspaces": [
     "services/*",
     "shared/*"
@@ -11,6 +12,9 @@
     "build": "turbo run build",
     "lint": "turbo run lint",
     "test": "turbo run test",
+    "test:cov": "turbo run test:cov",
+    "test:endpoints:inventory": "node scripts/endpoint-inventory.js",
+    "test:e2e:live": "node scripts/live-e2e-smoke.js",
     "dev:gateway": "npm run dev --workspace=services/api-gateway",
     "dev:auth": "npm run dev --workspace=services/auth-service",
     "dev:student": "npm run dev --workspace=services/student-service",
@@ -20,6 +24,15 @@
     "dev:analytics": "npm run dev --workspace=services/analytics-service"
   },
   "devDependencies": {
+    "@nestjs/testing": "^10.4.22",
+    "@types/jest": "^30.0.0",
+    "@types/supertest": "^7.2.0",
+    "@typescript-eslint/eslint-plugin": "^8.59.4",
+    "@typescript-eslint/parser": "^8.59.4",
+    "eslint": "^10.4.0",
+    "jest": "^30.4.2",
+    "supertest": "^7.2.2",
+    "ts-jest": "^29.4.10",
     "turbo": "^2.0.0",
     "typescript": "^5.4.0"
   }

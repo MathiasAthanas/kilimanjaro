@@ -1,5 +1,5 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma } from '../../generated/prisma';
 import { createHash } from 'crypto';
 import { applyRoleFilter } from '../common/helpers/role-filter.helper';
 import { mean, percentileRank } from '../common/helpers/statistics.helper';

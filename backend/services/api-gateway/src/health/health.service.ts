@@ -15,7 +15,7 @@ export class HealthService {
     const urls = getServiceUrls(this.configService);
 
     const checks = await Promise.all([
-      this.check(`${urls.auth}/api/v1/auth`),
+      this.check(`${urls.auth}/api/v1/auth/health`),
       this.check(`${urls.student}/students/health`),
       this.check(`${urls.academic}/api/v1/academics/health`),
       this.check(`${urls.finance}/api/v1/finance/health`),

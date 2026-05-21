@@ -8,10 +8,12 @@ import { RabbitMqModule } from './rabbitmq/rabbitmq.module';
 import { AuditModule } from './audit/audit.module';
 import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
+import { validateEnv } from './config/env.validation';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({ isGlobal: true, validate: validateEnv }),
     ThrottlerModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => [
@@ -27,6 +29,7 @@ import { AuthModule } from './auth/auth.module';
     AuditModule,
     UsersModule,
     AuthModule,
+    HealthModule,
   ],
   providers: [
     {

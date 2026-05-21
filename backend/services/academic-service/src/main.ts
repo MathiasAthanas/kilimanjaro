@@ -32,17 +32,19 @@ async function bootstrap() {
     credentials: true,
   });
 
-  const swagger = new DocumentBuilder()
-    .setTitle('Kilimanjaro Academic Service')
-    .setDescription('Academic workflow, approvals, results, report cards and performance bridge')
-    .setVersion('1.0.0')
-    .addBearerAuth()
-    .build();
+  if (config.get<string>('NODE_ENV') !== 'production') {
+    const swagger = new DocumentBuilder()
+      .setTitle('Kilimanjaro Academic Service')
+      .setDescription('Academic workflow, approvals, results, report cards and performance bridge')
+      .setVersion('1.0.0')
+      .addBearerAuth()
+      .build();
 
-  const document = SwaggerModule.createDocument(app, swagger);
-  SwaggerModule.setup('academics/docs', app, document);
+    const document = SwaggerModule.createDocument(app, swagger);
+    SwaggerModule.setup('academics/docs', app, document);
+  }
 
-  const port = Number(config.get<string>('PORT', '3013'));
+  const port = Number(config.get<string>('PORT', '3003'));
   await app.listen(port);
 }
 

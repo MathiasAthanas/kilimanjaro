@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import { AuditAction, Role, User } from '@prisma/client';
+import { AuditAction, Role, User } from '../../generated/prisma';
 import * as argon2 from 'argon2';
 import * as crypto from 'crypto';
 import { UsersService } from '../users/users.service';

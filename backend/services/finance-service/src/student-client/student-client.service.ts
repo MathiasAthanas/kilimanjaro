@@ -48,7 +48,7 @@ export class StudentClientService {
   }
 
   async getAcademic<T>(path: string, params?: Record<string, unknown>, extraHeaders?: Record<string, string>): Promise<T> {
-    const baseUrl = this.configService.get<string>('ACADEMIC_SERVICE_URL', 'http://localhost:3013');
+    const baseUrl = this.configService.get<string>('ACADEMIC_SERVICE_URL', 'http://localhost:3003');
     return this.doRequest<T>('get', baseUrl, path, undefined, params, extraHeaders);
   }
 
@@ -63,12 +63,12 @@ export class StudentClientService {
   }
 
   async postAcademic<T>(path: string, body?: unknown, extraHeaders?: Record<string, string>): Promise<T> {
-    const baseUrl = this.configService.get<string>('ACADEMIC_SERVICE_URL', 'http://localhost:3013');
+    const baseUrl = this.configService.get<string>('ACADEMIC_SERVICE_URL', 'http://localhost:3003');
     return this.doRequest<T>('post', baseUrl, path, body, undefined, extraHeaders);
   }
 
   async patchAcademic<T>(path: string, body?: unknown, extraHeaders?: Record<string, string>): Promise<T> {
-    const baseUrl = this.configService.get<string>('ACADEMIC_SERVICE_URL', 'http://localhost:3013');
+    const baseUrl = this.configService.get<string>('ACADEMIC_SERVICE_URL', 'http://localhost:3003');
     return this.doRequest<T>('patch', baseUrl, path, body, undefined, extraHeaders);
   }
 }

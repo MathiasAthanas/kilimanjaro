@@ -12,7 +12,7 @@ import {
   PaymentMethod,
   PaymentStatus,
   Prisma,
-} from '@prisma/client';
+} from '../../generated/prisma';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { NumberSequenceService } from '../common/helpers/number-sequence.service';

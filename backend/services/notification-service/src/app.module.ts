@@ -22,10 +22,11 @@ import { RabbitMqModule } from './rabbitmq/rabbitmq.module';
 import { RedisModule } from './redis/redis.module';
 import { SchedulerModule } from './scheduler/scheduler.module';
 import { TemplatesModule } from './templates/templates.module';
+import { validateEnv } from './config/env.validation';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({ isGlobal: true, validate: validateEnv }),
     ThrottlerModule.forRoot({
       throttlers: [{ ttl: Number(process.env.THROTTLE_TTL || 60), limit: Number(process.env.THROTTLE_LIMIT || 60) }],
     }),

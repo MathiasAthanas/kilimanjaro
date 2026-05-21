@@ -1,6 +1,6 @@
 import { Type } from 'class-transformer';
 import { IsEnum, IsOptional, IsString, Min } from 'class-validator';
-import { AlertSeverity, AlertType, PairingStatus } from '@prisma/client';
+import { AlertSeverity, AlertType, PairingStatus } from '../../../generated/prisma';
 
 export class PerformanceFilterDto {
   @IsOptional()

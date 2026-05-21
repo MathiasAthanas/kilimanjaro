@@ -1,5 +1,5 @@
 import { IsBoolean, IsEnum, IsOptional, IsString } from 'class-validator';
-import { GuardianRelationship } from '@prisma/client';
+import { GuardianRelationship } from '../../../generated/prisma';
 
 export class UpdateGuardianDto {
   @IsOptional()

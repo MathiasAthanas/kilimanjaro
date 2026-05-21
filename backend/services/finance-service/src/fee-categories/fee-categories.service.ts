@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { FinancialAuditAction } from '@prisma/client';
+import { FinancialAuditAction } from '../../generated/prisma';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { RequestUser } from '../common/interfaces/request-user.interface';

@@ -1,6 +1,6 @@
 import { Type } from 'class-transformer';
 import { IsArray, IsDateString, IsEnum, IsNotEmpty, IsOptional, IsString, ValidateNested } from 'class-validator';
-import { Gender, GuardianRelationship } from '@prisma/client';
+import { Gender, GuardianRelationship } from '../../../generated/prisma';
 
 export class CreateStudentGuardianDto {
   @IsOptional()

@@ -1,6 +1,6 @@
 import { createHash } from 'crypto';
 import { Injectable, Logger } from '@nestjs/common';
-import { NotificationChannel } from '@prisma/client';
+import { NotificationChannel } from '../../generated/prisma';
 import { compileTemplateSafe } from '../common/helpers/handlebars.helper';
 import { QueuesService } from '../queues/queues.service';
 import { PrismaService } from '../prisma/prisma.service';

@@ -1,5 +1,5 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { AnnouncementStatus } from '@prisma/client';
+import { AnnouncementStatus } from '../../generated/prisma';
 import { RequestUser } from '../common/interfaces/request-user.interface';
 import { DispatchService } from '../dispatch/dispatch.service';
 import { PrismaService } from '../prisma/prisma.service';

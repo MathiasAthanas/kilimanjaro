@@ -3,6 +3,7 @@ import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { firstValueFrom } from 'rxjs';
+import { getServiceUrls } from '../common/config/service-urls.config';
 
 @Injectable()
 export class GatewayService {
@@ -98,14 +99,6 @@ export class GatewayService {
   }
 
   getServiceUrl(service: string): string {
-    const urls: Record<string, string> = {
-      auth: this.config.get<string>('AUTH_SERVICE_URL') || 'http://localhost:3001',
-      student: this.config.get<string>('STUDENT_SERVICE_URL') || 'http://localhost:3002',
-      academic: this.config.get<string>('ACADEMIC_SERVICE_URL') || 'http://localhost:3003',
-      finance: this.config.get<string>('FINANCE_SERVICE_URL') || 'http://localhost:3004',
-      notification: this.config.get<string>('NOTIFICATION_SERVICE_URL') || 'http://localhost:3005',
-      analytics: this.config.get<string>('ANALYTICS_SERVICE_URL') || 'http://localhost:3006',
-    };
-    return urls[service];
+    return getServiceUrls(this.config)[service as keyof ReturnType<typeof getServiceUrls>];
   }
 }
