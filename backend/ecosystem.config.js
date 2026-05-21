@@ -21,7 +21,7 @@ module.exports = {
     {
       name: 'ks-student-service',
       cwd: './services/student-service',
-      script: 'dist/src/main.js',
+      script: 'dist/main.js',
       instances: 1,
       autorestart: true,
       watch: false,
