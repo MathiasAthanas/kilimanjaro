@@ -42,7 +42,7 @@ export class PerformanceProxyService {
     }
 
     const payload = await this.studentClient.get<any>(
-      '/api/v1/students/performance/alerts',
+      '/students/performance/alerts',
       finalQuery,
       { 'X-User-Id': user.id, 'X-User-Role': user.role },
     );
@@ -54,7 +54,7 @@ export class PerformanceProxyService {
 
   async alertsByClass(classId: string, user: RequestUser) {
     const payload = await this.studentClient.get<any>(
-      `/api/v1/students/performance/alerts/class/${classId}`,
+      `/students/performance/alerts/class/${classId}`,
       {},
       { 'X-User-Id': user.id, 'X-User-Role': user.role },
     );
@@ -64,7 +64,7 @@ export class PerformanceProxyService {
 
   async resolveAlert(alertId: string, body: { resolutionNote: string }, user: RequestUser) {
     const payload = await this.studentClient.patch<any>(
-      `/api/v1/students/performance/alerts/${alertId}/resolve`,
+      `/students/performance/alerts/${alertId}/resolve`,
       body,
       { 'X-User-Id': user.id, 'X-User-Role': user.role },
     );
@@ -114,7 +114,7 @@ export class PerformanceProxyService {
   }
 
   async pairings(query: Record<string, unknown>, user: RequestUser) {
-    const payload = await this.studentClient.get<any>('/api/v1/students/performance/pairings', query, {
+    const payload = await this.studentClient.get<any>('/students/performance/pairings', query, {
       'X-User-Id': user.id,
       'X-User-Role': user.role,
     });
@@ -130,7 +130,7 @@ export class PerformanceProxyService {
     interventionType: 'PAIRING_ACTIVATED' | 'PAIRING_REJECTED',
   ) {
     const payload = await this.studentClient.patch<any>(
-      `/api/v1/students/performance/pairings/${pairingId}/status`,
+      `/students/performance/pairings/${pairingId}/status`,
       { status, reason },
       { 'X-User-Id': user.id, 'X-User-Role': user.role },
     );
@@ -164,7 +164,7 @@ export class PerformanceProxyService {
   }
 
   async createPairing(body: any, user: RequestUser) {
-    const payload = await this.studentClient.post<any>('/api/v1/students/performance/pairings', body, {
+    const payload = await this.studentClient.post<any>('/students/performance/pairings', body, {
       'X-User-Id': user.id,
       'X-User-Role': user.role,
     });
@@ -190,7 +190,7 @@ export class PerformanceProxyService {
   }
 
   async pairingsEffectiveness(user: RequestUser) {
-    const payload = await this.studentClient.get<any>('/api/v1/students/performance/pairings/effectiveness', {}, {
+    const payload = await this.studentClient.get<any>('/students/performance/pairings/effectiveness', {}, {
       'X-User-Id': user.id,
       'X-User-Role': user.role,
     });
@@ -211,7 +211,7 @@ export class PerformanceProxyService {
         where: { studentId },
         orderBy: { createdAt: 'desc' },
       }),
-      this.studentClient.get<any>(`/api/v1/students/performance/${studentId}`, {}, {
+      this.studentClient.get<any>(`/students/performance/${studentId}`, {}, {
         'X-User-Id': user.id,
         'X-User-Role': user.role,
       }),
@@ -250,7 +250,7 @@ export class PerformanceProxyService {
         where: { classId },
         _avg: { weightedTotal: true },
       }),
-      this.studentClient.get<any>(`/api/v1/students/performance/summary/class/${classId}`, {}, {
+      this.studentClient.get<any>(`/students/performance/summary/class/${classId}`, {}, {
         'X-User-Id': user.id,
         'X-User-Role': user.role,
       }),
@@ -268,7 +268,7 @@ export class PerformanceProxyService {
         by: ['subjectId', 'subjectName'],
         _avg: { weightedTotal: true },
       }),
-      this.studentClient.get<any>('/api/v1/students/performance/summary/school', {}, {
+      this.studentClient.get<any>('/students/performance/summary/school', {}, {
         'X-User-Id': user.id,
         'X-User-Role': user.role,
       }),
@@ -281,21 +281,21 @@ export class PerformanceProxyService {
   }
 
   runEngine(body: any, user: RequestUser) {
-    return this.studentClient.post('/api/v1/students/performance/engine/run', body, {
+    return this.studentClient.post('/students/performance/engine/run', body, {
       'X-User-Id': user.id,
       'X-User-Role': user.role,
     });
   }
 
   getEngineConfig(user: RequestUser) {
-    return this.studentClient.get('/api/v1/students/performance/engine/config', {}, {
+    return this.studentClient.get('/students/performance/engine/config', {}, {
       'X-User-Id': user.id,
       'X-User-Role': user.role,
     });
   }
 
   async updateEngineConfig(body: any, user: RequestUser) {
-    const payload = await this.studentClient.patch('/api/v1/students/performance/engine/config', body, {
+    const payload = await this.studentClient.patch('/students/performance/engine/config', body, {
       'X-User-Id': user.id,
       'X-User-Role': user.role,
     });

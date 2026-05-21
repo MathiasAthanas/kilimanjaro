@@ -178,7 +178,7 @@ export class AssessmentsService {
     }
 
     const studentsPayload = await this.studentClient.get<any>(
-      '/api/v1/students',
+        '/students',
       { classId: assessment.classId, limit: 1000, page: 1 },
       { 'X-User-Id': user.id, 'X-User-Role': ROLES.PRINCIPAL },
     );
@@ -439,7 +439,7 @@ export class AssessmentsService {
     }
 
     const alertsPayload = await this.studentClient.get<any>(
-      '/api/v1/students/performance/alerts',
+        '/students/performance/alerts',
       { classId: assessment.classId, subjectId: assessment.subjectId, isResolved: false },
       { 'X-User-Id': 'academic-service', 'X-User-Role': ROLES.PRINCIPAL },
     );
@@ -551,7 +551,7 @@ export class AssessmentsService {
     }
 
     const highAlertsPayload = await this.studentClient.get<any>(
-      '/api/v1/students/performance/alerts',
+        '/students/performance/alerts',
       { classId: assessment.classId, isResolved: false, severity: 'HIGH,CRITICAL' },
       { 'X-User-Id': user.id, 'X-User-Role': user.role },
     );

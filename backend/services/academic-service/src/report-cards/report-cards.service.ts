@@ -61,7 +61,7 @@ export class ReportCardsService {
     const ranking = new Map(ranked.map((item, index) => [item.studentId, index + 1]));
 
     const alertsPayload = await this.studentClient.get<any>(
-      '/api/v1/students/performance/alerts',
+        '/students/performance/alerts',
       { classId, isResolved: false, severity: 'HIGH,CRITICAL' },
       { 'X-User-Id': actorId, 'X-User-Role': ROLES.PRINCIPAL },
     );
@@ -109,7 +109,7 @@ export class ReportCardsService {
         },
       });
 
-      const studentProfilePayload = await this.studentClient.get<any>(`/api/v1/students/${studentId}`, undefined, {
+      const studentProfilePayload = await this.studentClient.get<any>(`/students/${studentId}`, undefined, {
         'X-User-Id': actorId,
         'X-User-Role': ROLES.PRINCIPAL,
       });
@@ -117,14 +117,14 @@ export class ReportCardsService {
       const studentProfile = this.unwrap<any>(studentProfilePayload);
       const className = studentProfile?.enrolments?.[0]?.class?.name || classId;
       const attendancePayload = await this.studentClient.get<any>(
-        `/api/v1/students/attendance/summary/${studentId}`,
+        `/students/attendance/summary/${studentId}`,
         {},
         { 'X-User-Id': actorId, 'X-User-Role': ROLES.PRINCIPAL },
       );
       const attendanceSummary = (this.unwrap<any[]>(attendancePayload) || []).find((item) => item.termId === termId);
 
       const performancePayload = await this.studentClient.get<any>(
-        `/api/v1/students/performance/${studentId}`,
+        `/students/performance/${studentId}`,
         {},
         { 'X-User-Id': actorId, 'X-User-Role': ROLES.PRINCIPAL },
       );

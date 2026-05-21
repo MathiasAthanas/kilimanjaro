@@ -284,7 +284,7 @@ export class ResultsService {
     });
 
     const alertsPayload = await this.studentClient.get<any>(
-      '/api/v1/students/performance/summary/class/' + classId,
+        '/students/performance/summary/class/' + classId,
       { termId },
       { 'X-User-Id': 'academic-service', 'X-User-Role': ROLES.PRINCIPAL },
     );
@@ -350,7 +350,7 @@ export class ResultsService {
     });
 
     const highAlertsPayload = await this.studentClient.get<any>(
-      '/api/v1/students/performance/alerts',
+        '/students/performance/alerts',
       { classId: dto.classId, isResolved: false, severity: 'HIGH,CRITICAL' },
       { 'X-User-Id': user.id, 'X-User-Role': user.role },
     );
