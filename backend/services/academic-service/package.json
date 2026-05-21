@@ -6,6 +6,7 @@
     "dev": "nest start --watch",
     "prebuild": "prisma generate",
     "build": "nest build",
+    "postbuild": "node ../../scripts/copy-prisma-generated.js",
     "start": "node dist/main",
     "start:prod": "node dist/main.js",
     "test": "jest --config jest.config.js --runInBand",
