@@ -237,7 +237,7 @@ export class UiController {
   @Roles(...ADMIN_ROLES)
   async adminDashboard(@CurrentUser() user: GatewayUser): Promise<UiEnvelope> {
     const { data, warnings } = await this.ui.collect({
-      users: { service: 'auth', path: '/auth/users', fallback: [] },
+      users: { service: 'auth', path: '/auth/internal/users-by-role', params: { roles: this.allOperationalRoles() }, fallback: [] },
       classes: { service: 'student', path: '/students/classes', fallback: [] },
       terms: { service: 'student', path: '/students/terms', fallback: [] },
       feeCategories: { service: 'finance', path: '/finance/fee-categories', fallback: [] },
@@ -252,7 +252,7 @@ export class UiController {
     const { data, warnings } = await this.ui.collect({
       financeAudit: { service: 'finance', path: '/finance/audit-logs', fallback: [] },
       notificationLogs: { service: 'notification', path: '/notifications/logs', fallback: [] },
-      users: { service: 'auth', path: '/auth/users', fallback: [] },
+      users: { service: 'auth', path: '/auth/internal/users-by-role', params: { roles: this.allOperationalRoles() }, fallback: [] },
     }, user);
     return this.ui.envelope({
       ...data,
@@ -288,7 +288,7 @@ export class UiController {
 
     const { data, warnings } = await this.ui.collect({
       students: { service: 'student', path: '/students', fallback: [] },
-      users: { service: 'auth', path: '/auth/users', fallback: [] },
+      users: { service: 'auth', path: '/auth/internal/users-by-role', params: { roles: this.allOperationalRoles() }, fallback: [] },
       announcements: { service: 'notification', path: '/notifications/announcements', fallback: [] },
       invoices: { service: 'finance', path: '/finance/invoices', fallback: [] },
     }, user);
@@ -358,13 +358,13 @@ export class UiController {
   @Roles(...LEADERSHIP_ROLES)
   async resultsPublishingReadiness(@CurrentUser() user: GatewayUser): Promise<UiEnvelope> {
     const { data, warnings } = await this.ui.collect({
-      pendingApprovals: { service: 'academic', path: '/academics/assessments/pending-approval', fallback: [] },
+      pendingApprovals: { service: 'academic', path: '/academics/assessments', params: { status: 'SUBMITTED' }, fallback: [] },
       academicOverview: { service: 'analytics', path: '/analytics/academic/overview', fallback: null },
-      alerts: { service: 'academic', path: '/academics/performance/alerts', fallback: [] },
+      atRiskStudents: { service: 'analytics', path: '/analytics/students/at-risk', fallback: [] },
     }, user);
     const blockers = [
       ...this.ui.asArray(data.pendingApprovals).map((item) => ({ type: 'pending_approval', item })),
-      ...this.ui.asArray(data.alerts).map((item) => ({ type: 'performance_alert', item })),
+      ...this.ui.asArray(data.atRiskStudents).map((item) => ({ type: 'student_risk', item })),
     ];
     return this.ui.envelope({ ...data, blockers, ready: blockers.length === 0 }, warnings);
   }
@@ -420,5 +420,19 @@ export class UiController {
       announcements: { service: 'notification', path: '/notifications/announcements' },
     };
     return routes[resource] || routes.department;
+  }
+
+  private allOperationalRoles(): string {
+    return [
+      'SYSTEM_ADMIN',
+      'PRINCIPAL',
+      'ACADEMIC_QA',
+      'FINANCE',
+      'HEAD_OF_DEPARTMENT',
+      'TEACHER',
+      'PARENT',
+      'GUARDIAN',
+      'STUDENT',
+    ].join(',');
   }
 }
