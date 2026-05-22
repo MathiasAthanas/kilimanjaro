@@ -35,6 +35,149 @@ enum ReportStatus {
   @@schema("analytics")
 }
 
+enum Gender {
+  MALE
+  FEMALE
+
+  @@schema("students")
+}
+
+enum StudentStatus {
+  ACTIVE
+  GRADUATED
+  TRANSFERRED
+  SUSPENDED
+  EXPELLED
+  DECEASED
+
+  @@schema("students")
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+
+  @@schema("students")
+}
+
+enum DisciplineCategory {
+  MISCONDUCT
+  BULLYING
+  CHEATING
+  ABSENTEEISM
+  VIOLENCE
+  PROPERTY_DAMAGE
+  DISRESPECT
+  OTHER
+
+  @@schema("students")
+}
+
+enum DisciplineSeverity {
+  MINOR
+  MODERATE
+  SEVERE
+
+  @@schema("students")
+}
+
+enum AlertType {
+  CHRONIC_UNDERPERFORMER
+  SUDDEN_DECLINE
+  RAPID_IMPROVEMENT
+  AT_RISK
+  FAILURE_RISK
+  CONSISTENT_EXCELLENCE
+  VOLATILE_PERFORMANCE
+  ATTENDANCE_IMPACT
+  RECOVERED
+  CONSECUTIVE_DECLINE
+
+  @@schema("students")
+}
+
+enum AlertSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+
+  @@schema("students")
+}
+
+enum PairingStatus {
+  SUGGESTED
+  ACTIVE
+  COMPLETED
+  REJECTED
+  EXPIRED
+
+  @@schema("students")
+}
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+  CANCELLED
+  WAIVED
+
+  @@schema("finance")
+}
+
+enum PaymentMethod {
+  MOBILE_MONEY
+  BANK_TRANSFER
+  CASH
+  WAIVER
+  SCHOLARSHIP
+  OTHER
+
+  @@schema("finance")
+}
+
+enum PaymentStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+  REFUNDED
+  CANCELLED
+
+  @@schema("finance")
+}
+
+enum NotificationChannel {
+  SMS
+  EMAIL
+  PUSH
+  IN_APP
+
+  @@schema("notifications")
+}
+
+enum NotificationStatus {
+  QUEUED
+  SENDING
+  DELIVERED
+  FAILED
+  CANCELLED
+
+  @@schema("notifications")
+}
+
+enum AnnouncementStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHED
+  CANCELLED
+
+  @@schema("notifications")
+}
+
 model DashboardSnapshot {
   id           String   @id @default(uuid())
   snapshotType String
@@ -105,8 +248,8 @@ model Student {
   registrationNumber String
   firstName          String
   lastName           String
-  gender             String
-  status             String
+  gender             Gender
+  status             StudentStatus
   admissionDate      DateTime
   dateOfBirth        DateTime
   nationality        String
@@ -161,7 +304,7 @@ model AttendanceRecord {
   classId   String
   termId    String
   date      DateTime
-  status    String
+  status    AttendanceStatus
 
   @@schema("students")
 }
@@ -169,8 +312,8 @@ model AttendanceRecord {
 model DisciplineRecord {
   id           String   @id
   studentId    String
-  category     String
-  severity     String
+  category     DisciplineCategory
+  severity     DisciplineSeverity
   incidentDate DateTime
   actionTaken  String
   resolvedAt   DateTime?
@@ -215,8 +358,8 @@ model PerformanceAlert {
   studentId  String
   subjectId  String
   subjectName String
-  alertType  String
-  severity   String
+  alertType  AlertType
+  severity   AlertSeverity
   message    String
   isResolved Boolean
   createdAt  DateTime
@@ -231,7 +374,7 @@ model PeerPairing {
   peerId               String
   subjectId            String
   subjectName          String
-  status               String
+  status               PairingStatus
   reason               String
   studentScoreAtPairing Float
   peerScoreAtPairing   Float
@@ -350,7 +493,7 @@ model Invoice {
   totalAmount        Decimal  @db.Decimal(12, 2)
   paidAmount         Decimal  @db.Decimal(12, 2)
   outstandingBalance Decimal  @db.Decimal(12, 2)
-  status             String
+  status             InvoiceStatus
   dueDate            DateTime
 
   @@schema("finance")
@@ -361,8 +504,8 @@ model Payment {
   invoiceId String
   studentId String
   amount    Decimal  @db.Decimal(12, 2)
-  method    String
-  status    String
+  method    PaymentMethod
+  status    PaymentStatus
   confirmedAt DateTime?
   paidAt    DateTime?
 
@@ -392,9 +535,9 @@ model Receipt {
 model Notification {
   id         String   @id
   recipientId String
-  channel    String
+  channel    NotificationChannel
   eventType  String
-  status     String
+  status     NotificationStatus
   createdAt  DateTime
 
   @@schema("notifications")
@@ -403,7 +546,7 @@ model Notification {
 model Announcement {
   id          String   @id
   title       String
-  status      String
+  status      AnnouncementStatus
   publishedAt DateTime?
   targetRoles String[]
 

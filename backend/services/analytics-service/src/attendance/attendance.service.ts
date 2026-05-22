@@ -44,7 +44,7 @@ export class AttendanceService {
       this.prisma.class.findMany({ where: { id: classId || undefined }, select: { id: true, name: true, stream: true } }),
       this.prisma.student.findMany({ select: { id: true, firstName: true, lastName: true } }),
       this.prisma.reportCard.findMany({ where: { termId: scopedTerm || undefined, isPublished: true }, select: { studentId: true, overallAverage: true } }),
-      this.prisma.performanceAlert.findMany({ where: { isResolved: false, alertType: { contains: 'ATTENDANCE' } }, select: { studentId: true } }),
+      this.prisma.performanceAlert.findMany({ where: { isResolved: false, alertType: 'ATTENDANCE_IMPACT' }, select: { studentId: true } }),
     ]);
 
     const school = this.attendanceStats(records);
@@ -159,7 +159,7 @@ export class AttendanceService {
     const [records, terms, alerts] = await Promise.all([
       this.prisma.attendanceRecord.findMany({ where: { studentId }, orderBy: { date: 'asc' } }),
       this.prisma.term.findMany({ orderBy: { name: 'asc' }, select: { id: true, name: true, academicYearId: true } }),
-      this.prisma.performanceAlert.findMany({ where: { studentId, isResolved: false, alertType: { contains: 'ATTENDANCE' } }, select: { id: true } }),
+      this.prisma.performanceAlert.findMany({ where: { studentId, isResolved: false, alertType: 'ATTENDANCE_IMPACT' }, select: { id: true } }),
     ]);
 
     const overall = this.attendanceStats(records);

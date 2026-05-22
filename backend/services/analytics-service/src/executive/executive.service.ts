@@ -86,7 +86,7 @@ export class ExecutiveService {
       })),
       complianceAndGovernance: {
         resultsPublishedOnTime: reportCards.length ? 100 : 0,
-        financialAuditsClean: invoices.every((invoice) => invoice.status !== 'DISPUTED'),
+        financialAuditsClean: invoices.every((invoice) => invoice.status !== 'CANCELLED'),
         allClassesHaveTeachers: classes.every((klass) => Boolean(klass.classTeacherId)),
       },
     };
@@ -114,9 +114,9 @@ export class ExecutiveService {
         pendingApprovals: {
           marks: 0,
           manualPayments: 0,
-          pairings: pairings.filter((row) => row.status === 'PENDING').length,
+          pairings: pairings.filter((row) => row.status === 'SUGGESTED').length,
         },
-        overdueTasksByDepartment: [{ department: 'Academics', count: pairings.filter((row) => row.status === 'PENDING').length }],
+        overdueTasksByDepartment: [{ department: 'Academics', count: pairings.filter((row) => row.status === 'SUGGESTED').length }],
         systemUsageStats: {
           activeUsersThisWeek: new Set(notifications.map((row) => row.recipientId)).size,
           notificationsSentThisWeek: notifications.length,
