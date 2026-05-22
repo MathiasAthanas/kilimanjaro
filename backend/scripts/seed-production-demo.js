@@ -531,7 +531,9 @@ async function seedAcademics() {
       });
       const startHour = 8 + Math.floor(i / weekdays.length);
       const dayOfWeek = weekdays[i % weekdays.length];
-      const existingSlot = await academics.timetable.findFirst({
+      const timetableId = uuid(`timetable-${classSubjectId}`);
+      const existingTimetable = await academics.timetable.findUnique({ where: { id: timetableId } });
+      const existingSlot = existingTimetable || await academics.timetable.findFirst({
         where: { classId: classInfo.id, dayOfWeek, startTime: `${startHour}:00`, termId: CURRENT_TERM_ID },
       });
       if (existingSlot) {
@@ -541,7 +543,7 @@ async function seedAcademics() {
         });
       } else {
         await academics.timetable.create({
-          data: { id: uuid(`timetable-${classSubjectId}`), classId: classInfo.id, subjectId: subject.id, teacherId: teacher.id, termId: CURRENT_TERM_ID, academicYearId: SCHOOL_YEAR_ID, combinationId: comboId, dayOfWeek, startTime: `${startHour}:00`, endTime: `${startHour + 1}:00`, room: `Room ${classInfo.level}${classInfo.stream}` },
+          data: { id: timetableId, classId: classInfo.id, subjectId: subject.id, teacherId: teacher.id, termId: CURRENT_TERM_ID, academicYearId: SCHOOL_YEAR_ID, combinationId: comboId, dayOfWeek, startTime: `${startHour}:00`, endTime: `${startHour + 1}:00`, room: `Room ${classInfo.level}${classInfo.stream}` },
         });
       }
       const relevantTypes = assessmentTypes.filter((t) => t.stage === classInfo.stage).slice(0, 2);
