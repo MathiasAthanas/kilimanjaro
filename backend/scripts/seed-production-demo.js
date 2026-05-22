@@ -479,10 +479,18 @@ async function seedAcademics() {
   ]) {
     const id = uuid(`assessment-type-${stage}-${code}`);
     assessmentTypes.push({ id, code, stage, weight });
-    await academics.assessmentType.upsert({
-      where: { code_academicYearId_educationStage_classLevel_subjectId: { code, academicYearId: SCHOOL_YEAR_ID, educationStage: stage, classLevel: null, subjectId: null } },
-      update: { name, weightPercentage: weight, isActive: true },
-      create: { id, code, name, weightPercentage: weight, academicYearId: SCHOOL_YEAR_ID, educationStage: stage, isActive: true },
+    const existingType = await academics.assessmentType.findFirst({
+      where: { code, academicYearId: SCHOOL_YEAR_ID, educationStage: stage, classLevel: null, subjectId: null },
+    });
+    if (existingType) {
+      await academics.assessmentType.update({
+        where: { id: existingType.id },
+        data: { name, weightPercentage: weight, isActive: true },
+      });
+      continue;
+    }
+    await academics.assessmentType.create({
+      data: { id, code, name, weightPercentage: weight, academicYearId: SCHOOL_YEAR_ID, educationStage: stage, isActive: true },
     });
   }
 
