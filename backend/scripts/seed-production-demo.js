@@ -529,11 +529,21 @@ async function seedAcademics() {
         update: { totalTopics: 14, coveredTopics: 7 + (i % 6), completionPercentage: Math.round(((7 + (i % 6)) / 14) * 100), lastUpdatedById: teacher.id, notes: 'Demo weekly progress based on term scheme of work.' },
         create: { id: uuid(`syllabus-${classSubjectId}`), classSubjectId, termId: CURRENT_TERM_ID, totalTopics: 14, coveredTopics: 7 + (i % 6), completionPercentage: Math.round(((7 + (i % 6)) / 14) * 100), lastUpdatedById: teacher.id, notes: 'Demo weekly progress based on term scheme of work.' },
       });
-      await academics.timetable.upsert({
-        where: { id: uuid(`timetable-${classSubjectId}`) },
-        update: {},
-        create: { id: uuid(`timetable-${classSubjectId}`), classId: classInfo.id, subjectId: subject.id, teacherId: teacher.id, termId: CURRENT_TERM_ID, academicYearId: SCHOOL_YEAR_ID, combinationId: comboId, dayOfWeek: weekdays[i % weekdays.length], startTime: `${8 + (i % 5)}:00`, endTime: `${9 + (i % 5)}:00`, room: `Room ${classInfo.level}${classInfo.stream}` },
+      const startHour = 8 + Math.floor(i / weekdays.length);
+      const dayOfWeek = weekdays[i % weekdays.length];
+      const existingSlot = await academics.timetable.findFirst({
+        where: { classId: classInfo.id, dayOfWeek, startTime: `${startHour}:00`, termId: CURRENT_TERM_ID },
       });
+      if (existingSlot) {
+        await academics.timetable.update({
+          where: { id: existingSlot.id },
+          data: { subjectId: subject.id, teacherId: teacher.id, academicYearId: SCHOOL_YEAR_ID, combinationId: comboId, endTime: `${startHour + 1}:00`, room: `Room ${classInfo.level}${classInfo.stream}` },
+        });
+      } else {
+        await academics.timetable.create({
+          data: { id: uuid(`timetable-${classSubjectId}`), classId: classInfo.id, subjectId: subject.id, teacherId: teacher.id, termId: CURRENT_TERM_ID, academicYearId: SCHOOL_YEAR_ID, combinationId: comboId, dayOfWeek, startTime: `${startHour}:00`, endTime: `${startHour + 1}:00`, room: `Room ${classInfo.level}${classInfo.stream}` },
+        });
+      }
       const relevantTypes = assessmentTypes.filter((t) => t.stage === classInfo.stage).slice(0, 2);
       for (const type of relevantTypes) {
         const assessmentId = uuid(`assessment-${classSubjectId}-${type.code}`);
