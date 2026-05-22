@@ -511,11 +511,19 @@ async function seedAcademics() {
       const comboId = classInfo.stage === 'A_LEVEL' ? uuid(`combo-${classInfo.stream}`) : null;
       const classSubjectId = uuid(`class-subject-${classInfo.id}-${subject.id}-${comboId || 'core'}`);
       ids.classSubjects.push({ id: classSubjectId, classId: classInfo.id, subjectId: subject.id, subjectName: subject.name, stage: classInfo.stage, level: classInfo.level, teacherId: teacher.id, subjectIndex: i });
-      await academics.classSubject.upsert({
-        where: { classId_subjectId_academicYearId_combinationId: { classId: classInfo.id, subjectId: subject.id, academicYearId: SCHOOL_YEAR_ID, combinationId: comboId } },
-        update: { teacherId: teacher.id, educationStage: classInfo.stage, classLevel: classInfo.level, isActive: true },
-        create: { id: classSubjectId, classId: classInfo.id, subjectId: subject.id, academicYearId: SCHOOL_YEAR_ID, teacherId: teacher.id, educationStage: classInfo.stage, classLevel: classInfo.level, combinationId: comboId, isActive: true },
+      const existingClassSubject = await academics.classSubject.findFirst({
+        where: { classId: classInfo.id, subjectId: subject.id, academicYearId: SCHOOL_YEAR_ID, combinationId: comboId },
       });
+      if (existingClassSubject) {
+        await academics.classSubject.update({
+          where: { id: existingClassSubject.id },
+          data: { teacherId: teacher.id, educationStage: classInfo.stage, classLevel: classInfo.level, isActive: true },
+        });
+      } else {
+        await academics.classSubject.create({
+          data: { id: classSubjectId, classId: classInfo.id, subjectId: subject.id, academicYearId: SCHOOL_YEAR_ID, teacherId: teacher.id, educationStage: classInfo.stage, classLevel: classInfo.level, combinationId: comboId, isActive: true },
+        });
+      }
       await academics.syllabusTracker.upsert({
         where: { classSubjectId_termId: { classSubjectId, termId: CURRENT_TERM_ID } },
         update: { totalTopics: 14, coveredTopics: 7 + (i % 6), completionPercentage: Math.round(((7 + (i % 6)) / 14) * 100), lastUpdatedById: teacher.id, notes: 'Demo weekly progress based on term scheme of work.' },
