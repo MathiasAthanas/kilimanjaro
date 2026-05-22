@@ -3,6 +3,7 @@ type EnvConfig = Record<string, unknown>;
 const requiredInProduction = [
   'JWT_PUBLIC_KEY',
   'INTERNAL_API_KEY',
+  'DATABASE_URL',
   'AUTH_SERVICE_URL',
   'STUDENT_SERVICE_URL',
   'ACADEMIC_SERVICE_URL',

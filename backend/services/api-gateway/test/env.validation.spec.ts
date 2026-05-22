@@ -5,6 +5,7 @@ const validProductionEnv = {
   PORT: '3000',
   JWT_PUBLIC_KEY: 'public-key',
   INTERNAL_API_KEY: 'internal-key',
+  DATABASE_URL: 'postgresql://kilimanjaro:kilimanjaro@localhost:5432/kilimanjaro',
   AUTH_SERVICE_URL: 'http://localhost:3001',
   STUDENT_SERVICE_URL: 'http://localhost:3002',
   ACADEMIC_SERVICE_URL: 'http://localhost:3003',

@@ -1,8 +1,6 @@
-import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import * as fs from 'fs';
-import * as path from 'path';
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import * as crypto from 'crypto';
+import { PrismaClient } from '../../generated/prisma';
 import { GatewayUser } from '../ui/ui-api.service';
 
 export interface OperationRecord {
@@ -13,13 +11,20 @@ export interface OperationRecord {
 }
 
 @Injectable()
-export class OperationsStoreService {
-  private readonly dataDir: string;
+export class OperationsStoreService implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(OperationsStoreService.name);
+  private readonly prisma = new PrismaClient();
+  private readonly cache = new Map<string, OperationRecord[]>();
+  private writeQueue = Promise.resolve();
 
-  constructor(private readonly configService: ConfigService) {
-    this.dataDir = this.configService.get<string>('KILIMANJARO_DATA_DIR')
-      || path.join(process.cwd(), 'data');
-    fs.mkdirSync(this.dataDir, { recursive: true });
+  async onModuleInit(): Promise<void> {
+    await this.prisma.$connect();
+    await this.reload();
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    await this.writeQueue.catch(() => undefined);
+    await this.prisma.$disconnect();
   }
 
   list<T extends OperationRecord>(collection: string): T[] {
@@ -93,25 +98,69 @@ export class OperationsStoreService {
   }
 
   private read<T>(collection: string): T[] {
-    const file = this.filePath(collection);
-    if (!fs.existsSync(file)) return [];
-    try {
-      const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
+    return ([...(this.cache.get(collection) || [])] as unknown) as T[];
   }
 
   private write<T>(collection: string, items: T[]): void {
-    const file = this.filePath(collection);
-    const temp = `${file}.tmp`;
-    fs.writeFileSync(temp, JSON.stringify(items, null, 2));
-    fs.renameSync(temp, file);
+    this.cache.set(collection, ([...(items as OperationRecord[])]));
+    this.enqueuePersist(collection, items as OperationRecord[]);
   }
 
-  private filePath(collection: string): string {
-    const safe = collection.replace(/[^a-z0-9_.-]/gi, '-');
-    return path.join(this.dataDir, `${safe}.json`);
+  private enqueuePersist(collection: string, items: OperationRecord[]): void {
+    this.writeQueue = this.writeQueue
+      .then(() => this.persistCollection(collection, items))
+      .catch((error) => {
+        this.logger.error(`Failed to persist operations collection "${collection}"`, error instanceof Error ? error.stack : String(error));
+      });
+  }
+
+  private async persistCollection(collection: string, items: OperationRecord[]): Promise<void> {
+    const ids = items.map((item) => item.id);
+    await this.prisma.$transaction([
+      this.prisma.operationRecord.deleteMany({
+        where: ids.length
+          ? { collection, id: { notIn: ids } }
+          : { collection },
+      }),
+      ...items.map((item) => this.prisma.operationRecord.upsert({
+        where: { collection_id: { collection, id: item.id } },
+        update: {
+          data: item as unknown as object,
+          createdAt: new Date(item.createdAt),
+          updatedAt: item.updatedAt ? new Date(item.updatedAt) : new Date(),
+        },
+        create: {
+          collection,
+          id: item.id,
+          data: item as unknown as object,
+          createdAt: new Date(item.createdAt),
+          updatedAt: item.updatedAt ? new Date(item.updatedAt) : new Date(),
+        },
+      })),
+    ]);
+  }
+
+  private async reload(): Promise<void> {
+    const rows = await this.prisma.operationRecord.findMany({
+      orderBy: [{ collection: 'asc' }, { updatedAt: 'desc' }],
+    });
+
+    const next = new Map<string, OperationRecord[]>();
+    for (const row of rows) {
+      const record = row.data as unknown as OperationRecord;
+      const items = next.get(row.collection) || [];
+      items.push({
+        ...record,
+        id: record.id || row.id,
+        createdAt: record.createdAt || row.createdAt.toISOString(),
+        updatedAt: record.updatedAt || row.updatedAt.toISOString(),
+      });
+      next.set(row.collection, items);
+    }
+
+    this.cache.clear();
+    for (const [collection, items] of next.entries()) {
+      this.cache.set(collection, items);
+    }
   }
 }
