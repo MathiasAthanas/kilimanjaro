@@ -1,5 +1,11 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsBoolean, IsNotEmpty, IsNumber, IsOptional, IsString, ValidateNested } from 'class-validator';
+import { IsArray, IsBoolean, IsEnum, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, ValidateNested } from 'class-validator';
+
+export enum EducationStageDto {
+  PRIMARY = 'PRIMARY',
+  O_LEVEL = 'O_LEVEL',
+  A_LEVEL = 'A_LEVEL',
+}
 
 class GradeBoundaryDto {
   @IsString()
@@ -32,6 +38,18 @@ export class CreateGradingScaleDto {
   @IsString()
   @IsNotEmpty()
   academicYearId!: string;
+
+  @IsOptional()
+  @IsEnum(EducationStageDto)
+  educationStage?: EducationStageDto;
+
+  @IsOptional()
+  @IsInt()
+  classLevel?: number;
+
+  @IsOptional()
+  @IsString()
+  subjectId?: string;
 
   @IsArray()
   @ValidateNested({ each: true })

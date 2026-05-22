@@ -1,6 +1,7 @@
 import { IsBoolean, IsNumber, IsOptional, Min } from 'class-validator';
 
 export class UpdateEngineConfigDto {
+  // O-Level / default thresholds
   @IsOptional() @IsNumber() failureThreshold?: number;
   @IsOptional() @IsNumber() atRiskThreshold?: number;
   @IsOptional() @IsNumber() excellenceThreshold?: number;
@@ -16,4 +17,9 @@ export class UpdateEngineConfigDto {
   @IsOptional() @IsBoolean() autoNotifyTeacher?: boolean;
   @IsOptional() @IsBoolean() autoNotifyAcademicDept?: boolean;
   @IsOptional() @IsBoolean() autoNotifyParent?: boolean;
+  // Gap 6 — stage-specific thresholds
+  @IsOptional() @IsNumber() primaryFailureThreshold?: number;
+  @IsOptional() @IsNumber() primaryAtRiskThreshold?: number;
+  @IsOptional() @IsNumber() aLevelFailureThreshold?: number;
+  @IsOptional() @IsNumber() aLevelAtRiskThreshold?: number;
 }

@@ -14,9 +14,14 @@ import { CreateStudentDto } from './dto/create-student.dto';
 import { UpdateStudentDto } from './dto/update-student.dto';
 import { ChangeStatusDto } from './dto/change-status.dto';
 import { PromoteStudentDto } from './dto/promote-student.dto';
+import { BulkPromoteStudentsDto } from './dto/bulk-promote-students.dto';
 import { ListStudentsDto } from './dto/list-students.dto';
 import { paginate, buildPageMeta } from '../common/helpers/pagination.helper';
-import { formatRegistrationNumber } from '../common/helpers/registration-number.helper';
+import {
+  formatRegistrationNumber,
+  formatRegistrationNumberWithStage,
+  type EducationStageCode,
+} from '../common/helpers/registration-number.helper';
 import { RabbitMqService } from '../rabbitmq/rabbitmq.service';
 import { RedisService } from '../redis/redis.service';
 
@@ -30,24 +35,47 @@ export class StudentsService {
     private readonly redis: RedisService,
   ) {}
 
-  private async generateRegistrationNumber(tx: Prisma.TransactionClient, date: Date): Promise<string> {
+  /**
+   * Gap 9 — stage-prefixed registration numbers.
+   *
+   * When a classId is supplied we look up the class's educationStage
+   * and use the per-stage sequence table so Primary, O-Level and
+   * A-Level students never share sequence numbers.
+   *
+   * Falls back to the legacy global sequence when no stage is known.
+   */
+  private async generateRegistrationNumber(
+    tx: Prisma.TransactionClient,
+    date: Date,
+    classId?: string,
+  ): Promise<string> {
     const year = date.getUTCFullYear();
 
+    // Resolve stage from the class when available
+    let stage: EducationStageCode | null = null;
+    if (classId) {
+      const cls = await tx.class.findUnique({ where: { id: classId }, select: { educationStage: true } });
+      stage = (cls?.educationStage as EducationStageCode) ?? null;
+    }
+
+    if (stage) {
+      const seq = await (tx as any).registrationSequenceByStage.upsert({
+        where: { year_stage: { year, stage } },
+        create: { year, stage, nextValue: 2 },
+        update: { nextValue: { increment: 1 } },
+        select: { nextValue: true },
+      });
+      return formatRegistrationNumberWithStage(year, seq.nextValue - 1, stage);
+    }
+
+    // Legacy fallback (no stage info)
     const sequence = await tx.registrationSequence.upsert({
       where: { year },
       create: { year, nextValue: 2 },
-      update: {
-        nextValue: {
-          increment: 1,
-        },
-      },
-      select: {
-        nextValue: true,
-      },
+      update: { nextValue: { increment: 1 } },
+      select: { nextValue: true },
     });
-
-    const nextValue = sequence.nextValue - 1;
-    return formatRegistrationNumber(year, nextValue);
+    return formatRegistrationNumber(year, sequence.nextValue - 1);
   }
 
   private buildStudentProfileInclude(): Prisma.StudentInclude {
@@ -83,7 +111,7 @@ export class StudentsService {
         throw new BadRequestException('Academic year not found');
       }
 
-      const registrationNumber = await this.generateRegistrationNumber(tx, admissionDate);
+      const registrationNumber = await this.generateRegistrationNumber(tx, admissionDate, dto.classId);
 
       const student = await tx.student.create({
         data: {
@@ -328,17 +356,47 @@ export class StudentsService {
       throw new NotFoundException('Student not found');
     }
 
-    const targetClass = await this.prisma.class.findUnique({ where: { id: dto.toClassId } });
+    const activeEnrolment = await this.prisma.enrolment.findFirst({
+      where: { studentId: id, isActive: true },
+      include: { class: true },
+      orderBy: { enrolledAt: 'desc' },
+    });
+    const fromClassId = dto.fromClassId ?? activeEnrolment?.classId;
+    let targetClassId = dto.toClassId;
+    let pathwayTransition: string | null = null;
+    if (!targetClassId && fromClassId) {
+      const pathway = await this.prisma.classPathway.findUnique({
+        where: { fromClassId_academicYearId: { fromClassId, academicYearId: dto.academicYearId } },
+        include: { toClass: true },
+      });
+      if (!pathway) {
+        throw new BadRequestException('No class pathway configured for this promotion');
+      }
+      if (pathway.transitionType === 'GRADUATION' || pathway.transitionType === 'TRANSFER') {
+        throw new BadRequestException(`Pathway resolves to ${pathway.transitionType}; use status workflow instead of class promotion`);
+      }
+      if (!pathway.toClassId) {
+        throw new BadRequestException('Configured pathway has no target class');
+      }
+      targetClassId = pathway.toClassId;
+      pathwayTransition = pathway.transitionType;
+    }
+    if (!targetClassId) {
+      throw new BadRequestException('Provide toClassId or configure a class pathway');
+    }
+
+    const targetClass = await this.prisma.class.findUnique({ where: { id: targetClassId } });
     if (!targetClass) {
       throw new BadRequestException('Target class not found');
     }
+    if (
+      activeEnrolment?.class.educationStage !== targetClass.educationStage &&
+      pathwayTransition !== 'CROSS_STAGE'
+    ) {
+      throw new BadRequestException('Cross-stage promotion requires an explicit CROSS_STAGE pathway');
+    }
 
     const result = await this.prisma.$transaction(async (tx) => {
-      const activeEnrolment = await tx.enrolment.findFirst({
-        where: { studentId: id, isActive: true },
-        orderBy: { enrolledAt: 'desc' },
-      });
-
       if (activeEnrolment) {
         await tx.enrolment.update({
           where: { id: activeEnrolment.id },
@@ -349,7 +407,7 @@ export class StudentsService {
       const enrolment = await tx.enrolment.create({
         data: {
           studentId: id,
-          classId: dto.toClassId,
+          classId: targetClassId,
           academicYearId: dto.academicYearId,
           isActive: true,
           promotedFrom: activeEnrolment?.classId,
@@ -362,15 +420,90 @@ export class StudentsService {
 
     await this.rabbitMq.publish('student.promoted', {
       studentId: id,
-      toClassId: dto.toClassId,
+      toClassId: targetClassId,
       fromClassId: result.previousClassId,
       academicYearId: dto.academicYearId,
+      pathwayTransition,
       promotedBy: actorId,
     });
 
-    await this.redis.del(`student:${id}:profile`, `class:${dto.toClassId}:student-ids`);
+    await this.redis.del(`student:${id}:profile`, `class:${targetClassId}:student-ids`);
 
     return result.enrolment;
+  }
+
+  async bulkPromote(dto: BulkPromoteStudentsDto, actorId: string): Promise<unknown> {
+    const pathway = await this.prisma.classPathway.findUnique({
+      where: {
+        fromClassId_academicYearId: {
+          fromClassId: dto.fromClassId,
+          academicYearId: dto.academicYearId,
+        },
+      },
+      include: { fromClass: true, toClass: true },
+    });
+    if (!pathway) {
+      throw new BadRequestException('No class pathway configured for source class');
+    }
+    if (pathway.transitionType === 'GRADUATION' || pathway.transitionType === 'TRANSFER') {
+      return {
+        promoted: [],
+        blocked: [],
+        terminal: [{ fromClassId: dto.fromClassId, transitionType: pathway.transitionType, note: pathway.note }],
+      };
+    }
+    if (!pathway.toClassId || !pathway.toClass) {
+      throw new BadRequestException('Configured pathway has no target class');
+    }
+    if (pathway.fromClass.educationStage !== pathway.toClass.educationStage && pathway.transitionType !== 'CROSS_STAGE') {
+      throw new BadRequestException('Cross-stage bulk promotion requires a CROSS_STAGE pathway');
+    }
+
+    const enrolments = await this.prisma.enrolment.findMany({
+      where: {
+        classId: dto.fromClassId,
+        academicYearId: dto.academicYearId,
+        isActive: true,
+        studentId: dto.studentIds?.length ? { in: dto.studentIds } : undefined,
+      },
+      include: { student: true },
+      orderBy: { enrolledAt: 'asc' },
+    });
+
+    const promoted: Array<{ studentId: string; enrolmentId: string }> = [];
+    const blocked: Array<{ studentId: string; reason: string }> = [];
+
+    for (const enrolment of enrolments) {
+      try {
+        const created = await this.promote(
+          enrolment.studentId,
+          {
+            fromClassId: dto.fromClassId,
+            toClassId: pathway.toClassId,
+            academicYearId: dto.targetAcademicYearId,
+          },
+          actorId,
+        ) as { id: string; studentId: string };
+        promoted.push({ studentId: created.studentId, enrolmentId: created.id });
+      } catch (error) {
+        blocked.push({
+          studentId: enrolment.studentId,
+          reason: error instanceof Error ? error.message : 'Promotion failed',
+        });
+      }
+    }
+
+    await this.rabbitMq.publish('students.bulk_promoted', {
+      fromClassId: dto.fromClassId,
+      toClassId: pathway.toClassId,
+      academicYearId: dto.academicYearId,
+      targetAcademicYearId: dto.targetAcademicYearId,
+      promotedCount: promoted.length,
+      blockedCount: blocked.length,
+      promotedBy: actorId,
+    });
+
+    return { promoted, blocked, terminal: [] };
   }
 
   async getCurrentClassId(studentId: string): Promise<string | null> {

@@ -25,8 +25,18 @@ export class GradingController {
     ROLES.HEAD_OF_DEPARTMENT,
     ROLES.TEACHER,
   )
-  listGradingScales() {
-    return this.gradingService.listGradingScales();
+  listGradingScales(
+    @Query('academicYearId') academicYearId?: string,
+    @Query('educationStage') educationStage?: string,
+    @Query('classLevel') classLevel?: string,
+    @Query('subjectId') subjectId?: string,
+  ) {
+    return this.gradingService.listGradingScales({
+      academicYearId,
+      educationStage,
+      classLevel: classLevel ? Number(classLevel) : undefined,
+      subjectId,
+    });
   }
 
   @Patch('grading-scales/:id/activate')
@@ -49,7 +59,17 @@ export class GradingController {
     ROLES.HEAD_OF_DEPARTMENT,
     ROLES.TEACHER,
   )
-  listAssessmentTypes(@Query('academicYearId') academicYearId?: string) {
-    return this.gradingService.listAssessmentTypes(academicYearId);
+  listAssessmentTypes(
+    @Query('academicYearId') academicYearId?: string,
+    @Query('educationStage') educationStage?: string,
+    @Query('classLevel') classLevel?: string,
+    @Query('subjectId') subjectId?: string,
+  ) {
+    return this.gradingService.listAssessmentTypes({
+      academicYearId,
+      educationStage,
+      classLevel: classLevel ? Number(classLevel) : undefined,
+      subjectId,
+    });
   }
 }

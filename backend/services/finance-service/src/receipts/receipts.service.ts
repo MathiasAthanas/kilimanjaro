@@ -76,6 +76,8 @@ export class ReceiptsService {
         studentId: payment.studentId,
         studentName: `${student.firstName || ''} ${student.lastName || ''}`.trim() || payment.studentId,
         classId: payment.invoice.classId,
+        educationStage: payment.invoice.educationStage,
+        classLevel: payment.invoice.classLevel,
         termId: payment.invoice.termId,
         academicYearId: payment.invoice.academicYearId,
         amount: payment.amount,

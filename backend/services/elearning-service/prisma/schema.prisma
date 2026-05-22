@@ -81,6 +81,14 @@ enum RevealPolicy {
   @@schema("elearning")
 }
 
+enum EducationStage {
+  PRIMARY
+  O_LEVEL
+  A_LEVEL
+
+  @@schema("elearning")
+}
+
 model CourseSpace {
   id             String       @id @default(uuid())
   classSubjectId String
@@ -89,6 +97,9 @@ model CourseSpace {
   academicYearId String
   subjectName    String
   className      String
+  educationStage EducationStage @default(O_LEVEL)
+  classLevel     Int?
+  combinationId  String?
   description    String?
   coverColor     String?
   coverEmoji     String?
@@ -113,6 +124,8 @@ model CourseSpace {
   @@unique([classSubjectId, termId])
   @@index([teacherId, status])
   @@index([termId])
+  @@index([educationStage, classLevel, academicYearId])
+  @@index([combinationId])
   @@map("course_spaces")
   @@schema("elearning")
 }

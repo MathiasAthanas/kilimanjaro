@@ -59,16 +59,38 @@ enum InterventionType {
   @@schema("academics")
 }
 
+enum EducationStage {
+  PRIMARY
+  O_LEVEL
+  A_LEVEL
+
+  @@schema("academics")
+}
+
+/// Role of a subject inside an A-Level combination.
+/// COMPULSORY_SUBSIDIARY marks General Studies / General Paper which every
+/// ACSEE candidate must sit regardless of their principal combination.
+enum SubjectRole {
+  PRINCIPAL
+  SUBSIDIARY
+  COMPULSORY_SUBSIDIARY
+
+  @@schema("academics")
+}
+
 model Subject {
   id            String         @id @default(uuid())
   name          String
   code          String         @unique
   description   String?
+  educationStage EducationStage?
   isCompulsory  Boolean        @default(true)
   isActive      Boolean        @default(true)
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   classSubjects ClassSubject[]
+  combinationSubjects SubjectCombinationSubject[]
+  studentEnrollments StudentSubjectEnrollment[]
   assessments   Assessment[]
   timetable     Timetable[]
 
@@ -81,16 +103,22 @@ model ClassSubject {
   subjectId      String
   academicYearId String
   teacherId      String
+  educationStage EducationStage @default(O_LEVEL)
+  classLevel     Int?
+  combinationId  String?
   isActive       Boolean          @default(true)
   createdAt      DateTime         @default(now())
   subject        Subject          @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  combination    SubjectCombination? @relation(fields: [combinationId], references: [id], onDelete: SetNull)
   assessments    Assessment[]
   marks          Mark[]
   termResults    TermResult[]
   syllabus       SyllabusTracker[]
 
-  @@unique([classId, subjectId, academicYearId])
+  @@unique([classId, subjectId, academicYearId, combinationId])
   @@index([classId, academicYearId])
+  @@index([educationStage, classLevel, academicYearId])
+  @@index([combinationId])
   @@index([teacherId])
   @@schema("academics")
 }
@@ -99,11 +127,14 @@ model GradingScale {
   id             String         @id @default(uuid())
   name           String
   academicYearId String
+  educationStage EducationStage?
+  classLevel     Int?
+  subjectId      String?
   isActive       Boolean        @default(false)
   createdAt      DateTime       @default(now())
   grades         GradeBoundary[]
 
-  @@index([academicYearId, isActive])
+  @@index([academicYearId, educationStage, classLevel, subjectId, isActive])
   @@schema("academics")
 }
 
@@ -129,12 +160,15 @@ model AssessmentType {
   code             String
   weightPercentage Float
   academicYearId   String
+  educationStage   EducationStage?
+  classLevel       Int?
+  subjectId        String?
   isActive         Boolean      @default(true)
   createdAt        DateTime     @default(now())
   assessments      Assessment[]
 
-  @@unique([code, academicYearId])
-  @@index([academicYearId, isActive])
+  @@unique([code, academicYearId, educationStage, classLevel, subjectId])
+  @@index([academicYearId, educationStage, classLevel, subjectId, isActive])
   @@schema("academics")
 }
 
@@ -144,6 +178,9 @@ model Assessment {
   assessmentTypeId String
   subjectId       String
   classId         String
+  educationStage  EducationStage @default(O_LEVEL)
+  classLevel      Int?
+  combinationId   String?
   termId          String
   academicYearId  String
   name            String
@@ -168,6 +205,8 @@ model Assessment {
 
   @@unique([classSubjectId, assessmentTypeId, termId])
   @@index([classId, termId, status])
+  @@index([educationStage, classLevel, academicYearId])
+  @@index([combinationId])
   @@schema("academics")
 }
 
@@ -200,6 +239,9 @@ model TermResult {
   classSubjectId       String
   subjectId            String
   subjectName          String
+  educationStage       EducationStage @default(O_LEVEL)
+  classLevel           Int?
+  combinationId        String?
   termId               String
   academicYearId       String
   assessmentScores     Json
@@ -221,6 +263,8 @@ model TermResult {
   @@unique([studentId, classSubjectId, termId])
   @@index([studentId, termId])
   @@index([classId, termId])
+  @@index([educationStage, classLevel, termId])
+  @@index([combinationId, termId])
   @@schema("academics")
 }
 
@@ -228,12 +272,17 @@ model ReportCard {
   id                   String    @id @default(uuid())
   studentId            String
   classId              String
+  educationStage       EducationStage @default(O_LEVEL)
+  classLevel           Int?
+  combinationId        String?
   termId               String
   academicYearId       String
   overallAverage       Float
   overallGrade         String
   overallPoints        Float
   overallRemark        String
+  reportTemplateCode   String?
+  divisionSummary      Json?
   rank                 Int?
   totalStudentsInClass Int?
   subjectCount         Int
@@ -249,9 +298,73 @@ model ReportCard {
   publishedById        String?
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
+  /// Gap 12 ── Primary holistic assessment fields
+  behaviourGrade       String?
+  socialSkillsGrade    String?
+  extraCurricularNote  String?
+  readingAbility       String?
+  writingAbility       String?
+  numeracyAbility      String?
 
   @@unique([studentId, termId])
   @@index([classId, termId])
+  @@index([educationStage, classLevel, termId])
+  @@index([combinationId, termId])
+  @@schema("academics")
+}
+
+model SubjectCombination {
+  id             String                      @id @default(uuid())
+  code           String
+  name           String
+  educationStage EducationStage              @default(A_LEVEL)
+  academicYearId String
+  isActive       Boolean                     @default(true)
+  createdAt      DateTime                    @default(now())
+  subjects       SubjectCombinationSubject[]
+  classSubjects  ClassSubject[]
+  studentEnrollments StudentSubjectEnrollment[]
+
+  @@unique([code, academicYearId])
+  @@index([educationStage, academicYearId, isActive])
+  @@schema("academics")
+}
+
+model SubjectCombinationSubject {
+  id            String             @id @default(uuid())
+  combinationId String
+  subjectId     String
+  /// Kept for backward compatibility. Prefer subjectRole going forward.
+  isPrincipal   Boolean            @default(true)
+  /// Semantic role of this subject in the combination.
+  subjectRole   SubjectRole        @default(PRINCIPAL)
+  displayOrder  Int                @default(0)
+  combination   SubjectCombination @relation(fields: [combinationId], references: [id], onDelete: Cascade)
+  subject       Subject            @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@unique([combinationId, subjectId])
+  @@index([subjectId])
+  @@index([combinationId, subjectRole])
+  @@schema("academics")
+}
+
+model StudentSubjectEnrollment {
+  id             String              @id @default(uuid())
+  studentId      String
+  classId        String
+  subjectId      String
+  academicYearId String
+  termId         String?
+  combinationId  String?
+  isActive       Boolean             @default(true)
+  enrolledAt     DateTime            @default(now())
+  subject        Subject             @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  combination    SubjectCombination? @relation(fields: [combinationId], references: [id], onDelete: SetNull)
+
+  @@unique([studentId, subjectId, academicYearId, termId])
+  @@index([studentId, academicYearId, isActive])
+  @@index([classId, academicYearId, isActive])
+  @@index([combinationId, academicYearId])
   @@schema("academics")
 }
 
@@ -276,14 +389,17 @@ model Timetable {
   teacherId      String
   termId         String
   academicYearId String
+  /// For A-Level: restrict this slot to a specific subject combination.
+  /// NULL means the slot applies to the whole class (Primary / O-Level).
+  combinationId  String?
   dayOfWeek      DayOfWeek
   startTime      String
   endTime        String
   room           String?
   subject        Subject   @relation(fields: [subjectId], references: [id], onDelete: Cascade)
 
-  @@unique([classId, dayOfWeek, startTime, termId])
   @@index([classId, termId])
+  @@index([combinationId])
   @@schema("academics")
 }
 

@@ -70,6 +70,9 @@ export class InvoicesService {
   private async generateInvoiceForStudent(student: any, dto: GenerateInvoicesDto, actor: RequestUser) {
     const classId = student.enrolments?.[0]?.classId;
     if (!classId) return null;
+    const studentClass = student.enrolments?.[0]?.class;
+    const educationStage = studentClass?.educationStage ?? undefined;
+    const classLevel = studentClass?.level ?? undefined;
 
     const existing = await this.prisma.invoice.findUnique({
       where: {
@@ -82,17 +85,10 @@ export class InvoicesService {
     });
     if (existing) return null;
 
-    const [structures, assignments] = await Promise.all([
-      this.prisma.feeStructure.findMany({
-        where: {
-          academicYearId: dto.academicYearId,
-          isActive: true,
-          AND: [
-            { OR: [{ termId: dto.termId }, { termId: null }] },
-            { OR: [{ classId }, { classLevel: student.enrolments?.[0]?.class?.level ?? undefined }] },
-          ],
-        },
-        include: { feeCategory: true },
+    const [groupMemberships, assignments] = await Promise.all([
+      this.prisma.studentGroupMembership.findMany({
+        where: { studentId: student.id, isActive: true, group: { isActive: true } },
+        include: { group: true },
       }),
       this.prisma.studentFeeAssignment.findMany({
         where: {
@@ -103,6 +99,26 @@ export class InvoicesService {
         },
       }),
     ]);
+    const studentGroupCodes = groupMemberships.map((item) => item.group.code);
+
+    const structures = await this.prisma.feeStructure.findMany({
+      where: {
+        academicYearId: dto.academicYearId,
+        isActive: true,
+        AND: [
+          { OR: [{ termId: dto.termId }, { termId: null }] },
+          {
+            OR: [
+              { classId },
+              { educationStage, classLevel },
+              { educationStage, classLevel: null },
+              ...(studentGroupCodes.length ? [{ studentGroup: { in: studentGroupCodes } }] : []),
+            ],
+          },
+        ],
+      },
+      include: { feeCategory: true },
+    });
 
     const optionalSet = new Set(assignments.map((a) => a.feeCategoryId));
     const applicable = structures.filter((s) => !s.feeCategory.isOptional || optionalSet.has(s.feeCategoryId));
@@ -119,6 +135,8 @@ export class InvoicesService {
         invoiceNumber,
         studentId: student.id,
         classId,
+        educationStage,
+        classLevel,
         academicYearId: dto.academicYearId,
         termId: dto.termId,
         subtotal,

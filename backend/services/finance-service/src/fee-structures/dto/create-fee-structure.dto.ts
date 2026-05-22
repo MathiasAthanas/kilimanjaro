@@ -1,4 +1,10 @@
-import { IsNotEmpty, IsNumberString, IsOptional, IsString } from 'class-validator';
+import { IsEnum, IsInt, IsNotEmpty, IsNumberString, IsOptional, IsString } from 'class-validator';
+
+export enum EducationStageDto {
+  PRIMARY = 'PRIMARY',
+  O_LEVEL = 'O_LEVEL',
+  A_LEVEL = 'A_LEVEL',
+}
 
 export class CreateFeeStructureDto {
   @IsString()
@@ -10,7 +16,16 @@ export class CreateFeeStructureDto {
   classId?: string;
 
   @IsOptional()
+  @IsEnum(EducationStageDto)
+  educationStage?: EducationStageDto;
+
+  @IsOptional()
+  @IsInt()
   classLevel?: number;
+
+  @IsOptional()
+  @IsString()
+  studentGroup?: string;
 
   @IsString()
   @IsNotEmpty()

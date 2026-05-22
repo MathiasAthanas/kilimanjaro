@@ -91,14 +91,42 @@ export class AssessmentsService {
       include: { subject: true },
     });
 
-    const assessmentTypes = await this.prisma.assessmentType.findMany({
-      where: { academicYearId: dto.academicYearId, isActive: true },
-    });
-
     let created = 0;
+    let assessmentTypeCount = 0;
 
     for (const classSubject of classSubjects) {
-      for (const type of assessmentTypes) {
+      const assessmentTypes = await this.prisma.assessmentType.findMany({
+        where: {
+          academicYearId: dto.academicYearId,
+          isActive: true,
+          OR: [
+            {
+              educationStage: classSubject.educationStage,
+              classLevel: classSubject.classLevel,
+              subjectId: classSubject.subjectId,
+            },
+            {
+              educationStage: classSubject.educationStage,
+              classLevel: classSubject.classLevel,
+              subjectId: null,
+            },
+            {
+              educationStage: classSubject.educationStage,
+              classLevel: null,
+              subjectId: null,
+            },
+            {
+              educationStage: null,
+              classLevel: null,
+              subjectId: null,
+            },
+          ],
+        },
+        orderBy: [{ subjectId: 'desc' }, { classLevel: 'desc' }, { educationStage: 'desc' }, { code: 'asc' }],
+      });
+      const dedupedTypes = [...new Map(assessmentTypes.map((type) => [type.code, type])).values()];
+      assessmentTypeCount += dedupedTypes.length;
+      for (const type of dedupedTypes) {
         const existing = await this.prisma.assessment.findUnique({
           where: {
             classSubjectId_assessmentTypeId_termId: {
@@ -119,6 +147,9 @@ export class AssessmentsService {
             assessmentTypeId: type.id,
             classId: classSubject.classId,
             subjectId: classSubject.subjectId,
+            educationStage: classSubject.educationStage,
+            classLevel: classSubject.classLevel,
+            combinationId: classSubject.combinationId,
             termId: dto.termId,
             academicYearId: dto.academicYearId,
             name: `${classSubject.subject.name} ${type.name} - ${dto.termId}`,
@@ -130,7 +161,7 @@ export class AssessmentsService {
       }
     }
 
-    return { created, classSubjects: classSubjects.length, assessmentTypes: assessmentTypes.length };
+    return { created, classSubjects: classSubjects.length, assessmentTypes: assessmentTypeCount };
   }
 
   async listAssessments(filters: {

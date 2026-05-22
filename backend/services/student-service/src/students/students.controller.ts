@@ -19,6 +19,7 @@ import { ListStudentsDto } from './dto/list-students.dto';
 import { UpdateStudentDto } from './dto/update-student.dto';
 import { ChangeStatusDto } from './dto/change-status.dto';
 import { PromoteStudentDto } from './dto/promote-student.dto';
+import { BulkPromoteStudentsDto } from './dto/bulk-promote-students.dto';
 import { AccessControlService } from '../common/helpers/access-control.service';
 
 @ApiTags('Students')
@@ -100,5 +101,12 @@ export class StudentsController {
   @ApiOperation({ summary: 'Promote student to new class and academic year' })
   async promote(@Param('id') id: string, @Body() dto: PromoteStudentDto, @CurrentUser() user?: RequestUser) {
     return this.studentsService.promote(id, dto, user?.id || 'system');
+  }
+
+  @Post('promotions/bulk')
+  @Roles('SYSTEM_ADMIN', 'PRINCIPAL')
+  @ApiOperation({ summary: 'Bulk promote students using configured class pathway' })
+  async bulkPromote(@Body() dto: BulkPromoteStudentsDto, @CurrentUser() user?: RequestUser) {
+    return this.studentsService.bulkPromote(dto, user?.id || 'system');
   }
 }

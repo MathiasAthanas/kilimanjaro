@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ClassesService } from './classes.service';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -6,6 +6,7 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { CreateClassDto } from './dto/create-class.dto';
 import { CreateAcademicYearDto } from './dto/create-academic-year.dto';
 import { CreateTermDto } from './dto/create-term.dto';
+import { CreateClassPathwayDto } from './dto/create-class-pathway.dto';
 
 @ApiTags('Class & Enrolment')
 @Controller('students')
@@ -21,6 +22,13 @@ export class ClassesController {
     return this.classesService.createClass(dto);
   }
 
+  @Patch('classes/:classId')
+  @Roles('SYSTEM_ADMIN', 'PRINCIPAL')
+  @ApiOperation({ summary: 'Update class setup and mixed-school stage metadata' })
+  async updateClass(@Param('classId') classId: string, @Body() dto: Partial<CreateClassDto>) {
+    return this.classesService.updateClass(classId, dto);
+  }
+
   @Get('classes')
   @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'ACADEMIC_QA', 'FINANCE', 'HEAD_OF_DEPARTMENT', 'TEACHER')
   @ApiOperation({ summary: 'List classes by academic year/level/stream' })
@@ -28,12 +36,38 @@ export class ClassesController {
     @Query('academicYearId') academicYearId?: string,
     @Query('level') level?: string,
     @Query('stream') stream?: string,
+    @Query('educationStage') educationStage?: string,
   ) {
     return this.classesService.listClasses({
       academicYearId,
       level: level ? Number(level) : undefined,
       stream,
+      educationStage,
     });
+  }
+
+  @Post('class-pathways')
+  @Roles('SYSTEM_ADMIN', 'PRINCIPAL')
+  @ApiOperation({ summary: 'Create or update class promotion/transition pathway' })
+  async createClassPathway(@Body() dto: CreateClassPathwayDto) {
+    return this.classesService.createClassPathway(dto);
+  }
+
+  @Get('class-pathways')
+  @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'ACADEMIC_QA', 'HEAD_OF_DEPARTMENT')
+  @ApiOperation({ summary: 'List configured class transition pathways' })
+  async listClassPathways(
+    @Query('academicYearId') academicYearId?: string,
+    @Query('transitionType') transitionType?: string,
+  ) {
+    return this.classesService.listClassPathways({ academicYearId, transitionType });
+  }
+
+  @Get('class-pathways/resolve')
+  @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'ACADEMIC_QA', 'HEAD_OF_DEPARTMENT')
+  @ApiOperation({ summary: 'Resolve next class from configured pathway' })
+  async resolveNextClass(@Query('fromClassId') fromClassId: string, @Query('academicYearId') academicYearId: string) {
+    return this.classesService.resolveNextClass(fromClassId, academicYearId);
   }
 
   @Get('classes/:classId/students')

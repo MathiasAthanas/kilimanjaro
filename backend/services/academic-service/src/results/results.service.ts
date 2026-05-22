@@ -58,17 +58,51 @@ export class ResultsService {
     return ranks;
   }
 
-  private async getActiveScale(academicYearId: string) {
-    const cacheKey = `grading-scale:active:${academicYearId}`;
+  private async getActiveScale(
+    academicYearId: string,
+    scope: { educationStage?: string | null; classLevel?: number | null; subjectId?: string | null } = {},
+  ) {
+    const cacheKey = `grading-scale:active:${academicYearId}:${scope.educationStage ?? 'ALL'}:${scope.classLevel ?? 'ALL'}:${scope.subjectId ?? 'ALL'}`;
     const cached = await this.redis.get<any>(cacheKey);
     if (cached) {
       return cached;
     }
 
-    const scale = await this.prisma.gradingScale.findFirst({
-      where: { academicYearId, isActive: true },
+    const candidates = await this.prisma.gradingScale.findMany({
+      where: {
+        academicYearId,
+        isActive: true,
+        OR: [
+          {
+            educationStage: scope.educationStage as any,
+            classLevel: scope.classLevel ?? null,
+            subjectId: scope.subjectId ?? null,
+          },
+          {
+            educationStage: scope.educationStage as any,
+            classLevel: scope.classLevel ?? null,
+            subjectId: null,
+          },
+          {
+            educationStage: scope.educationStage as any,
+            classLevel: null,
+            subjectId: null,
+          },
+          {
+            educationStage: null,
+            classLevel: null,
+            subjectId: null,
+          },
+        ],
+      },
       include: { grades: { orderBy: { minScore: 'asc' } } },
     });
+    const scale = candidates
+      .sort((a, b) => {
+        const score = (item: typeof a) =>
+          (item.subjectId ? 4 : 0) + (item.classLevel !== null ? 2 : 0) + (item.educationStage ? 1 : 0);
+        return score(b) - score(a);
+      })[0];
 
     if (!scale) {
       throw new BadRequestException(`No active grading scale for academicYearId ${academicYearId}`);
@@ -104,7 +138,11 @@ export class ResultsService {
     }
 
     const first = assessments[0];
-    const scale = await this.getActiveScale(first.academicYearId);
+    const scale = await this.getActiveScale(first.academicYearId, {
+      educationStage: first.classSubject.educationStage,
+      classLevel: first.classSubject.classLevel,
+      subjectId: first.subjectId,
+    });
 
     const studentIdsPayload = await this.studentClient.get<any>(`/students/internal/class/${first.classId}/student-ids`);
     const studentIds = this.unwrap<string[]>(studentIdsPayload) || [];
@@ -165,6 +203,9 @@ export class ResultsService {
             classSubjectId,
             subjectId: first.subjectId,
             subjectName: first.classSubject.subject.name,
+            educationStage: first.classSubject.educationStage,
+            classLevel: first.classSubject.classLevel,
+            combinationId: first.classSubject.combinationId,
             termId,
             academicYearId: first.academicYearId,
             assessmentScores: row.breakdown,
@@ -178,6 +219,9 @@ export class ResultsService {
             teacherId: first.classSubject.teacherId,
           },
           update: {
+            educationStage: first.classSubject.educationStage,
+            classLevel: first.classSubject.classLevel,
+            combinationId: first.classSubject.combinationId,
             assessmentScores: row.breakdown,
             weightedTotal: row.weightedTotal,
             grade: resolved.grade,

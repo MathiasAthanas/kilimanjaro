@@ -121,6 +121,23 @@ enum PairingStatus {
   @@schema("students")
 }
 
+enum EducationStage {
+  PRIMARY
+  O_LEVEL
+  A_LEVEL
+
+  @@schema("students")
+}
+
+enum ClassTransitionType {
+  PROMOTION
+  CROSS_STAGE
+  GRADUATION
+  TRANSFER
+
+  @@schema("students")
+}
+
 model Student {
   id                 String                @id @default(uuid())
   registrationNumber String                @unique
@@ -138,6 +155,11 @@ model Student {
   transferDate       DateTime?
   transferSchool     String?
   notes              String?
+  /// Gap 3 ── National exam identifiers
+  /// Populated when the student is registered for a national sitting.
+  nectaCandidateNumber String?            /// CSEE (Form 4) or ACSEE (Form 6) candidate number
+  psleIndexNumber      String?            /// PSLE index number for Standard 7 national exam
+  nationalExamYear     Int?               /// Year of the national sitting
   createdAt          DateTime              @default(now())
   updatedAt          DateTime              @updatedAt
   createdBy          String
@@ -197,6 +219,7 @@ model AcademicYear {
   classes   Class[]
   enrolments Enrolment[]
   snapshots PerformanceSnapshot[]
+  pathways  ClassPathway[]
 
   @@schema("students")
 }
@@ -223,6 +246,10 @@ model Class {
   name           String
   level          Int
   stream         String?
+  educationStage EducationStage @default(O_LEVEL)
+  curriculumCode String?
+  terminalYear   Boolean  @default(false)
+  sortOrder      Int?
   academicYearId String
   classTeacherId String?
   capacity       Int      @default(40)
@@ -232,8 +259,28 @@ model Class {
   attendance     AttendanceRecord[]
   snapshots      PerformanceSnapshot[]
   pairings       PeerPairing[]
+  pathwayFrom    ClassPathway[] @relation("PathwayFromClass")
+  pathwayTo      ClassPathway[] @relation("PathwayToClass")
 
   @@unique([name, stream, academicYearId])
+  @@index([educationStage, level, academicYearId])
+  @@schema("students")
+}
+
+model ClassPathway {
+  id             String              @id @default(uuid())
+  fromClassId    String
+  toClassId      String?
+  academicYearId String
+  transitionType ClassTransitionType @default(PROMOTION)
+  note           String?
+  createdAt      DateTime            @default(now())
+  fromClass      Class               @relation("PathwayFromClass", fields: [fromClassId], references: [id], onDelete: Cascade)
+  toClass        Class?              @relation("PathwayToClass", fields: [toClassId], references: [id], onDelete: SetNull)
+  academicYear   AcademicYear        @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+
+  @@unique([fromClassId, academicYearId])
+  @@index([transitionType, academicYearId])
   @@schema("students")
 }
 
@@ -417,6 +464,12 @@ model PerformanceEngineConfig {
   peerSuggestionSameClass      Boolean  @default(true)
   volatilityStdDevThreshold    Float    @default(20.0)
   analysisEnabled              Boolean  @default(true)
+  /// Gap 6 ── Stage-specific failure / at-risk thresholds.
+  /// Primary pass mark is 50 % in Tanzania; A-Level E grade = 25 %.
+  primaryFailureThreshold      Float    @default(50.0)
+  primaryAtRiskThreshold       Float    @default(60.0)
+  aLevelFailureThreshold       Float    @default(25.0)
+  aLevelAtRiskThreshold        Float    @default(35.0)
   autoNotifyTeacher            Boolean  @default(true)
   autoNotifyAcademicDept       Boolean  @default(true)
   autoNotifyParent             Boolean  @default(false)
@@ -431,5 +484,18 @@ model RegistrationSequence {
   nextValue Int    @default(1)
   updatedAt DateTime @updatedAt
 
+  @@schema("students")
+}
+
+/// Gap 9 ── Per-stage registration number sequences.
+/// Produces prefixed numbers: KS-P-YYYY-NNNNN (Primary),
+/// KS-S-YYYY-NNNNN (Secondary O-Level), KS-A-YYYY-NNNNN (A-Level).
+model RegistrationSequenceByStage {
+  year      Int
+  stage     String   /// "PRIMARY" | "O_LEVEL" | "A_LEVEL"
+  nextValue Int      @default(1)
+  updatedAt DateTime @updatedAt
+
+  @@id([year, stage])
   @@schema("students")
 }

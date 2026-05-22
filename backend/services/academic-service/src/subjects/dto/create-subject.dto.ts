@@ -1,4 +1,5 @@
-import { IsBoolean, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsBoolean, IsEnum, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+import { EducationStageDto } from '../../grading/dto/create-grading-scale.dto';
 
 export class CreateSubjectDto {
   @IsString()
@@ -15,6 +16,10 @@ export class CreateSubjectDto {
   @IsString()
   @MaxLength(300)
   description?: string;
+
+  @IsOptional()
+  @IsEnum(EducationStageDto)
+  educationStage?: EducationStageDto;
 
   @IsOptional()
   @IsBoolean()

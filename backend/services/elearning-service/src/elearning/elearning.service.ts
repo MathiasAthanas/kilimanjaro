@@ -29,6 +29,9 @@ export class ElearningService {
   async listCourses(user: RequestUser, query: Record<string, string>) {
     const where: Prisma.CourseSpaceWhereInput = {};
     if (query.status) where.status = query.status.toUpperCase() as never;
+    if (query.educationStage) where.educationStage = query.educationStage.toUpperCase() as never;
+    if (query.classLevel) where.classLevel = Number(query.classLevel);
+    if (query.combinationId) where.combinationId = query.combinationId;
     if (user.role === 'TEACHER') where.teacherId = user.id;
     if (user.role === 'STUDENT') where.enrollments = { some: { studentId: this.studentId(user), status: 'ACTIVE' } };
     return this.prisma.courseSpace.findMany({
@@ -48,6 +51,9 @@ export class ElearningService {
         academicYearId: this.required(body.academicYearId, 'academicYearId'),
         subjectName: this.required(body.subjectName, 'subjectName'),
         className: this.required(body.className, 'className'),
+        educationStage: String(body.educationStage || 'O_LEVEL') as never,
+        classLevel: body.classLevel === undefined ? undefined : Number(body.classLevel),
+        combinationId: this.optionalString(body.combinationId),
         description: this.optionalString(body.description),
         coverColor: this.optionalString(body.coverColor),
         coverEmoji: this.optionalString(body.coverEmoji) || '📘',
@@ -73,6 +79,9 @@ export class ElearningService {
       data: {
         subjectName: this.optionalString(body.subjectName),
         className: this.optionalString(body.className),
+        educationStage: body.educationStage === undefined ? undefined : String(body.educationStage) as never,
+        classLevel: body.classLevel === undefined ? undefined : Number(body.classLevel),
+        combinationId: this.optionalString(body.combinationId),
         description: this.optionalString(body.description),
         coverColor: this.optionalString(body.coverColor),
         coverEmoji: this.optionalString(body.coverEmoji),

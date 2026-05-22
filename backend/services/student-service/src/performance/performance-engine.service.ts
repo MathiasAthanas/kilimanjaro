@@ -130,7 +130,7 @@ export class PerformanceEngineService {
     alertsResolved: number;
     pairingsCreated: number;
   }> {
-    const [config, student, snapshots] = await Promise.all([
+    const [config, student, snapshots, activeEnrolment] = await Promise.all([
       this.getEngineConfig(),
       this.prisma.student.findUnique({ where: { id: studentId } }),
       this.prisma.performanceSnapshot.findMany({
@@ -138,11 +138,37 @@ export class PerformanceEngineService {
         include: { term: true },
         orderBy: [{ term: { startDate: 'asc' } }, { createdAt: 'asc' }],
       }),
+      // Gap 6 — look up the student's current stage for threshold selection
+      this.prisma.enrolment.findFirst({
+        where: { studentId, isActive: true },
+        include: { class: { select: { educationStage: true } } },
+        orderBy: { enrolledAt: 'desc' },
+      }),
     ]);
 
     if (!student || snapshots.length === 0) {
       return { alertsCreated: 0, alertsResolved: 0, pairingsCreated: 0 };
     }
+
+    // Gap 6 — pick the right failure / at-risk thresholds for this stage
+    const stage = activeEnrolment?.class?.educationStage ?? 'O_LEVEL';
+    const stageAwareConfig = {
+      ...config,
+      failureThreshold:
+        stage === 'PRIMARY'
+          ? config.primaryFailureThreshold
+          : stage === 'A_LEVEL'
+          ? config.aLevelFailureThreshold
+          : config.failureThreshold,
+      atRiskThreshold:
+        stage === 'PRIMARY'
+          ? config.primaryAtRiskThreshold
+          : stage === 'A_LEVEL'
+          ? config.aLevelAtRiskThreshold
+          : config.atRiskThreshold,
+    };
+    // Replace config reference for the rest of this call
+    Object.assign(config, stageAwareConfig);
 
     const scores = snapshots.map((snapshot) => snapshot.score);
     const avg = mean(scores);

@@ -35,6 +35,9 @@ export class GradingService {
       data: {
         name: dto.name,
         academicYearId: dto.academicYearId,
+        educationStage: dto.educationStage,
+        classLevel: dto.classLevel,
+        subjectId: dto.subjectId,
         grades: {
           create: dto.grades,
         },
@@ -42,12 +45,23 @@ export class GradingService {
       include: { grades: { orderBy: { minScore: 'asc' } } },
     });
 
-    await this.redis.del(`grading-scale:active:${dto.academicYearId}`);
+    await this.redis.delByPattern(`grading-scale:active:${dto.academicYearId}:*`);
     return scale;
   }
 
-  async listGradingScales() {
+  async listGradingScales(filters: {
+    academicYearId?: string;
+    educationStage?: string;
+    classLevel?: number;
+    subjectId?: string;
+  } = {}) {
     return this.prisma.gradingScale.findMany({
+      where: {
+        academicYearId: filters.academicYearId,
+        educationStage: filters.educationStage as any,
+        classLevel: filters.classLevel,
+        subjectId: filters.subjectId,
+      },
       include: { grades: { orderBy: { minScore: 'asc' } } },
       orderBy: { createdAt: 'desc' },
     });
@@ -61,7 +75,13 @@ export class GradingService {
 
     const result = await this.prisma.$transaction(async (tx) => {
       await tx.gradingScale.updateMany({
-        where: { academicYearId: existing.academicYearId, isActive: true },
+        where: {
+          academicYearId: existing.academicYearId,
+          educationStage: existing.educationStage,
+          classLevel: existing.classLevel,
+          subjectId: existing.subjectId,
+          isActive: true,
+        },
         data: { isActive: false },
       });
 
@@ -72,14 +92,20 @@ export class GradingService {
       });
     });
 
-    await this.redis.del(`grading-scale:active:${existing.academicYearId}`);
+    await this.redis.delByPattern(`grading-scale:active:${existing.academicYearId}:*`);
     return result;
   }
 
   async createAssessmentType(dto: CreateAssessmentTypeDto) {
     const currentTotal = await this.prisma.assessmentType.aggregate({
       _sum: { weightPercentage: true },
-      where: { academicYearId: dto.academicYearId, isActive: true },
+      where: {
+        academicYearId: dto.academicYearId,
+        educationStage: dto.educationStage,
+        classLevel: dto.classLevel,
+        subjectId: dto.subjectId,
+        isActive: true,
+      },
     });
 
     const total = (currentTotal._sum.weightPercentage ?? 0) + dto.weightPercentage;
@@ -88,12 +114,19 @@ export class GradingService {
     }
 
     const type = await this.prisma.assessmentType.create({ data: dto });
-    await this.redis.del(`assessment-types:${dto.academicYearId}`);
+    await this.redis.delByPattern(`assessment-types:${dto.academicYearId}:*`);
     return type;
   }
 
-  async listAssessmentTypes(academicYearId?: string) {
-    const cacheKey = academicYearId ? `assessment-types:${academicYearId}` : '';
+  async listAssessmentTypes(filters: {
+    academicYearId?: string;
+    educationStage?: string;
+    classLevel?: number;
+    subjectId?: string;
+  } = {}) {
+    const cacheKey = filters.academicYearId
+      ? `assessment-types:${filters.academicYearId}:${filters.educationStage ?? 'ALL'}:${filters.classLevel ?? 'ALL'}:${filters.subjectId ?? 'ALL'}`
+      : '';
     if (cacheKey) {
       const cached = await this.redis.get(cacheKey);
       if (cached) {
@@ -102,8 +135,13 @@ export class GradingService {
     }
 
     const types = await this.prisma.assessmentType.findMany({
-      where: { academicYearId },
-      orderBy: [{ academicYearId: 'asc' }, { code: 'asc' }],
+      where: {
+        academicYearId: filters.academicYearId,
+        educationStage: filters.educationStage as any,
+        classLevel: filters.classLevel,
+        subjectId: filters.subjectId,
+      },
+      orderBy: [{ academicYearId: 'asc' }, { educationStage: 'asc' }, { classLevel: 'asc' }, { code: 'asc' }],
     });
 
     if (cacheKey) {
