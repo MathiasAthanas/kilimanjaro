@@ -15,6 +15,7 @@
     "test:cov": "turbo run test:cov",
     "test:endpoints:inventory": "node scripts/endpoint-inventory.js",
     "test:e2e:live": "node scripts/live-e2e-smoke.js",
+    "seed:production-demo": "node scripts/seed-production-demo.js",
     "dev:gateway": "npm run dev --workspace=services/api-gateway",
     "dev:auth": "npm run dev --workspace=services/auth-service",
     "dev:student": "npm run dev --workspace=services/student-service",
