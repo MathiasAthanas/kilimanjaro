@@ -1,12 +1,12 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import amqplib, { Channel } from 'amqplib';
+import * as amqplib from 'amqplib';
 
 @Injectable()
 export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(RabbitMqService.name);
   private connection?: any;
-  private channel?: Channel;
+  private channel?: amqplib.Channel;
 
   constructor(private readonly configService: ConfigService) {}
 
@@ -17,7 +17,7 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
   private async connect(): Promise<void> {
     const url = this.configService.get<string>('RABBITMQ_URL', 'amqp://localhost:5672');
     try {
-      this.connection = await (amqplib as any).connect(url);
+      this.connection = await amqplib.connect(url);
       this.channel = await this.connection.createChannel();
       const channel = this.channel!;
       await channel.assertExchange('student.events', 'topic', { durable: true });
@@ -28,7 +28,7 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  async createConsumerChannel(): Promise<Channel | undefined> {
+  async createConsumerChannel(): Promise<amqplib.Channel | undefined> {
     if (!this.connection) {
       await this.connect();
     }
