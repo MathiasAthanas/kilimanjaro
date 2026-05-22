@@ -827,11 +827,19 @@ async function seedNotificationsAnalyticsOperations() {
     ['finance_collection', 'school', null, { billed: 190000000, collected: 157000000, outstanding: 33000000, collectionRate: 82.7 }],
     ['elearning_engagement', 'school', null, { activeCourses: 16, submissions: 128, quizAttempts: 128, materialViews: 480 }],
   ]) {
-    await analytics.dashboardSnapshot.upsert({
-      where: { snapshotType_scope_scopeId_period: { snapshotType: snapshot[0], scope: snapshot[1], scopeId: snapshot[2], period: '2026-T2' } },
-      update: { data: snapshot[3], expiresAt: date(7) },
-      create: { id: uuid(`snapshot-${snapshot[0]}`), snapshotType: snapshot[0], scope: snapshot[1], scopeId: snapshot[2], period: '2026-T2', data: snapshot[3], expiresAt: date(7) },
+    const existingSnapshot = await analytics.dashboardSnapshot.findFirst({
+      where: { snapshotType: snapshot[0], scope: snapshot[1], scopeId: snapshot[2], period: '2026-T2' },
     });
+    if (existingSnapshot) {
+      await analytics.dashboardSnapshot.update({
+        where: { id: existingSnapshot.id },
+        data: { data: snapshot[3], expiresAt: date(7) },
+      });
+    } else {
+      await analytics.dashboardSnapshot.create({
+        data: { id: uuid(`snapshot-${snapshot[0]}`), snapshotType: snapshot[0], scope: snapshot[1], scopeId: snapshot[2], period: '2026-T2', data: snapshot[3], expiresAt: date(7) },
+      });
+    }
   }
   for (const kpi of [['attendance_rate', 91.4], ['collection_rate', 82.7], ['pass_rate', 78.3], ['elearning_completion', 64.2]]) {
     await analytics.kpiHistory.upsert({
