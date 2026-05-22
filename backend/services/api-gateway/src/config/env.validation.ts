@@ -10,6 +10,7 @@ const requiredInProduction = [
   'FINANCE_SERVICE_URL',
   'NOTIFICATION_SERVICE_URL',
   'ANALYTICS_SERVICE_URL',
+  'ELEARNING_SERVICE_URL',
 ];
 
 function asString(config: EnvConfig, key: string): string {

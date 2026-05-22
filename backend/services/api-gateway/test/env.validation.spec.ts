@@ -12,6 +12,7 @@ const validProductionEnv = {
   FINANCE_SERVICE_URL: 'http://localhost:3004',
   NOTIFICATION_SERVICE_URL: 'http://localhost:3005',
   ANALYTICS_SERVICE_URL: 'http://localhost:3006',
+  ELEARNING_SERVICE_URL: 'http://localhost:3007',
 };
 
 describe('api-gateway env validation', () => {

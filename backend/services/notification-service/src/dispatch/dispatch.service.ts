@@ -63,6 +63,27 @@ export class DispatchService {
         const admins = await this.resolver.resolveStaffByRole(['SYSTEM_ADMIN']);
         for (const user of admins) recipients.push({ userId: user.id || user.authUserId, role: 'SYSTEM_ADMIN', email: user.email, phone: user.phone });
       }
+    } else if (eventType === 'submission.graded' || eventType === 'quiz.result') {
+      if (payload.studentId) {
+        const student = await this.resolver.resolveUser(payload.studentId);
+        if (student?.id || student?.authUserId) {
+          recipients.push({ userId: student.id || student.authUserId, role: 'STUDENT', email: student.email, phone: student.phone });
+        }
+      }
+    } else if (
+      eventType === 'assignment.published' ||
+      eventType === 'quiz.published' ||
+      eventType === 'announcement.published' ||
+      eventType === 'assignment.due_soon' ||
+      eventType === 'assignment.overdue'
+    ) {
+      const studentIds: string[] = payload.studentIds ?? payload.missingStudentIds ?? [];
+      for (const studentId of studentIds) {
+        const student = await this.resolver.resolveUser(studentId);
+        if (student?.id || student?.authUserId) {
+          recipients.push({ userId: student.id || student.authUserId, role: 'STUDENT', email: student.email, phone: student.phone });
+        }
+      }
     } else if (payload.recipientIds?.length) {
       for (const id of payload.recipientIds) {
         const user = await this.resolver.resolveUser(id);
@@ -82,6 +103,10 @@ export class DispatchService {
       return ['SMS', 'EMAIL', 'IN_APP'];
     }
     if (eventType.includes('alert') || eventType.includes('marks') || eventType.includes('report_card')) return ['EMAIL', 'IN_APP', 'PUSH'];
+    if (eventType === 'submission.graded' || eventType === 'quiz.result') return ['PUSH', 'IN_APP'];
+    if (eventType === 'assignment.published' || eventType === 'quiz.published' || eventType === 'announcement.published') return ['PUSH', 'IN_APP'];
+    if (eventType === 'assignment.due_soon') return ['PUSH', 'IN_APP'];
+    if (eventType === 'assignment.overdue') return ['IN_APP'];
     return ['IN_APP'];
   }
 

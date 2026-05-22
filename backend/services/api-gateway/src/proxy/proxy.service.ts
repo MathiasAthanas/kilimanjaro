@@ -6,7 +6,7 @@ import { Request } from 'express';
 import { getServiceUrls } from '../common/config/service-urls.config';
 
 export interface ResolvedRoute {
-  serviceName: 'auth' | 'student' | 'academic' | 'finance' | 'notification' | 'analytics';
+  serviceName: 'auth' | 'student' | 'academic' | 'finance' | 'notification' | 'analytics' | 'elearning';
   serviceUrl: string;
   incomingPath: string;
   outboundPath: string;
@@ -46,6 +46,9 @@ export class ProxyService {
     }
     if (normalized.startsWith('/analytics/') || normalized === '/analytics') {
       return this.route('analytics', urls.analytics, path, normalized);
+    }
+    if (normalized.startsWith('/elearning/') || normalized === '/elearning') {
+      return this.route('elearning', urls.elearning, path, normalized);
     }
 
     throw new HttpException('No matching route prefix found', HttpStatus.NOT_FOUND);

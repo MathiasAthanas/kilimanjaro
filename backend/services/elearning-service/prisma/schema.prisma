@@ -1,0 +1,461 @@
+generator client {
+  provider        = "prisma-client-js"
+  output          = "../generated/prisma"
+  previewFeatures = ["multiSchema"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["elearning"]
+}
+
+enum CourseStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+
+  @@schema("elearning")
+}
+
+enum PublishStatus {
+  DRAFT
+  PUBLISHED
+  CLOSED
+  ARCHIVED
+
+  @@schema("elearning")
+}
+
+enum MaterialType {
+  PDF
+  NOTE
+  SLIDE
+  IMAGE
+  VIDEO
+  LINK
+  FILE
+
+  @@schema("elearning")
+}
+
+enum AssignmentType {
+  FILE_UPLOAD
+  TEXT
+  BOTH
+
+  @@schema("elearning")
+}
+
+enum SubmissionStatus {
+  DRAFT
+  SUBMITTED
+  GRADED
+  RETURNED
+
+  @@schema("elearning")
+}
+
+enum QuestionType {
+  MULTIPLE_CHOICE
+  TRUE_FALSE
+  SHORT_ANSWER
+
+  @@schema("elearning")
+}
+
+enum AttemptStatus {
+  IN_PROGRESS
+  SUBMITTED
+  AUTO_GRADED
+  MANUALLY_GRADED
+
+  @@schema("elearning")
+}
+
+enum RevealPolicy {
+  IMMEDIATELY
+  AFTER_CLOSE
+  NEVER
+
+  @@schema("elearning")
+}
+
+model CourseSpace {
+  id             String       @id @default(uuid())
+  classSubjectId String
+  teacherId      String
+  termId         String
+  academicYearId String
+  subjectName    String
+  className      String
+  description    String?
+  coverColor     String?
+  coverEmoji     String?
+  status         CourseStatus @default(DRAFT)
+  publishedAt    DateTime?
+  archivedAt     DateTime?
+  enrolledCount  Int          @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  lessons       Lesson[]
+  materials     Material[]
+  assignments   Assignment[]
+  submissions   Submission[]
+  quizzes       Quiz[]
+  enrollments   CourseEnrollment[]
+  announcements CourseAnnouncement[]
+  discussions   DiscussionThread[]
+  materialProgress MaterialProgress[]
+  lessonProgress   LessonProgress[]
+
+  @@unique([classSubjectId, termId])
+  @@index([teacherId, status])
+  @@index([termId])
+  @@map("course_spaces")
+  @@schema("elearning")
+}
+
+model Lesson {
+  id               String        @id @default(uuid())
+  courseSpaceId    String
+  courseSpace      CourseSpace   @relation(fields: [courseSpaceId], references: [id], onDelete: Cascade)
+  title            String
+  description      String?
+  orderIndex       Int           @default(0)
+  weekNumber       Int?
+  status           PublishStatus @default(DRAFT)
+  publishedAt      DateTime?
+  estimatedMinutes Int?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  materials   Material[]
+  assignments Assignment[]
+  quizzes     Quiz[]
+  progress    LessonProgress[]
+
+  @@index([courseSpaceId, orderIndex])
+  @@map("lessons")
+  @@schema("elearning")
+}
+
+model Material {
+  id               String        @id @default(uuid())
+  lessonId         String
+  lesson           Lesson        @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  courseSpaceId    String
+  courseSpace      CourseSpace   @relation(fields: [courseSpaceId], references: [id], onDelete: Cascade)
+  title            String
+  type             MaterialType
+  status           PublishStatus @default(DRAFT)
+  orderIndex       Int           @default(0)
+  body             String?
+  fileKey          String?
+  fileOriginalName String?
+  fileMimeType     String?
+  fileSizeBytes    BigInt?
+  externalUrl      String?
+  thumbnailKey     String?
+  downloadable     Boolean       @default(true)
+  viewCount        Int           @default(0)
+  publishedAt      DateTime?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  progress MaterialProgress[]
+
+  @@index([lessonId, orderIndex])
+  @@index([courseSpaceId, status])
+  @@map("materials")
+  @@schema("elearning")
+}
+
+model Assignment {
+  id                  String         @id @default(uuid())
+  courseSpaceId       String
+  courseSpace         CourseSpace    @relation(fields: [courseSpaceId], references: [id], onDelete: Cascade)
+  lessonId            String?
+  lesson              Lesson?        @relation(fields: [lessonId], references: [id], onDelete: SetNull)
+  title               String
+  instructions        String
+  type                AssignmentType @default(BOTH)
+  maxScore            Decimal?       @db.Decimal(8, 2)
+  dueAt               DateTime?
+  allowLateSubmission Boolean        @default(true)
+  latePenaltyPercent  Decimal?       @db.Decimal(5, 2)
+  status              PublishStatus  @default(DRAFT)
+  publishedAt         DateTime?
+  closedAt              DateTime?
+  attachmentKey         String?
+  attachmentName        String?
+  dueSoonNotifiedAt     DateTime?      @map("due_soon_notified_at")
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+
+  submissions Submission[]
+
+  @@index([courseSpaceId, status])
+  @@index([dueAt])
+  @@map("assignments")
+  @@schema("elearning")
+}
+
+model Submission {
+  id               String           @id @default(uuid())
+  assignmentId     String
+  assignment       Assignment       @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  studentId        String
+  courseSpaceId    String
+  courseSpace      CourseSpace      @relation(fields: [courseSpaceId], references: [id], onDelete: Cascade)
+  textContent      String?
+  fileKey          String?
+  fileOriginalName String?
+  fileMimeType     String?
+  fileSizeBytes    BigInt?
+  submittedAt      DateTime?
+  isLate           Boolean          @default(false)
+  status           SubmissionStatus @default(DRAFT)
+  score            Decimal?         @db.Decimal(8, 2)
+  maxScore         Decimal?         @db.Decimal(8, 2)
+  feedback         String?
+  gradedAt         DateTime?
+  gradedBy         String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@unique([assignmentId, studentId])
+  @@index([courseSpaceId, studentId])
+  @@index([status])
+  @@map("submissions")
+  @@schema("elearning")
+}
+
+model Quiz {
+  id               String       @id @default(uuid())
+  courseSpaceId    String
+  courseSpace      CourseSpace  @relation(fields: [courseSpaceId], references: [id], onDelete: Cascade)
+  lessonId         String?
+  lesson           Lesson?      @relation(fields: [lessonId], references: [id], onDelete: SetNull)
+  title            String
+  instructions     String?
+  timeLimitMinutes Int?
+  maxAttempts      Int          @default(1)
+  shuffleQuestions Boolean      @default(false)
+  shuffleOptions   Boolean      @default(true)
+  showCorrectAfter RevealPolicy @default(AFTER_CLOSE)
+  passingScore     Decimal?     @db.Decimal(5, 2)
+  status           PublishStatus @default(DRAFT)
+  publishedAt      DateTime?
+  closedAt         DateTime?
+  totalPoints      Decimal      @default(0) @db.Decimal(8, 2)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  questions QuizQuestion[]
+  attempts  QuizAttempt[]
+
+  @@index([courseSpaceId, status])
+  @@map("quizzes")
+  @@schema("elearning")
+}
+
+model QuizQuestion {
+  id            String       @id @default(uuid())
+  quizId        String
+  quiz          Quiz         @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  type          QuestionType
+  prompt        String
+  imageKey      String?
+  points        Decimal      @default(1) @db.Decimal(8, 2)
+  orderIndex    Int          @default(0)
+  explanation   String?
+  correctAnswer String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  options QuizOption[]
+  answers QuizAnswer[]
+
+  @@index([quizId, orderIndex])
+  @@map("quiz_questions")
+  @@schema("elearning")
+}
+
+model QuizOption {
+  id          String       @id @default(uuid())
+  questionId  String
+  question    QuizQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  text        String
+  isCorrect   Boolean      @default(false)
+  orderIndex  Int          @default(0)
+
+  @@index([questionId, orderIndex])
+  @@map("quiz_options")
+  @@schema("elearning")
+}
+
+model QuizAttempt {
+  id               String        @id @default(uuid())
+  quizId           String
+  quiz             Quiz          @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  studentId        String
+  courseSpaceId    String
+  attemptNumber    Int
+  startedAt        DateTime      @default(now())
+  submittedAt      DateTime?
+  timeTakenSeconds Int?
+  status           AttemptStatus @default(IN_PROGRESS)
+  totalScore       Decimal?      @db.Decimal(8, 2)
+  maxScore         Decimal?      @db.Decimal(8, 2)
+  percentScore     Decimal?      @db.Decimal(5, 2)
+  isPassed         Boolean?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  answers QuizAnswer[]
+
+  @@unique([quizId, studentId, attemptNumber])
+  @@index([courseSpaceId, studentId])
+  @@map("quiz_attempts")
+  @@schema("elearning")
+}
+
+model QuizAnswer {
+  id               String       @id @default(uuid())
+  attemptId        String
+  attempt          QuizAttempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  questionId       String
+  question         QuizQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  selectedOptionId String?
+  textAnswer       String?
+  isCorrect        Boolean?
+  scoreAwarded     Decimal?     @db.Decimal(8, 2)
+  answeredAt       DateTime     @default(now())
+
+  @@unique([attemptId, questionId])
+  @@map("quiz_answers")
+  @@schema("elearning")
+}
+
+model CourseEnrollment {
+  id             String      @id @default(uuid())
+  courseSpaceId  String
+  courseSpace    CourseSpace @relation(fields: [courseSpaceId], references: [id], onDelete: Cascade)
+  studentId      String
+  status         String      @default("ACTIVE")
+  enrolledAt     DateTime    @default(now())
+  lastActivityAt DateTime?
+
+  @@unique([courseSpaceId, studentId])
+  @@index([studentId])
+  @@map("course_enrollments")
+  @@schema("elearning")
+}
+
+model MaterialProgress {
+  id             String      @id @default(uuid())
+  materialId     String
+  material       Material    @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  courseSpaceId  String
+  courseSpace    CourseSpace @relation(fields: [courseSpaceId], references: [id], onDelete: Cascade)
+  studentId      String
+  viewedAt       DateTime?
+  isDownloaded   Boolean     @default(false)
+  completedAt    DateTime?
+  viewDurationSec Int        @default(0)
+
+  @@unique([materialId, studentId])
+  @@index([courseSpaceId, studentId])
+  @@map("material_progress")
+  @@schema("elearning")
+}
+
+model LessonProgress {
+  id             String      @id @default(uuid())
+  lessonId       String
+  lesson         Lesson      @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  courseSpaceId  String
+  courseSpace    CourseSpace @relation(fields: [courseSpaceId], references: [id], onDelete: Cascade)
+  studentId      String
+  completedAt    DateTime?
+  percentComplete Decimal    @default(0) @db.Decimal(5, 2)
+
+  @@unique([lessonId, studentId])
+  @@index([courseSpaceId, studentId])
+  @@map("lesson_progress")
+  @@schema("elearning")
+}
+
+model CourseAnnouncement {
+  id            String        @id @default(uuid())
+  courseSpaceId String
+  courseSpace   CourseSpace   @relation(fields: [courseSpaceId], references: [id], onDelete: Cascade)
+  title         String
+  body          String
+  status        PublishStatus @default(DRAFT)
+  isPinned      Boolean       @default(false)
+  publishedAt   DateTime?
+  createdBy     String
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([courseSpaceId, isPinned])
+  @@map("course_announcements")
+  @@schema("elearning")
+}
+
+model DiscussionThread {
+  id            String      @id @default(uuid())
+  courseSpaceId String
+  courseSpace   CourseSpace @relation(fields: [courseSpaceId], references: [id], onDelete: Cascade)
+  lessonId      String?
+  assignmentId  String?
+  title         String
+  body          String
+  authorId      String
+  authorRole    String
+  isResolved    Boolean     @default(false)
+  isPinned      Boolean     @default(false)
+  deletedAt     DateTime?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  replies DiscussionReply[]
+
+  @@index([courseSpaceId, isPinned])
+  @@map("discussion_threads")
+  @@schema("elearning")
+}
+
+model DiscussionReply {
+  id        String           @id @default(uuid())
+  threadId  String
+  thread    DiscussionThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  body      String
+  authorId  String
+  authorRole String
+  deletedAt DateTime?
+  createdAt DateTime         @default(now())
+
+  @@index([threadId])
+  @@map("discussion_replies")
+  @@schema("elearning")
+}
+
+model ElearningAuditLog {
+  id         String   @id @default(uuid())
+  action     String
+  entityType String
+  entityId   String?
+  actorId    String?
+  actorRole  String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([action, createdAt])
+  @@index([actorId])
+  @@map("audit_logs")
+  @@schema("elearning")
+}

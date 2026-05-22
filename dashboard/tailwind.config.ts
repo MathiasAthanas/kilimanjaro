@@ -19,6 +19,12 @@ export default {
           amber: '#F59E0B',
           rose: '#F43F5E',
         },
+        el: {
+          primary: '#6C63FF',
+          light: '#EEEDFF',
+          dark: '#3D35CC',
+          muted: '#A09CF5',
+        },
         surface: '#faf8ff',
         'on-surface': '#131b2e',
       },

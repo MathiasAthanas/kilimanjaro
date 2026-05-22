@@ -1,0 +1,677 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { api } from '../../../lib/api/client';
+
+// ─── Query key factory ────────────────────────────────────────────────────────
+
+export const elKeys = {
+  all: ['elearning'] as const,
+  courses: () => [...elKeys.all, 'courses'] as const,
+  course: (id: string) => [...elKeys.courses(), id] as const,
+  teacherAnalytics: () => [...elKeys.all, 'analytics', 'teacher'] as const,
+  hodOverview: () => [...elKeys.all, 'analytics', 'hod'] as const,
+  principalOverview: () => [...elKeys.all, 'analytics', 'principal'] as const,
+  aqaOverview: () => [...elKeys.all, 'analytics', 'aqa'] as const,
+  lessons: (courseId: string) => [...elKeys.course(courseId), 'lessons'] as const,
+  materials: (courseId: string, lessonId: string) => [...elKeys.lessons(courseId), lessonId, 'materials'] as const,
+  assignments: (courseId: string) => [...elKeys.course(courseId), 'assignments'] as const,
+  assignment: (courseId: string, id: string) => [...elKeys.assignments(courseId), id] as const,
+  assignmentSubmissions: (courseId: string, assignmentId: string) => [...elKeys.assignment(courseId, assignmentId), 'submissions'] as const,
+  assignmentSummary: (courseId: string, assignmentId: string) => [...elKeys.assignment(courseId, assignmentId), 'summary'] as const,
+  missingStudents: (courseId: string, assignmentId: string) => [...elKeys.assignment(courseId, assignmentId), 'missing'] as const,
+  submission: (id: string) => [...elKeys.all, 'submissions', id] as const,
+  quizzes: (courseId: string) => [...elKeys.course(courseId), 'quizzes'] as const,
+  quiz: (courseId: string, id: string) => [...elKeys.quizzes(courseId), id] as const,
+  quizResults: (courseId: string, quizId: string) => [...elKeys.quiz(courseId, quizId), 'results'] as const,
+  engagement: (courseId: string) => [...elKeys.course(courseId), 'engagement'] as const,
+  struggling: (courseId: string) => [...elKeys.course(courseId), 'struggling'] as const,
+  progress: (courseId: string) => [...elKeys.course(courseId), 'progress'] as const,
+  announcements: (courseId: string) => [...elKeys.course(courseId), 'announcements'] as const,
+  discussions: (courseId: string) => [...elKeys.course(courseId), 'discussions'] as const,
+  discussion: (threadId: string) => [...elKeys.all, 'discussions', threadId] as const,
+  auditLogs: () => [...elKeys.all, 'audit-logs'] as const,
+};
+
+// ─── Response types ───────────────────────────────────────────────────────────
+
+export interface ElearningLesson {
+  id: string;
+  courseSpaceId: string;
+  title: string;
+  topic?: string;
+  week?: number;
+  orderIndex: number;
+  estimatedMinutes?: number;
+  status: string;
+  description?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ElearningMaterial {
+  id: string;
+  lessonId?: string;
+  courseSpaceId: string;
+  title: string;
+  type: string;
+  status: string;
+  body?: string;
+  fileKey?: string;
+  externalUrl?: string;
+  isDownloadable: boolean;
+  estimatedMinutes?: number;
+  orderIndex: number;
+  viewCount: number;
+  downloadCount: number;
+  createdAt: string;
+}
+
+export interface ElearningCourse {
+  id: string;
+  classSubjectId: string;
+  subjectName: string;
+  className: string;
+  term: string;
+  academicYear: string;
+  status: string;
+  teacherId: string;
+  enrolledCount: number;
+  lessons: ElearningLesson[];
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ElearningAssignment {
+  id: string;
+  courseSpaceId: string;
+  lessonId?: string;
+  title: string;
+  instructions?: string;
+  submissionMode: string;
+  dueAt?: string;
+  maxScore?: number;
+  allowLateSubmission: boolean;
+  latePenaltyPercent: number;
+  status: string;
+  publishedAt?: string;
+  closedAt?: string;
+  createdAt: string;
+}
+
+export interface ElearningSubmission {
+  id: string;
+  assignmentId: string;
+  courseSpaceId: string;
+  studentId: string;
+  studentName?: string;
+  status: string;
+  textAnswer?: string;
+  fileKey?: string;
+  score?: number;
+  maxScore?: number;
+  feedback?: string;
+  isLate: boolean;
+  submittedAt?: string;
+  gradedAt?: string;
+  createdAt: string;
+}
+
+export interface ElearningQuizOption {
+  id: string;
+  text: string;
+  isCorrect?: boolean;
+  orderIndex: number;
+}
+
+export interface ElearningQuizQuestion {
+  id: string;
+  quizId: string;
+  type: string;
+  prompt: string;
+  points: number;
+  orderIndex: number;
+  explanation?: string;
+  correctAnswer?: string;
+  options: ElearningQuizOption[];
+}
+
+export interface ElearningQuiz {
+  id: string;
+  courseSpaceId: string;
+  lessonId?: string;
+  title: string;
+  instructions?: string;
+  timeLimitMinutes?: number;
+  maxAttempts: number;
+  passingScore?: number;
+  status: string;
+  questions: ElearningQuizQuestion[];
+  createdAt: string;
+}
+
+export interface ElearningQuizAttempt {
+  id: string;
+  quizId: string;
+  studentId: string;
+  studentName?: string;
+  status: string;
+  score?: number;
+  maxScore?: number;
+  percentScore?: number;
+  isPassed?: boolean;
+  startedAt: string;
+  submittedAt?: string;
+  manualMarksPending?: number;
+}
+
+export interface SubmissionSummary {
+  total: number;
+  submitted: number;
+  missing: number;
+  late: number;
+  graded: number;
+  returned: number;
+}
+
+export interface MissingStudent {
+  studentId: string;
+  studentName?: string;
+  lastActivity?: string;
+}
+
+export interface CourseEngagement {
+  courseId: string;
+  heatmap: { day: number; value: number }[];
+  materialStats: { total: number; viewed: number; unviewed: number };
+  assignmentStats: { total: number; submitted: number; late: number };
+  quizStats: { total: number; attempts: number; averageScore: number };
+  studentRiskFlags: { studentId: string; completionPercent: number; reason: string }[];
+  activityTimeline: { label: string; value: number }[];
+  progress: { studentId: string; completionPercent: number }[];
+}
+
+export interface TeacherAnalytics {
+  courses: ElearningCourse[];
+  activeCourses: number;
+  submissionsPending: number;
+}
+
+export interface RoleOverview {
+  role: string;
+  courses: number;
+  active: number;
+  materials: number;
+  assignments: number;
+  quizzes: number;
+  attempts: number;
+}
+
+export interface ElearningAnnouncement {
+  id: string;
+  courseSpaceId: string;
+  title: string;
+  body: string;
+  status: string;
+  isPinned: boolean;
+  audience: string;
+  publishedAt?: string;
+  createdAt: string;
+}
+
+export interface ElearningDiscussion {
+  id: string;
+  courseSpaceId: string;
+  lessonId?: string;
+  title: string;
+  authorId: string;
+  authorName?: string;
+  isResolved: boolean;
+  isPinned: boolean;
+  replies: ElearningDiscussionReply[];
+  createdAt: string;
+}
+
+export interface ElearningDiscussionReply {
+  id: string;
+  threadId: string;
+  authorId: string;
+  authorName?: string;
+  body: string;
+  createdAt: string;
+}
+
+export interface AuditLog {
+  id: string;
+  action: string;
+  actorId: string;
+  actorName?: string;
+  entityType: string;
+  entityId: string;
+  createdAt: string;
+}
+
+// ─── Course display shape (UI adapter) ───────────────────────────────────────
+
+/** Merged shape compatible with all CourseCard render fields */
+export interface CourseDisplay {
+  id: string;
+  subjectName: string;
+  className: string;
+  classSubjectId: string;
+  term: string;
+  academicYear: string;
+  status: string;
+  emoji: string;
+  enrolledCount: number;
+  lessonCount: number;
+  publishedLessons: number;
+  materialCount: number;
+  assignmentCount: number;
+  quizCount: number;
+  completion: number;
+  pendingSubmissions: number;
+  manualMarks: number;
+  inactiveStudents: number;
+  health: number;
+  teacherName?: string;
+}
+
+export function mapApiCourse(c: ElearningCourse): CourseDisplay {
+  const publishedLessons = c.lessons?.filter((l) => l.status === 'PUBLISHED').length ?? 0;
+  const lessonCount = c.lessons?.length ?? 0;
+  return {
+    id: c.id,
+    subjectName: c.subjectName,
+    className: c.className,
+    classSubjectId: c.classSubjectId,
+    term: c.term,
+    academicYear: c.academicYear,
+    status: c.status,
+    emoji: c.subjectName?.[0]?.toUpperCase() ?? 'C',
+    enrolledCount: c.enrolledCount,
+    lessonCount,
+    publishedLessons,
+    materialCount: 0,
+    assignmentCount: 0,
+    quizCount: 0,
+    completion: 0,
+    pendingSubmissions: 0,
+    manualMarks: 0,
+    inactiveStudents: 0,
+    health: Math.round((publishedLessons / Math.max(lessonCount, 1)) * 100),
+  };
+}
+
+// ─── Queries — Courses ────────────────────────────────────────────────────────
+
+export function useElearningCourses() {
+  return useQuery({
+    queryKey: elKeys.courses(),
+    queryFn: () => api.get<ElearningCourse[]>('/elearning/courses').then((r) => r.data),
+  });
+}
+
+export function useElearningCourse(courseId: string | undefined) {
+  return useQuery({
+    queryKey: elKeys.course(courseId ?? ''),
+    queryFn: () => api.get<ElearningCourse>(`/elearning/courses/${courseId}`).then((r) => r.data),
+    enabled: Boolean(courseId),
+  });
+}
+
+export function useTeacherAnalytics() {
+  return useQuery({
+    queryKey: elKeys.teacherAnalytics(),
+    queryFn: () => api.get<TeacherAnalytics>('/elearning/analytics/teacher/courses').then((r) => r.data),
+  });
+}
+
+export function useHodOverview() {
+  return useQuery({
+    queryKey: elKeys.hodOverview(),
+    queryFn: () => api.get<RoleOverview>('/elearning/analytics/hod/overview').then((r) => r.data),
+  });
+}
+
+export function usePrincipalOverview() {
+  return useQuery({
+    queryKey: elKeys.principalOverview(),
+    queryFn: () => api.get<RoleOverview>('/elearning/analytics/principal/overview').then((r) => r.data),
+  });
+}
+
+export function useAqaOverview() {
+  return useQuery({
+    queryKey: elKeys.aqaOverview(),
+    queryFn: () => api.get<{ courses: ElearningCourse[] }>('/elearning/analytics/aqa/courses').then((r) => r.data),
+  });
+}
+
+// ─── Queries — Lessons ────────────────────────────────────────────────────────
+
+export function useElearningLessons(courseId: string | undefined) {
+  return useQuery({
+    queryKey: elKeys.lessons(courseId ?? ''),
+    queryFn: () => api.get<ElearningLesson[]>(`/elearning/courses/${courseId}/lessons`).then((r) => r.data),
+    enabled: Boolean(courseId),
+  });
+}
+
+// ─── Queries — Materials ──────────────────────────────────────────────────────
+
+export function useElearningMaterials(courseId: string | undefined, lessonId: string | undefined) {
+  return useQuery({
+    queryKey: elKeys.materials(courseId ?? '', lessonId ?? ''),
+    queryFn: () =>
+      api
+        .get<ElearningMaterial[]>(`/elearning/courses/${courseId}/lessons/${lessonId}/materials`)
+        .then((r) => r.data),
+    enabled: Boolean(courseId) && Boolean(lessonId),
+  });
+}
+
+// ─── Queries — Assignments ────────────────────────────────────────────────────
+
+export function useElearningAssignments(courseId: string | undefined) {
+  return useQuery({
+    queryKey: elKeys.assignments(courseId ?? ''),
+    queryFn: () =>
+      api.get<ElearningAssignment[]>(`/elearning/courses/${courseId}/assignments`).then((r) => r.data),
+    enabled: Boolean(courseId),
+  });
+}
+
+export function useElearningAssignment(courseId: string | undefined, assignmentId: string | undefined) {
+  return useQuery({
+    queryKey: elKeys.assignment(courseId ?? '', assignmentId ?? ''),
+    queryFn: () =>
+      api
+        .get<ElearningAssignment>(`/elearning/courses/${courseId}/assignments/${assignmentId}`)
+        .then((r) => r.data),
+    enabled: Boolean(courseId) && Boolean(assignmentId),
+  });
+}
+
+export function useAssignmentSubmissions(courseId: string | undefined, assignmentId: string | undefined) {
+  return useQuery({
+    queryKey: elKeys.assignmentSubmissions(courseId ?? '', assignmentId ?? ''),
+    queryFn: () =>
+      api
+        .get<ElearningSubmission[]>(`/elearning/courses/${courseId}/assignments/${assignmentId}/submissions`)
+        .then((r) => r.data),
+    enabled: Boolean(courseId) && Boolean(assignmentId),
+  });
+}
+
+export function useSubmissionSummary(courseId: string | undefined, assignmentId: string | undefined) {
+  return useQuery({
+    queryKey: elKeys.assignmentSummary(courseId ?? '', assignmentId ?? ''),
+    queryFn: () =>
+      api
+        .get<SubmissionSummary>(`/elearning/courses/${courseId}/assignments/${assignmentId}/submissions/summary`)
+        .then((r) => r.data),
+    enabled: Boolean(courseId) && Boolean(assignmentId),
+  });
+}
+
+export function useMissingStudents(courseId: string | undefined, assignmentId: string | undefined) {
+  return useQuery({
+    queryKey: elKeys.missingStudents(courseId ?? '', assignmentId ?? ''),
+    queryFn: () =>
+      api
+        .get<MissingStudent[]>(`/elearning/courses/${courseId}/assignments/${assignmentId}/submissions/missing`)
+        .then((r) => r.data),
+    enabled: Boolean(courseId) && Boolean(assignmentId),
+  });
+}
+
+export function useSubmission(submissionId: string | undefined) {
+  return useQuery({
+    queryKey: elKeys.submission(submissionId ?? ''),
+    queryFn: () => api.get<ElearningSubmission>(`/elearning/submissions/${submissionId}`).then((r) => r.data),
+    enabled: Boolean(submissionId),
+  });
+}
+
+// ─── Queries — Quizzes ────────────────────────────────────────────────────────
+
+export function useElearningQuizzes(courseId: string | undefined) {
+  return useQuery({
+    queryKey: elKeys.quizzes(courseId ?? ''),
+    queryFn: () =>
+      api.get<ElearningQuiz[]>(`/elearning/courses/${courseId}/quizzes`).then((r) => r.data),
+    enabled: Boolean(courseId),
+  });
+}
+
+export function useElearningQuiz(courseId: string | undefined, quizId: string | undefined) {
+  return useQuery({
+    queryKey: elKeys.quiz(courseId ?? '', quizId ?? ''),
+    queryFn: () =>
+      api.get<ElearningQuiz>(`/elearning/courses/${courseId}/quizzes/${quizId}`).then((r) => r.data),
+    enabled: Boolean(courseId) && Boolean(quizId),
+  });
+}
+
+export function useQuizResults(courseId: string | undefined, quizId: string | undefined) {
+  return useQuery({
+    queryKey: elKeys.quizResults(courseId ?? '', quizId ?? ''),
+    queryFn: () =>
+      api
+        .get<ElearningQuizAttempt[]>(`/elearning/courses/${courseId}/quizzes/${quizId}/results`)
+        .then((r) => r.data),
+    enabled: Boolean(courseId) && Boolean(quizId),
+  });
+}
+
+// ─── Queries — Engagement ─────────────────────────────────────────────────────
+
+export function useCourseEngagement(courseId: string | undefined) {
+  return useQuery({
+    queryKey: elKeys.engagement(courseId ?? ''),
+    queryFn: () =>
+      api
+        .get<CourseEngagement>(`/elearning/analytics/teacher/courses/${courseId}/engagement`)
+        .then((r) => r.data),
+    enabled: Boolean(courseId),
+    staleTime: 60_000,
+  });
+}
+
+export function useStrugglingStudents(courseId: string | undefined) {
+  return useQuery({
+    queryKey: elKeys.struggling(courseId ?? ''),
+    queryFn: () =>
+      api
+        .get<{ studentId: string; completionPercent: number }[]>(
+          `/elearning/analytics/teacher/courses/${courseId}/struggling`,
+        )
+        .then((r) => r.data),
+    enabled: Boolean(courseId),
+  });
+}
+
+// ─── Queries — Announcements + Discussions ───────────────────────────────────
+
+export function useElearningAnnouncements(courseId: string | undefined) {
+  return useQuery({
+    queryKey: elKeys.announcements(courseId ?? ''),
+    queryFn: () =>
+      api
+        .get<ElearningAnnouncement[]>(`/elearning/courses/${courseId}/announcements`)
+        .then((r) => r.data),
+    enabled: Boolean(courseId),
+  });
+}
+
+export function useElearningDiscussions(courseId: string | undefined) {
+  return useQuery({
+    queryKey: elKeys.discussions(courseId ?? ''),
+    queryFn: () =>
+      api.get<ElearningDiscussion[]>(`/elearning/courses/${courseId}/discussions`).then((r) => r.data),
+    enabled: Boolean(courseId),
+  });
+}
+
+export function useElearningDiscussion(threadId: string | undefined) {
+  return useQuery({
+    queryKey: elKeys.discussion(threadId ?? ''),
+    queryFn: () =>
+      api.get<ElearningDiscussion>(`/elearning/discussions/${threadId}`).then((r) => r.data),
+    enabled: Boolean(threadId),
+  });
+}
+
+// ─── Queries — Audit ─────────────────────────────────────────────────────────
+
+export function useElearningAuditLogs() {
+  return useQuery({
+    queryKey: elKeys.auditLogs(),
+    queryFn: () => api.get<AuditLog[]>('/elearning/admin/audit-logs').then((r) => r.data),
+    staleTime: 60_000,
+  });
+}
+
+// ─── Mutations ────────────────────────────────────────────────────────────────
+
+export function usePublishCourse() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (courseId: string) =>
+      api.patch(`/elearning/courses/${courseId}/publish`).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: elKeys.courses() }),
+  });
+}
+
+export function usePublishLesson() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ courseId, lessonId }: { courseId: string; lessonId: string }) =>
+      api.patch(`/elearning/courses/${courseId}/lessons/${lessonId}/publish`).then((r) => r.data),
+    onSuccess: (_d, { courseId }) => qc.invalidateQueries({ queryKey: elKeys.lessons(courseId) }),
+  });
+}
+
+export function usePublishAssignment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ courseId, assignmentId }: { courseId: string; assignmentId: string }) =>
+      api.patch(`/elearning/courses/${courseId}/assignments/${assignmentId}/publish`).then((r) => r.data),
+    onSuccess: (_d, { courseId }) => qc.invalidateQueries({ queryKey: elKeys.assignments(courseId) }),
+  });
+}
+
+export function usePublishQuiz() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ courseId, quizId }: { courseId: string; quizId: string }) =>
+      api.patch(`/elearning/courses/${courseId}/quizzes/${quizId}/publish`).then((r) => r.data),
+    onSuccess: (_d, { courseId }) => qc.invalidateQueries({ queryKey: elKeys.quizzes(courseId) }),
+  });
+}
+
+export function useGradeSubmission() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ submissionId, score, feedback }: { submissionId: string; score: number; feedback?: string }) =>
+      api.patch(`/elearning/submissions/${submissionId}/grade`, { score, feedback }).then((r) => r.data),
+    onSuccess: (_d, { submissionId }) => qc.invalidateQueries({ queryKey: elKeys.submission(submissionId) }),
+  });
+}
+
+export function useReturnSubmission() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ submissionId, feedback }: { submissionId: string; feedback?: string }) =>
+      api.patch(`/elearning/submissions/${submissionId}/return`, { feedback }).then((r) => r.data),
+    onSuccess: (_d, { submissionId }) => qc.invalidateQueries({ queryKey: elKeys.submission(submissionId) }),
+  });
+}
+
+export function useGradeShortAnswer() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      attemptId,
+      questionId,
+      score,
+      feedback,
+    }: { attemptId: string; questionId: string; score: number; feedback?: string }) =>
+      api
+        .patch(`/elearning/attempts/${attemptId}/grade-short-answer`, { questionId, score, feedback })
+        .then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: elKeys.all }),
+  });
+}
+
+export function useAddDiscussionReply() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ threadId, body }: { threadId: string; body: string }) =>
+      api.post(`/elearning/discussions/${threadId}/replies`, { body }).then((r) => r.data),
+    onSuccess: (_d, { threadId }) =>
+      qc.invalidateQueries({ queryKey: elKeys.discussion(threadId) }),
+  });
+}
+
+export function usePublishAnnouncement() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ courseId, announcementId }: { courseId: string; announcementId: string }) =>
+      api.patch(`/elearning/courses/${courseId}/announcements/${announcementId}/publish`).then((r) => r.data),
+    onSuccess: (_d, { courseId }) => qc.invalidateQueries({ queryKey: elKeys.announcements(courseId) }),
+  });
+}
+
+export function useResolveDiscussion() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (threadId: string) =>
+      api.patch(`/elearning/discussions/${threadId}/resolve`).then((r) => r.data),
+    onSuccess: (_d, threadId) => qc.invalidateQueries({ queryKey: elKeys.discussion(threadId) }),
+  });
+}
+
+export function useUploadFile() {
+  return useMutation({
+    mutationFn: (payload: { fileName: string; contentBase64: string; mimeType: string; domain?: string }) =>
+      api.post<{ fileKey: string; url: string }>('/elearning/uploads/local', payload).then((r) => r.data),
+  });
+}
+
+export function useCreateLesson() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ courseId, body }: { courseId: string; body: Record<string, unknown> }) =>
+      api.post<ElearningLesson>(`/elearning/courses/${courseId}/lessons`, body).then((r) => r.data),
+    onSuccess: (_d, { courseId }) => qc.invalidateQueries({ queryKey: elKeys.lessons(courseId) }),
+  });
+}
+
+export function useCreateAssignment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ courseId, body }: { courseId: string; body: Record<string, unknown> }) =>
+      api.post<ElearningAssignment>(`/elearning/courses/${courseId}/assignments`, body).then((r) => r.data),
+    onSuccess: (_d, { courseId }) => qc.invalidateQueries({ queryKey: elKeys.assignments(courseId) }),
+  });
+}
+
+export function useCreateQuiz() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ courseId, body }: { courseId: string; body: Record<string, unknown> }) =>
+      api.post<ElearningQuiz>(`/elearning/courses/${courseId}/quizzes`, body).then((r) => r.data),
+    onSuccess: (_d, { courseId }) => qc.invalidateQueries({ queryKey: elKeys.quizzes(courseId) }),
+  });
+}
+
+export function useAddQuizQuestion() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ quizId, body }: { quizId: string; courseId: string; body: Record<string, unknown> }) =>
+      api.post<ElearningQuizQuestion>(`/elearning/quizzes/${quizId}/questions`, body).then((r) => r.data),
+    onSuccess: (_d, { courseId, quizId }) =>
+      qc.invalidateQueries({ queryKey: elKeys.quiz(courseId, quizId) }),
+  });
+}

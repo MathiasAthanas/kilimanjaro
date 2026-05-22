@@ -63,5 +63,14 @@ module.exports = {
       watch: false,
       env: { NODE_ENV: 'production', PORT: 3006 },
     },
+    {
+      name: 'ks-elearning-service',
+      cwd: './services/elearning-service',
+      script: 'dist/src/main.js',
+      instances: 1,
+      autorestart: true,
+      watch: false,
+      env: { NODE_ENV: 'production', PORT: 3007 },
+    },
   ],
 };

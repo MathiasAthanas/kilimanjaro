@@ -12,6 +12,7 @@ describe('service URL config', () => {
       finance: 'http://localhost:3004',
       notification: 'http://localhost:3005',
       analytics: 'http://localhost:3006',
+      elearning: 'http://localhost:3007',
     });
   });
 

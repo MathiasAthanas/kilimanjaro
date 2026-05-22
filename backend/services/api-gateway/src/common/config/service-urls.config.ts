@@ -7,6 +7,7 @@ export interface ServiceUrls {
   finance: string;
   notification: string;
   analytics: string;
+  elearning: string;
 }
 
 export function getServiceUrls(configService: ConfigService): ServiceUrls {
@@ -17,5 +18,6 @@ export function getServiceUrls(configService: ConfigService): ServiceUrls {
     finance: configService.get<string>('FINANCE_SERVICE_URL') || 'http://localhost:3004',
     notification: configService.get<string>('NOTIFICATION_SERVICE_URL') || 'http://localhost:3005',
     analytics: configService.get<string>('ANALYTICS_SERVICE_URL') || 'http://localhost:3006',
+    elearning: configService.get<string>('ELEARNING_SERVICE_URL') || 'http://localhost:3007',
   };
 }

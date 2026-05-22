@@ -52,6 +52,15 @@ export class RabbitMqConsumer implements OnModuleInit {
         'receipt.generated',
         'finance.daily.summary',
       ], 'finance-service');
+      await this.setup(ch, 'elearning.events', 'notification-service.elearning', [
+        'assignment.published',
+        'quiz.published',
+        'submission.graded',
+        'quiz.result',
+        'announcement.published',
+        'assignment.due_soon',
+        'assignment.overdue',
+      ], 'elearning-service');
 
       this.logger.log('RabbitMQ consumers initialized');
     } catch (error) {
