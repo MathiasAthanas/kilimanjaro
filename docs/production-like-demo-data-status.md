@@ -39,7 +39,23 @@ The successful VPS seed reported:
 | Assignments | 65 |
 | Quizzes | 17 |
 | Notifications | 50 |
-| Gateway operation records | 215 |
+| Notification templates | 28 |
+| Notification preferences | 32 |
+| SMS delivery logs | 8 |
+| Auth audit logs | 62 |
+| Academic audit logs | 3 |
+| Academic interventions | 12 |
+| Subject enrolments | 180 |
+| Finance audit logs | 3 |
+| Manual payment approvals | 1 |
+| Student group memberships | 54 |
+| Lesson progress records | 80 |
+| Quiz answers | 96 |
+| Discussion replies | 9 |
+| E-learning audit logs | 15 |
+| Generated analytics reports | 3 |
+| Metric events | 5 |
+| Gateway operation records | 263 |
 
 The student count is slightly above 200 because existing test/demo records were
 left intact and the seeder adds a deterministic complete 200-student demo set.
@@ -47,25 +63,35 @@ left intact and the seeder adds a deterministic complete 200-student demo set.
 ## Populated Modules
 
 - Authentication: admin, principal, AQA, HOD, teacher, finance, parent, student
-  and operational staff accounts.
+  and operational staff accounts, plus refresh-token, password-reset and auth
+  audit-log coverage.
 - Student management: students, guardians, links, enrolments, classes, pathways,
   attendance, discipline, performance snapshots, trends and alerts.
 - Academics: subjects, class-subject assignments, A-Level combinations,
-  assessment types, grading scales, assessments, marks, approvals, term results,
-  report cards, timetables and syllabus progress.
-- Finance: fee categories, fee structures, student fee assignments, invoices,
-  invoice line items, payments, receipts, assets and finance analytics data.
+  assessment types, grading scales, assessments, marks, approvals, student
+  subject enrolments, academic interventions, audit logs, term results, report
+  cards, timetables and syllabus progress.
+- Finance: fee categories, fee structures, student groups, group memberships,
+  student fee assignments, invoices, invoice line items, payments, receipts,
+  manual approval records, audit logs, number sequences, assets and finance
+  analytics data.
 - E-learning: course spaces, lessons, text notes, PDF/video-style materials,
-  assignments, submissions, grading feedback, quizzes, attempts, progress,
-  course announcements and discussions.
-- Notifications: published announcements, in-app notifications and realistic
-  recipient data.
-- Analytics: dashboard snapshots, KPI history and relational data for academic,
-  finance, attendance and overview analytics.
+  assignments, submissions, grading feedback, quizzes, attempts, quiz answers,
+  material progress, lesson progress, course announcements, discussion threads,
+  discussion replies and e-learning audit logs.
+- Notifications: published announcements, templates, device tokens, user
+  preferences, in-app notifications, SMS delivery logs and realistic recipient
+  data.
+- Analytics: dashboard snapshots, KPI history, generated reports, metric events
+  and relational data for academic, finance, attendance and overview analytics.
 - Operations store: staff profiles, payroll runs, leave requests, library books,
   borrowings, hostel rooms, hostel allocations, transport routes, transport
-  allocations, budget lines, cash drawers, bank reconciliation matches, feature
-  flags, engine runs and report jobs.
+  allocations, budget lines, files, payment evidence, cash drawers, bank
+  statement imports, bank reconciliation matches, asset maintenance/photos,
+  report templates, scheduled reports, report-card jobs/signatures/comments,
+  marks imports/autosaves, attendance sessions, mobile HOD decisions,
+  notification jobs/retries/template tests/template versions, feature flags,
+  engine runs and report jobs.
 
 ## Login Credentials
 
@@ -106,8 +132,22 @@ After deployment and service restart, the following gateway checks returned 200:
 - `/analytics/finance/overview`
 - `/admin/system/backups`
 - `/principal/staff`
+- `/admin/system/audit`
+- `/admin/system/feature-flags`
+- `/reports/downloads`
+- `/finance/reconciliation/cash-drawers`
+- `/finance/reconciliation/matches`
+- `/aqa/performance/engine/runs`
+- `/admin/system/settings`
+- `/notifications/providers/health`
 
 The authenticated smoke test also passed against the seeded admin user.
+
+The seed script now fails deliberately if the smaller support tables are empty,
+including notification templates/preferences/SMS logs, auth audit logs, academic
+audit/intervention/subject-enrolment data, finance audit/manual-approval/group
+membership data, e-learning lesson progress/quiz answers/discussion replies and
+analytics generated reports/metric events.
 
 ## Test Scenarios
 
@@ -150,4 +190,3 @@ The authenticated smoke test also passed against the seeded admin user.
 - PM2 services were restarted and saved.
 - Public health endpoint remains healthy:
   `https://srms.kilimanjaroschools.site/health`
-
