@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../lib/api/client';
+import { arrayFromApi, payloadOf } from '../../../lib/api/response';
 
 // ─── Query key factory ────────────────────────────────────────────────────────
 
@@ -26,8 +27,7 @@ export const aqaKeys = {
 export function useAqaDashboard() {
   return useQuery({
     queryKey: aqaKeys.dashboard(),
-    queryFn: () =>
-      api.get('/aqa/dashboard').then((res) => res.data?.data ?? res.data),
+    queryFn: () => api.get('/aqa/dashboard').then(payloadOf),
   });
 }
 
@@ -37,7 +37,7 @@ export function useAqaAlerts() {
     queryFn: () =>
       api
         .get('/academics/performance/alerts')
-        .then((res) => res.data?.data?.items ?? res.data?.data ?? []),
+        .then((r) => arrayFromApi(payloadOf(r), ['alerts', 'performanceAlerts'])),
   });
 }
 
@@ -47,7 +47,7 @@ export function useAqaAlertsByClass(classId: string) {
     queryFn: () =>
       api
         .get(`/academics/performance/alerts/class/${classId}`)
-        .then((res) => res.data?.data?.items ?? res.data?.data ?? []),
+        .then((r) => arrayFromApi(payloadOf(r), ['alerts'])),
     enabled: Boolean(classId),
   });
 }
@@ -58,7 +58,7 @@ export function useAqaHeatmap() {
     queryFn: () =>
       api
         .get('/aqa/analytics/heatmap')
-        .then((res) => res.data?.data?.items ?? res.data?.data ?? []),
+        .then((r) => arrayFromApi(payloadOf(r), ['heatmap', 'data'])),
   });
 }
 
@@ -68,7 +68,7 @@ export function useAqaPairings() {
     queryFn: () =>
       api
         .get('/academics/performance/pairings')
-        .then((res) => res.data?.data?.items ?? res.data?.data ?? []),
+        .then((r) => arrayFromApi(payloadOf(r), ['pairings'])),
   });
 }
 
@@ -78,7 +78,7 @@ export function useAqaInterventions() {
     queryFn: () =>
       api
         .get('/academics/interventions')
-        .then((res) => res.data?.data?.items ?? res.data?.data ?? []),
+        .then((r) => arrayFromApi(payloadOf(r), ['interventions'])),
   });
 }
 
@@ -88,17 +88,14 @@ export function useAqaReports() {
     queryFn: () =>
       api
         .get('/analytics/reports')
-        .then((res) => res.data?.data?.items ?? res.data?.data ?? []),
+        .then((r) => arrayFromApi(payloadOf(r), ['reports'])),
   });
 }
 
 export function useEngineConfig() {
   return useQuery({
     queryKey: aqaKeys.engineConfig(),
-    queryFn: () =>
-      api
-        .get('/academics/performance/engine/config')
-        .then((res) => res.data?.data ?? res.data),
+    queryFn: () => api.get('/academics/performance/engine/config').then(payloadOf),
   });
 }
 
@@ -108,17 +105,14 @@ export function useEngineRuns() {
     queryFn: () =>
       api
         .get('/aqa/performance/engine/runs')
-        .then((res) => res.data?.data?.items ?? res.data?.data ?? []),
+        .then((r) => arrayFromApi(payloadOf(r), ['runs', 'engineRuns'])),
   });
 }
 
 export function useAqaStudentProfile(studentId: string) {
   return useQuery({
     queryKey: aqaKeys.studentProfile(studentId),
-    queryFn: () =>
-      api
-        .get(`/analytics/students/${studentId}`)
-        .then((res) => res.data?.data ?? res.data),
+    queryFn: () => api.get(`/analytics/students/${studentId}`).then(payloadOf),
     enabled: Boolean(studentId),
   });
 }
@@ -129,17 +123,14 @@ export function useAtRiskStudents() {
     queryFn: () =>
       api
         .get('/analytics/students/at-risk')
-        .then((res) => res.data?.data?.items ?? res.data?.data ?? []),
+        .then((r) => arrayFromApi(payloadOf(r), ['students', 'atRiskStudents'])),
   });
 }
 
 export function useAqaSchoolSummary() {
   return useQuery({
     queryKey: aqaKeys.schoolSummary(),
-    queryFn: () =>
-      api
-        .get('/academics/performance/school/summary')
-        .then((res) => res.data?.data ?? res.data),
+    queryFn: () => api.get('/academics/performance/school/summary').then(payloadOf),
   });
 }
 
@@ -147,9 +138,7 @@ export function useAqaAudit() {
   return useQuery({
     queryKey: aqaKeys.audit(),
     queryFn: () =>
-      api
-        .get('/aqa/audit')
-        .then((res) => res.data?.data?.items ?? res.data?.data ?? []),
+      api.get('/aqa/audit').then((r) => arrayFromApi(payloadOf(r), ['logs', 'auditLogs'])),
   });
 }
 
@@ -159,7 +148,7 @@ export function useAqaAnnouncements() {
     queryFn: () =>
       api
         .get('/notifications/announcements')
-        .then((res) => res.data?.data?.items ?? res.data?.data ?? []),
+        .then((r) => arrayFromApi(payloadOf(r), ['announcements'])),
   });
 }
 

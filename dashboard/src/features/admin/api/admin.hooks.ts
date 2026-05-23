@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../lib/api/client';
+import { arrayFromApi, payloadOf } from '../../../lib/api/response';
 import type { AdminStatus } from './adminApi';
 
 type AdminUserRow = {
@@ -12,24 +13,6 @@ type AdminUserRow = {
   lastLogin: string;
   createdAt: string;
 };
-
-type ApiResponse = { data?: unknown };
-
-function payloadOf(response: ApiResponse) {
-  const body = response.data as { data?: unknown } | undefined;
-  return body?.data ?? response.data;
-}
-
-function arrayFrom(value: unknown, keys: string[] = []) {
-  if (Array.isArray(value)) return value;
-  if (!value || typeof value !== 'object') return [];
-  const record = value as Record<string, unknown>;
-  if (Array.isArray(record.items)) return record.items;
-  for (const key of keys) {
-    if (Array.isArray(record[key])) return record[key] as unknown[];
-  }
-  return [];
-}
 
 function statusToState(status: unknown) {
   const normalized = String(status ?? '').toLowerCase();
@@ -56,7 +39,7 @@ function toServiceHealth(value: unknown) {
 }
 
 function toAdminUsers(value: unknown) {
-  return arrayFrom(value, ['users']).map((raw) => {
+  return arrayFromApi(value, ['users']).map((raw) => {
     const user = raw as Record<string, unknown>;
     const fullName = [user.firstName, user.lastName].filter(Boolean).join(' ').trim();
     const status = user.lockedUntil ? 'LOCKED' : user.isActive === false ? 'INACTIVE' : 'ACTIVE';
@@ -75,13 +58,13 @@ function toAdminUsers(value: unknown) {
 }
 
 function toAuditEvents(value: unknown) {
-  const direct = arrayFrom(value, ['items', 'events']);
+  const direct = arrayFromApi(value, ['items', 'events']);
   if (direct.length) return direct;
   const payload = value as Record<string, unknown> | undefined;
-  const streams = arrayFrom(payload, ['auditStreams']);
-  const streamEvents = streams.flatMap((stream) => arrayFrom((stream as Record<string, unknown>).items));
-  const financeEvents = arrayFrom(payload, ['financeAudit']);
-  const notificationEvents = arrayFrom(payload, ['notificationLogs']);
+  const streams = arrayFromApi(payload, ['auditStreams']);
+  const streamEvents = streams.flatMap((stream) => arrayFromApi((stream as Record<string, unknown>).items));
+  const financeEvents = arrayFromApi(payload, ['financeAudit']);
+  const notificationEvents = arrayFromApi(payload, ['notificationLogs']);
   return [...streamEvents, ...financeEvents, ...notificationEvents].slice(0, 30).map((raw, index) => {
     const event = raw as Record<string, unknown>;
     return {
@@ -150,7 +133,7 @@ export function useAdminUser(id: string | undefined) {
 export function useAdminStudents(params?: Record<string, unknown>) {
   return useQuery({
     queryKey: adminKeys.students(params),
-    queryFn: () => api.get('/students', { params }).then((r) => arrayFrom(payloadOf(r), ['students'])),
+    queryFn: () => api.get('/students', { params }).then((r) => arrayFromApi(payloadOf(r), ['students'])),
     staleTime: 30_000,
   });
 }
@@ -158,7 +141,7 @@ export function useAdminStudents(params?: Record<string, unknown>) {
 export function useAdminClasses() {
   return useQuery({
     queryKey: adminKeys.classes(),
-    queryFn: () => api.get('/students/classes').then((r) => arrayFrom(payloadOf(r), ['classes'])),
+    queryFn: () => api.get('/students/classes').then((r) => arrayFromApi(payloadOf(r), ['classes'])),
     staleTime: 30_000,
   });
 }
@@ -166,7 +149,7 @@ export function useAdminClasses() {
 export function useAdminSubjects() {
   return useQuery({
     queryKey: adminKeys.subjects(),
-    queryFn: () => api.get('/academics/subjects').then((r) => arrayFrom(payloadOf(r), ['subjects'])),
+    queryFn: () => api.get('/academics/subjects').then((r) => arrayFromApi(payloadOf(r), ['subjects'])),
     staleTime: 30_000,
   });
 }
@@ -177,7 +160,7 @@ export function useSubjectCombinations() {
     queryFn: () =>
       api
         .get('/academics/subject-combinations')
-        .then((r) => arrayFrom(payloadOf(r), ['combinations', 'subjectCombinations'])),
+        .then((r) => arrayFromApi(payloadOf(r), ['combinations', 'subjectCombinations'])),
     staleTime: 30_000,
   });
 }
@@ -185,7 +168,7 @@ export function useSubjectCombinations() {
 export function useClassPathways() {
   return useQuery({
     queryKey: adminKeys.pathways(),
-    queryFn: () => api.get('/students/class-pathways').then((r) => arrayFrom(payloadOf(r), ['pathways', 'classPathways'])),
+    queryFn: () => api.get('/students/class-pathways').then((r) => arrayFromApi(payloadOf(r), ['pathways', 'classPathways'])),
     staleTime: 60_000,
   });
 }
@@ -193,7 +176,7 @@ export function useClassPathways() {
 export function useGradingScales() {
   return useQuery({
     queryKey: adminKeys.gradingScales(),
-    queryFn: () => api.get('/academics/grading-scales').then((r) => arrayFrom(payloadOf(r), ['gradingScales', 'scales'])),
+    queryFn: () => api.get('/academics/grading-scales').then((r) => arrayFromApi(payloadOf(r), ['gradingScales', 'scales'])),
     staleTime: 60_000,
   });
 }
@@ -201,7 +184,7 @@ export function useGradingScales() {
 export function useAssessmentTypes() {
   return useQuery({
     queryKey: adminKeys.assessmentTypes(),
-    queryFn: () => api.get('/academics/assessment-types').then((r) => arrayFrom(payloadOf(r), ['assessmentTypes', 'types'])),
+    queryFn: () => api.get('/academics/assessment-types').then((r) => arrayFromApi(payloadOf(r), ['assessmentTypes', 'types'])),
     staleTime: 60_000,
   });
 }
@@ -218,7 +201,7 @@ export function useServiceHealth() {
 export function useNotificationTemplates() {
   return useQuery({
     queryKey: adminKeys.notifTemplates(),
-    queryFn: () => api.get('/notifications/templates').then((r) => arrayFrom(payloadOf(r), ['templates', 'notificationTemplates'])),
+    queryFn: () => api.get('/notifications/templates').then((r) => arrayFromApi(payloadOf(r), ['templates', 'notificationTemplates'])),
     staleTime: 60_000,
   });
 }
@@ -234,7 +217,7 @@ export function useNotificationTemplate(id: string | undefined) {
 export function useNotificationLogs() {
   return useQuery({
     queryKey: adminKeys.notifLogs(),
-    queryFn: () => api.get('/notifications/logs').then((r) => arrayFrom(payloadOf(r), ['logs', 'notifications'])),
+    queryFn: () => api.get('/notifications/logs').then((r) => arrayFromApi(payloadOf(r), ['logs', 'notifications'])),
     staleTime: 15_000,
   });
 }
@@ -258,7 +241,7 @@ export function useAdminAuditEvents() {
 export function useAdminReportJobs() {
   return useQuery({
     queryKey: adminKeys.reportJobs(),
-    queryFn: () => api.get('/reports/jobs').then((r) => arrayFrom(payloadOf(r), ['jobs', 'reportJobs'])),
+    queryFn: () => api.get('/reports/jobs').then((r) => arrayFromApi(payloadOf(r), ['jobs', 'reportJobs'])),
     staleTime: 15_000,
   });
 }
@@ -282,7 +265,7 @@ export function useFeatureFlags() {
 export function useAcademicYears() {
   return useQuery({
     queryKey: adminKeys.academicYears(),
-    queryFn: () => api.get('/students/academic-years').then((r) => arrayFrom(payloadOf(r), ['academicYears', 'years'])),
+    queryFn: () => api.get('/students/academic-years').then((r) => arrayFromApi(payloadOf(r), ['academicYears', 'years'])),
     staleTime: 60_000,
   });
 }
@@ -290,7 +273,7 @@ export function useAcademicYears() {
 export function useTerms() {
   return useQuery({
     queryKey: adminKeys.terms(),
-    queryFn: () => api.get('/students/terms').then((r) => arrayFrom(payloadOf(r), ['terms'])),
+    queryFn: () => api.get('/students/terms').then((r) => arrayFromApi(payloadOf(r), ['terms'])),
     staleTime: 60_000,
   });
 }

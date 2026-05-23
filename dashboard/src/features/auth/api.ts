@@ -5,13 +5,33 @@ import type { AuthSession, SessionUser } from '../../lib/auth/session';
 import type { UserRole } from '../../lib/auth/permissions';
 
 const roleByEmail: Record<string, { role: UserRole; name: string; department?: string }> = {
+  // ── Live demo credentials (shown on login page) ─────────────────────────────
   'admin@demo.kilimanjaro.test': { role: 'ADMIN', name: 'System Administrator', department: 'System Administration' },
   'principal@demo.kilimanjaro.test': { role: 'PRINCIPAL', name: 'Dr. Miriam Kileo', department: 'Executive Office' },
   'aqa@demo.kilimanjaro.test': { role: 'AQA', name: 'Quality Assurance', department: 'Academic Quality Assurance' },
   'finance@demo.kilimanjaro.test': { role: 'FINANCE', name: 'Bursar Mtei', department: 'Finance Office' },
   't-english@demo.kilimanjaro.test': { role: 'TEACHER', name: 'Mary Mallya', department: 'Languages' },
   'hod-science@demo.kilimanjaro.test': { role: 'HOD', name: 'HOD Science Msuya', department: 'Science Department' },
+  // ── Legacy dev/test shortcuts ─────────────────────────────────────────────
+  'admin@ks.ac.tz': { role: 'ADMIN', name: 'System Administrator', department: 'System Administration' },
+  'finance.office@ks.ac.tz': { role: 'FINANCE', name: 'Bursar Mtei', department: 'Finance Office' },
+  'rose.mhina@ks.ac.tz': { role: 'TEACHER', name: 'Rose Mhina', department: 'Science Department' },
+  'james.kileo@ks.ac.tz': { role: 'HOD', name: 'James Kileo', department: 'Science Department' },
+  'principal@ks.ac.tz': { role: 'PRINCIPAL', name: 'Dr. Miriam Kileo', department: 'Executive Office' },
+  'qa.office@ks.ac.tz': { role: 'AQA', name: 'Quality Assurance', department: 'Academic Quality Assurance' },
 };
+
+/** Returns a local demo session without hitting the backend. */
+function demoSession(email: string): AuthSession {
+  const mapped = roleByEmail[email.toLowerCase().trim()];
+  if (!mapped) throw new Error('Email not recognised as a demo account.');
+  const role = mapped.role;
+  return {
+    accessToken: `demo-access-${role.toLowerCase()}`,
+    refreshToken: `demo-refresh-${role.toLowerCase()}`,
+    user: { id: `demo-${role.toLowerCase()}`, email: email.toLowerCase(), name: mapped.name, role, department: mapped.department },
+  };
+}
 
 const roleAliases: Record<string, UserRole> = {
   STUDENT: 'STUDENT',
@@ -52,8 +72,14 @@ function normalizeApiUser(raw: any, loginIdentifier: string): SessionUser {
 }
 
 export async function login(username: string, password: string): Promise<AuthSession> {
+  const identifier = username.trim();
+
+  // ── DEV shortcut: bypass network entirely with demo accounts ───────────────
+  if (import.meta.env.DEV && password === 'demo1234' && roleByEmail[identifier.toLowerCase()]) {
+    return demoSession(identifier);
+  }
+
   try {
-    const identifier = username.trim();
     const credentials = identifier.includes('@')
       ? { email: identifier.toLowerCase(), password }
       : { registrationNumber: identifier, password };
@@ -64,13 +90,18 @@ export async function login(username: string, password: string): Promise<AuthSes
     const rawUser = payload.user;
 
     if (accessToken && rawUser) {
-      const user = normalizeApiUser(rawUser, username);
+      const user = normalizeApiUser(rawUser, identifier);
       return { accessToken, refreshToken, user };
     }
 
     throw new Error('Login response was missing token or user data.');
   } catch (error) {
-    throw normalizeApiError(error);
+    const normalized = normalizeApiError(error);
+    // Network unreachable / backend down — fall back to demo session in DEV
+    if (import.meta.env.DEV && (normalized.status === 0 || normalized.status === 404 || normalized.status >= 500)) {
+      try { return demoSession(identifier); } catch { /* not a demo account */ }
+    }
+    throw normalized;
   }
 }
 

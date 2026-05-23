@@ -1,5 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../lib/api/client';
+import { arrayFromApi, payloadOf } from '../../../lib/api/response';
+import type { Assessment, ClassSubject, TimetableEntry } from '../types/teacher.types';
 
 // ─── Query key factory ────────────────────────────────────────────────────────
 
@@ -28,8 +30,7 @@ export const teacherKeys = {
 export function useTeacherDashboard() {
   return useQuery({
     queryKey: teacherKeys.dashboard(),
-    queryFn: () =>
-      api.get('/teacher/dashboard').then((r) => r.data?.data ?? r.data),
+    queryFn: () => api.get('/teacher/dashboard').then(payloadOf),
     staleTime: 30_000,
   });
 }
@@ -40,7 +41,7 @@ export function useTeacherClasses() {
     queryFn: () =>
       api
         .get('/academics/class-subjects')
-        .then((r) => r.data?.data ?? []),
+        .then((r) => arrayFromApi(payloadOf(r), ['classes', 'classSubjects']) as ClassSubject[]),
     staleTime: 30_000,
   });
 }
@@ -51,7 +52,7 @@ export function useTeacherAssessments() {
     queryFn: () =>
       api
         .get('/academics/assessments', { params: { mine: true } })
-        .then((r) => r.data?.data?.items ?? r.data?.data ?? []),
+        .then((r) => arrayFromApi(payloadOf(r), ['assessments']) as Assessment[]),
     staleTime: 30_000,
   });
 }
@@ -59,10 +60,7 @@ export function useTeacherAssessments() {
 export function useAssessmentDetail(id: string) {
   return useQuery({
     queryKey: teacherKeys.assessment(id),
-    queryFn: () =>
-      api
-        .get(`/academics/assessments/${id}`)
-        .then((r) => r.data?.data ?? r.data),
+    queryFn: () => api.get(`/academics/assessments/${id}`).then(payloadOf),
     enabled: !!id,
   });
 }
@@ -71,9 +69,7 @@ export function useMarksSheet(assessmentId: string) {
   return useQuery({
     queryKey: teacherKeys.marksSheet(assessmentId),
     queryFn: () =>
-      api
-        .get(`/academics/assessments/${assessmentId}/marks/sheet`)
-        .then((r) => r.data?.data ?? r.data),
+      api.get(`/academics/assessments/${assessmentId}/marks/sheet`).then(payloadOf),
     enabled: !!assessmentId,
     staleTime: 30_000,
   });
@@ -83,9 +79,7 @@ export function useMarksReview(assessmentId: string) {
   return useQuery({
     queryKey: teacherKeys.marksReview(assessmentId),
     queryFn: () =>
-      api
-        .get(`/academics/assessments/${assessmentId}/marks/review`)
-        .then((r) => r.data?.data ?? r.data),
+      api.get(`/academics/assessments/${assessmentId}/marks/review`).then(payloadOf),
     enabled: !!assessmentId,
   });
 }
@@ -96,7 +90,7 @@ export function useClassStudents(classId: string) {
     queryFn: () =>
       api
         .get(`/students/classes/${classId}/students`)
-        .then((r) => r.data?.data?.items ?? r.data?.data ?? []),
+        .then((r) => arrayFromApi(payloadOf(r), ['students'])),
     enabled: !!classId,
     staleTime: 30_000,
   });
@@ -108,7 +102,7 @@ export function useAttendanceList() {
     queryFn: () =>
       api
         .get('/students/attendance')
-        .then((r) => r.data?.data?.items ?? r.data?.data ?? []),
+        .then((r) => arrayFromApi(payloadOf(r), ['attendance', 'records'])),
     staleTime: 30_000,
   });
 }
@@ -119,7 +113,7 @@ export function usePerformanceAlerts() {
     queryFn: () =>
       api
         .get('/students/performance/alerts')
-        .then((r) => r.data?.data?.items ?? r.data?.data ?? []),
+        .then((r) => arrayFromApi(payloadOf(r), ['alerts', 'performanceAlerts'])),
     staleTime: 30_000,
   });
 }
@@ -130,7 +124,7 @@ export function usePerfPairings() {
     queryFn: () =>
       api
         .get('/students/performance/pairings')
-        .then((r) => r.data?.data?.items ?? r.data?.data ?? []),
+        .then((r) => arrayFromApi(payloadOf(r), ['pairings'])),
     staleTime: 30_000,
   });
 }
@@ -138,10 +132,7 @@ export function usePerfPairings() {
 export function useStudentPerformance(studentId: string) {
   return useQuery({
     queryKey: teacherKeys.studentPerformance(studentId),
-    queryFn: () =>
-      api
-        .get(`/students/performance/${studentId}`)
-        .then((r) => r.data?.data ?? r.data),
+    queryFn: () => api.get(`/students/performance/${studentId}`).then(payloadOf),
     enabled: !!studentId,
   });
 }
@@ -152,7 +143,7 @@ export function useTeacherTimetable() {
     queryFn: () =>
       api
         .get('/academics/timetables')
-        .then((r) => r.data?.data?.items ?? r.data?.data ?? []),
+        .then((r) => arrayFromApi(payloadOf(r), ['timetables', 'schedule']) as TimetableEntry[]),
     staleTime: 30_000,
   });
 }
@@ -163,7 +154,7 @@ export function useTeacherSyllabus() {
     queryFn: () =>
       api
         .get('/academics/syllabus')
-        .then((r) => r.data?.data?.items ?? r.data?.data ?? []),
+        .then((r) => arrayFromApi(payloadOf(r), ['syllabus', 'topics'])),
     staleTime: 30_000,
   });
 }
@@ -174,7 +165,7 @@ export function useTeacherAnnouncements() {
     queryFn: () =>
       api
         .get('/notifications/announcements')
-        .then((r) => r.data?.data?.items ?? r.data?.data ?? []),
+        .then((r) => arrayFromApi(payloadOf(r), ['announcements'])),
     staleTime: 30_000,
   });
 }
@@ -182,10 +173,7 @@ export function useTeacherAnnouncements() {
 export function useClassAnalytics(classId: string) {
   return useQuery({
     queryKey: teacherKeys.classAnalytics(classId),
-    queryFn: () =>
-      api
-        .get(`/teacher/classes/${classId}/analytics`)
-        .then((r) => r.data?.data ?? r.data),
+    queryFn: () => api.get(`/teacher/classes/${classId}/analytics`).then(payloadOf),
     enabled: !!classId,
     staleTime: 30_000,
   });

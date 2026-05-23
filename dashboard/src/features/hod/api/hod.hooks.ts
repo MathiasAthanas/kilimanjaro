@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../lib/api/client';
+import { arrayFromApi, payloadOf } from '../../../lib/api/response';
 
 // ─── Query key factory ────────────────────────────────────────────────────────
 
@@ -25,8 +26,7 @@ export const hodKeys = {
 export function useHodDashboard() {
   return useQuery({
     queryKey: hodKeys.dashboard(),
-    queryFn: () =>
-      api.get('/hod/dashboard').then((res) => res.data?.data ?? res.data),
+    queryFn: () => api.get('/hod/dashboard').then(payloadOf),
   });
 }
 
@@ -36,7 +36,7 @@ export function useHodPendingApprovals() {
     queryFn: () =>
       api
         .get('/academics/assessments/pending-approval')
-        .then((res) => res.data?.data?.items ?? res.data?.data ?? []),
+        .then((r) => arrayFromApi(payloadOf(r), ['assessments', 'approvals'])),
   });
 }
 
@@ -46,7 +46,7 @@ export function useHodApprovalHistory() {
     queryFn: () =>
       api
         .get('/hod/approvals/history')
-        .then((res) => res.data?.data?.items ?? res.data?.data ?? []),
+        .then((r) => arrayFromApi(payloadOf(r), ['approvals', 'history'])),
   });
 }
 
@@ -54,9 +54,7 @@ export function useMarksApprovalReview(assessmentId: string) {
   return useQuery({
     queryKey: hodKeys.marksReview(assessmentId),
     queryFn: () =>
-      api
-        .get(`/academics/assessments/${assessmentId}/marks/review`)
-        .then((res) => res.data?.data ?? res.data),
+      api.get(`/academics/assessments/${assessmentId}/marks/review`).then(payloadOf),
     enabled: Boolean(assessmentId),
   });
 }
@@ -67,7 +65,7 @@ export function useHodClassSubjects() {
     queryFn: () =>
       api
         .get('/academics/class-subjects')
-        .then((res) => res.data?.data?.items ?? res.data?.data ?? []),
+        .then((r) => arrayFromApi(payloadOf(r), ['classSubjects', 'classes'])),
   });
 }
 
@@ -77,17 +75,14 @@ export function useHodTeachersList() {
     queryFn: () =>
       api
         .get('/hod/teachers/performance')
-        .then((res) => res.data?.data?.items ?? res.data?.data ?? []),
+        .then((r) => arrayFromApi(payloadOf(r), ['teachers', 'performance'])),
   });
 }
 
 export function useHodTeacherDetail(teacherId: string) {
   return useQuery({
     queryKey: hodKeys.teacherDetail(teacherId),
-    queryFn: () =>
-      api
-        .get(`/hod/teachers/${teacherId}/performance`)
-        .then((res) => res.data?.data ?? res.data),
+    queryFn: () => api.get(`/hod/teachers/${teacherId}/performance`).then(payloadOf),
     enabled: Boolean(teacherId),
   });
 }
@@ -98,7 +93,7 @@ export function useHodAlerts() {
     queryFn: () =>
       api
         .get('/academics/performance/alerts')
-        .then((res) => res.data?.data?.items ?? res.data?.data ?? []),
+        .then((r) => arrayFromApi(payloadOf(r), ['alerts', 'performanceAlerts'])),
   });
 }
 
@@ -108,7 +103,7 @@ export function useHodPairings() {
     queryFn: () =>
       api
         .get('/academics/performance/pairings')
-        .then((res) => res.data?.data?.items ?? res.data?.data ?? []),
+        .then((r) => arrayFromApi(payloadOf(r), ['pairings'])),
   });
 }
 
@@ -118,17 +113,14 @@ export function useHodInterventions() {
     queryFn: () =>
       api
         .get('/academics/interventions')
-        .then((res) => res.data?.data?.items ?? res.data?.data ?? []),
+        .then((r) => arrayFromApi(payloadOf(r), ['interventions'])),
   });
 }
 
 export function useHodStudentPerformance(studentId: string) {
   return useQuery({
     queryKey: hodKeys.studentPerformance(studentId),
-    queryFn: () =>
-      api
-        .get(`/academics/performance/student/${studentId}`)
-        .then((res) => res.data?.data ?? res.data),
+    queryFn: () => api.get(`/academics/performance/student/${studentId}`).then(payloadOf),
     enabled: Boolean(studentId),
   });
 }
@@ -137,9 +129,7 @@ export function useHodAudit() {
   return useQuery({
     queryKey: hodKeys.audit(),
     queryFn: () =>
-      api
-        .get('/hod/audit')
-        .then((res) => res.data?.data?.items ?? res.data?.data ?? []),
+      api.get('/hod/audit').then((r) => arrayFromApi(payloadOf(r), ['logs', 'auditLogs'])),
   });
 }
 
@@ -149,7 +139,7 @@ export function useHodAnnouncements() {
     queryFn: () =>
       api
         .get('/notifications/announcements')
-        .then((res) => res.data?.data?.items ?? res.data?.data ?? []),
+        .then((r) => arrayFromApi(payloadOf(r), ['announcements'])),
   });
 }
 

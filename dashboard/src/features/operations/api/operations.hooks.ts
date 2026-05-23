@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../lib/api/client';
+import { arrayFromApi, payloadOf } from '../../../lib/api/response';
 
 // ─── Query key factory ────────────────────────────────────────────────────────
 
@@ -30,7 +31,7 @@ export function useReportCatalog() {
   return useQuery({
     queryKey: operationsKeys.reportCatalog(),
     queryFn: () =>
-      api.get('/reports/catalog').then((r) => r.data?.data?.items ?? r.data?.data ?? []),
+      api.get('/reports/catalog').then((r) => arrayFromApi(payloadOf(r), ['catalog', 'reportTypes'])),
     staleTime: 60_000,
   });
 }
@@ -39,7 +40,7 @@ export function useReportJobs() {
   return useQuery({
     queryKey: operationsKeys.reportJobs(),
     queryFn: () =>
-      api.get('/reports/jobs').then((r) => r.data?.data?.items ?? r.data?.data ?? []),
+      api.get('/reports/jobs').then((r) => arrayFromApi(payloadOf(r), ['jobs', 'reportJobs'])),
     staleTime: 15_000,
   });
 }
@@ -47,7 +48,7 @@ export function useReportJobs() {
 export function useReportJob(id: string | undefined) {
   return useQuery({
     queryKey: operationsKeys.reportJob(id ?? ''),
-    queryFn: () => api.get(`/reports/jobs/${id}`).then((r) => r.data?.data ?? r.data),
+    queryFn: () => api.get(`/reports/jobs/${id}`).then(payloadOf),
     enabled: !!id,
     staleTime: 10_000,
   });
@@ -57,7 +58,7 @@ export function useScheduledReports() {
   return useQuery({
     queryKey: operationsKeys.scheduledReports(),
     queryFn: () =>
-      api.get('/reports/scheduled').then((r) => r.data?.data?.items ?? r.data?.data ?? []),
+      api.get('/reports/scheduled').then((r) => arrayFromApi(payloadOf(r), ['scheduled', 'scheduledReports'])),
     staleTime: 60_000,
   });
 }
@@ -66,7 +67,7 @@ export function useReportsAudit() {
   return useQuery({
     queryKey: operationsKeys.reportsAudit(),
     queryFn: () =>
-      api.get('/reports/audit').then((r) => r.data?.data?.items ?? r.data?.data ?? []),
+      api.get('/reports/audit').then((r) => arrayFromApi(payloadOf(r), ['logs', 'auditLogs'])),
     staleTime: 30_000,
   });
 }
@@ -74,7 +75,7 @@ export function useReportsAudit() {
 export function useAnalyticsOverview() {
   return useQuery({
     queryKey: operationsKeys.analyticsOverview(),
-    queryFn: () => api.get('/analytics/overview').then((r) => r.data?.data ?? r.data),
+    queryFn: () => api.get('/analytics/overview').then(payloadOf),
     staleTime: 30_000,
   });
 }
@@ -82,7 +83,7 @@ export function useAnalyticsOverview() {
 export function useEnrolmentAnalytics() {
   return useQuery({
     queryKey: operationsKeys.enrolment(),
-    queryFn: () => api.get('/analytics/enrolment').then((r) => r.data?.data ?? r.data),
+    queryFn: () => api.get('/analytics/enrolment').then(payloadOf),
     staleTime: 30_000,
   });
 }
@@ -90,7 +91,7 @@ export function useEnrolmentAnalytics() {
 export function useAcademicOverview() {
   return useQuery({
     queryKey: operationsKeys.academicOverview(),
-    queryFn: () => api.get('/analytics/academic/overview').then((r) => r.data?.data ?? r.data),
+    queryFn: () => api.get('/analytics/academic/overview').then(payloadOf),
     staleTime: 30_000,
   });
 }
@@ -98,7 +99,7 @@ export function useAcademicOverview() {
 export function useOperationsFinanceOverview() {
   return useQuery({
     queryKey: operationsKeys.financeOverview(),
-    queryFn: () => api.get('/analytics/finance/overview').then((r) => r.data?.data ?? r.data),
+    queryFn: () => api.get('/analytics/finance/overview').then(payloadOf),
     staleTime: 30_000,
   });
 }
@@ -106,7 +107,7 @@ export function useOperationsFinanceOverview() {
 export function useAttendanceOverview() {
   return useQuery({
     queryKey: operationsKeys.attendanceOverview(),
-    queryFn: () => api.get('/analytics/attendance/overview').then((r) => r.data?.data ?? r.data),
+    queryFn: () => api.get('/analytics/attendance/overview').then(payloadOf),
     staleTime: 30_000,
   });
 }
@@ -114,8 +115,7 @@ export function useAttendanceOverview() {
 export function usePerformanceEngineAnalytics() {
   return useQuery({
     queryKey: operationsKeys.performanceEngine(),
-    queryFn: () =>
-      api.get('/analytics/academic/performance-engine').then((r) => r.data?.data ?? r.data),
+    queryFn: () => api.get('/analytics/academic/performance-engine').then(payloadOf),
     staleTime: 30_000,
   });
 }
@@ -124,7 +124,7 @@ export function useAllAssessments() {
   return useQuery({
     queryKey: operationsKeys.assessments(),
     queryFn: () =>
-      api.get('/academics/assessments').then((r) => r.data?.data?.items ?? r.data?.data ?? []),
+      api.get('/academics/assessments').then((r) => arrayFromApi(payloadOf(r), ['assessments'])),
     staleTime: 30_000,
   });
 }
@@ -135,7 +135,7 @@ export function useAssessmentMarksSheet(assessmentId: string | undefined) {
     queryFn: () =>
       api
         .get(`/academics/assessments/${assessmentId}/marks/sheet`)
-        .then((r) => r.data?.data ?? []),
+        .then((r) => arrayFromApi(payloadOf(r), ['marks', 'students'])),
     enabled: !!assessmentId,
   });
 }
@@ -144,7 +144,7 @@ export function useAllTimetables() {
   return useQuery({
     queryKey: operationsKeys.timetables(),
     queryFn: () =>
-      api.get('/academics/timetables').then((r) => r.data?.data?.items ?? r.data?.data ?? []),
+      api.get('/academics/timetables').then((r) => arrayFromApi(payloadOf(r), ['timetables'])),
     staleTime: 60_000,
   });
 }
@@ -153,7 +153,7 @@ export function useOperationsClasses() {
   return useQuery({
     queryKey: operationsKeys.classes(),
     queryFn: () =>
-      api.get('/students/classes').then((r) => r.data?.data?.items ?? r.data?.data ?? []),
+      api.get('/students/classes').then((r) => arrayFromApi(payloadOf(r), ['classes'])),
     staleTime: 60_000,
   });
 }
@@ -161,8 +161,7 @@ export function useOperationsClasses() {
 export function usePublishReadiness() {
   return useQuery({
     queryKey: operationsKeys.publishReadiness(),
-    queryFn: () =>
-      api.get('/reports/results-publishing/readiness').then((r) => r.data?.data ?? r.data),
+    queryFn: () => api.get('/reports/results-publishing/readiness').then(payloadOf),
     staleTime: 15_000,
   });
 }
@@ -173,7 +172,7 @@ export function useClassTermResults(classId: string | undefined, termId: string 
     queryFn: () =>
       api
         .get(`/academics/results/class/${classId}/term/${termId}`)
-        .then((r) => r.data?.data?.items ?? r.data?.data ?? []),
+        .then((r) => arrayFromApi(payloadOf(r), ['results', 'students'])),
     enabled: !!classId && !!termId,
   });
 }

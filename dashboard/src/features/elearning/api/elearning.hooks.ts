@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../lib/api/client';
+import { arrayFromApi, payloadOf } from '../../../lib/api/response';
 
 // ─── Query key factory ────────────────────────────────────────────────────────
 
@@ -307,14 +308,15 @@ export function mapApiCourse(c: ElearningCourse): CourseDisplay {
 export function useElearningCourses() {
   return useQuery({
     queryKey: elKeys.courses(),
-    queryFn: () => api.get<ElearningCourse[]>('/elearning/courses').then((r) => r.data),
+    queryFn: () =>
+      api.get('/elearning/courses').then((r) => arrayFromApi(payloadOf(r), ['courses']) as ElearningCourse[]),
   });
 }
 
 export function useElearningCourse(courseId: string | undefined) {
   return useQuery({
     queryKey: elKeys.course(courseId ?? ''),
-    queryFn: () => api.get<ElearningCourse>(`/elearning/courses/${courseId}`).then((r) => r.data),
+    queryFn: () => api.get(`/elearning/courses/${courseId}`).then(payloadOf) as Promise<ElearningCourse>,
     enabled: Boolean(courseId),
   });
 }
@@ -322,28 +324,28 @@ export function useElearningCourse(courseId: string | undefined) {
 export function useTeacherAnalytics() {
   return useQuery({
     queryKey: elKeys.teacherAnalytics(),
-    queryFn: () => api.get<TeacherAnalytics>('/elearning/analytics/teacher/courses').then((r) => r.data),
+    queryFn: () => api.get('/elearning/analytics/teacher/courses').then(payloadOf) as Promise<TeacherAnalytics>,
   });
 }
 
 export function useHodOverview() {
   return useQuery({
     queryKey: elKeys.hodOverview(),
-    queryFn: () => api.get<RoleOverview>('/elearning/analytics/hod/overview').then((r) => r.data),
+    queryFn: () => api.get('/elearning/analytics/hod/overview').then(payloadOf) as Promise<RoleOverview>,
   });
 }
 
 export function usePrincipalOverview() {
   return useQuery({
     queryKey: elKeys.principalOverview(),
-    queryFn: () => api.get<RoleOverview>('/elearning/analytics/principal/overview').then((r) => r.data),
+    queryFn: () => api.get('/elearning/analytics/principal/overview').then(payloadOf) as Promise<RoleOverview>,
   });
 }
 
 export function useAqaOverview() {
   return useQuery({
     queryKey: elKeys.aqaOverview(),
-    queryFn: () => api.get<{ courses: ElearningCourse[] }>('/elearning/analytics/aqa/courses').then((r) => r.data),
+    queryFn: () => api.get('/elearning/analytics/aqa/courses').then(payloadOf) as Promise<{ courses: ElearningCourse[] }>,
   });
 }
 
@@ -352,7 +354,10 @@ export function useAqaOverview() {
 export function useElearningLessons(courseId: string | undefined) {
   return useQuery({
     queryKey: elKeys.lessons(courseId ?? ''),
-    queryFn: () => api.get<ElearningLesson[]>(`/elearning/courses/${courseId}/lessons`).then((r) => r.data),
+    queryFn: () =>
+      api
+        .get(`/elearning/courses/${courseId}/lessons`)
+        .then((r) => arrayFromApi(payloadOf(r), ['lessons']) as ElearningLesson[]),
     enabled: Boolean(courseId),
   });
 }
@@ -364,8 +369,8 @@ export function useElearningMaterials(courseId: string | undefined, lessonId: st
     queryKey: elKeys.materials(courseId ?? '', lessonId ?? ''),
     queryFn: () =>
       api
-        .get<ElearningMaterial[]>(`/elearning/courses/${courseId}/lessons/${lessonId}/materials`)
-        .then((r) => r.data),
+        .get(`/elearning/courses/${courseId}/lessons/${lessonId}/materials`)
+        .then((r) => arrayFromApi(payloadOf(r), ['materials']) as ElearningMaterial[]),
     enabled: Boolean(courseId) && Boolean(lessonId),
   });
 }
@@ -376,7 +381,9 @@ export function useElearningAssignments(courseId: string | undefined) {
   return useQuery({
     queryKey: elKeys.assignments(courseId ?? ''),
     queryFn: () =>
-      api.get<ElearningAssignment[]>(`/elearning/courses/${courseId}/assignments`).then((r) => r.data),
+      api
+        .get(`/elearning/courses/${courseId}/assignments`)
+        .then((r) => arrayFromApi(payloadOf(r), ['assignments']) as ElearningAssignment[]),
     enabled: Boolean(courseId),
   });
 }
@@ -386,8 +393,8 @@ export function useElearningAssignment(courseId: string | undefined, assignmentI
     queryKey: elKeys.assignment(courseId ?? '', assignmentId ?? ''),
     queryFn: () =>
       api
-        .get<ElearningAssignment>(`/elearning/courses/${courseId}/assignments/${assignmentId}`)
-        .then((r) => r.data),
+        .get(`/elearning/courses/${courseId}/assignments/${assignmentId}`)
+        .then(payloadOf) as Promise<ElearningAssignment>,
     enabled: Boolean(courseId) && Boolean(assignmentId),
   });
 }
@@ -397,8 +404,8 @@ export function useAssignmentSubmissions(courseId: string | undefined, assignmen
     queryKey: elKeys.assignmentSubmissions(courseId ?? '', assignmentId ?? ''),
     queryFn: () =>
       api
-        .get<ElearningSubmission[]>(`/elearning/courses/${courseId}/assignments/${assignmentId}/submissions`)
-        .then((r) => r.data),
+        .get(`/elearning/courses/${courseId}/assignments/${assignmentId}/submissions`)
+        .then((r) => arrayFromApi(payloadOf(r), ['submissions']) as ElearningSubmission[]),
     enabled: Boolean(courseId) && Boolean(assignmentId),
   });
 }
@@ -408,8 +415,8 @@ export function useSubmissionSummary(courseId: string | undefined, assignmentId:
     queryKey: elKeys.assignmentSummary(courseId ?? '', assignmentId ?? ''),
     queryFn: () =>
       api
-        .get<SubmissionSummary>(`/elearning/courses/${courseId}/assignments/${assignmentId}/submissions/summary`)
-        .then((r) => r.data),
+        .get(`/elearning/courses/${courseId}/assignments/${assignmentId}/submissions/summary`)
+        .then(payloadOf) as Promise<SubmissionSummary>,
     enabled: Boolean(courseId) && Boolean(assignmentId),
   });
 }
@@ -419,8 +426,8 @@ export function useMissingStudents(courseId: string | undefined, assignmentId: s
     queryKey: elKeys.missingStudents(courseId ?? '', assignmentId ?? ''),
     queryFn: () =>
       api
-        .get<MissingStudent[]>(`/elearning/courses/${courseId}/assignments/${assignmentId}/submissions/missing`)
-        .then((r) => r.data),
+        .get(`/elearning/courses/${courseId}/assignments/${assignmentId}/submissions/missing`)
+        .then((r) => arrayFromApi(payloadOf(r), ['students', 'missing']) as MissingStudent[]),
     enabled: Boolean(courseId) && Boolean(assignmentId),
   });
 }
@@ -428,7 +435,8 @@ export function useMissingStudents(courseId: string | undefined, assignmentId: s
 export function useSubmission(submissionId: string | undefined) {
   return useQuery({
     queryKey: elKeys.submission(submissionId ?? ''),
-    queryFn: () => api.get<ElearningSubmission>(`/elearning/submissions/${submissionId}`).then((r) => r.data),
+    queryFn: () =>
+      api.get(`/elearning/submissions/${submissionId}`).then(payloadOf) as Promise<ElearningSubmission>,
     enabled: Boolean(submissionId),
   });
 }
@@ -439,7 +447,9 @@ export function useElearningQuizzes(courseId: string | undefined) {
   return useQuery({
     queryKey: elKeys.quizzes(courseId ?? ''),
     queryFn: () =>
-      api.get<ElearningQuiz[]>(`/elearning/courses/${courseId}/quizzes`).then((r) => r.data),
+      api
+        .get(`/elearning/courses/${courseId}/quizzes`)
+        .then((r) => arrayFromApi(payloadOf(r), ['quizzes']) as ElearningQuiz[]),
     enabled: Boolean(courseId),
   });
 }
@@ -448,7 +458,9 @@ export function useElearningQuiz(courseId: string | undefined, quizId: string | 
   return useQuery({
     queryKey: elKeys.quiz(courseId ?? '', quizId ?? ''),
     queryFn: () =>
-      api.get<ElearningQuiz>(`/elearning/courses/${courseId}/quizzes/${quizId}`).then((r) => r.data),
+      api
+        .get(`/elearning/courses/${courseId}/quizzes/${quizId}`)
+        .then(payloadOf) as Promise<ElearningQuiz>,
     enabled: Boolean(courseId) && Boolean(quizId),
   });
 }
@@ -458,8 +470,8 @@ export function useQuizResults(courseId: string | undefined, quizId: string | un
     queryKey: elKeys.quizResults(courseId ?? '', quizId ?? ''),
     queryFn: () =>
       api
-        .get<ElearningQuizAttempt[]>(`/elearning/courses/${courseId}/quizzes/${quizId}/results`)
-        .then((r) => r.data),
+        .get(`/elearning/courses/${courseId}/quizzes/${quizId}/results`)
+        .then((r) => arrayFromApi(payloadOf(r), ['attempts', 'results']) as ElearningQuizAttempt[]),
     enabled: Boolean(courseId) && Boolean(quizId),
   });
 }
@@ -471,8 +483,8 @@ export function useCourseEngagement(courseId: string | undefined) {
     queryKey: elKeys.engagement(courseId ?? ''),
     queryFn: () =>
       api
-        .get<CourseEngagement>(`/elearning/analytics/teacher/courses/${courseId}/engagement`)
-        .then((r) => r.data),
+        .get(`/elearning/analytics/teacher/courses/${courseId}/engagement`)
+        .then(payloadOf) as Promise<CourseEngagement>,
     enabled: Boolean(courseId),
     staleTime: 60_000,
   });
@@ -483,10 +495,8 @@ export function useStrugglingStudents(courseId: string | undefined) {
     queryKey: elKeys.struggling(courseId ?? ''),
     queryFn: () =>
       api
-        .get<{ studentId: string; completionPercent: number }[]>(
-          `/elearning/analytics/teacher/courses/${courseId}/struggling`,
-        )
-        .then((r) => r.data),
+        .get(`/elearning/analytics/teacher/courses/${courseId}/struggling`)
+        .then((r) => arrayFromApi(payloadOf(r), ['students', 'struggling']) as { studentId: string; completionPercent: number }[]),
     enabled: Boolean(courseId),
   });
 }
@@ -498,8 +508,8 @@ export function useElearningAnnouncements(courseId: string | undefined) {
     queryKey: elKeys.announcements(courseId ?? ''),
     queryFn: () =>
       api
-        .get<ElearningAnnouncement[]>(`/elearning/courses/${courseId}/announcements`)
-        .then((r) => r.data),
+        .get(`/elearning/courses/${courseId}/announcements`)
+        .then((r) => arrayFromApi(payloadOf(r), ['announcements']) as ElearningAnnouncement[]),
     enabled: Boolean(courseId),
   });
 }
@@ -508,7 +518,9 @@ export function useElearningDiscussions(courseId: string | undefined) {
   return useQuery({
     queryKey: elKeys.discussions(courseId ?? ''),
     queryFn: () =>
-      api.get<ElearningDiscussion[]>(`/elearning/courses/${courseId}/discussions`).then((r) => r.data),
+      api
+        .get(`/elearning/courses/${courseId}/discussions`)
+        .then((r) => arrayFromApi(payloadOf(r), ['discussions', 'threads']) as ElearningDiscussion[]),
     enabled: Boolean(courseId),
   });
 }
@@ -517,7 +529,7 @@ export function useElearningDiscussion(threadId: string | undefined) {
   return useQuery({
     queryKey: elKeys.discussion(threadId ?? ''),
     queryFn: () =>
-      api.get<ElearningDiscussion>(`/elearning/discussions/${threadId}`).then((r) => r.data),
+      api.get(`/elearning/discussions/${threadId}`).then(payloadOf) as Promise<ElearningDiscussion>,
     enabled: Boolean(threadId),
   });
 }
@@ -527,7 +539,10 @@ export function useElearningDiscussion(threadId: string | undefined) {
 export function useElearningAuditLogs() {
   return useQuery({
     queryKey: elKeys.auditLogs(),
-    queryFn: () => api.get<AuditLog[]>('/elearning/admin/audit-logs').then((r) => r.data),
+    queryFn: () =>
+      api
+        .get('/elearning/admin/audit-logs')
+        .then((r) => arrayFromApi(payloadOf(r), ['logs', 'auditLogs']) as AuditLog[]),
     staleTime: 60_000,
   });
 }
