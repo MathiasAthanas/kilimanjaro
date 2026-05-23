@@ -21,7 +21,12 @@ async function bootstrap() {
     }),
   );
 
-  const allowedOrigins = (configService.get<string>('ALLOWED_ORIGINS', 'http://localhost:3000') || '')
+  const allowedOrigins = (
+    configService.get<string>(
+      'ALLOWED_ORIGINS',
+      'http://localhost:3000,http://localhost:5173,http://127.0.0.1:5173',
+    ) || ''
+  )
     .split(',')
     .map((origin) => origin.trim())
     .filter(Boolean);
@@ -35,6 +40,7 @@ async function bootstrap() {
       'Accept',
       'Accept-Language',
       'x-internal-api-key',
+      'x-correlation-id',
     ],
     credentials: true,
   });
