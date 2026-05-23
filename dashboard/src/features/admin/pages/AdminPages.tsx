@@ -5,9 +5,27 @@ import { Badge } from '../../../components/common/Badge';
 import { Button } from '../../../components/common/Button';
 import {
   adminAuditEvents, adminClasses, adminStudents, adminSubjects,
-  adminUsers, assessmentTypes, gradingScales, notificationLogs,
-  notificationTemplates, reportJobs, serviceHealth,
+  adminUsers, assessmentTypes, classPathways, gradingScales, notificationLogs,
+  mixedSchoolApiContracts, notificationTemplates, reportJobs, serviceHealth,
+  subjectCombinations,
 } from '../api/adminApi';
+import {
+  useAdminAuditEvents,
+  useAdminClasses,
+  useAdminReportJobs,
+  useAdminStudents,
+  useAdminSubjects,
+  useAdminUsers,
+  useAssessmentTypes,
+  useClassPathways,
+  useGradingScales,
+  useNotificationLogs,
+  useNotificationTemplates,
+  useServiceHealth,
+  useSubjectCombinations,
+} from '../api/admin.hooks';
+import { useFeeCategories } from '../../finance/api/finance.hooks';
+import { useAnnouncements } from '../../common/common.hooks';
 import {
   AdminDataTable, AdminFormSection, AdminMetricStrip, AdminQuickCard,
   AdminShell, AdminStatusIndicator, AssessmentTypeEditor, CsvImportZone,
@@ -16,19 +34,32 @@ import {
   SelectField, Td,
 } from '../components/AdminConsole';
 import { assessmentWeightsTotal, roleRisk } from '../utils/adminValidation';
+import { DataError } from '../../../components/feedback/DataError';
+import { EmptyState } from '../../../components/feedback/EmptyState';
+import { SkeletonTable } from '../../../components/common/SkeletonTable';
 
 // ─── Home ─────────────────────────────────────────────────────────────────────
 
 export function AdminHomePage() {
+  const { data: apiServiceHealth = [] as typeof serviceHealth } = useServiceHealth() as { data: typeof serviceHealth };
+  const { data: apiUsers = [] as typeof adminUsers } = useAdminUsers() as { data: typeof adminUsers };
+  const { data: apiStudents = [] as typeof adminStudents } = useAdminStudents() as { data: typeof adminStudents };
+  const { data: apiAudit = [] as typeof adminAuditEvents } = useAdminAuditEvents() as { data: typeof adminAuditEvents };
+  const { data: apiLogs = [] as typeof notificationLogs } = useNotificationLogs() as { data: typeof notificationLogs };
+  const { data: apiClasses = [] as typeof adminClasses } = useAdminClasses() as { data: typeof adminClasses };
+
+  const lockedCount = apiUsers.filter((u: { status: string }) => u.status === 'LOCKED').length;
+  const failedSms = apiLogs.filter((l: { status: string; channel: string }) => l.status === 'FAILED' && l.channel === 'SMS').length;
+
   return (
     <AdminShell title="System Control Center" eyebrow="Admin operations console">
       <AdminMetricStrip items={[
-        { label: 'Users',      value: '350+', detail: '4 loaded in mock',    tone: 'blue'  },
-        { label: 'Students',   value: '312',  detail: 'Active registry',      tone: 'green' },
-        { label: 'Locked',     value: '1',    detail: 'Needs unlock',         tone: 'amber' },
-        { label: 'Classes',    value: '18',   detail: 'Active academic year', tone: 'blue'  },
-        { label: 'Audit',      value: '24',   detail: 'Open events',          tone: 'rose'  },
-        { label: 'Failed SMS', value: '7',    detail: 'Notification logs',    tone: 'rose'  },
+        { label: 'Users',      value: String(apiUsers.length),    detail: 'All roles',            tone: 'blue'  },
+        { label: 'Students',   value: String(apiStudents.length), detail: 'Active registry',       tone: 'green' },
+        { label: 'Locked',     value: String(lockedCount),        detail: 'Needs unlock',          tone: 'amber' },
+        { label: 'Classes',    value: String(apiClasses.length),  detail: 'Active academic year',  tone: 'blue'  },
+        { label: 'Audit',      value: String(apiAudit.length),    detail: 'Recent events',         tone: 'rose'  },
+        { label: 'Failed SMS', value: String(failedSms),          detail: 'Notification logs',     tone: 'rose'  },
       ]} />
 
       <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_380px]">
@@ -48,7 +79,7 @@ export function AdminHomePage() {
         <div className="space-y-4">
           <p className="text-[11px] font-black uppercase tracking-[0.28em] text-slate-400">Service Health</p>
           <div className="space-y-2.5">
-            {serviceHealth.map((item) => <AdminStatusIndicator key={item.service} {...item} />)}
+            {apiServiceHealth.map((item: typeof serviceHealth[number]) => <AdminStatusIndicator key={item.service} {...item} />)}
           </div>
         </div>
       </div>
@@ -73,15 +104,18 @@ export function AdminUsersPage() {
 }
 
 function UsersTable() {
-  const [statuses, setStatuses] = useState<Record<string, string>>(
-    Object.fromEntries(adminUsers.map((u) => [u.id, u.status as string])),
-  );
-  const toggle = (id: string) =>
-    setStatuses((prev) => ({ ...prev, [id]: prev[id] === 'ACTIVE' ? 'LOCKED' : 'ACTIVE' }));
+  const { data: apiUsers = [] as typeof adminUsers, isLoading, isError, refetch } = useAdminUsers() as { data: typeof adminUsers; isLoading: boolean; isError: boolean; refetch: () => void };
+  const [statuses, setStatuses] = useState<Record<string, string>>({});
+  const getStatus = (user: { id: string; status: string }) => statuses[user.id] ?? user.status;
+  const toggle = (id: string, current: string) =>
+    setStatuses((prev) => ({ ...prev, [id]: current === 'ACTIVE' ? 'LOCKED' : 'ACTIVE' }));
 
+  if (isLoading) return <SkeletonTable cols={7} />;
+  if (isError) return <DataError onRetry={refetch} />;
+  if (!apiUsers.length) return <EmptyState title="No users found" description="Create the first user account to get started." />;
   return (
     <AdminDataTable columns={['Name', 'Email', 'Role', 'Status', 'Linked Entity', 'Last Login', 'Actions']}>
-      {adminUsers.map((user) => (
+      {apiUsers.map((user) => (
         <tr key={user.id} className="hover:bg-slate-50">
           <Td>
             <p className="font-black text-slate-900">{user.name}</p>
@@ -91,17 +125,17 @@ function UsersTable() {
             <Badge tone={user.role === 'ADMIN' ? 'rose' : 'blue'}>{user.role}</Badge>
           </Td>
           <Td>
-            <Badge tone={statuses[user.id] === 'ACTIVE' ? 'emerald' : statuses[user.id] === 'LOCKED' ? 'amber' : 'slate'}>
-              {statuses[user.id]}
+            <Badge tone={getStatus(user) === 'ACTIVE' ? 'emerald' : getStatus(user) === 'LOCKED' ? 'amber' : 'slate'}>
+              {getStatus(user)}
             </Badge>
           </Td>
           <Td className="text-slate-500">{user.linked}</Td>
-          <Td className="text-xs text-slate-400">{user.lastLogin.slice(0, 10)}</Td>
+          <Td className="text-xs text-slate-400">{String(user.lastLogin ?? '').slice(0, 10)}</Td>
           <Td>
             <div className="flex items-center gap-3">
               <NavLink className="text-xs font-black text-[#4338CA] hover:underline" to={`/admin/users/${user.id}`}>Edit</NavLink>
-              <button onClick={() => toggle(user.id)} className="text-xs font-black text-slate-500 transition hover:text-slate-900">
-                {statuses[user.id] === 'LOCKED' ? 'Unlock' : 'Lock'}
+              <button onClick={() => toggle(user.id, getStatus(user))} className="text-xs font-black text-slate-500 transition hover:text-slate-900">
+                {getStatus(user) === 'LOCKED' ? 'Unlock' : 'Lock'}
               </button>
               <button className="text-xs font-black text-slate-400 transition hover:text-slate-700">Reset PW</button>
             </div>
@@ -259,17 +293,26 @@ export function EditUserPage() {
 // ─── Academic setup hub ───────────────────────────────────────────────────────
 
 export function AcademicSetupHubPage() {
+  const { data: apiPathways = [] as typeof classPathways } = useClassPathways() as { data: typeof classPathways };
   const cards: [string, string][] = [
-    ['Academic Years',   '/admin/academic/setup'],
-    ['Terms',            '/admin/academic/setup'],
-    ['Classes',          '/admin/classes'],
-    ['Subjects',         '/admin/subjects'],
-    ['Class Subjects',   '/admin/academic/setup'],
-    ['Grading Scales',   '/admin/grading'],
-    ['Assessment Types', '/admin/assessment-types'],
+    ['Academic Years',         '/admin/academic/setup'],
+    ['Terms',                  '/admin/academic/setup'],
+    ['Mixed School Classes',   '/admin/classes'],
+    ['Stage Subjects',         '/admin/subjects'],
+    ['Class Subjects',         '/admin/academic/setup'],
+    ['Grading Scales',         '/admin/grading'],
+    ['Assessment Types',       '/admin/assessment-types'],
+    ['Stage Configuration',    '/admin/academic/stage-config'],
+    ['Cross-Stage Promotion',  '/admin/academic/promotion/cross-stage'],
   ];
   return (
     <AdminShell title="Academic Setup Hub" eyebrow="School academic structure">
+      <AdminMetricStrip items={[
+        { label: 'Primary', value: 'Class 1-6/7', detail: 'Configurable terminal year', tone: 'green' },
+        { label: 'O-Level', value: 'Form 1-4', detail: 'Core secondary track', tone: 'blue' },
+        { label: 'A-Level', value: 'Form 5-6', detail: 'Combination-based subjects', tone: 'amber' },
+        { label: 'Pathways', value: String(apiPathways.length), detail: 'Promotion and graduation map', tone: 'rose' },
+      ]} />
       <div className="grid gap-gutter md:grid-cols-2 xl:grid-cols-4">
         {cards.map(([title, to]) => (
           <AdminQuickCard key={title} title={title} detail="Setup active · last updated today." to={to} />
@@ -282,20 +325,119 @@ export function AcademicSetupHubPage() {
 // ─── Classes ──────────────────────────────────────────────────────────────────
 
 export function ClassesPage() {
+  const { data: apiClasses = [] as typeof adminClasses } = useAdminClasses() as { data: typeof adminClasses };
+  const { data: apiPathways = [] as typeof classPathways } = useClassPathways() as { data: typeof classPathways };
+  const { data: apiCombinations = [] as typeof subjectCombinations } = useSubjectCombinations() as { data: typeof subjectCombinations };
+
+  const byStage = apiClasses.reduce<Record<string, number>>((acc, item) => {
+    acc[item.stage] = (acc[item.stage] ?? 0) + 1;
+    return acc;
+  }, {});
+
   return (
     <AdminShell title="Class Management" eyebrow="Classes, rosters, assigned subjects">
-      <AdminDataTable columns={['Class', 'Level', 'Students', 'Class Teacher', 'Year', 'Status', 'Actions']}>
-        {adminClasses.map((item) => (
-          <tr key={item.id} className="hover:bg-slate-50">
-            <Td><p className="font-black text-slate-900">{item.name}</p></Td>
-            <Td>{item.level}</Td>
-            <Td>{item.students}</Td>
-            <Td>{item.teacher}</Td>
-            <Td>{item.year}</Td>
-            <Td><Badge tone="emerald">{item.status}</Badge></Td>
-            <Td>
-              <NavLink className="text-xs font-black text-[#4338CA] hover:underline" to={`/admin/classes/${item.id}`}>Open</NavLink>
-            </Td>
+      <AdminMetricStrip items={[
+        { label: 'Primary Classes', value: String(byStage.Primary ?? 0), detail: 'Class 1 to terminal primary', tone: 'green' },
+        { label: 'O-Level Classes', value: String(byStage['O-Level'] ?? 0), detail: 'Form 1 to Form 4', tone: 'blue' },
+        { label: 'A-Level Streams', value: String(byStage['A-Level'] ?? 0), detail: 'Form 5/6 combinations', tone: 'amber' },
+        { label: 'Terminal Classes', value: String(apiClasses.filter((item) => item.terminal).length), detail: 'Cross-stage or graduation', tone: 'rose' },
+      ]} />
+      <AdminFormSection
+        title="Class Setup Wizard"
+        subtitle="Production-ready contract for Primary, O-Level and A-Level class creation."
+        badge={<Badge tone="emerald">API ready</Badge>}
+      >
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <SelectField label="Education Stage" value="O_LEVEL" options={[
+            { value: 'PRIMARY', label: 'Primary' },
+            { value: 'O_LEVEL', label: 'O-Level' },
+            { value: 'A_LEVEL', label: 'A-Level' },
+          ]} />
+          <Field label="Class/Form Level" value="4" type="number" />
+          <Field label="Display Name" value="Form 4A" />
+          <Field label="Stream or Combination" value="A / PCM" />
+          <Field label="Academic Year ID" placeholder="active-academic-year-id" />
+          <Field label="Class Teacher ID" placeholder="teacher-user-id" />
+          <Field label="Capacity" value="40" type="number" />
+          <Field label="Curriculum Code" value="NECTA_OLEVEL" />
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <FeatureToggle label="Terminal year" description="Required for Form 4, Form 6 and final primary year." enabled />
+          <FeatureToggle label="Validate stage range" description="Blocks Class/Form level collisions before submit." enabled />
+          <FeatureToggle label="Create pathway next" description="Immediately opens pathway setup after class save." enabled />
+        </div>
+      </AdminFormSection>
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <AdminDataTable columns={['Class', 'Stage', 'Level', 'Stream', 'Students', 'Class Teacher', 'Next Pathway', 'Actions']}>
+          {apiClasses.map((item) => (
+            <tr key={item.id} className="hover:bg-slate-50">
+              <Td>
+                <p className="font-black text-slate-900">{item.name}</p>
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">{item.curriculum}</p>
+              </Td>
+              <Td><Badge tone={item.stage === 'Primary' ? 'emerald' : item.stage === 'A-Level' ? 'amber' : 'blue'}>{item.stage}</Badge></Td>
+              <Td>{item.level}</Td>
+              <Td>{item.stream}</Td>
+              <Td>{item.students}</Td>
+              <Td>{item.teacher}</Td>
+              <Td>{item.pathway}</Td>
+              <Td>
+                <NavLink className="text-xs font-black text-[#4338CA] hover:underline" to={`/admin/classes/${item.id}`}>Open</NavLink>
+              </Td>
+            </tr>
+          ))}
+        </AdminDataTable>
+        <div className="space-y-4">
+          <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+            <p className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-400">Promotion Pathways</p>
+            <div className="mt-4 grid gap-3">
+              <SelectField label="From Class" value="form-4a" options={apiClasses.map((item) => ({ value: item.id, label: item.name }))} />
+              <SelectField label="Transition Type" value="CROSS_STAGE" options={[
+                { value: 'PROMOTION', label: 'Promotion' },
+                { value: 'CROSS_STAGE', label: 'Cross-stage' },
+                { value: 'GRADUATION', label: 'Graduation' },
+                { value: 'TRANSFER', label: 'Transfer' },
+              ]} />
+              <SelectField label="To Class" value="form-5-pcm" options={[{ value: '', label: 'No class / graduation' }, ...apiClasses.map((item) => ({ value: item.id, label: item.name }))]} />
+            </div>
+            <div className="mt-4 space-y-3">
+              {apiPathways.map((pathway) => (
+                <div key={pathway.id} className="rounded-2xl border border-slate-100 bg-slate-50 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-black text-slate-900">{pathway.from} {'->'} {pathway.to}</p>
+                    <Badge tone={pathway.type === 'Graduation' ? 'emerald' : 'blue'}>{pathway.type}</Badge>
+                  </div>
+                  <p className="mt-1 text-xs font-semibold text-slate-500">{pathway.rule}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="rounded-[28px] border border-amber-100 bg-amber-50 p-5">
+            <p className="text-[11px] font-black uppercase tracking-[0.24em] text-amber-700">A-Level Combinations</p>
+            <div className="mt-4 grid gap-3 rounded-2xl bg-white p-3 shadow-sm">
+              <Field label="Combination Code" value="PCM" />
+              <Field label="Principal Subjects" value="Physics, Chemistry, Mathematics" />
+              <Field label="Bulk Assign Class" value="Form 5 PCM" />
+            </div>
+            <div className="mt-4 space-y-3">
+              {apiCombinations.map((combo) => (
+                <div key={combo.id} className="rounded-2xl bg-white p-3 shadow-sm">
+                  <p className="font-black text-slate-900">{combo.code} <span className="text-xs text-slate-400">({combo.students} students)</span></p>
+                  <p className="mt-1 text-xs font-semibold text-slate-500">{combo.subjects}</p>
+                  <p className="mt-1 text-[11px] font-bold text-amber-700">Principal: {combo.principal}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+      <AdminDataTable columns={['Method', 'Endpoint', 'Purpose', 'Status']} minWidth={980}>
+        {mixedSchoolApiContracts.map((contract) => (
+          <tr key={contract.path} className="hover:bg-slate-50">
+            <Td><Badge tone="slate">{contract.method}</Badge></Td>
+            <Td className="font-mono text-xs text-slate-500">{contract.path}</Td>
+            <Td>{contract.purpose}</Td>
+            <Td><Badge tone="emerald">Ready for integration</Badge></Td>
           </tr>
         ))}
       </AdminDataTable>
@@ -305,7 +447,8 @@ export function ClassesPage() {
 
 export function ClassDetailPage() {
   const { classId } = useParams();
-  const klass = adminClasses.find((c) => c.id === classId) ?? adminClasses[0];
+  const { data: apiClasses = [] as typeof adminClasses } = useAdminClasses() as { data: typeof adminClasses };
+  const klass = apiClasses.find((c) => c.id === classId) ?? apiClasses[0] ?? adminClasses[0];
   return (
     <AdminShell title={klass.name} eyebrow="Class detail">
       <StudentsTable />
@@ -321,12 +464,17 @@ export function SubjectsPage() {
 }
 
 function SubjectsTable() {
+  const { data: apiSubjects = [] as typeof adminSubjects, isLoading, isError, refetch } = useAdminSubjects() as { data: typeof adminSubjects; isLoading: boolean; isError: boolean; refetch: () => void };
+  if (isLoading) return <SkeletonTable cols={8} />;
+  if (isError) return <DataError onRetry={refetch} />;
+  if (!apiSubjects.length) return <EmptyState title="No subjects configured" description="Add subjects through the academic setup wizard." />;
   return (
-    <AdminDataTable columns={['Subject', 'Code', 'Department', 'Status', 'Classes', 'Teachers', 'Actions']}>
-      {adminSubjects.map((item) => (
+    <AdminDataTable columns={['Subject', 'Code', 'Stage', 'Department', 'Status', 'Classes', 'Teachers', 'Actions']}>
+      {apiSubjects.map((item) => (
         <tr key={item.id} className="hover:bg-slate-50">
           <Td><p className="font-black text-slate-900">{item.name}</p></Td>
           <Td className="font-mono text-xs text-slate-500">{item.code}</Td>
+          <Td><Badge tone={item.stage === 'Primary' ? 'emerald' : item.stage === 'A-Level' ? 'amber' : 'blue'}>{item.stage}</Badge></Td>
           <Td>{item.department}</Td>
           <Td><Badge tone="emerald">{item.status}</Badge></Td>
           <Td>{item.classes}</Td>
@@ -342,7 +490,8 @@ function SubjectsTable() {
 
 export function SubjectDetailPage() {
   const { subjectId } = useParams();
-  const subject = adminSubjects.find((s) => s.id === subjectId) ?? adminSubjects[0];
+  const { data: apiSubjects = [] as typeof adminSubjects } = useAdminSubjects() as { data: typeof adminSubjects };
+  const subject = apiSubjects.find((s) => s.id === subjectId) ?? apiSubjects[0] ?? adminSubjects[0];
   return (
     <AdminShell title={subject.name} eyebrow="Subject detail">
       <div className="grid gap-gutter xl:grid-cols-3">
@@ -357,9 +506,18 @@ export function SubjectDetailPage() {
 // ─── Grading scales ───────────────────────────────────────────────────────────
 
 export function GradingPage() {
+  const { data: apiGradingScales = [] as typeof gradingScales } = useGradingScales() as { data: typeof gradingScales };
   return (
     <AdminShell title="Grading Scales" eyebrow="Grade boundaries and activation">
-      {gradingScales.map((scale) => <GradingBoundaryEditor key={scale.id} scale={scale} />)}
+      {apiGradingScales.map((scale) => (
+        <div key={scale.id} className="space-y-2">
+          <div className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
+            <p className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">{scale.scope}</p>
+            <Badge tone={scale.active ? 'emerald' : 'amber'}>{scale.active ? 'Active' : 'Draft'}</Badge>
+          </div>
+          <GradingBoundaryEditor scale={scale} />
+        </div>
+      ))}
       <NavLink to="/admin/grading/create">
         <Button variant="secondary" className="rounded-xl">+ Create New Scale</Button>
       </NavLink>
@@ -379,16 +537,23 @@ export function CreateGradingScalePage() {
 // ─── Assessment types ─────────────────────────────────────────────────────────
 
 export function AssessmentTypesPage() {
-  const total = assessmentWeightsTotal(assessmentTypes.map((t) => t.weight));
+  const { data: apiAssessmentTypes = [] as typeof assessmentTypes } = useAssessmentTypes() as { data: typeof assessmentTypes };
+  const oLevelTypes = apiAssessmentTypes.filter((type) => type.scope === 'O-Level');
+  const total = assessmentWeightsTotal(oLevelTypes.map((t) => t.weight));
   return (
     <AdminShell title="Assessment Types" eyebrow="Weight distribution">
       <AdminMetricStrip items={[{
-        label: 'Total Weight',
+        label: 'O-Level Weight',
         value: `${total}%`,
-        detail: total === 100 ? 'Distribution valid' : 'Must equal 100%',
+        detail: total === 100 ? 'O-Level distribution valid' : 'O-Level must equal 100%',
         tone: total === 100 ? 'green' : 'rose',
+      }, {
+        label: 'Scoped Types',
+        value: String(apiAssessmentTypes.length),
+        detail: 'Primary, O-Level, A-Level and subject-specific',
+        tone: 'blue',
       }]} />
-      <AssessmentTypeEditor types={assessmentTypes} />
+      <AssessmentTypeEditor types={apiAssessmentTypes} />
     </AdminShell>
   );
 }
@@ -405,13 +570,18 @@ export function StudentsPage() {
 }
 
 function StudentsTable() {
+  const { data: apiStudents = [] as typeof adminStudents, isLoading, isError, refetch } = useAdminStudents() as { data: typeof adminStudents; isLoading: boolean; isError: boolean; refetch: () => void };
+  if (isLoading) return <SkeletonTable cols={9} />;
+  if (isError) return <DataError onRetry={refetch} />;
+  if (!apiStudents.length) return <EmptyState title="No students enrolled" description="Enrol students individually or import a CSV file." />;
   return (
-    <AdminDataTable columns={['Reg. No.', 'Name', 'Class', 'Status', 'Guardians', 'Balance', 'Risk', 'Actions']}>
-      {adminStudents.map((student) => (
+    <AdminDataTable columns={['Reg. No.', 'Name', 'Class', 'Stage', 'Status', 'Guardians', 'Balance', 'Risk', 'Actions']}>
+      {apiStudents.map((student) => (
         <tr key={student.id} className="hover:bg-slate-50">
           <Td className="font-mono text-xs text-slate-500">{student.registration}</Td>
           <Td><p className="font-black text-slate-900">{student.name}</p></Td>
           <Td>{student.className}</Td>
+          <Td><Badge tone={student.stage === 'Primary' ? 'emerald' : student.stage === 'A-Level' ? 'amber' : 'blue'}>{student.stage}</Badge></Td>
           <Td><Badge tone="emerald">{student.status}</Badge></Td>
           <Td>{student.guardians}</Td>
           <Td className="font-mono text-xs">TZS {student.balance.toLocaleString('en-US')}</Td>
@@ -434,6 +604,7 @@ function StudentsTable() {
 const ENROL_STEPS = ['Identity', 'Admission', 'Class', 'Guardians', 'Portal', 'Review'];
 
 export function EnrolStudentPage() {
+  const { data: enrolClasses = [] as typeof adminClasses } = useAdminClasses() as { data: typeof adminClasses };
   const [step, setStep] = useState(0);
   const prev = () => setStep((s) => Math.max(0, s - 1));
   const next = () => setStep((s) => Math.min(ENROL_STEPS.length - 1, s + 1));
@@ -509,7 +680,7 @@ export function EnrolStudentPage() {
               { value: 'Form 3', label: 'Form 3' },
               { value: 'Form 4', label: 'Form 4' },
             ]} />
-            <SelectField label="Class Section" options={adminClasses.map((c) => ({ value: c.id, label: c.name }))} />
+            <SelectField label="Class Section" options={enrolClasses.map((c: { id: string; name: string }) => ({ value: c.id, label: c.name }))} />
           </div>
         </AdminFormSection>
       )}
@@ -592,7 +763,8 @@ export function EnrolStudentPage() {
 
 export function StudentAdminProfilePage() {
   const { id } = useParams();
-  const student = adminStudents.find((s) => s.id === id) ?? adminStudents[0];
+  const { data: apiStudents = [] as typeof adminStudents } = useAdminStudents() as { data: typeof adminStudents };
+  const student = apiStudents.find((s) => s.id === id) ?? apiStudents[0] ?? adminStudents[0];
   return (
     <AdminShell title={student.name} eyebrow="Admin student profile">
       {/* Quick stats */}
@@ -615,13 +787,24 @@ export function StudentAdminProfilePage() {
 
 // ─── Fee categories ───────────────────────────────────────────────────────────
 
+const FALLBACK_FEE_CATEGORIES = [
+  { code: 'TUI', name: 'Tuition',  type: 'Mandatory', amount: 120000, used: 4 },
+  { code: 'BRD', name: 'Boarding', type: 'Optional',  amount: 340000, used: 2 },
+  { code: 'MLS', name: 'Meals',    type: 'Optional',  amount: 220000, used: 3 },
+  { code: 'ICT', name: 'ICT',      type: 'Optional',  amount: 80000,  used: 2 },
+];
+
 export function AdminFeeCategoriesPage() {
-  const categories = [
-    { code: 'TUI', name: 'Tuition',  type: 'Mandatory', amount: 120000, used: 4 },
-    { code: 'BRD', name: 'Boarding', type: 'Optional',  amount: 340000, used: 2 },
-    { code: 'MLS', name: 'Meals',    type: 'Optional',  amount: 220000, used: 3 },
-    { code: 'ICT', name: 'ICT',      type: 'Optional',  amount: 80000,  used: 2 },
-  ];
+  const { data: rawCategories } = useFeeCategories() as { data: Array<{ id?: string; code?: string; name?: string; type?: string; category?: string; amount?: number; defaultAmount?: number; usedByStructures?: number }> | undefined };
+  const categories = rawCategories && rawCategories.length > 0
+    ? rawCategories.map((c) => ({
+        code: c.code ?? c.id ?? '',
+        name: c.name ?? '',
+        type: c.type ?? c.category ?? 'Optional',
+        amount: c.amount ?? c.defaultAmount ?? 0,
+        used: c.usedByStructures ?? 0,
+      }))
+    : FALLBACK_FEE_CATEGORIES;
   return (
     <AdminShell title="Fee Categories" eyebrow="Finance setup with dependency safety">
       <AdminDataTable columns={['Code', 'Name', 'Type', 'Amount', 'Used By', 'Actions']}>
@@ -681,10 +864,11 @@ export function PerformanceEngineAdminPage() {
 // ─── Notification templates ───────────────────────────────────────────────────
 
 export function NotificationTemplatesPage() {
+  const { data: apiTemplates = [] as typeof notificationTemplates } = useNotificationTemplates() as { data: typeof notificationTemplates };
   return (
     <AdminShell title="Notification Templates" eyebrow="SMS, email, push, in-app">
       <AdminDataTable columns={['Name', 'Channel', 'Event Type', 'Status', 'Last Edited', 'Editor', 'Actions']}>
-        {notificationTemplates.map((tpl) => (
+        {apiTemplates.map((tpl) => (
           <tr key={tpl.id} className="hover:bg-slate-50">
             <Td><p className="font-black text-slate-900">{tpl.name}</p></Td>
             <Td><Badge tone="blue">{tpl.channel}</Badge></Td>
@@ -704,7 +888,8 @@ export function NotificationTemplatesPage() {
 
 export function NotificationTemplateDetailPage() {
   const { id } = useParams();
-  const tpl = notificationTemplates.find((t) => t.id === id) ?? notificationTemplates[0];
+  const { data: apiTemplates = [] as typeof notificationTemplates } = useNotificationTemplates() as { data: typeof notificationTemplates };
+  const tpl = apiTemplates.find((t) => t.id === id) ?? apiTemplates[0] ?? notificationTemplates[0];
   return <AdminShell title={tpl.name} eyebrow="Template editor"><NotificationTemplateEditor template={tpl} /></AdminShell>;
 }
 
@@ -745,10 +930,11 @@ export function SendManualNotificationPage() {
 }
 
 export function NotificationLogsPage() {
+  const { data: apiLogs = [] as typeof notificationLogs } = useNotificationLogs() as { data: typeof notificationLogs };
   return (
     <AdminShell title="Notification Logs" eyebrow="Delivery inspection">
       <AdminDataTable columns={['Time', 'Channel', 'Recipient', 'Event', 'Status', 'Attempts', 'Provider', 'Payload']}>
-        {notificationLogs.map((log) => (
+        {apiLogs.map((log) => (
           <tr key={log.id} className="hover:bg-slate-50">
             <Td className="text-xs text-slate-400">{log.time.slice(0, 16).replace('T', ' ')}</Td>
             <Td><Badge tone="blue">{log.channel}</Badge></Td>
@@ -780,10 +966,11 @@ export function AdminAnalyticsPage() {
 }
 
 export function AdminReportsPage() {
+  const { data: apiReportJobs = [] as typeof reportJobs } = useAdminReportJobs() as { data: typeof reportJobs };
   return (
     <AdminShell title="Generate Any Report" eyebrow="Report jobs and downloads">
       <AdminDataTable columns={['Report', 'Status', 'Requested By', 'Role', 'Scope', 'Format', 'Created', 'Actions']}>
-        {reportJobs.map((job) => (
+        {apiReportJobs.map((job) => (
           <tr key={job.id} className="hover:bg-slate-50">
             <Td><p className="font-black text-slate-900">{job.name}</p></Td>
             <Td><Badge tone={job.status === 'COMPLETED' ? 'emerald' : 'amber'}>{job.status}</Badge></Td>
@@ -804,7 +991,8 @@ export function AdminReportsPage() {
 
 export function AdminReportDetailPage() {
   const { id } = useParams();
-  const job = reportJobs.find((r) => r.id === id) ?? reportJobs[0];
+  const { data: apiReportJobs = [] as typeof reportJobs } = useAdminReportJobs() as { data: typeof reportJobs };
+  const job = apiReportJobs.find((r) => r.id === id) ?? apiReportJobs[0] ?? reportJobs[0];
   return (
     <AdminShell title={job.name} eyebrow="Report detail">
       <AdminMetricStrip items={[
@@ -833,9 +1021,10 @@ export function SystemAuditPage() {
 }
 
 function AuditPanel() {
+  const { data: apiAudit = [] as typeof adminAuditEvents } = useAdminAuditEvents() as { data: typeof adminAuditEvents };
   return (
     <div className="space-y-3">
-      {adminAuditEvents.map((event) => (
+      {apiAudit.map((event) => (
         <div key={event.id} className="rounded-2xl border border-slate-200 bg-white p-5">
           <p className="text-xs font-black uppercase tracking-widest text-slate-500">
             {event.time.slice(0, 16).replace('T', ' ')} · {event.actor}
@@ -918,12 +1107,23 @@ export function SystemSettingsPage() {
 
 // ─── Announcements ────────────────────────────────────────────────────────────
 
+const FALLBACK_ADMIN_ANNOUNCEMENTS = [
+  { title: 'Results publishing window', author: 'Principal', audience: 'All roles', status: 'ACTIVE', priority: 'High' },
+  { title: 'Parent meeting — Term II',  author: 'Admin',     audience: 'Parents',   status: 'ACTIVE', priority: 'Normal' },
+  { title: 'Fee reminder — May 2026',   author: 'Admin',     audience: 'Guardians', status: 'ACTIVE', priority: 'High' },
+];
+
 export function AdminAnnouncementsPage() {
-  const items = [
-    { title: 'Results publishing window', author: 'Principal', audience: 'All roles', status: 'ACTIVE', priority: 'High' },
-    { title: 'Parent meeting — Term II',  author: 'Admin',     audience: 'Parents',   status: 'ACTIVE', priority: 'Normal' },
-    { title: 'Fee reminder — May 2026',   author: 'Admin',     audience: 'Guardians', status: 'ACTIVE', priority: 'High' },
-  ];
+  const { data: rawAnnouncements } = useAnnouncements() as { data: Array<{ id?: string; title?: string; author?: string; createdBy?: string; audience?: string; targetRoles?: string[]; status?: string; priority?: string }> | undefined };
+  const items = rawAnnouncements && rawAnnouncements.length > 0
+    ? rawAnnouncements.map((a) => ({
+        title: a.title ?? '',
+        author: a.author ?? a.createdBy ?? 'Admin',
+        audience: a.audience ?? ((a.targetRoles ?? []).join(', ') || 'All roles'),
+        status: a.status?.toUpperCase() ?? 'ACTIVE',
+        priority: a.priority ?? 'Normal',
+      }))
+    : FALLBACK_ADMIN_ANNOUNCEMENTS;
   return (
     <AdminShell title="Announcements Admin" eyebrow="Create, edit, cancel with reason">
       <AdminDataTable columns={['Title', 'Author', 'Audience', 'Status', 'Priority', 'Actions']}>
@@ -944,9 +1144,305 @@ export function AdminAnnouncementsPage() {
   );
 }
 
+// ─── Stage Configuration (Gap 10) ────────────────────────────────────────────
+
+const STAGE_DESCRIPTIONS: Record<string, { label: string; note: string; tone: 'emerald' | 'blue' | 'amber' }> = {
+  PRIMARY: { label: 'Primary School', note: 'Class 1 up to terminal year (Class 6 or 7). Pass mark: 50 %. PSLE national exam at terminal year.', tone: 'emerald' },
+  O_LEVEL: { label: 'Secondary O-Level', note: 'Form 1 to Form 4. CSEE national exam at Form 4. Registration prefix: KS-S-.', tone: 'blue' },
+  A_LEVEL: { label: 'Advanced Level', note: 'Form 5 and Form 6. ACSEE national exam at Form 6. Combination-based subjects. Registration prefix: KS-A-.', tone: 'amber' },
+};
+
+export function StageConfigPage() {
+  const [terminalPrimary, setTerminalPrimary] = useState('7');
+  const [saved, setSaved] = useState(false);
+
+  return (
+    <AdminShell title="Stage Range Configuration" eyebrow="Primary · O-Level · A-Level school structure">
+      <AdminMetricStrip items={[
+        { label: 'Primary',  value: `Class 1–${terminalPrimary}`, detail: 'Configurable terminal year', tone: 'green'  },
+        { label: 'O-Level',  value: 'Form 1–4',                   detail: 'CSEE at Form 4',              tone: 'blue'  },
+        { label: 'A-Level',  value: 'Form 5–6',                   detail: 'ACSEE at Form 6',             tone: 'amber' },
+        { label: 'Reg. Prefix', value: 'KS-P / KS-S / KS-A',     detail: 'Stage-prefixed numbers',      tone: 'blue'  },
+      ]} />
+
+      {/* Stage overview cards */}
+      <div className="grid gap-4 md:grid-cols-3">
+        {Object.entries(STAGE_DESCRIPTIONS).map(([key, { label, note, tone }]) => (
+          <div key={key} className={`rounded-2xl border p-5 ${
+            tone === 'emerald' ? 'border-emerald-200 bg-emerald-50'
+          : tone === 'amber'   ? 'border-amber-200 bg-amber-50'
+          :                      'border-blue-200 bg-blue-50'
+          }`}>
+            <p className={`text-[11px] font-black uppercase tracking-[0.24em] ${
+              tone === 'emerald' ? 'text-emerald-700'
+            : tone === 'amber'   ? 'text-amber-700'
+            :                      'text-blue-700'
+            }`}>{label}</p>
+            <p className="mt-2 text-sm font-semibold text-slate-700">{note}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Primary terminal year */}
+      <AdminFormSection title="Primary Stage" subtitle="Define the terminal (exam) year for the primary stage">
+        <div className="grid gap-4 md:grid-cols-3">
+          <SelectField
+            label="Terminal Primary Year"
+            value={terminalPrimary}
+            options={[
+              { value: '6', label: 'Class 6 (6-year primary)' },
+              { value: '7', label: 'Class 7 (7-year primary — Tanzania standard)' },
+            ]}
+            onChange={setTerminalPrimary}
+          />
+          <Field label="Primary Pass Mark (%)" type="number" value="50" readOnly />
+          <Field label="Primary Registration Prefix" value="KS-P" readOnly />
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <FeatureToggle label="PSLE national exam registration" description="Enable PSLE index number field for Standard 7 students" enabled />
+          <FeatureToggle label="Holistic assessment fields" description="Show behaviour, reading, writing, numeracy on Primary report cards" enabled />
+        </div>
+      </AdminFormSection>
+
+      {/* O-Level */}
+      <AdminFormSection title="O-Level Stage" subtitle="Form 1–4 configuration. CSEE readiness template activates at Form 4.">
+        <div className="grid gap-4 md:grid-cols-3">
+          <Field label="Entry Form Level" value="Form 1" readOnly />
+          <Field label="Terminal Form Level" value="Form 4" readOnly />
+          <Field label="O-Level Registration Prefix" value="KS-S" readOnly />
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <Field label="Failure Threshold (%)" type="number" value="40" />
+          <Field label="At-Risk Threshold (%)" type="number" value="50" />
+          <Field label="CSEE Division bands" value="I (7-17 pts)  II (18-21)  III (22-25)  IV (26-33)  0 (≥34)" readOnly />
+        </div>
+        <div className="mt-4">
+          <FeatureToggle label="NECTA candidate number field" description="Show CSEE candidate number field when CSEE registration opens" enabled />
+        </div>
+      </AdminFormSection>
+
+      {/* A-Level */}
+      <AdminFormSection title="A-Level Stage" subtitle="Form 5–6. Combination-based subjects. ACSEE readiness template at Form 6.">
+        <div className="grid gap-4 md:grid-cols-3">
+          <Field label="Entry Form Level" value="Form 5" readOnly />
+          <Field label="Terminal Form Level" value="Form 6" readOnly />
+          <Field label="A-Level Registration Prefix" value="KS-A" readOnly />
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <Field label="Failure Threshold (%)" type="number" value="25" />
+          <Field label="At-Risk Threshold (%)" type="number" value="35" />
+          <Field label="ACSEE Division bands" value="I (13-15 pts)  II (10-12)  III (7-9)  IV (4-6)  0 (≤3)" readOnly />
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <FeatureToggle label="Require min. 2 principal subjects per combination" description="Block combination creation unless ≥2 principal subjects present" enabled />
+          <FeatureToggle label="Require compulsory subsidiary (General Studies)" description="Block combination creation unless COMPULSORY_SUBSIDIARY subject included" enabled />
+        </div>
+      </AdminFormSection>
+
+      <div className="flex items-center gap-3">
+        <Button className="rounded-xl bg-[#4338CA]" onClick={() => setSaved(true)}>Save Stage Config</Button>
+        {saved && (
+          <span className="flex items-center gap-1.5 text-sm font-black text-emerald-600">
+            <CheckCircle2 className="h-4 w-4" /> Saved
+          </span>
+        )}
+      </div>
+    </AdminShell>
+  );
+}
+
+// ─── Cross-Stage Promotion (Gap 11) ───────────────────────────────────────────
+
+const CROSS_STAGE_FLOWS = [
+  {
+    id: 'std7-form1',
+    from: 'Standard 7 (Primary)',
+    to: 'Form 1 (O-Level)',
+    type: 'CROSS_STAGE',
+    rule: 'Student must pass PSLE. New registration number issued: KS-S-YYYY-NNNNN.',
+    badge: 'Primary → O-Level',
+    tone: 'emerald' as const,
+  },
+  {
+    id: 'form4-form5',
+    from: 'Form 4 (O-Level)',
+    to: 'Form 5 (A-Level)',
+    type: 'CROSS_STAGE',
+    rule: 'Student must select an A-Level combination. New registration number: KS-A-YYYY-NNNNN.',
+    badge: 'O-Level → A-Level',
+    tone: 'amber' as const,
+  },
+  {
+    id: 'form6-graduation',
+    from: 'Form 6 (A-Level)',
+    to: 'Graduation',
+    type: 'GRADUATION',
+    rule: 'Student graduates. ACSEE results recorded. Status set to GRADUATED.',
+    badge: 'A-Level → Graduate',
+    tone: 'blue' as const,
+  },
+];
+
+export function CrossStagePromotionPage() {
+  const [selectedFlow, setSelectedFlow] = useState(CROSS_STAGE_FLOWS[0].id);
+  const flow = CROSS_STAGE_FLOWS.find((f) => f.id === selectedFlow) ?? CROSS_STAGE_FLOWS[0];
+
+  return (
+    <AdminShell title="Cross-Stage Promotion Workflow" eyebrow="Primary → O-Level · O-Level → A-Level · Graduation">
+      <AdminMetricStrip items={[
+        { label: 'Std 7 → Form 1', value: 'CROSS_STAGE', detail: 'New KS-S reg. number',  tone: 'green' },
+        { label: 'Form 4 → Form 5', value: 'CROSS_STAGE', detail: 'New KS-A reg. number', tone: 'amber' },
+        { label: 'Form 6 → Graduate', value: 'GRADUATION', detail: 'Status = GRADUATED',  tone: 'blue'  },
+      ]} />
+
+      {/* Flow selector */}
+      <div className="grid gap-3 md:grid-cols-3">
+        {CROSS_STAGE_FLOWS.map((f) => (
+          <button
+            key={f.id}
+            onClick={() => setSelectedFlow(f.id)}
+            className={`rounded-2xl border p-4 text-left transition ${
+              selectedFlow === f.id
+                ? 'border-[#4338CA] bg-[#EEF2FF] ring-2 ring-[#4338CA]/30'
+                : 'border-slate-200 bg-white hover:border-slate-300'
+            }`}
+          >
+            <Badge tone={f.tone === 'emerald' ? 'emerald' : f.tone === 'amber' ? 'amber' : 'blue'}>{f.badge}</Badge>
+            <p className="mt-2 text-sm font-black text-slate-900">{f.from} {'→'} {f.to}</p>
+            <p className="mt-1 text-xs font-semibold text-slate-500">{f.type}</p>
+          </button>
+        ))}
+      </div>
+
+      {/* Workflow panel */}
+      <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="space-y-gutter">
+          {flow.id === 'std7-form1' && (
+            <>
+              <AdminFormSection title="Standard 7 → Form 1 Transition" subtitle="Promote PSLE graduates into Form 1 O-Level">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <Field label="Academic Year" value="2026" />
+                  <SelectField label="Source Class" options={[
+                    { value: 'std7a', label: 'Standard 7A' },
+                    { value: 'std7b', label: 'Standard 7B' },
+                  ]} />
+                  <SelectField label="Destination Class" options={[
+                    { value: 'form1a', label: 'Form 1A' },
+                    { value: 'form1b', label: 'Form 1B' },
+                  ]} />
+                  <Field label="PSLE Minimum Score" type="number" value="100" />
+                </div>
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  <FeatureToggle label="Issue new O-Level registration (KS-S-YYYY-NNNNN)" description="Auto-generates stage-prefixed registration number for each promoted student" enabled />
+                  <FeatureToggle label="Require PSLE index number on record" description="Block promotion if psleIndexNumber is not set" enabled />
+                </div>
+              </AdminFormSection>
+              <div className="rounded-2xl border border-blue-100 bg-blue-50 p-5">
+                <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-700">What happens</p>
+                <ul className="mt-3 space-y-2 text-sm font-semibold text-slate-700">
+                  <li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-blue-500" /> Primary enrolment deactivated (isActive=false)</li>
+                  <li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-blue-500" /> New enrolment created in Form 1 class</li>
+                  <li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-blue-500" /> New registration number generated: KS-S-2026-NNNNN</li>
+                  <li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-blue-500" /> ClassPathway record created (CROSS_STAGE)</li>
+                  <li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-blue-500" /> Student history and performance data carried forward</li>
+                </ul>
+              </div>
+            </>
+          )}
+
+          {flow.id === 'form4-form5' && (
+            <>
+              <AdminFormSection title="Form 4 → Form 5 Transition" subtitle="Promote O-Level graduates into A-Level with combination selection">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <Field label="Academic Year" value="2026" />
+                  <SelectField label="Source Class" options={[
+                    { value: 'form4a', label: 'Form 4A' },
+                    { value: 'form4b', label: 'Form 4B' },
+                  ]} />
+                  <SelectField label="A-Level Combination" options={[
+                    { value: 'pcm',  label: 'PCM — Physics, Chemistry, Mathematics' },
+                    { value: 'pce',  label: 'PCE — Physics, Chemistry, Economics' },
+                    { value: 'hgl',  label: 'HGL — History, Geography, Kiswahili' },
+                    { value: 'ega',  label: 'EGA — Economics, Geography, Accountancy' },
+                  ]} />
+                  <SelectField label="Destination Class" options={[
+                    { value: 'form5pcm', label: 'Form 5 PCM' },
+                    { value: 'form5pce', label: 'Form 5 PCE' },
+                    { value: 'form5hgl', label: 'Form 5 HGL' },
+                  ]} />
+                </div>
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  <FeatureToggle label="Issue new A-Level registration (KS-A-YYYY-NNNNN)" description="Auto-generates A-Level prefix for each promoted student" enabled />
+                  <FeatureToggle label="Require CSEE division ≥ IV to qualify" description="Block Form 5 entry for Division 0 students without manual override" enabled />
+                </div>
+              </AdminFormSection>
+              <div className="rounded-2xl border border-amber-100 bg-amber-50 p-5">
+                <p className="text-xs font-black uppercase tracking-[0.2em] text-amber-700">What happens</p>
+                <ul className="mt-3 space-y-2 text-sm font-semibold text-slate-700">
+                  <li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" /> O-Level enrolment deactivated</li>
+                  <li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" /> New enrolment created in Form 5 combination class</li>
+                  <li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" /> New registration number generated: KS-A-2026-NNNNN</li>
+                  <li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" /> StudentSubjectEnrollment records created for all combination subjects</li>
+                  <li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" /> ClassPathway record created (CROSS_STAGE)</li>
+                </ul>
+              </div>
+            </>
+          )}
+
+          {flow.id === 'form6-graduation' && (
+            <>
+              <AdminFormSection title="Form 6 → Graduation" subtitle="Mark Form 6 completers as graduated after ACSEE">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <Field label="Academic Year" value="2026" />
+                  <SelectField label="Source Class" options={[
+                    { value: 'form6pcm', label: 'Form 6 PCM' },
+                    { value: 'form6hgl', label: 'Form 6 HGL' },
+                  ]} />
+                  <Field label="Graduation Date" type="date" />
+                  <Field label="ACSEE Year" type="number" value="2026" />
+                </div>
+                <div className="mt-4">
+                  <FeatureToggle label="Generate final ACSEE report cards before graduation" description="Trigger report-card generation for Form 6 before updating status" enabled />
+                </div>
+              </AdminFormSection>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-600">What happens</p>
+                <ul className="mt-3 space-y-2 text-sm font-semibold text-slate-700">
+                  <li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" /> Student status set to GRADUATED</li>
+                  <li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" /> graduationDate field populated</li>
+                  <li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" /> A-Level enrolment deactivated</li>
+                  <li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" /> ClassPathway record created (GRADUATION)</li>
+                  <li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" /> Final ACSEE report card PDF generated and published</li>
+                </ul>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Summary card */}
+        <div className="h-fit rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">Selected Flow</p>
+          <h3 className="mt-2 font-display text-xl font-black text-slate-950">{flow.from} → {flow.to}</h3>
+          <p className="mt-1 text-sm font-semibold text-slate-500">{flow.rule}</p>
+          <div className="mt-4 space-y-2">
+            <Badge tone={flow.tone === 'emerald' ? 'emerald' : flow.tone === 'amber' ? 'amber' : 'blue'}>{flow.type}</Badge>
+          </div>
+          <Button className="mt-6 w-full rounded-xl bg-[#4338CA]">
+            <Play className="h-4 w-4" /> Run Promotion Workflow
+          </Button>
+          <p className="mt-3 text-center text-xs font-semibold text-slate-400">
+            Dry-run mode — no data is committed until you confirm.
+          </p>
+        </div>
+      </div>
+    </AdminShell>
+  );
+}
+
 // ─── Util ─────────────────────────────────────────────────────────────────────
 
 function useUser() {
   const { id } = useParams();
-  return adminUsers.find((u) => u.id === id) ?? adminUsers[0];
+  const { data: apiUsers = [] as typeof adminUsers } = useAdminUsers() as { data: typeof adminUsers };
+  return apiUsers.find((u) => u.id === id) ?? apiUsers[0] ?? adminUsers[0];
 }

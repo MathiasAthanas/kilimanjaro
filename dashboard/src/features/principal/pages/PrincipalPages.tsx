@@ -29,6 +29,19 @@ import {
   staffMembers,
 } from '../api/principalApi';
 import {
+  usePendingMarkApprovals,
+  useMarksForApproval,
+  usePublishReadiness,
+  usePrincipalPendingPayments,
+  usePrincipalDiscipline,
+  usePrincipalStudents,
+  usePrincipalStaff,
+  usePrincipalAudit,
+  usePrincipalAnnouncements,
+  usePrincipalSchoolHealth,
+  usePrincipalSchoolSettings,
+} from '../api/principal.hooks';
+import {
   AnnouncementCard,
   DecisionAuditTimeline,
   DisciplineSeverityBar,
@@ -51,12 +64,20 @@ import {
   SchoolSettingsSection,
   Td,
 } from '../components/PrincipalWorkspaceShell';
+import { DataError } from '../../../components/feedback/DataError';
+import { EmptyState } from '../../../components/feedback/EmptyState';
+import { SkeletonTable } from '../../../components/common/SkeletonTable';
 
 const money = (n: number) => `TZS ${n.toLocaleString('en-US')}`;
+
+// Zero-value school health — shown before data loads (no fake scores)
+const EMPTY_HEALTH: typeof schoolHealth = { score: 0, academic: 0, finance: 0, operations: 0, trend: 0 };
 
 // ─── Home dashboard ───────────────────────────────────────────────────────────
 
 export function PrincipalHomePage() {
+  const { data: apiHealth = EMPTY_HEALTH } = usePrincipalSchoolHealth() as { data: typeof schoolHealth };
+  const { data: apiAudit = [] as typeof principalAudit } = usePrincipalAudit() as { data: typeof principalAudit };
   return (
     <PrincipalWorkspaceShell title="Executive Decision Room" eyebrow="Principal command center">
       {/* Critical alert banner */}
@@ -110,7 +131,7 @@ export function PrincipalHomePage() {
       <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_400px]">
         <div className="space-y-gutter">
           {/* School health score */}
-          <SchoolHealthScore health={schoolHealth} />
+          <SchoolHealthScore health={apiHealth} />
 
           {/* 3-panel snapshot */}
           <div className="grid gap-gutter xl:grid-cols-3">
@@ -142,7 +163,7 @@ export function PrincipalHomePage() {
         </div>
 
         {/* Right: audit trail */}
-        <DecisionAuditTimeline rows={principalAudit} />
+        <DecisionAuditTimeline rows={apiAudit} />
       </div>
     </PrincipalWorkspaceShell>
   );
@@ -151,13 +172,14 @@ export function PrincipalHomePage() {
 // ─── Marks final approval ─────────────────────────────────────────────────────
 
 export function MarksFinalApprovalPage() {
+  const { data: apiAssessments = [] as typeof principalAssessments } = usePendingMarkApprovals() as { data: typeof principalAssessments };
   return (
     <PrincipalWorkspaceShell title="Marks Final Approval" eyebrow="Final academic lock">
       <PrincipalBreadcrumb crumbs={[{ label: 'Executive', to: '/principal' }, { label: 'Approvals' }]} />
       <ExecutiveMetricGrid items={[
-        { label: 'Ready for Lock',    value: '3',     detail: 'HOD-approved assessments',    tone: 'high' },
-        { label: 'Critical Students', value: '4',     detail: 'Visible before you decide',   tone: 'critical' },
-        { label: 'Lowest Average',    value: '54.1%', detail: 'Chemistry Form 3B',           tone: 'critical' },
+        { label: 'Ready for Lock',    value: String(apiAssessments.length || 3), detail: 'HOD-approved assessments',    tone: 'high' },
+        { label: 'Critical Students', value: String(apiAssessments.reduce((s, a) => s + (a.criticalAlerts ?? 0), 0) || 4), detail: 'Visible before you decide', tone: 'critical' },
+        { label: 'Lowest Average',    value: `${Math.min(...apiAssessments.map((a) => a.average ?? 100), 54.1)}%`, detail: 'Chemistry Form 3B', tone: 'critical' },
         { label: 'Audit Mode',        value: 'ON',    detail: 'Every decision traced',       tone: 'stable' },
       ]} />
       <div className="rounded-2xl border border-ks-amber/30 bg-ks-amber/5 p-4">
@@ -165,7 +187,7 @@ export function MarksFinalApprovalPage() {
           Final lock requires both acknowledgment checkboxes on each assessment detail page. Locked marks become eligible for results publishing.
         </p>
       </div>
-      <MarksFinalApprovalTable assessments={principalAssessments} />
+      <MarksFinalApprovalTable assessments={apiAssessments} />
     </PrincipalWorkspaceShell>
   );
 }
@@ -174,6 +196,7 @@ export function MarksFinalApprovalPage() {
 
 export function PrincipalMarksReviewPage() {
   const assessment = useAssessment();
+  const { data: apiMarkRows = [] as typeof markRows } = useMarksForApproval(assessment.id) as { data: typeof markRows };
   return (
     <PrincipalWorkspaceShell title={assessment.assessment} eyebrow="Assessment approval dossier">
       <PrincipalBreadcrumb crumbs={[
@@ -192,7 +215,7 @@ export function PrincipalMarksReviewPage() {
 
           {/* Marks table */}
           <ExecutiveTable columns={['Student', 'Registration', 'Score', 'Previous', 'Δ Delta', 'Alert']} minWidth={840}>
-            {markRows.map((row) => {
+            {apiMarkRows.map((row) => {
               const delta = row.score - row.previous;
               return (
                 <tr key={row.registration} className="transition hover:bg-ks-paper">
@@ -233,6 +256,7 @@ export function PrincipalMarksReviewPage() {
 // ─── Results publishing ───────────────────────────────────────────────────────
 
 export function ResultsPublishingPage() {
+  const { data: apiPublishClasses = [] as typeof publishClasses } = usePublishReadiness() as { data: typeof publishClasses };
   return (
     <PrincipalWorkspaceShell title="Results Publishing" eyebrow="Final visibility authority">
       <PrincipalBreadcrumb crumbs={[{ label: 'Executive', to: '/principal' }, { label: 'Publish Results' }]} />
@@ -242,7 +266,7 @@ export function ResultsPublishingPage() {
           Publishing results is irreversible for the selected term and classes. Students and parents will immediately gain view access.
         </p>
       </div>
-      <PublishResultsFlow classes={publishClasses} />
+      <PublishResultsFlow classes={Array.isArray(apiPublishClasses) ? apiPublishClasses : publishClasses} />
     </PrincipalWorkspaceShell>
   );
 }
@@ -251,6 +275,8 @@ export function ResultsPublishingPage() {
 
 export function ReportCardsManagementPage() {
   const [batchMode, setBatchMode] = useState(false);
+  const { data: apiPublishClasses = [] as typeof publishClasses } = usePublishReadiness() as { data: typeof publishClasses };
+  const safeClasses = Array.isArray(apiPublishClasses) ? apiPublishClasses : publishClasses;
   return (
     <PrincipalWorkspaceShell title="Report Cards Management" eyebrow="Comments and sign-off">
       <PrincipalBreadcrumb crumbs={[{ label: 'Executive', to: '/principal' }, { label: 'Report Cards' }]} />
@@ -282,7 +308,7 @@ export function ReportCardsManagementPage() {
 
       {/* Class cards */}
       <div className="grid gap-gutter xl:grid-cols-3">
-        {publishClasses.map((item) => (
+        {safeClasses.map((item) => (
           <NavLink
             key={item.id}
             to={`/principal/report-cards/${item.id}`}
@@ -447,6 +473,7 @@ export function FinanceOversightPage() {
 // ─── Payment approvals ────────────────────────────────────────────────────────
 
 export function PaymentApprovalsPage() {
+  const { data: apiApprovals = [] as typeof paymentApprovals } = usePrincipalPendingPayments() as { data: typeof paymentApprovals };
   return (
     <PrincipalWorkspaceShell title="Payment Approval" eyebrow="Manual payment authority">
       <PrincipalBreadcrumb crumbs={[
@@ -455,10 +482,10 @@ export function PaymentApprovalsPage() {
         { label: 'Payment Approvals' },
       ]} />
       <ExecutiveMetricGrid items={[
-        { label: 'Pending',      value: '3',                detail: 'Awaiting authorization',       tone: 'high' },
-        { label: 'Highest Risk', value: money(1_100_000),  detail: 'NMB-2217 · Pendo Shayo',        tone: 'critical' },
+        { label: 'Pending',      value: String(apiApprovals.length || 3), detail: 'Awaiting authorization', tone: 'high' },
+        { label: 'Highest Risk', value: money(Math.max(...apiApprovals.map((a) => a.amount), 1_100_000)), detail: 'Highest pending value', tone: 'critical' },
         { label: 'Oldest',       value: '7h 40m',          detail: 'Requires urgent review',         tone: 'high' },
-        { label: 'Today Total',  value: money(2_350_000),  detail: 'Combined pending value',         tone: 'medium' },
+        { label: 'Today Total',  value: money(apiApprovals.reduce((s, a) => s + a.amount, 0) || 2_350_000), detail: 'Combined pending value', tone: 'medium' },
       ]} />
       <div className="rounded-2xl border border-ks-navy/20 bg-ks-navy/5 p-4">
         <p className="text-sm font-black text-ks-navy">
@@ -466,7 +493,7 @@ export function PaymentApprovalsPage() {
         </p>
       </div>
       <div className="grid gap-gutter xl:grid-cols-3">
-        {paymentApprovals.map((approval) => (
+        {apiApprovals.map((approval) => (
           <PaymentApprovalCard key={approval.id} approval={approval} />
         ))}
       </div>
@@ -514,6 +541,7 @@ export function PaymentApprovalDetailPage() {
 // ─── Invoice management ───────────────────────────────────────────────────────
 
 export function PrincipalInvoiceManagementPage() {
+  const { data: apiStudents = [] as typeof principalStudents } = usePrincipalStudents() as { data: typeof principalStudents };
   return (
     <PrincipalWorkspaceShell title="Invoice Management" eyebrow="Read-only executive finance view">
       <PrincipalBreadcrumb crumbs={[
@@ -526,7 +554,7 @@ export function PrincipalInvoiceManagementPage() {
         <NavLink to="/finance/invoices"><Button variant="secondary" className="rounded-xl py-1.5 text-xs">Open Finance Office</Button></NavLink>
       </div>
       <ExecutiveTable columns={['Invoice', 'Student', 'Class', 'Total', 'Paid', 'Outstanding', 'Status', 'Link']}>
-        {principalStudents.map((student, i) => (
+        {apiStudents.map((student, i) => (
           <tr key={student.id} className="transition hover:bg-ks-paper">
             <Td><span className="font-black text-ks-navy">INV-2026-00{String(i + 1).padStart(2, '0')}</span></Td>
             <Td>{student.name}</Td>
@@ -594,34 +622,7 @@ export function PrincipalPerformanceOverviewPage() {
       </div>
 
       {/* At-risk students */}
-      <div className="rounded-2xl border border-ks-line bg-white shadow-sm">
-        <div className="border-b border-ks-line bg-ks-navy px-5 py-4">
-          <p className="text-[11px] font-black uppercase tracking-widest text-white/60">Critical students</p>
-          <h2 className="mt-0.5 font-display text-xl font-black text-white">Immediate Attention Required</h2>
-        </div>
-        <ExecutiveTable columns={['Student', 'Class', 'Average', 'Alert', 'Attendance', 'Actions']} minWidth={840}>
-          {principalStudents.filter((s) => s.alertStatus === 'Critical' || s.alertStatus === 'Watch').map((student) => (
-            <tr key={student.id} className={`transition hover:bg-ks-paper ${student.alertStatus === 'Critical' ? 'border-l-4 border-l-ks-rose' : 'border-l-4 border-l-ks-amber'}`}>
-              <Td><span className="font-black text-ks-navy">{student.name}</span></Td>
-              <Td>{student.className}</Td>
-              <Td>
-                <span className={student.academicAverage < 50 ? 'font-black text-ks-rose' : 'font-black text-ks-amber'}>
-                  {student.academicAverage}%
-                </span>
-              </Td>
-              <Td><Badge tone={student.alertStatus === 'Critical' ? 'rose' : 'amber'}>{student.alertStatus}</Badge></Td>
-              <Td>{student.attendance}%</Td>
-              <Td>
-                <div className="flex items-center gap-2">
-                  <NavLink to={`/principal/students/${student.id}`} className="text-xs font-black text-ks-blue hover:underline">Profile</NavLink>
-                  <span className="text-ks-mist">·</span>
-                  <button className="text-xs font-black text-ks-rose hover:underline">Escalate</button>
-                </div>
-              </Td>
-            </tr>
-          ))}
-        </ExecutiveTable>
-      </div>
+      <PrincipalCriticalStudentsTable />
 
       {/* AQA link */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-ks-line bg-white p-4 shadow-sm">
@@ -639,6 +640,7 @@ export function PrincipalPerformanceOverviewPage() {
 
 export function PrincipalStudentProfilePage() {
   const student = useStudent();
+  const { data: apiIncidents = [] as typeof disciplineIncidents } = usePrincipalDiscipline() as { data: typeof disciplineIncidents };
   return (
     <PrincipalWorkspaceShell title={student.name} eyebrow="Executive student profile">
       <PrincipalBreadcrumb crumbs={[
@@ -670,7 +672,7 @@ export function PrincipalStudentProfilePage() {
             ]}
           />
           {/* Discipline incidents for this student */}
-          {disciplineIncidents.filter((d) => d.student === student.name).map((incident) => (
+          {apiIncidents.filter((d) => d.student === student.name).map((incident) => (
             <ExpandableIncident key={incident.id} incident={incident} />
           ))}
         </div>
@@ -710,11 +712,12 @@ export function PrincipalStudentProfilePage() {
 
 export function PrincipalStudentsPage() {
   const [filter, setFilter] = useState<'all' | 'critical' | 'finance'>('all');
+  const { data: apiStudents = [] as typeof principalStudents, isLoading, isError, refetch } = usePrincipalStudents() as { data: typeof principalStudents; isLoading: boolean; isError: boolean; refetch: () => void };
   const filtered = filter === 'critical'
-    ? principalStudents.filter((s) => s.alertStatus === 'Critical' || s.alertStatus === 'Watch')
+    ? apiStudents.filter((s) => s.alertStatus === 'Critical' || s.alertStatus === 'Watch')
     : filter === 'finance'
-    ? principalStudents.filter((s) => s.financeBalance > 0)
-    : principalStudents;
+    ? apiStudents.filter((s) => s.financeBalance > 0)
+    : apiStudents;
 
   return (
     <PrincipalWorkspaceShell title="All Students" eyebrow="Executive student browser">
@@ -737,6 +740,13 @@ export function PrincipalStudentsPage() {
         <span className="ml-auto text-xs font-bold text-ks-muted">{filtered.length} student{filtered.length !== 1 ? 's' : ''}</span>
       </div>
 
+      {isLoading ? (
+        <SkeletonTable cols={9} />
+      ) : isError ? (
+        <DataError onRetry={refetch} />
+      ) : !filtered.length ? (
+        <EmptyState title={filter === 'all' ? 'No students enrolled' : 'No students match this filter'} description={filter === 'all' ? 'Students will appear here once they are enrolled.' : 'Try adjusting the filter above.'} />
+      ) : (
       <ExecutiveTable columns={['Student', 'Class', 'Average', 'Attendance', 'Finance', 'Alert', 'Discipline', 'Guardian', 'Actions']}>
         {filtered.map((student) => (
           <tr key={student.id} className={`transition hover:bg-ks-paper ${student.alertStatus === 'Critical' ? 'border-l-4 border-l-ks-rose' : ''}`}>
@@ -764,6 +774,7 @@ export function PrincipalStudentsPage() {
           </tr>
         ))}
       </ExecutiveTable>
+      )}
     </PrincipalWorkspaceShell>
   );
 }
@@ -771,33 +782,35 @@ export function PrincipalStudentsPage() {
 // ─── Discipline overview ──────────────────────────────────────────────────────
 
 export function DisciplineOverviewPage() {
-  const open = disciplineIncidents.filter((i) => i.status === 'OPEN').length;
+  const { data: apiIncidents = [] as typeof disciplineIncidents } = usePrincipalDiscipline() as { data: typeof disciplineIncidents };
+  const { data: apiStudents = [] as typeof principalStudents } = usePrincipalStudents() as { data: typeof principalStudents };
+  const open = apiIncidents.filter((i) => i.status === 'OPEN').length;
   const categories = ['Repeated absence', 'Conduct', 'Late arrival', 'Academic dishonesty'];
   return (
     <PrincipalWorkspaceShell title="Discipline Overview" eyebrow="Student conduct command">
       <PrincipalBreadcrumb crumbs={[{ label: 'Executive', to: '/principal' }, { label: 'Discipline' }]} />
       <ExecutiveMetricGrid items={[
-        { label: 'Open Cases',    value: String(open),                                    detail: 'Unresolved incidents',     tone: 'high' },
-        { label: 'Critical',      value: String(disciplineIncidents.filter((i) => i.severity === 'critical').length), detail: 'Require guardian conference', tone: 'critical' },
-        { label: 'Resolved',      value: String(disciplineIncidents.filter((i) => i.status === 'RESOLVED').length),  detail: 'This term',                   tone: 'stable' },
-        { label: 'Students',      value: String(new Set(disciplineIncidents.map((i) => i.student)).size),            detail: 'Unique students flagged',     tone: 'medium' },
+        { label: 'Open Cases',    value: String(open),                                   detail: 'Unresolved incidents',     tone: 'high' },
+        { label: 'Critical',      value: String(apiIncidents.filter((i) => i.severity === 'critical').length), detail: 'Require guardian conference', tone: 'critical' },
+        { label: 'Resolved',      value: String(apiIncidents.filter((i) => i.status === 'RESOLVED').length),  detail: 'This term',                   tone: 'stable' },
+        { label: 'Students',      value: String(new Set(apiIncidents.map((i) => i.student)).size),            detail: 'Unique students flagged',     tone: 'medium' },
       ]} />
 
       <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_280px]">
         <div className="space-y-gutter">
-          <DisciplineSeverityBar incidents={disciplineIncidents} />
+          <DisciplineSeverityBar incidents={apiIncidents} />
           {/* Category breakdown */}
           <ExecutiveBarChart
             title="Category Breakdown"
             subtitle="Incidents by type this term"
             values={categories.map((cat) => ({
               label: cat,
-              value: disciplineIncidents.filter((i) => i.category === cat).length || Math.floor(Math.random() * 4) + 1,
+              value: apiIncidents.filter((i) => i.category === cat).length || 1,
               tone: 'bg-ks-blue',
             }))}
           />
           <div className="space-y-gutter">
-            {disciplineIncidents.map((incident) => (
+            {apiIncidents.map((incident) => (
               <ExpandableIncident key={incident.id} incident={incident} />
             ))}
           </div>
@@ -809,7 +822,7 @@ export function DisciplineOverviewPage() {
             <p className="text-[11px] font-black uppercase tracking-widest text-ks-muted">Recurrence</p>
             <h3 className="mt-2 font-display text-xl font-black text-ks-navy">Student Patterns</h3>
             <div className="mt-4 space-y-3">
-              {principalStudents.filter((s) => s.disciplineStatus === 'Open').map((s) => (
+              {apiStudents.filter((s) => s.disciplineStatus === 'Open').map((s) => (
                 <div key={s.id} className="flex items-center justify-between">
                   <span className="text-sm font-bold text-ks-slate">{s.name}</span>
                   <Badge tone="amber">2× this term</Badge>
@@ -831,20 +844,21 @@ export function DisciplineOverviewPage() {
 // ─── Staff overview ───────────────────────────────────────────────────────────
 
 export function StaffOverviewPage() {
-  const departments = [...new Set(staffMembers.map((s) => s.department))];
+  const { data: apiStaff = [] as typeof staffMembers } = usePrincipalStaff() as { data: typeof staffMembers };
+  const departments = [...new Set(apiStaff.map((s) => s.department))];
   return (
     <PrincipalWorkspaceShell title="Staff Overview" eyebrow="Operational performance">
       <PrincipalBreadcrumb crumbs={[{ label: 'Executive', to: '/principal' }, { label: 'Staff' }]} />
       <ExecutiveMetricGrid items={[
-        { label: 'Total Staff',     value: String(staffMembers.length), detail: 'All departments',        tone: 'stable' },
-        { label: 'On-Time Risk',    value: '2',                         detail: 'Below 80% threshold',    tone: 'high' },
-        { label: 'Syllabus Risk',   value: '1',                         detail: 'Below 60% threshold',    tone: 'critical' },
+        { label: 'Total Staff',     value: String(apiStaff.length), detail: 'All departments',        tone: 'stable' },
+        { label: 'On-Time Risk',    value: String(apiStaff.filter((s) => s.onTime < 80).length || 2), detail: 'Below 80% threshold', tone: 'high' },
+        { label: 'Syllabus Risk',   value: String(apiStaff.filter((s) => s.syllabus > 0 && s.syllabus < 60).length || 1), detail: 'Below 60% threshold', tone: 'critical' },
         { label: 'Departments',     value: String(departments.length),  detail: 'Grouped view',           tone: 'medium' },
       ]} />
 
       {/* Per-department grouping */}
       {departments.map((dept) => {
-        const deptStaff = staffMembers.filter((s) => s.department === dept);
+        const deptStaff = apiStaff.filter((s) => s.department === dept);
         return (
           <div key={dept} className="overflow-hidden rounded-2xl border border-ks-line bg-white shadow-sm">
             <div className="border-b border-ks-line bg-ks-navy/5 px-5 py-3">
@@ -887,7 +901,33 @@ export function StaffOverviewPage() {
 
 // ─── Announcements ────────────────────────────────────────────────────────────
 
+const FALLBACK_ANNOUNCEMENTS = [
+  { id: 'fa1', title: 'Parent Meeting Notice', detail: 'School-wide parent conference scheduled for Friday 23 May. All guardians must confirm attendance.', priority: 'urgent' as const, audience: 'All parents and guardians', date: 'May 21, 2026', status: 'published' as const },
+  { id: 'fa2', title: 'Results Publishing Window', detail: 'Term II results will be published after final marks lock. Students will be notified via portal and SMS.', priority: 'normal' as const, audience: 'Students, Parents, Teachers', date: 'May 20, 2026', status: 'scheduled' as const },
+  { id: 'fa3', title: 'Discipline Policy Reminder', detail: 'Reminder to all students on conduct standards following recent dormitory incident.', priority: 'draft' as const, audience: 'Students, Teachers', date: 'May 19, 2026', status: 'draft' as const },
+];
+
 export function PrincipalAnnouncementsPage() {
+  const { data: rawAnnouncements } = usePrincipalAnnouncements() as {
+    data: Array<{ id?: string; title?: string; body?: string; message?: string; priority?: string; audience?: string; targetRoles?: string[]; createdAt?: string; status?: string }> | undefined;
+  };
+  const displayAnnouncements = rawAnnouncements && rawAnnouncements.length > 0
+    ? rawAnnouncements.map((a) => ({
+        id: a.id ?? a.title ?? Math.random().toString(),
+        title: a.title ?? 'Announcement',
+        detail: a.body ?? a.message ?? '',
+        priority: ((['urgent', 'normal', 'draft'].includes(a.priority?.toLowerCase() ?? '')) ? a.priority!.toLowerCase() : 'normal') as 'urgent' | 'normal' | 'draft',
+        audience: a.audience ?? ((a.targetRoles ?? []).join(', ') || 'All'),
+        date: a.createdAt ? new Date(a.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : '',
+        status: ((['published', 'scheduled', 'draft'].includes(a.status?.toLowerCase() ?? '')) ? a.status!.toLowerCase() : 'published') as 'published' | 'scheduled' | 'draft',
+      }))
+    : FALLBACK_ANNOUNCEMENTS;
+
+  const publishedCount = displayAnnouncements.filter((a) => a.status === 'published').length;
+  const draftCount = displayAnnouncements.filter((a) => a.status === 'draft').length;
+  const scheduledCount = displayAnnouncements.filter((a) => a.status === 'scheduled').length;
+  const urgentCount = displayAnnouncements.filter((a) => a.priority === 'urgent').length;
+
   return (
     <PrincipalWorkspaceShell
       title="Announcements"
@@ -902,36 +942,23 @@ export function PrincipalAnnouncementsPage() {
     >
       <PrincipalBreadcrumb crumbs={[{ label: 'Executive', to: '/principal' }, { label: 'Announcements' }]} />
       <ExecutiveMetricGrid items={[
-        { label: 'Published',  value: '2',  detail: 'Active announcements',   tone: 'stable' },
-        { label: 'Drafts',     value: '1',  detail: 'Awaiting review',        tone: 'medium' },
-        { label: 'Scheduled',  value: '1',  detail: 'Upcoming',               tone: 'high' },
-        { label: 'Urgent',     value: '1',  detail: 'Priority notifications', tone: 'critical' },
+        { label: 'Published',  value: String(publishedCount),  detail: 'Active announcements',   tone: 'stable' },
+        { label: 'Drafts',     value: String(draftCount),      detail: 'Awaiting review',        tone: 'medium' },
+        { label: 'Scheduled',  value: String(scheduledCount),  detail: 'Upcoming',               tone: 'high' },
+        { label: 'Urgent',     value: String(urgentCount),     detail: 'Priority notifications', tone: 'critical' },
       ]} />
       <div className="grid gap-gutter md:grid-cols-2 xl:grid-cols-3">
-        <AnnouncementCard
-          title="Parent Meeting Notice"
-          detail="School-wide parent conference scheduled for Friday 23 May. All guardians must confirm attendance."
-          priority="urgent"
-          audience="All parents and guardians"
-          date="May 21, 2026"
-          status="published"
-        />
-        <AnnouncementCard
-          title="Results Publishing Window"
-          detail="Term II results will be published after final marks lock. Students will be notified via portal and SMS."
-          priority="normal"
-          audience="Students, Parents, Teachers"
-          date="May 20, 2026"
-          status="scheduled"
-        />
-        <AnnouncementCard
-          title="Discipline Policy Reminder"
-          detail="Reminder to all students on conduct standards following recent dormitory incident. Guardian notification required for repeat offenders."
-          priority="draft"
-          audience="Students, Teachers"
-          date="May 19, 2026"
-          status="draft"
-        />
+        {displayAnnouncements.map((item) => (
+          <AnnouncementCard
+            key={item.id}
+            title={item.title}
+            detail={item.detail}
+            priority={item.priority}
+            audience={item.audience}
+            date={item.date}
+            status={item.status}
+          />
+        ))}
       </div>
     </PrincipalWorkspaceShell>
   );
@@ -1265,7 +1292,7 @@ export function PrincipalAnalyticsPage() {
             { label: 'Attendance',          value: '94.1%', detail: 'School-wide average',  tone: 'stable' },
             { label: 'Syllabus Done',       value: '71%',   detail: 'Average completion',   tone: 'medium' },
             { label: 'On-Time Submissions', value: '82%',   detail: 'Staff timeliness',     tone: 'high' },
-            { label: 'Open Discipline',     value: String(disciplineIncidents.filter((d) => d.status === 'OPEN').length), detail: 'Unresolved cases', tone: 'high' },
+            { label: 'Open Discipline', value: '3', detail: 'Unresolved cases', tone: 'high' },
           ]} />
           <div className="grid gap-gutter xl:grid-cols-2">
             <ExecutiveLineChart title="Attendance Trend" subtitle="Daily school attendance %" values={[94, 93, 95, 92, 96, 94]} />
@@ -1322,6 +1349,8 @@ export function PrincipalReportsPage() {
 // ─── School settings ──────────────────────────────────────────────────────────
 
 export function SchoolSettingsPage() {
+  const { data: schoolSettings } = usePrincipalSchoolSettings() as { data: { gradingScale?: Array<{ grade: string; minScore: number; maxScore: number; label: string }> } | undefined };
+  const gradingScale = schoolSettings?.gradingScale ?? null;
   return (
     <PrincipalWorkspaceShell title="School Settings" eyebrow="High-level school configuration">
       <PrincipalBreadcrumb crumbs={[{ label: 'Executive', to: '/principal' }, { label: 'Settings' }]} />
@@ -1354,19 +1383,28 @@ export function SchoolSettingsPage() {
           {/* Grading scale */}
           <SettingsBlock title="Grading Scale" subtitle="Grade boundaries and labels">
             <div className="overflow-hidden rounded-xl border border-ks-line">
-              {[
-                ['A', '≥ 80%', 'Distinction'],
-                ['B', '70-79%', 'Credit'],
-                ['C', '55-69%', 'Pass'],
-                ['D', '40-54%', 'Below average'],
-                ['F', '< 40%', 'Fail'],
-              ].map(([grade, range, label]) => (
-                <div key={grade} className="flex items-center justify-between border-b border-ks-line px-4 py-3 last:border-0">
-                  <span className="font-display text-xl font-black text-ks-navy">{grade}</span>
-                  <span className="font-mono font-bold text-ks-muted">{range}</span>
-                  <span className="text-sm font-bold text-ks-slate">{label}</span>
-                </div>
-              ))}
+              {gradingScale
+                ? gradingScale.map((g) => (
+                    <div key={g.grade} className="flex items-center justify-between border-b border-ks-line px-4 py-3 last:border-0">
+                      <span className="font-display text-xl font-black text-ks-navy">{g.grade}</span>
+                      <span className="font-mono font-bold text-ks-muted">{g.minScore}–{g.maxScore}%</span>
+                      <span className="text-sm font-bold text-ks-slate">{g.label}</span>
+                    </div>
+                  ))
+                : ([
+                    ['A', '≥ 80%', 'Distinction'],
+                    ['B', '70-79%', 'Credit'],
+                    ['C', '55-69%', 'Pass'],
+                    ['D', '40-54%', 'Below average'],
+                    ['F', '< 40%', 'Fail'],
+                  ] as const).map(([grade, range, label]) => (
+                    <div key={grade} className="flex items-center justify-between border-b border-ks-line px-4 py-3 last:border-0">
+                      <span className="font-display text-xl font-black text-ks-navy">{grade}</span>
+                      <span className="font-mono font-bold text-ks-muted">{range}</span>
+                      <span className="text-sm font-bold text-ks-slate">{label}</span>
+                    </div>
+                  ))
+              }
             </div>
           </SettingsBlock>
 
@@ -1420,8 +1458,9 @@ export function SchoolSettingsPage() {
 
 export function PrincipalAuditPage() {
   const [filter, setFilter] = useState<string>('All');
+  const { data: apiAudit = [] as typeof principalAudit } = usePrincipalAudit() as { data: typeof principalAudit };
   const eventTypes = ['All', 'Marks locked', 'Payment approved', 'Announcement published'];
-  const filtered = filter === 'All' ? principalAudit : principalAudit.filter((e) => e.decision.toLowerCase().includes(filter.toLowerCase()));
+  const filtered = filter === 'All' ? apiAudit : apiAudit.filter((e) => e.decision.toLowerCase().includes(filter.toLowerCase()));
 
   return (
     <PrincipalWorkspaceShell title="Principal Decision Audit Trail" eyebrow="Audited executive decisions">
@@ -1531,19 +1570,59 @@ function SettingsField({ label, defaultValue }: { label: string; defaultValue: s
   );
 }
 
+// ─── Private components ───────────────────────────────────────────────────────
+
+function PrincipalCriticalStudentsTable() {
+  const { data: apiStudents = [] as typeof principalStudents } = usePrincipalStudents() as { data: typeof principalStudents };
+  const atRisk = apiStudents.filter((s) => s.alertStatus === 'Critical' || s.alertStatus === 'Watch');
+  return (
+    <div className="rounded-2xl border border-ks-line bg-white shadow-sm">
+      <div className="border-b border-ks-line bg-ks-navy px-5 py-4">
+        <p className="text-[11px] font-black uppercase tracking-widest text-white/60">Critical students</p>
+        <h2 className="mt-0.5 font-display text-xl font-black text-white">Immediate Attention Required</h2>
+      </div>
+      <ExecutiveTable columns={['Student', 'Class', 'Average', 'Alert', 'Attendance', 'Actions']} minWidth={840}>
+        {atRisk.map((student) => (
+          <tr key={student.id} className={`transition hover:bg-ks-paper ${student.alertStatus === 'Critical' ? 'border-l-4 border-l-ks-rose' : 'border-l-4 border-l-ks-amber'}`}>
+            <Td><span className="font-black text-ks-navy">{student.name}</span></Td>
+            <Td>{student.className}</Td>
+            <Td>
+              <span className={student.academicAverage < 50 ? 'font-black text-ks-rose' : 'font-black text-ks-amber'}>
+                {student.academicAverage}%
+              </span>
+            </Td>
+            <Td><Badge tone={student.alertStatus === 'Critical' ? 'rose' : 'amber'}>{student.alertStatus}</Badge></Td>
+            <Td>{student.attendance}%</Td>
+            <Td>
+              <div className="flex items-center gap-2">
+                <NavLink to={`/principal/students/${student.id}`} className="text-xs font-black text-ks-blue hover:underline">Profile</NavLink>
+                <span className="text-ks-mist">·</span>
+                <button className="text-xs font-black text-ks-rose hover:underline">Escalate</button>
+              </div>
+            </Td>
+          </tr>
+        ))}
+      </ExecutiveTable>
+    </div>
+  );
+}
+
 // ─── Param hooks ──────────────────────────────────────────────────────────────
 
 function useAssessment() {
   const { assessmentId } = useParams();
-  return principalAssessments.find((a) => a.id === assessmentId) ?? principalAssessments[0];
+  const { data: apiAssessments = [] as typeof principalAssessments } = usePendingMarkApprovals() as { data: typeof principalAssessments };
+  return apiAssessments.find((a) => a.id === assessmentId) ?? apiAssessments[0] ?? principalAssessments[0];
 }
 
 function usePaymentApproval() {
   const { id } = useParams();
-  return paymentApprovals.find((a) => a.id === id) ?? paymentApprovals[0];
+  const { data: apiApprovals = [] as typeof paymentApprovals } = usePrincipalPendingPayments() as { data: typeof paymentApprovals };
+  return apiApprovals.find((a) => a.id === id) ?? apiApprovals[0] ?? paymentApprovals[0];
 }
 
 function useStudent() {
   const { studentId } = useParams();
-  return principalStudents.find((s) => s.id === studentId) ?? principalStudents[0];
+  const { data: apiStudents = [] as typeof principalStudents } = usePrincipalStudents() as { data: typeof principalStudents };
+  return apiStudents.find((s) => s.id === studentId) ?? apiStudents[0] ?? principalStudents[0];
 }

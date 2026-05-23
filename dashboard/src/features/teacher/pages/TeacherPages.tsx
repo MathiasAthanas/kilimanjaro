@@ -7,6 +7,16 @@ import { Button } from '../../../components/common/Button';
 import { Card } from '../../../components/common/Card';
 import { assessments, alerts, marksRows, pairings, students, teacherClasses, timetable } from '../api/teacherApi';
 import {
+  useTeacherClasses,
+  useTeacherAssessments,
+  useTeacherTimetable,
+  usePerformanceAlerts,
+  usePerfPairings,
+  useClassStudents,
+  useMarksSheet,
+  useTeacherAnnouncements,
+} from '../api/teacher.hooks';
+import {
   AlertStaffCard,
   AlertTypeBadge,
   AssessmentStatusBadge,
@@ -22,11 +32,19 @@ import {
   TimetableBoard,
 } from '../components/TeacherWorkspaceShell';
 import { canSubmitMarks, validateSyllabusProgress } from '../utils/marks';
+import { DataError } from '../../../components/feedback/DataError';
+import { EmptyState } from '../../../components/feedback/EmptyState';
+import { SkeletonTable } from '../../../components/common/SkeletonTable';
+import { SkeletonCards } from '../../../components/common/SkeletonCards';
 
-const firstClass = teacherClasses[0];
-const firstAssessment = assessments[0];
 
 export function TeacherHomePage() {
+  const { data: apiClasses = [] } = useTeacherClasses();
+  const { data: apiAssessments = [] } = useTeacherAssessments();
+  const { data: apiTimetable = [] } = useTeacherTimetable();
+  const classes = apiClasses.length > 0 ? apiClasses : teacherClasses;
+  const assessmentList = apiAssessments.length > 0 ? apiAssessments : assessments;
+  const timetableList = apiTimetable.length > 0 ? apiTimetable : timetable;
   return (
     <TeacherWorkspaceShell title="Good morning, Mwalimu Rose" eyebrow="Teacher operations desk" action={<Button className="bg-ks-gold text-ks-slate hover:shadow-md hover:shadow-ks-gold/30">Mark Attendance</Button>}>
       <TeacherMetricStrip
@@ -47,7 +65,7 @@ export function TeacherHomePage() {
             <Badge tone="gold">Live schedule</Badge>
           </div>
           <div className="mt-5 space-y-2.5">
-            {timetable.slice(0, 4).map((entry) => (
+            {timetableList.slice(0, 4).map((entry: typeof timetable[number]) => (
               <div
                 key={entry.id}
                 className={`flex items-center justify-between rounded-xl border p-3.5 transition ${
@@ -79,7 +97,7 @@ export function TeacherHomePage() {
           <Card className="rounded-xl p-5">
             <p className="text-[11px] font-black uppercase tracking-[0.22em] text-ks-muted">Open marks queue</p>
             <div className="mt-3 space-y-2.5">
-              {assessments.filter((item) => item.status !== 'APPROVED').map((item) => (
+              {assessmentList.filter((item: typeof assessments[number]) => item.status !== 'APPROVED').map((item: typeof assessments[number]) => (
                 <NavLink key={item.id} to={`/teacher/assessments/${item.id}/marks`} className="block rounded-xl border border-ks-line p-3 transition hover:border-ks-blue/30 hover:bg-ks-paper">
                   <div className="flex items-center justify-between gap-3">
                     <p className="text-sm font-bold text-ks-slate">{item.title}</p>
@@ -96,13 +114,14 @@ export function TeacherHomePage() {
         </div>
       </div>
       <div className="grid gap-gutter xl:grid-cols-3">
-        {teacherClasses.map((item) => <ClassSubjectCard key={item.id} item={item} />)}
+        {classes.map((item: typeof teacherClasses[number]) => <ClassSubjectCard key={item.id} item={item} />)}
       </div>
     </TeacherWorkspaceShell>
   );
 }
 
 export function TeacherClassesPage() {
+  const { data: apiClasses = [] as typeof teacherClasses, isLoading, isError, refetch } = useTeacherClasses() as { data: typeof teacherClasses; isLoading: boolean; isError: boolean; refetch: () => void };
   return (
     <TeacherWorkspaceShell title="My Classes" eyebrow="Assigned class-subjects">
       <Card className="flex flex-wrap items-center gap-3 rounded-xl p-4">
@@ -112,9 +131,17 @@ export function TeacherClassesPage() {
           <button key={item} className="rounded-full border border-ks-line bg-ks-paper px-3 py-1 text-xs font-bold text-ks-muted transition hover:border-ks-blue hover:text-ks-blue">{item}</button>
         ))}
       </Card>
-      <div className="grid gap-gutter xl:grid-cols-3">
-        {teacherClasses.map((item) => <ClassSubjectCard key={item.id} item={item} />)}
-      </div>
+      {isLoading ? (
+        <SkeletonCards count={3} cols="xl:grid-cols-3" />
+      ) : isError ? (
+        <DataError onRetry={refetch} />
+      ) : !apiClasses.length ? (
+        <EmptyState title="No classes assigned" description="Class-subject assignments will appear here once configured by the administrator." />
+      ) : (
+        <div className="grid gap-gutter xl:grid-cols-3">
+          {apiClasses.map((item: typeof teacherClasses[number]) => <ClassSubjectCard key={item.id} item={item} />)}
+        </div>
+      )}
       <ClassSubjectsTable />
     </TeacherWorkspaceShell>
   );
@@ -122,6 +149,9 @@ export function TeacherClassesPage() {
 
 export function ClassWorkspacePage() {
   const klass = useClassSubject();
+  const { data: apiAlerts = [] as typeof alerts } = usePerformanceAlerts() as { data: typeof alerts };
+  const { data: apiAssessments = [] as typeof assessments } = useTeacherAssessments() as { data: typeof assessments };
+  const firstAss = apiAssessments[0] ?? assessments[0];
   return (
     <TeacherWorkspaceShell title={`${klass.subject} · ${klass.className}`} eyebrow="Class command workspace">
       <WorkspaceTabs id={klass.id} />
@@ -136,7 +166,7 @@ export function ClassWorkspacePage() {
           <Card className="rounded-xl p-5">
             <SectionTitle title="Students needing attention" action="/teacher/performance/alerts" />
             <div className="mt-4 grid gap-3 md:grid-cols-2">
-              {alerts.slice(0, 2).map((alert) => <AlertStaffCard key={alert.id} alert={alert} />)}
+              {apiAlerts.slice(0, 2).map((alert) => <AlertStaffCard key={alert.id} alert={alert} />)}
             </div>
           </Card>
           <AssessmentMiniTable />
@@ -146,7 +176,7 @@ export function ClassWorkspacePage() {
           <h3 className="mt-2 font-display text-2xl font-black text-ks-slate">Complete marks before HOD review</h3>
           <p className="mt-2 text-sm font-semibold leading-6 text-ks-muted">Six rows remain in Midterm Mathematics. Finish and submit to HOD.</p>
           <div className="mt-4 space-y-2.5 [&_a]:block">
-            <NavLink to={`/teacher/assessments/${firstAssessment.id}/marks`}><Button className="w-full">Enter marks</Button></NavLink>
+            <NavLink to={`/teacher/assessments/${firstAss.id}/marks`}><Button className="w-full">Enter marks</Button></NavLink>
             <NavLink to={`/teacher/classes/${klass.id}/analytics`}><Button variant="secondary" className="w-full">View analytics</Button></NavLink>
           </div>
         </Card>
@@ -160,7 +190,7 @@ export function ClassStudentsPage() {
   return (
     <TeacherWorkspaceShell title={`${klass.className} Student Directory`} eyebrow={klass.subject}>
       <SearchPanel />
-      <StudentsTable />
+      <StudentsTable classId={klass.id} />
     </TeacherWorkspaceShell>
   );
 }
@@ -190,6 +220,7 @@ export function AssessmentListPage() {
 
 export function MarksEntryPage() {
   const assessment = useAssessment();
+  const { data: apiMarks = [] as typeof marksRows } = useMarksSheet(assessment.id) as { data: typeof marksRows };
   const completion = Math.round((assessment.entered / assessment.total) * 100);
   const radius = 54;
   const circumference = 2 * Math.PI * radius;
@@ -217,7 +248,7 @@ export function MarksEntryPage() {
             </div>
             <ProgressBar value={completion} tone="bg-ks-blue" className="mt-3" />
           </div>
-          <MarksGrid rows={marksRows} maxScore={assessment.maxScore} />
+          <MarksGrid rows={apiMarks} maxScore={assessment.maxScore} />
         </Card>
         <div className="sticky top-24 space-y-gutter">
           <Card className="overflow-hidden rounded-xl border-l-4 border-l-ks-blue p-5">
@@ -258,8 +289,9 @@ export function MarksEntryPage() {
 
 export function AssessmentSubmitPage() {
   const assessment = useAssessment();
+  const { data: apiMarks = [] as typeof marksRows } = useMarksSheet(assessment.id) as { data: typeof marksRows };
   const [confirmed, setConfirmed] = useState(false);
-  const ready = canSubmitMarks(marksRows.map((row) => ({ ...row, state: row.state === 'dirty' ? 'saved' : row.state })), assessment.maxScore);
+  const ready = canSubmitMarks(apiMarks.map((row) => ({ ...row, state: row.state === 'dirty' ? 'saved' : row.state })), assessment.maxScore);
   const checklist = [
     { label: 'All students accounted for', done: true },
     { label: 'Outliers reviewed', done: true },
@@ -308,6 +340,7 @@ export function AssessmentSubmitPage() {
 
 export function MarksReviewPage() {
   const assessment = useAssessment();
+  const { data: apiMarks = [] as typeof marksRows } = useMarksSheet(assessment.id) as { data: typeof marksRows };
   return (
     <TeacherWorkspaceShell title="Marks Review" eyebrow={assessment.title}>
       <Card className="rounded-xl p-5">
@@ -319,16 +352,18 @@ export function MarksReviewPage() {
           ))}
         </div>
       </Card>
-      <MarksGrid rows={marksRows.map((row) => ({ ...row, state: 'saved' }))} maxScore={assessment.maxScore} />
+      <MarksGrid rows={apiMarks.map((row) => ({ ...row, state: 'saved' }))} maxScore={assessment.maxScore} />
     </TeacherWorkspaceShell>
   );
 }
 
 export function AttendancePage() {
+  const { data: apiClasses = [] as typeof teacherClasses } = useTeacherClasses() as { data: typeof teacherClasses };
+  const { data: apiStudents = [] as typeof students } = useClassStudents(apiClasses[0]?.id ?? '') as { data: typeof students };
   return (
     <TeacherWorkspaceShell title="Attendance Marking" eyebrow="Today sessions">
       <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_320px]">
-        <AttendanceGrid students={students} />
+        <AttendanceGrid students={apiStudents} />
         <div className="sticky top-24 space-y-gutter">
           <Card className="overflow-hidden rounded-xl border-l-4 border-l-ks-emerald p-5">
             <p className="text-[11px] font-black uppercase tracking-[0.22em] text-ks-muted">Session summary</p>
@@ -352,10 +387,11 @@ export function AttendancePage() {
 }
 
 export function AttendanceHistoryPage() {
+  const { data: apiTimetable = [] as typeof timetable } = useTeacherTimetable() as { data: typeof timetable };
   return (
     <TeacherWorkspaceShell title="Attendance History" eyebrow="Submitted sessions">
       <TeacherTable columns={['Date', 'Time', 'Class', 'Subject', 'Present', 'Absent', 'Late', 'Submitted', 'Actions']}>
-        {timetable.map((entry) => (
+        {apiTimetable.map((entry) => (
           <tr key={entry.id} className="hover:bg-ks-paper">
             <Td>May 20</Td>
             <Td>{entry.time}</Td>
@@ -374,6 +410,7 @@ export function AttendanceHistoryPage() {
 }
 
 export function PerformanceAlertsPage() {
+  const { data: apiPairings = [] as typeof pairings } = usePerfPairings() as { data: typeof pairings };
   return (
     <TeacherWorkspaceShell title="Performance Alerts" eyebrow="Actionable student risks">
       <TeacherMetricStrip items={[
@@ -392,7 +429,7 @@ export function PerformanceAlertsPage() {
             <h2 className="font-display text-2xl font-black text-ks-navy">Peer Pairings</h2>
             <span className="rounded-full bg-ks-sky px-2.5 py-1 text-[10px] font-black text-white">2 PENDING</span>
           </div>
-          {pairings.map((pairing) => (
+          {apiPairings.map((pairing) => (
             <NavLink key={pairing.id} to={`/teacher/performance/pairings/${pairing.id}`} className="block">
               <PairingCard pairing={pairing} />
             </NavLink>
@@ -413,7 +450,8 @@ export function PerformanceAlertsPage() {
 
 export function AlertDetailPage() {
   const { id } = useParams();
-  const alert = alerts.find((item) => item.id === id) ?? alerts[0];
+  const { data: apiAlerts = [] as typeof alerts } = usePerformanceAlerts() as { data: typeof alerts };
+  const alert = apiAlerts.find((item) => item.id === id) ?? apiAlerts[0] ?? alerts[0];
   return (
     <TeacherWorkspaceShell title={alert.student} eyebrow={alert.type}>
       <div className="grid gap-gutter xl:grid-cols-[1fr_360px]">
@@ -426,6 +464,7 @@ export function AlertDetailPage() {
 }
 
 export function PeerPairingsPage() {
+  const { data: apiPairings = [] as typeof pairings } = usePerfPairings() as { data: typeof pairings };
   return (
     <TeacherWorkspaceShell title="Peer Pairings" eyebrow="Student support suggestions">
       <TeacherMetricStrip items={[
@@ -436,7 +475,7 @@ export function PeerPairingsPage() {
       ]} />
       <div className="grid gap-gutter xl:grid-cols-[1fr_360px]">
         <div className="grid gap-gutter">
-          {pairings.map((pairing) => (
+          {apiPairings.map((pairing) => (
             <NavLink key={pairing.id} to={`/teacher/performance/pairings/${pairing.id}`}>
               <PairingCard pairing={pairing} />
             </NavLink>
@@ -450,7 +489,8 @@ export function PeerPairingsPage() {
 
 export function PairingDetailPage() {
   const { id } = useParams();
-  const pairing = pairings.find((item) => item.id === id) ?? pairings[0];
+  const { data: apiPairings = [] as typeof pairings } = usePerfPairings() as { data: typeof pairings };
+  const pairing = apiPairings.find((item) => item.id === id) ?? apiPairings[0] ?? pairings[0];
   return (
     <TeacherWorkspaceShell title={`${pairing.mentor} + ${pairing.support}`} eyebrow="Pairing detail">
       <div className="grid gap-gutter xl:grid-cols-[1fr_360px]">
@@ -463,7 +503,9 @@ export function PairingDetailPage() {
 
 export function StudentPerformancePage() {
   const { studentId } = useParams();
-  const student = students.find((item) => item.id === studentId) ?? students[0];
+  const { data: apiClasses = [] as typeof teacherClasses } = useTeacherClasses() as { data: typeof teacherClasses };
+  const { data: apiStudents = [] as typeof students } = useClassStudents(apiClasses[0]?.id ?? '') as { data: typeof students };
+  const student = apiStudents.find((item) => item.id === studentId) ?? apiStudents[0] ?? students[0];
   const avgColor = student.average >= 75 ? 'text-ks-emerald' : student.average >= 60 ? 'text-ks-amber' : 'text-ks-rose';
   const avgTone = student.average >= 75 ? 'bg-ks-emerald' : student.average >= 60 ? 'bg-ks-amber' : 'bg-ks-rose';
   return (
@@ -480,19 +522,21 @@ export function StudentPerformancePage() {
 }
 
 export function TimetablePage() {
+  const { data: apiTimetable = [] as typeof timetable } = useTeacherTimetable() as { data: typeof timetable };
   return (
     <TeacherWorkspaceShell title="Weekly Timetable" eyebrow="Teaching periods">
-      <TimetableBoard entries={timetable} />
+      <TimetableBoard entries={apiTimetable} />
     </TeacherWorkspaceShell>
   );
 }
 
 export function SyllabusPage() {
+  const { data: apiClasses = [] as typeof teacherClasses } = useTeacherClasses() as { data: typeof teacherClasses };
   const valid = validateSyllabusProgress(17, 24);
   return (
     <TeacherWorkspaceShell title="Syllabus Tracker" eyebrow="Coverage editor">
       <TeacherTable columns={['Class', 'Subject', 'Covered', 'Total', 'Progress', 'Risk', 'Action']}>
-        {teacherClasses.map((klass) => {
+        {apiClasses.map((klass) => {
           const covered = Math.round((klass.syllabus / 100) * 24);
           const barTone = klass.risk === 'HIGH' ? 'bg-ks-rose' : klass.risk === 'MEDIUM' ? 'bg-ks-amber' : 'bg-ks-emerald';
           return (
@@ -525,19 +569,28 @@ export function SyllabusPage() {
   );
 }
 
-const announcementItems = [
-  { body: 'Form 3A Mathematics revision set is now available on the portal. Students should complete exercises 1–12 before Friday.', audience: 'Students + Parents', tone: 'blue' as const },
-  { body: 'Physics lab report is due this Friday. Remind students to follow the standard format for the cover page and data section.', audience: 'Students', tone: 'amber' as const },
+const fallbackAnnouncements = [
+  { id: 'fa1', body: 'Form 3A Mathematics revision set is now available on the portal. Students should complete exercises 1–12 before Friday.', audience: 'Students + Parents', tone: 'blue' as const },
+  { id: 'fa2', body: 'Physics lab report is due this Friday. Remind students to follow the standard format for the cover page and data section.', audience: 'Students', tone: 'amber' as const },
 ];
 
 export function TeacherAnnouncementsPage() {
+  const { data: rawAnnouncements } = useTeacherAnnouncements() as { data: Array<{ id?: string; body?: string; title?: string; audience?: string; targetRoles?: string[] }> | undefined };
+  const announcementItems = rawAnnouncements && rawAnnouncements.length > 0
+    ? rawAnnouncements.map((a) => ({
+        id: a.id ?? a.title ?? Math.random().toString(),
+        body: a.body ?? a.title ?? '',
+        audience: a.audience ?? ((a.targetRoles ?? []).join(', ') || 'All classes'),
+        tone: 'blue' as const,
+      }))
+    : fallbackAnnouncements;
   return (
     <TeacherWorkspaceShell title="Teacher Announcements" eyebrow="Class communication">
       <Card className="rounded-xl p-5">
         <SectionTitle title="Active announcements" action="/teacher/announcements/create" />
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           {announcementItems.map((item) => (
-            <Card key={item.body} className="flex flex-col gap-3 rounded-xl p-4">
+            <Card key={item.id} className="flex flex-col gap-3 rounded-xl p-4">
               <p className="flex-1 text-sm font-semibold leading-6 text-ks-slate">{item.body}</p>
               <div className="flex items-center justify-between gap-2">
                 <Badge tone={item.tone}>{item.audience}</Badge>
@@ -593,9 +646,12 @@ export function TeacherExportsPage() {
 // ─── Internal sub-components ────────────────────────────────────────────────
 
 function ClassSubjectsTable() {
+  const { data: apiClasses = [] as typeof teacherClasses, isLoading, isError } = useTeacherClasses() as { data: typeof teacherClasses; isLoading: boolean; isError: boolean };
+  if (isLoading) return <SkeletonTable cols={9} />;
+  if (isError || !apiClasses.length) return null;
   return (
     <TeacherTable columns={['Class', 'Subject', 'Students', 'Average', 'Attendance', 'Syllabus', 'Open marks', 'Next lesson', 'Actions']}>
-      {teacherClasses.map((item) => (
+      {apiClasses.map((item) => (
         <tr key={item.id} className="hover:bg-ks-paper">
           <Td>{item.className}</Td>
           <Td>{item.subject}</Td>
@@ -618,6 +674,7 @@ function ClassSubjectsTable() {
 }
 
 function AlertsOperationalTable() {
+  const { data: apiAlerts = [] as typeof alerts } = usePerformanceAlerts() as { data: typeof alerts };
   return (
     <Card className="overflow-hidden rounded-xl">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-ks-line bg-ks-paper/50 px-gutter py-4">
@@ -628,7 +685,7 @@ function AlertsOperationalTable() {
         </div>
       </div>
       <TeacherTable columns={['Student', 'Class / Subject', 'Alert Type', 'Recommended Action']}>
-        {alerts.map((alert) => (
+        {apiAlerts.map((alert) => (
           <tr key={alert.id} className="group cursor-pointer hover:bg-ks-paper">
             <Td>
               <div className="flex items-center gap-3">
@@ -717,9 +774,13 @@ function AcademicSpotlight() {
 }
 
 function AssessmentMiniTable({ detailed = false }: { detailed?: boolean }) {
+  const { data: apiAssessments = [] as typeof assessments, isLoading, isError, refetch } = useTeacherAssessments() as { data: typeof assessments; isLoading: boolean; isError: boolean; refetch: () => void };
+  if (isLoading) return <SkeletonTable cols={9} />;
+  if (isError) return <DataError onRetry={refetch} />;
+  if (!apiAssessments.length) return <EmptyState title="No assessments yet" description="Assessments will appear here once they are created for your classes." />;
   return (
     <TeacherTable columns={['Assessment', 'Class', 'Subject', 'Type', 'Max', 'Status', 'Progress', 'Due', 'Actions']}>
-      {assessments.map((item) => (
+      {apiAssessments.map((item) => (
         <tr key={item.id} className="hover:bg-ks-paper">
           <Td>{item.title}</Td>
           <Td>{item.className}</Td>
@@ -746,10 +807,11 @@ function AssessmentMiniTable({ detailed = false }: { detailed?: boolean }) {
   );
 }
 
-function StudentsTable() {
+function StudentsTable({ classId = '' }: { classId?: string }) {
+  const { data: apiStudents = [] as typeof students } = useClassStudents(classId) as { data: typeof students };
   return (
     <TeacherTable columns={['Roll', 'Student', 'Registration', 'Average', 'Attendance', 'Alert', 'Last score', 'Actions']}>
-      {students.map((student) => (
+      {apiStudents.map((student) => (
         <tr key={student.id} className="hover:bg-ks-paper">
           <Td><span className="font-mono text-xs text-ks-muted">{student.roll}</span></Td>
           <Td>
@@ -1009,10 +1071,18 @@ function Td({ children }: { children: ReactNode }) {
 
 function useClassSubject() {
   const { classSubjectId } = useParams();
-  return useMemo(() => teacherClasses.find((item) => item.id === classSubjectId) ?? firstClass, [classSubjectId]);
+  const { data: apiClasses = [] as typeof teacherClasses } = useTeacherClasses() as { data: typeof teacherClasses };
+  return useMemo(() => {
+    const list = apiClasses.length > 0 ? apiClasses : teacherClasses;
+    return list.find((item) => item.id === classSubjectId) ?? list[0];
+  }, [classSubjectId, apiClasses]);
 }
 
 function useAssessment() {
   const { assessmentId } = useParams();
-  return useMemo(() => assessments.find((item) => item.id === assessmentId) ?? firstAssessment, [assessmentId]);
+  const { data: apiAssessments = [] as typeof assessments } = useTeacherAssessments() as { data: typeof assessments };
+  return useMemo(() => {
+    const list = apiAssessments.length > 0 ? apiAssessments : assessments;
+    return list.find((item) => item.id === assessmentId) ?? list[0];
+  }, [assessmentId, apiAssessments]);
 }

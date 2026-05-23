@@ -73,6 +73,9 @@ export type FeeStructure = {
   id: string;
   category: string;
   className: string;
+  educationStage: 'Primary' | 'O-Level' | 'A-Level';
+  classLevel?: number;
+  studentGroup?: string;
   amount: number;
   effectiveTerm: string;
   active: boolean;

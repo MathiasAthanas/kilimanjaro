@@ -52,8 +52,8 @@ export function LoginPage() {
           <h1 className="font-display text-2xl font-bold">Kilimanjaro Schools</h1>
         </div>
         <div className="relative z-10 max-w-md">
-          <h2 className="font-display text-5xl font-bold leading-tight text-ks-mist">Excellence in Academic Governance.</h2>
-          <p className="mt-5 text-lg leading-8 text-ks-mist/70">The centralized operational command center for Tanzania's leading educational network.</p>
+          <h2 className="font-display text-5xl font-bold leading-tight text-ks-mist">Your whole school, working together.</h2>
+          <p className="mt-5 text-lg leading-8 text-ks-mist/70">One place for teachers, administrators and the finance team to get their work done — smoothly and without switching systems.</p>
           <div className="mt-8 flex items-center gap-3 text-ks-gold"><div className="h-px w-12 bg-ks-gold" /><span className="text-[10px] font-black uppercase tracking-widest">Staff Portal Access</span></div>
         </div>
         <p className="relative z-10 border-t border-ks-mist/10 pt-4 text-xs font-bold text-ks-mist/40">© 2026 Kilimanjaro Schools Group. Version 1.0.0</p>
@@ -65,7 +65,7 @@ export function LoginPage() {
           <div className="mb-8">
             <div className="mb-2 flex items-center gap-2 text-ks-gold"><LockOpen className="h-5 w-5" /><span className="text-xs font-black uppercase tracking-wider">Secure Access</span></div>
             <h3 className="font-display text-2xl font-bold text-ks-navy">Staff Portal Login</h3>
-            <p className="mt-1 text-sm text-ks-muted">Enter your credentials to access the operational command center.</p>
+            <p className="mt-1 text-sm text-ks-muted">Sign in to reach your workspace.</p>
           </div>
           <form className="space-y-6" onSubmit={form.handleSubmit(onSubmit)}>
             <TextField label="Username or Email" placeholder="name.office@ks.ac.tz" error={form.formState.errors.username?.message} {...form.register('username')} />

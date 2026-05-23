@@ -2,10 +2,31 @@ import { NavLink, useParams } from 'react-router-dom';
 import { Badge } from '../../../components/common/Badge';
 import { Button } from '../../../components/common/Button';
 import { analyticsMetrics, bulkAssessments, bulkMarks, reportCatalog, reportJobs, resultClasses, timetableEntries } from '../api/operationsApi';
+import {
+  useAllAssessments,
+  useAllTimetables,
+  useAssessmentMarksSheet,
+  usePublishReadiness,
+  useReportCatalog,
+  useReportJobs,
+} from '../api/operations.hooks';
 import { AnalyticsInsightPanel, BulkMarksGrid, ChartCard, ExportCenterDrawer, MarksReviewPanel, OperationsShell, OperationsTable, PendingIntegration, ReportBuilderCanvas, ReportPreviewFrame, ReportTile, Td, TimetableMatrix } from '../components/OperationsWorkspace';
 
 export function ReportsHomePage() {
-  return <OperationsShell title="Reports Home" eyebrow="Cross-role reports catalog"><div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_360px]"><div className="grid gap-gutter md:grid-cols-2 xl:grid-cols-3">{reportCatalog.map((report) => <ReportTile key={report.id} title={report.title} detail={`${report.domain} / ${report.roles.join(', ')}`} to="/reports/builder" />)}</div><ExportCenterDrawer jobs={reportJobs} /></div></OperationsShell>;
+  const { data: apiCatalog = [] as typeof reportCatalog } = useReportCatalog() as { data: typeof reportCatalog };
+  const { data: apiJobs = [] as typeof reportJobs } = useReportJobs() as { data: typeof reportJobs };
+  return (
+    <OperationsShell title="Reports Home" eyebrow="Cross-role reports catalog">
+      <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="grid gap-gutter md:grid-cols-2 xl:grid-cols-3">
+          {apiCatalog.map((report) => (
+            <ReportTile key={report.id} title={report.title} detail={`${report.domain} / ${report.roles.join(', ')}`} to="/reports/builder" />
+          ))}
+        </div>
+        <ExportCenterDrawer jobs={apiJobs} />
+      </div>
+    </OperationsShell>
+  );
 }
 
 export function ReportBuilderPage() {
@@ -17,17 +38,42 @@ export function ReportJobsPage() {
 }
 
 function JobsTable() {
-  return <OperationsTable columns={['Job', 'Status', 'Requested By', 'Role', 'Scope', 'Format', 'Created', 'Actions']}>{reportJobs.map((job) => <tr key={job.id}><Td>{job.name}</Td><Td><Badge tone={job.status === 'COMPLETED' ? 'emerald' : job.status === 'FAILED' ? 'rose' : 'amber'}>{job.status}</Badge></Td><Td>{job.requestedBy}</Td><Td>{job.role}</Td><Td>{job.scope}</Td><Td>{job.format}</Td><Td>{job.created}</Td><Td><NavLink className="font-black text-ks-blue" to={`/reports/jobs/${job.id}`}>Open</NavLink></Td></tr>)}</OperationsTable>;
+  const { data: apiJobs = [] as typeof reportJobs } = useReportJobs() as { data: typeof reportJobs };
+  return (
+    <OperationsTable columns={['Job', 'Status', 'Requested By', 'Role', 'Scope', 'Format', 'Created', 'Actions']}>
+      {apiJobs.map((job) => (
+        <tr key={job.id}>
+          <Td>{job.name}</Td>
+          <Td><Badge tone={job.status === 'COMPLETED' ? 'emerald' : job.status === 'FAILED' ? 'rose' : 'amber'}>{job.status}</Badge></Td>
+          <Td>{job.requestedBy}</Td>
+          <Td>{job.role}</Td>
+          <Td>{job.scope}</Td>
+          <Td>{job.format}</Td>
+          <Td>{String(job.created ?? '').slice(0, 10)}</Td>
+          <Td><NavLink className="font-black text-ks-blue" to={`/reports/jobs/${job.id}`}>Open</NavLink></Td>
+        </tr>
+      ))}
+    </OperationsTable>
+  );
 }
 
 export function ReportJobDetailPage() {
   const { id } = useParams();
-  const job = reportJobs.find((item) => item.id === id) ?? reportJobs[0];
-  return <OperationsShell title={job.name} eyebrow="Report job detail"><div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_320px]"><ReportPreviewFrame title={job.name} /><ExportCenterDrawer jobs={[job]} /></div></OperationsShell>;
+  const { data: apiJobs = [] as typeof reportJobs } = useReportJobs() as { data: typeof reportJobs };
+  const job = apiJobs.find((item) => item.id === id) ?? apiJobs[0] ?? reportJobs[0];
+  return (
+    <OperationsShell title={job?.name ?? 'Report'} eyebrow="Report job detail">
+      <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_320px]">
+        <ReportPreviewFrame title={job?.name ?? 'Report'} />
+        <ExportCenterDrawer jobs={job ? [job] : []} />
+      </div>
+    </OperationsShell>
+  );
 }
 
 export function DownloadCenterPage() {
-  return <OperationsShell title="Download Center" eyebrow="Completed files and expiries"><ExportCenterDrawer jobs={reportJobs} /></OperationsShell>;
+  const { data: apiJobs = [] as typeof reportJobs } = useReportJobs() as { data: typeof reportJobs };
+  return <OperationsShell title="Download Center" eyebrow="Completed files and expiries"><ExportCenterDrawer jobs={apiJobs} /></OperationsShell>;
 }
 
 export function ScheduledReportsPage() {
@@ -35,7 +81,17 @@ export function ScheduledReportsPage() {
 }
 
 export function ReportTemplatesPage() {
-  return <OperationsShell title="Report Templates" eyebrow="Reusable report definitions"><PendingIntegration feature="Report templates endpoint" /><div className="grid gap-gutter xl:grid-cols-3">{reportCatalog.map((report) => <ReportTile key={report.id} title={report.title} detail="Template-ready report definition." to="/reports/builder" />)}</div></OperationsShell>;
+  const { data: apiCatalog = [] as typeof reportCatalog } = useReportCatalog() as { data: typeof reportCatalog };
+  return (
+    <OperationsShell title="Report Templates" eyebrow="Reusable report definitions">
+      <PendingIntegration feature="Report templates endpoint" />
+      <div className="grid gap-gutter xl:grid-cols-3">
+        {apiCatalog.map((report) => (
+          <ReportTile key={report.id} title={report.title} detail="Template-ready report definition." to="/reports/builder" />
+        ))}
+      </div>
+    </OperationsShell>
+  );
 }
 
 export function ReportAccessAuditPage() {
@@ -43,13 +99,44 @@ export function ReportAccessAuditPage() {
 }
 
 export function BulkMarksWorkspacePage() {
-  return <OperationsShell title="Bulk Marks Workspace" eyebrow="Spreadsheet-grade entry"><OperationsTable columns={['Assessment', 'Class', 'Subject', 'Type', 'Max', 'Status', 'Teacher', 'Last Edited', 'Actions']}>{bulkAssessments.map((item) => <tr key={item.id}><Td>{item.assessment}</Td><Td>{item.className}</Td><Td>{item.subject}</Td><Td>{item.type}</Td><Td>{item.max}</Td><Td>{item.status}</Td><Td>{item.teacher}</Td><Td>{item.lastEdited}</Td><Td><NavLink className="font-black text-ks-blue" to={`/academics/marks/bulk/${item.id}`}>Open Sheet</NavLink></Td></tr>)}</OperationsTable></OperationsShell>;
+  const { data: rawAssessments } = useAllAssessments() as { data: Record<string, unknown>[] | undefined };
+  const apiAssessments: Record<string, unknown>[] = (rawAssessments ?? bulkAssessments) as Record<string, unknown>[];
+  return (
+    <OperationsShell title="Bulk Marks Workspace" eyebrow="Spreadsheet-grade entry">
+      <OperationsTable columns={['Assessment', 'Class', 'Subject', 'Type', 'Max', 'Status', 'Teacher', 'Last Edited', 'Actions']}>
+        {apiAssessments.map((item) => {
+          const id = String(item.id ?? '');
+          return (
+            <tr key={id}>
+              <Td>{String(item.assessment ?? item.name ?? '')}</Td>
+              <Td>{String(item.className ?? item.classId ?? '')}</Td>
+              <Td>{String(item.subject ?? item.subjectId ?? '')}</Td>
+              <Td>{String(item.type ?? '')}</Td>
+              <Td>{String(item.max ?? item.maxScore ?? '')}</Td>
+              <Td>{String(item.status ?? '')}</Td>
+              <Td>{String(item.teacher ?? item.teacherId ?? '')}</Td>
+              <Td>{String(item.lastEdited ?? item.updatedAt ?? '')}</Td>
+              <Td><NavLink className="font-black text-ks-blue" to={`/academics/marks/bulk/${id}`}>Open Sheet</NavLink></Td>
+            </tr>
+          );
+        })}
+      </OperationsTable>
+    </OperationsShell>
+  );
 }
 
 export function BulkMarksSheetPage() {
   const { assessmentId } = useParams();
-  const assessment = bulkAssessments.find((item) => item.id === assessmentId) ?? bulkAssessments[0];
-  return <OperationsShell title={assessment.assessment} eyebrow="Bulk marks sheet"><BulkMarksGrid rows={bulkMarks} /></OperationsShell>;
+  const { data: rawAssessments } = useAllAssessments() as { data: Record<string, unknown>[] | undefined };
+  const { data: apiMarks = [] as typeof bulkMarks } = useAssessmentMarksSheet(assessmentId) as { data: typeof bulkMarks };
+  const allAssessments = rawAssessments ?? bulkAssessments;
+  const assessment = allAssessments.find((item) => String(item.id) === assessmentId) ?? allAssessments[0];
+  const title = String((assessment as Record<string, unknown>)?.assessment ?? (assessment as Record<string, unknown>)?.name ?? 'Marks Sheet');
+  return (
+    <OperationsShell title={title} eyebrow="Bulk marks sheet">
+      <BulkMarksGrid rows={apiMarks} />
+    </OperationsShell>
+  );
 }
 
 export function MarksReviewWorkspacePage() {
@@ -61,7 +148,22 @@ export function ResultsWorkspacePage() {
 }
 
 function ResultsTable() {
-  return <OperationsTable columns={['Class', 'Students', 'Status', 'Blockers', 'Readiness', 'Actions']}>{resultClasses.map((item) => <tr key={item.classId}><Td>{item.className}</Td><Td>{item.students}</Td><Td><Badge tone={item.status === 'READY' ? 'emerald' : 'rose'}>{item.status}</Badge></Td><Td>{item.blockers}</Td><Td>{item.readiness}%</Td><Td><NavLink className="font-black text-ks-blue" to={`/academics/results/class/${item.classId}/${item.termId}`}>Review</NavLink></Td></tr>)}</OperationsTable>;
+  const { data: readiness } = usePublishReadiness() as { data: { classes?: typeof resultClasses } | undefined };
+  const apiResultClasses = readiness?.classes ?? resultClasses;
+  return (
+    <OperationsTable columns={['Class', 'Students', 'Status', 'Blockers', 'Readiness', 'Actions']}>
+      {apiResultClasses.map((item) => (
+        <tr key={item.classId}>
+          <Td>{item.className}</Td>
+          <Td>{item.students}</Td>
+          <Td><Badge tone={item.status === 'READY' ? 'emerald' : 'rose'}>{item.status}</Badge></Td>
+          <Td>{item.blockers}</Td>
+          <Td>{item.readiness}%</Td>
+          <Td><NavLink className="font-black text-ks-blue" to={`/academics/results/class/${item.classId}/${item.termId}`}>Review</NavLink></Td>
+        </tr>
+      ))}
+    </OperationsTable>
+  );
 }
 
 export function ClassResultsReviewPage() {
@@ -74,7 +176,17 @@ export function ResultsPublishingSupportPage() {
 }
 
 export function ReportCardGenerationCenterPage() {
-  return <OperationsShell title="Report Card Generation Center" eyebrow="Generate, preview, download"><div className="grid gap-gutter xl:grid-cols-3">{resultClasses.map((item) => <ReportTile key={item.classId} title={item.className} detail={`${item.students} cards / ${item.readiness}% ready`} to={`/academics/report-cards/stu-amina/${item.termId}`} />)}</div></OperationsShell>;
+  const { data: readiness } = usePublishReadiness() as { data: { classes?: typeof resultClasses } | undefined };
+  const apiResultClasses = readiness?.classes ?? resultClasses;
+  return (
+    <OperationsShell title="Report Card Generation Center" eyebrow="Generate, preview, download">
+      <div className="grid gap-gutter xl:grid-cols-3">
+        {apiResultClasses.map((item) => (
+          <ReportTile key={item.classId} title={item.className} detail={`${item.students} cards / ${item.readiness}% ready`} to={`/academics/report-cards/stu-amina/${item.termId}`} />
+        ))}
+      </div>
+    </OperationsShell>
+  );
 }
 
 export function ReportCardPreviewPage() {
@@ -86,7 +198,13 @@ export function AnalyticsWorkspacePage() {
 }
 
 function AnalyticsGrid() {
-  return <div className="grid gap-gutter md:grid-cols-2 xl:grid-cols-4">{analyticsMetrics.map((metric) => <AnalyticsInsightPanel key={metric.label} title={`${metric.label}: ${metric.value}`} insight={`${metric.insight} Source: ${metric.source}`} />)}</div>;
+  return (
+    <div className="grid gap-gutter md:grid-cols-2 xl:grid-cols-4">
+      {analyticsMetrics.map((metric) => (
+        <AnalyticsInsightPanel key={metric.label} title={`${metric.label}: ${metric.value}`} insight={`${metric.insight} Source: ${metric.source}`} />
+      ))}
+    </div>
+  );
 }
 
 export function AcademicAnalyticsOpsPage() {
@@ -106,7 +224,21 @@ export function TeacherAnalyticsDetailPage() {
 }
 
 export function StudentAnalyticsDirectoryPage() {
-  return <OperationsShell title="Student Analytics Directory" eyebrow="At-risk, improved, top performers"><OperationsTable columns={['Student', 'Segment', 'Average', 'Trend', 'Actions']}>{['Hassan Mwamba', 'Zahara Mushi', 'Amina Baraka Juma'].map((name, index) => <tr key={name}><Td>{name}</Td><Td>{['At-risk', 'Most improved', 'Top performer'][index]}</Td><Td>{[44, 84, 72][index]}%</Td><Td>{[-18, 12, 6][index]}</Td><Td><NavLink className="font-black text-ks-blue" to={`/analytics/students/stu-${index}`}>Open</NavLink></Td></tr>)}</OperationsTable></OperationsShell>;
+  return (
+    <OperationsShell title="Student Analytics Directory" eyebrow="At-risk, improved, top performers">
+      <OperationsTable columns={['Student', 'Segment', 'Average', 'Trend', 'Actions']}>
+        {(['Hassan Mwamba', 'Zahara Mushi', 'Amina Baraka Juma'] as const).map((name, index) => (
+          <tr key={name}>
+            <Td>{name}</Td>
+            <Td>{(['At-risk', 'Most improved', 'Top performer'] as const)[index]}</Td>
+            <Td>{([44, 84, 72] as const)[index]}%</Td>
+            <Td>{([-18, 12, 6] as const)[index]}</Td>
+            <Td><NavLink className="font-black text-ks-blue" to={`/analytics/students/stu-${index}`}>Open</NavLink></Td>
+          </tr>
+        ))}
+      </OperationsTable>
+    </OperationsShell>
+  );
 }
 
 export function StudentAnalyticsProfilePage() {
@@ -122,23 +254,50 @@ export function EnrolmentAnalyticsPage() {
 }
 
 export function TimetableWorkspacePage() {
-  return <OperationsShell title="Timetable Workspace" eyebrow="Search, create, print"><TimetableMatrix entries={timetableEntries} /></OperationsShell>;
+  const { data: apiTimetables = [] as typeof timetableEntries } = useAllTimetables() as { data: typeof timetableEntries };
+  return <OperationsShell title="Timetable Workspace" eyebrow="Search, create, print"><TimetableMatrix entries={apiTimetables} /></OperationsShell>;
 }
 
 export function ClassTimetablePage() {
-  return <OperationsShell title="Class Timetable" eyebrow="Class weekly matrix"><TimetableMatrix entries={timetableEntries} /></OperationsShell>;
+  const { data: apiTimetables = [] as typeof timetableEntries } = useAllTimetables() as { data: typeof timetableEntries };
+  return <OperationsShell title="Class Timetable" eyebrow="Class weekly matrix"><TimetableMatrix entries={apiTimetables} /></OperationsShell>;
 }
 
 export function TeacherTimetablePage() {
-  return <OperationsShell title="Teacher Timetable" eyebrow="Teacher weekly matrix"><TimetableMatrix entries={timetableEntries} /></OperationsShell>;
+  const { data: apiTimetables = [] as typeof timetableEntries } = useAllTimetables() as { data: typeof timetableEntries };
+  return <OperationsShell title="Teacher Timetable" eyebrow="Teacher weekly matrix"><TimetableMatrix entries={apiTimetables} /></OperationsShell>;
 }
 
 export function CreateTimetableEntryPage() {
-  return <OperationsShell title="Create Timetable Entry" eyebrow="Conflict-safe scheduling"><div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_320px]"><div className="rounded-2xl border border-ks-line bg-white p-5"><div className="grid gap-4 md:grid-cols-2">{['Class', 'Subject', 'Teacher', 'Day', 'Start Time', 'End Time', 'Room', 'Term'].map((field) => <label key={field}><span className="text-xs font-black uppercase text-ks-muted">{field}</span><input className="mt-2 h-11 w-full rounded-xl border border-ks-line px-3" /></label>)}</div><Button className="mt-5 rounded-xl">Create Entry</Button></div><AnalyticsInsightPanel title="Conflict Rules" insight="Teacher and class overlap checks are shown before save." /></div></OperationsShell>;
+  return (
+    <OperationsShell title="Create Timetable Entry" eyebrow="Conflict-safe scheduling">
+      <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="rounded-2xl border border-ks-line bg-white p-5">
+          <div className="grid gap-4 md:grid-cols-2">
+            {(['Class', 'Subject', 'Teacher', 'Day', 'Start Time', 'End Time', 'Room', 'Term'] as const).map((field) => (
+              <label key={field}>
+                <span className="text-xs font-black uppercase text-ks-muted">{field}</span>
+                <input className="mt-2 h-11 w-full rounded-xl border border-ks-line px-3" />
+              </label>
+            ))}
+          </div>
+          <Button className="mt-5 rounded-xl">Create Entry</Button>
+        </div>
+        <AnalyticsInsightPanel title="Conflict Rules" insight="Teacher and class overlap checks are shown before save." />
+      </div>
+    </OperationsShell>
+  );
 }
 
 export function FinanceReportPage({ type }: { type: string }) {
-  return <OperationsShell title={type} eyebrow="Finance report"><div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_320px]"><ReportPreviewFrame title={type} /><AnalyticsInsightPanel title="Audit Context" insight="Sensitive finance downloads require a reason and immutable audit record." /></div></OperationsShell>;
+  return (
+    <OperationsShell title={type} eyebrow="Finance report">
+      <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_320px]">
+        <ReportPreviewFrame title={type} />
+        <AnalyticsInsightPanel title="Audit Context" insight="Sensitive finance downloads require a reason and immutable audit record." />
+      </div>
+    </OperationsShell>
+  );
 }
 
 export function StudentStatementReportPage() {

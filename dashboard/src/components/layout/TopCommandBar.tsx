@@ -1,3 +1,4 @@
+import { useIsFetching } from '@tanstack/react-query';
 import { Bell, ChevronDown, HelpCircle, Menu, Search } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuthStore } from '../../lib/auth/authStore';
@@ -10,9 +11,16 @@ type TopCommandBarProps = {
 
 export function TopCommandBar({ onMenuToggle }: TopCommandBarProps) {
   const session = useAuthStore((state) => state.session);
+  const isFetching = useIsFetching();
 
   return (
     <header className="sticky top-0 z-50 flex h-topbar-height items-center justify-between border-b border-ks-line bg-surface/80 px-5 backdrop-blur-md lg:px-margin-page">
+      {/* Thin loading bar at the very top of the header */}
+      {isFetching > 0 && (
+        <div className="absolute inset-x-0 top-0 h-0.5 overflow-hidden">
+          <div className="h-full w-1/2 animate-[slide_1.4s_linear_infinite] bg-ks-blue" />
+        </div>
+      )}
       <div className="flex min-w-0 items-center gap-4">
         <button
           onClick={onMenuToggle}

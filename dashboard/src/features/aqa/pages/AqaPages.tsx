@@ -25,6 +25,19 @@ import { Button } from '../../../components/common/Button';
 import { Card } from '../../../components/common/Card';
 import { aqaAlerts, heatmap, interventions, pairings, reports, thresholds } from '../api/aqaApi';
 import {
+  useAqaAlerts,
+  useAqaHeatmap,
+  useAqaInterventions,
+  useAqaPairings,
+  useAqaReports,
+  useEngineConfig,
+  useAqaSchoolSummary,
+  useAqaAudit,
+  useAqaAnnouncements,
+  useRunEngineMutation,
+  useUpdateEngineConfigMutation,
+} from '../api/aqa.hooks';
+import {
   AlertCard,
   AqaMetricStrip,
   AqaTable,
@@ -38,11 +51,11 @@ import {
 } from '../components/AqaWorkspaceShell';
 import { hasUnsavedThresholdChanges, validateThresholdOrder } from '../utils/aqaEngine';
 
-const criticalAlerts = aqaAlerts.filter((a) => a.severity === 'CRITICAL');
 
 // ─── Home ────────────────────────────────────────────────────────────────────
 
 export function AqaHomePage() {
+  const { data: apiHeatmap = [] as typeof heatmap } = useAqaHeatmap() as { data: typeof heatmap };
   return (
     <AqaWorkspaceShell
       title="Academic QA Command Center"
@@ -80,7 +93,7 @@ export function AqaHomePage() {
 
         {/* Center: Heatmap + Insights */}
         <section className="space-y-gutter">
-          <SchoolHeatmap cells={heatmap} />
+          <SchoolHeatmap cells={apiHeatmap} />
           <div className="grid gap-gutter md:grid-cols-2">
             {[
               { text: 'Chemistry Form 3B has 5 critical heat cells across all classes.', tone: 'rose' as const },
@@ -106,22 +119,27 @@ export function AqaHomePage() {
 // ─── Performance command center ──────────────────────────────────────────────
 
 export function PerformanceCommandCenterPage() {
+  const { data: apiAlerts = [] as typeof aqaAlerts } = useAqaAlerts() as { data: typeof aqaAlerts };
+  const critical = apiAlerts.filter((a) => a.severity === 'CRITICAL');
+  const high = apiAlerts.filter((a) => a.severity === 'HIGH');
+  const medium = apiAlerts.filter((a) => a.severity === 'MEDIUM');
+  const recovery = apiAlerts.filter((a) => a.severity === 'POSITIVE');
   return (
     <AqaWorkspaceShell title="Performance Command Center" eyebrow="Alert triage and investigation">
       <AqaMetricStrip items={[
-        { label: 'Critical',  value: '02', detail: '↑ 1 since yesterday',    tone: 'bg-ks-rose',    trend: 'up'      },
-        { label: 'High',      value: '01', detail: 'Needs intervention',      tone: 'bg-ks-amber',   trend: 'neutral' },
-        { label: 'Medium',    value: '01', detail: 'Monitor closely',         tone: 'bg-ks-blue',    trend: 'neutral' },
-        { label: 'Recovery',  value: '01', detail: '↓ resolved today',        tone: 'bg-ks-emerald', trend: 'down', inverted: true },
+        { label: 'Critical',  value: String(critical.length).padStart(2, '0'), detail: '↑ 1 since yesterday',    tone: 'bg-ks-rose',    trend: 'up'      },
+        { label: 'High',      value: String(high.length).padStart(2, '0'), detail: 'Needs intervention',      tone: 'bg-ks-amber',   trend: 'neutral' },
+        { label: 'Medium',    value: String(medium.length).padStart(2, '0'), detail: 'Monitor closely',         tone: 'bg-ks-blue',    trend: 'neutral' },
+        { label: 'Recovery',  value: String(recovery.length).padStart(2, '0'), detail: '↓ resolved today',        tone: 'bg-ks-emerald', trend: 'down', inverted: true },
       ]} />
 
       <FilterBar items={['Severity', 'Alert type', 'Subject', 'Class', 'Teacher / HOD', 'Escalated', 'Has pairing']} />
 
       <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_360px]">
         <section className="grid gap-gutter md:grid-cols-2">
-          {aqaAlerts.map((alert) => <AlertCard key={alert.id} alert={alert} />)}
+          {apiAlerts.map((alert) => <AlertCard key={alert.id} alert={alert} />)}
         </section>
-        <InvestigationPanel alert={aqaAlerts[0]} />
+        <InvestigationPanel alert={apiAlerts[0] ?? aqaAlerts[0]} />
       </div>
     </AqaWorkspaceShell>
   );
@@ -148,11 +166,12 @@ export function AqaAlertDetailPage() {
 // ─── Pairings overview ────────────────────────────────────────────────────────
 
 export function PairingsOverviewPage() {
+  const { data: apiPairings = [] as typeof pairings } = useAqaPairings() as { data: typeof pairings };
   return (
     <AqaWorkspaceShell title="Peer Pairings Overview" eyebrow="Effectiveness and actions">
       <div className="grid gap-gutter xl:grid-cols-[320px_minmax(0,1fr)]">
         <PairingFunnel />
-        <PairingTable pairings={pairings} />
+        <PairingTable pairings={apiPairings} />
       </div>
     </AqaWorkspaceShell>
   );
@@ -163,10 +182,12 @@ export function PairingsOverviewPage() {
 export function EngineControlPage() {
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState(0);
+  const runMutation = useRunEngineMutation();
 
   const handleRun = () => {
     setRunning(true);
     setProgress(0);
+    runMutation.mutate({});
     const interval = setInterval(() => {
       setProgress((p) => {
         if (p >= 100) { clearInterval(interval); setRunning(false); return 100; }
@@ -242,17 +263,20 @@ export function EngineControlPage() {
 // ─── Engine config ────────────────────────────────────────────────────────────
 
 export function EngineConfigPage() {
+  const { data: apiThresholds = [] as typeof thresholds } = useEngineConfig() as { data: typeof thresholds };
+  const configThresholds = (Array.isArray(apiThresholds) ? apiThresholds : thresholds);
+  const updateConfigMutation = useUpdateEngineConfigMutation();
   const [values, setValues] = useState(
-    Object.fromEntries(thresholds.map((t) => [t.id, t.value])) as Record<string, number>
+    Object.fromEntries(configThresholds.map((t) => [t.id, t.value])) as Record<string, number>
   );
-  const unsaved = hasUnsavedThresholdChanges(thresholds, values);
+  const unsaved = hasUnsavedThresholdChanges(configThresholds, values);
   const valid   = validateThresholdOrder(values);
 
   return (
     <AqaWorkspaceShell title="Engine Configuration" eyebrow="Threshold rails and safety controls">
       <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_340px]">
         <section className="space-y-gutter">
-          {thresholds.map((t) => (
+          {configThresholds.map((t) => (
             <ThresholdEditor
               key={t.id}
               item={t}
@@ -278,6 +302,8 @@ export function EngineConfigPage() {
           <div className="mt-6 space-y-2">
             <Button
               disabled={!unsaved || !valid}
+              loading={updateConfigMutation.isPending}
+              onClick={() => updateConfigMutation.mutate({ thresholds: values })}
               className="w-full rounded-xl bg-ks-gold text-ks-navy hover:shadow-lg hover:shadow-ks-gold/30"
             >
               <Save className="h-4 w-4" /> Deploy to Production
@@ -295,15 +321,18 @@ export function EngineConfigPage() {
 // ─── Analytics ───────────────────────────────────────────────────────────────
 
 export function AcademicAnalyticsPage() {
+  const { data: apiHeatmap = [] as typeof heatmap } = useAqaHeatmap() as { data: typeof heatmap };
+  const { data: schoolSummary } = useAqaSchoolSummary() as { data: Record<string, unknown> | undefined };
+  const schoolMean = schoolSummary?.mean ?? schoolSummary?.averageScore ?? '74.2%';
   return (
     <AqaWorkspaceShell title="Academic Radar" eyebrow="School-wide analytics dashboard">
       <AqaMetricStrip items={[
-        { label: 'School mean',       value: '74.2%', detail: '+2.4% term trend', tone: 'bg-ks-blue',    trend: 'down' },
+        { label: 'School mean',       value: typeof schoolMean === 'number' ? `${Math.round(schoolMean as number)}%` : String(schoolMean), detail: '+2.4% term trend', tone: 'bg-ks-blue',    trend: 'down' },
         { label: 'Interventions',     value: '128',   detail: 'Currently active',  tone: 'bg-ks-amber',   trend: 'up'   },
         { label: 'Critical alerts',   value: '12',    detail: 'Needs attention',   tone: 'bg-ks-rose',    trend: 'up'   },
         { label: 'Attendance rate',   value: '93%',   detail: 'Stable context',    tone: 'bg-ks-emerald', inverted: true},
       ]} />
-      <SchoolHeatmap cells={heatmap} />
+      <SchoolHeatmap cells={apiHeatmap} />
       <div className="grid gap-gutter xl:grid-cols-3">
         <TrendBoard student="School Average" subject="All subjects" />
         <RankingsCard title="Most improved" students={['Zahara Mushi', 'Joel Komba', 'Amina Baraka Juma']} gains={[18, 15, 12]} />
@@ -373,17 +402,18 @@ export function AtRiskStudentsPage() {
 // ─── Interventions ────────────────────────────────────────────────────────────
 
 export function AqaInterventionsPage() {
+  const { data: apiInterventions = [] as typeof interventions } = useAqaInterventions() as { data: typeof interventions };
   return (
     <AqaWorkspaceShell title="School-Wide Interventions" eyebrow="Academic support operations">
       <AqaMetricStrip items={[
-        { label: 'Open interventions', value: '18', detail: 'Pending follow-up', tone: 'bg-ks-amber',   trend: 'neutral' },
-        { label: 'Completed',          value: '9',  detail: 'This week',         tone: 'bg-ks-emerald', trend: 'down'    },
+        { label: 'Open interventions', value: String(apiInterventions.filter((i) => ['OPEN', 'PENDING'].includes(i.status as string)).length || 18), detail: 'Pending follow-up', tone: 'bg-ks-amber',   trend: 'neutral' },
+        { label: 'Completed',          value: String(apiInterventions.filter((i) => ['CLOSED', 'RESOLVED', 'COMPLETED'].includes(i.status as string)).length || 9), detail: 'This week', tone: 'bg-ks-emerald', trend: 'down' },
         { label: 'Overdue',            value: '3',  detail: 'Needs escalation',  tone: 'bg-ks-rose',    trend: 'up'      },
         { label: 'Avg. response',      value: '4.2h', detail: 'Target < 6.0h',   tone: 'bg-ks-blue', inverted: true     },
       ]} />
       <FilterBar items={['Pending follow-up', 'Type', 'Staff role', 'Subject', 'Class', 'Severity']} />
       <div className="grid gap-gutter xl:grid-cols-3">
-        {interventions.map((item) => <InterventionCard key={item.id} item={item} />)}
+        {apiInterventions.map((item) => <InterventionCard key={item.id} item={item} />)}
       </div>
     </AqaWorkspaceShell>
   );
@@ -392,12 +422,13 @@ export function AqaInterventionsPage() {
 // ─── Reports ──────────────────────────────────────────────────────────────────
 
 export function AqaReportsPage() {
+  const { data: apiReports = [] as typeof reports } = useAqaReports() as { data: typeof reports };
   return (
     <AqaWorkspaceShell title="AQA Reports" eyebrow="Generate and download academic QA reports">
       <div className="grid gap-gutter xl:grid-cols-[380px_minmax(0,1fr)]">
         <ReportGenerator />
         <div className="grid gap-gutter md:grid-cols-2">
-          {reports.map((r) => <ReportTile key={r.id} report={r} />)}
+          {apiReports.map((r) => <ReportTile key={r.id} report={r} />)}
         </div>
       </div>
     </AqaWorkspaceShell>
@@ -474,7 +505,7 @@ export function AqaExportsPage() {
 // ─── Audit ────────────────────────────────────────────────────────────────────
 
 export function AqaAuditPage() {
-  const events = [
+  const fallbackEvents = [
     { label: 'Engine run completed',                       severity: 'success', day: 0 },
     { label: 'Engine configuration changed',               severity: 'info',    day: 0 },
     { label: 'Alert escalated — Jabir Hassan',             severity: 'critical',day: 1 },
@@ -482,6 +513,15 @@ export function AqaAuditPage() {
     { label: 'Report generated: At-Risk Students',         severity: 'info',    day: 2 },
     { label: 'Announcement published',                     severity: 'info',    day: 2 },
   ];
+  const { data: apiAudit = [] as typeof fallbackEvents } = useAqaAudit() as { data: typeof fallbackEvents };
+  const events = apiAudit.map((e, i) => ({
+    label: (e as { label?: string; action?: string; description?: string }).label
+      ?? (e as { action?: string }).action
+      ?? (e as { description?: string }).description
+      ?? `Event ${i + 1}`,
+    severity: (e as { severity?: string }).severity ?? 'info',
+    day: (e as { day?: number }).day ?? i,
+  }));
   return (
     <AqaWorkspaceShell title="Academic Quality Audit Trail" eyebrow="Important AQA actions">
       <Card className="overflow-hidden rounded-xl">
@@ -504,18 +544,20 @@ export function AqaAuditPage() {
 // ─── Private components ───────────────────────────────────────────────────────
 
 function CriticalBanner() {
+  const { data: apiAlerts = [] as typeof aqaAlerts } = useAqaAlerts() as { data: typeof aqaAlerts };
+  const liveCritical = apiAlerts.filter((a) => a.severity === 'CRITICAL');
   return (
     <Card className="overflow-hidden rounded-xl border border-ks-rose/20 bg-ks-rose/5">
       <div className="flex items-center gap-3 border-b border-ks-rose/10 px-5 py-4">
         <AlertTriangle className="h-5 w-5 text-ks-rose" />
         <h3 className="font-display text-base font-black text-ks-navy">Critical Alerts</h3>
-        <span className="ml-auto rounded-full bg-ks-rose px-2 py-0.5 text-[10px] font-black text-white">{criticalAlerts.length}</span>
+        <span className="ml-auto rounded-full bg-ks-rose px-2 py-0.5 text-[10px] font-black text-white">{liveCritical.length}</span>
       </div>
       <p className="px-5 pt-4 text-sm font-semibold text-ks-navy">
-        <span className="font-black">{criticalAlerts.length} students</span> require immediate intervention.
+        <span className="font-black">{liveCritical.length} students</span> require immediate intervention.
       </p>
       <div className="space-y-2 p-4">
-        {criticalAlerts.map((alert) => {
+        {liveCritical.map((alert) => {
           const initials = alert.student.split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase();
           return (
             <NavLink
@@ -587,7 +629,8 @@ function InvestigationPanel({ alert }: { alert: (typeof aqaAlerts)[number] }) {
 }
 
 function AtRiskTable({ compact = false }: { compact?: boolean }) {
-  const alerts = aqaAlerts.filter((a) => a.severity !== 'POSITIVE');
+  const { data: liveAlerts = [] as typeof aqaAlerts } = useAqaAlerts() as { data: typeof aqaAlerts };
+  const alerts = liveAlerts.filter((a) => a.severity !== 'POSITIVE');
   const criticals = alerts.filter((a) => a.severity === 'CRITICAL');
   const highs     = alerts.filter((a) => a.severity === 'HIGH');
   const others    = alerts.filter((a) => a.severity !== 'CRITICAL' && a.severity !== 'HIGH');
@@ -777,6 +820,7 @@ function EngineTimeline() {
 }
 
 function ReportsPreview() {
+  const { data: apiReports = [] as typeof reports } = useAqaReports() as { data: typeof reports };
   return (
     <Card className="overflow-hidden rounded-xl">
       <div className="flex items-center justify-between border-b border-ks-line px-5 py-4">
@@ -784,7 +828,7 @@ function ReportsPreview() {
         <NavLink to="/aqa/reports" className="text-xs font-black text-ks-blue hover:underline">View all →</NavLink>
       </div>
       <div className="divide-y divide-ks-line">
-        {reports.map((r) => (
+        {apiReports.map((r) => (
           <div key={r.id} className="flex items-center justify-between px-5 py-3 transition hover:bg-ks-paper">
             <span className="text-sm font-bold text-ks-navy">{r.title}</span>
             <Badge tone={r.status === 'READY' ? 'emerald' : 'amber'}>{r.status}</Badge>
@@ -863,26 +907,35 @@ function RankingsCard({
 }
 
 function AnnouncementsTable() {
-  const rows = [
-    { title: 'Engine run scheduled tonight',      status: 'ACTIVE', audience: 'Academic staff', priority: 'High'   },
-    { title: 'Chemistry interventions due Friday', status: 'ACTIVE', audience: 'Science HOD',   priority: 'High'   },
-    { title: 'At-risk register published',         status: 'ACTIVE', audience: 'All staff',     priority: 'Medium' },
+  const fallbackRows = [
+    { id: '1', title: 'Engine run scheduled tonight',      status: 'ACTIVE', audience: 'Academic staff', priority: 'High',   scheduledAt: 'Now', createdBy: 'Fatuma Ally' },
+    { id: '2', title: 'Chemistry interventions due Friday', status: 'ACTIVE', audience: 'Science HOD',   priority: 'High',   scheduledAt: 'Now', createdBy: 'Fatuma Ally' },
+    { id: '3', title: 'At-risk register published',         status: 'ACTIVE', audience: 'All staff',     priority: 'Medium', scheduledAt: 'Now', createdBy: 'Fatuma Ally' },
   ];
+  const { data: apiAnnouncements = [] as typeof fallbackRows } = useAqaAnnouncements() as { data: typeof fallbackRows };
   return (
     <AqaTable columns={['Title', 'Status', 'Audience', 'Priority', 'Schedule', 'Published by', 'Actions']}>
-      {rows.map(({ title, status, audience, priority }) => (
-        <tr key={title} className="transition hover:bg-ks-paper">
-          <Td><span className="font-bold text-ks-navy">{title}</span></Td>
-          <Td><Badge tone="emerald">{status}</Badge></Td>
-          <Td>{audience}</Td>
-          <Td>
-            <span className={`text-xs font-black ${priority === 'High' ? 'text-ks-rose' : 'text-ks-amber'}`}>{priority}</span>
-          </Td>
-          <Td>Now</Td>
-          <Td>Fatuma Ally</Td>
-          <Td><Button variant="secondary" className="rounded-xl py-1.5 text-xs">Preview</Button></Td>
-        </tr>
-      ))}
+      {apiAnnouncements.map((row) => {
+        const title = row.title ?? (row as { subject?: string }).subject ?? 'Announcement';
+        const status = row.status ?? 'ACTIVE';
+        const audience = row.audience ?? (row as { targetAudience?: string }).targetAudience ?? 'All staff';
+        const priority = row.priority ?? (row as { level?: string }).level ?? 'Medium';
+        const scheduledAt = row.scheduledAt ?? (row as { scheduledFor?: string }).scheduledFor ?? 'Now';
+        const createdBy = row.createdBy ?? (row as { author?: string }).author ?? '—';
+        return (
+          <tr key={row.id} className="transition hover:bg-ks-paper">
+            <Td><span className="font-bold text-ks-navy">{title}</span></Td>
+            <Td><Badge tone="emerald">{status}</Badge></Td>
+            <Td>{audience}</Td>
+            <Td>
+              <span className={`text-xs font-black ${priority === 'High' || priority === 'HIGH' ? 'text-ks-rose' : 'text-ks-amber'}`}>{priority}</span>
+            </Td>
+            <Td>{scheduledAt}</Td>
+            <Td>{createdBy}</Td>
+            <Td><Button variant="secondary" className="rounded-xl py-1.5 text-xs">Preview</Button></Td>
+          </tr>
+        );
+      })}
     </AqaTable>
   );
 }
@@ -985,10 +1038,12 @@ function Td({ children, className }: { children: ReactNode; className?: string }
 
 function useAlert() {
   const { id } = useParams();
-  return useMemo(() => aqaAlerts.find((a) => a.id === id) ?? aqaAlerts[0], [id]);
+  const { data: apiAlerts = [] as typeof aqaAlerts } = useAqaAlerts() as { data: typeof aqaAlerts };
+  return useMemo(() => apiAlerts.find((a) => a.id === id) ?? apiAlerts[0] ?? aqaAlerts[0], [id, apiAlerts]);
 }
 
 function useStudentAlert() {
   const { studentId } = useParams();
-  return useMemo(() => aqaAlerts.find((a) => a.studentId === studentId) ?? aqaAlerts[0], [studentId]);
+  const { data: apiAlerts = [] as typeof aqaAlerts } = useAqaAlerts() as { data: typeof aqaAlerts };
+  return useMemo(() => apiAlerts.find((a) => a.studentId === studentId) ?? apiAlerts[0] ?? aqaAlerts[0], [studentId, apiAlerts]);
 }

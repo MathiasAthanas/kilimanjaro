@@ -45,6 +45,15 @@ export default {
         shell: '0 24px 80px rgba(15, 23, 42, 0.12)',
         layer: '0 4px 6px -1px rgba(15, 23, 42, 0.1), 0 2px 4px -2px rgba(15, 23, 42, 0.05)',
       },
+      keyframes: {
+        slide: {
+          '0%':   { transform: 'translateX(-100%)' },
+          '100%': { transform: 'translateX(300%)' },
+        },
+      },
+      animation: {
+        slide: 'slide 1.4s linear infinite',
+      },
     },
   },
   plugins: [],

@@ -9,31 +9,63 @@ export const adminUsers = [
 ];
 
 export const adminStudents = [
-  { id: 'stu-amina', registration: 'KS-2026-00017', name: 'Amina Baraka Juma', className: 'Form 2A', status: 'ACTIVE', guardians: 2, linked: true, balance: 400000, risk: 'WATCH' },
-  { id: 'stu-jabir', registration: 'KS-2026-00092', name: 'Jabir Hassan', className: 'Form 3B', status: 'ACTIVE', guardians: 1, linked: true, balance: 1450000, risk: 'CRITICAL' },
-  { id: 'stu-zahara', registration: 'KS-2026-00058', name: 'Zahara Mushi', className: 'Form 4A', status: 'ACTIVE', guardians: 2, linked: true, balance: 0, risk: 'IMPROVING' },
+  { id: 'stu-amina', registration: 'KS-2026-00017', name: 'Amina Baraka Juma', className: 'Form 2A', stage: 'O-Level', status: 'ACTIVE', guardians: 2, linked: true, balance: 400000, risk: 'WATCH' },
+  { id: 'stu-jabir', registration: 'KS-2026-00092', name: 'Jabir Hassan', className: 'Form 3B', stage: 'O-Level', status: 'ACTIVE', guardians: 1, linked: true, balance: 1450000, risk: 'CRITICAL' },
+  { id: 'stu-zahara', registration: 'KS-2026-00058', name: 'Zahara Mushi', className: 'Form 4A', stage: 'O-Level', status: 'ACTIVE', guardians: 2, linked: true, balance: 0, risk: 'IMPROVING' },
+  { id: 'stu-mariam', registration: 'KS-2026-00142', name: 'Mariam Kileo', className: 'Class 6A', stage: 'Primary', status: 'ACTIVE', guardians: 2, linked: true, balance: 120000, risk: 'STABLE' },
+  { id: 'stu-isaac', registration: 'KS-2026-00211', name: 'Isaac Mollel', className: 'Form 5 PCM', stage: 'A-Level', status: 'ACTIVE', guardians: 1, linked: true, balance: 620000, risk: 'IMPROVING' },
 ];
 
 export const adminClasses = [
-  { id: 'form-2a', name: 'Form 2A', level: 'Form 2', students: 38, teacher: 'Neema John', year: '2026', status: 'ACTIVE' },
-  { id: 'form-3b', name: 'Form 3B', level: 'Form 3', students: 42, teacher: 'Amina Rashidi', year: '2026', status: 'ACTIVE' },
-  { id: 'form-4a', name: 'Form 4A', level: 'Form 4', students: 39, teacher: 'Joseph Mrema', year: '2026', status: 'ACTIVE' },
+  { id: 'class-1a', name: 'Class 1A', level: 'Class 1', numericLevel: 1, stage: 'Primary', curriculum: 'NECTA Primary', students: 34, teacher: 'Rehema Paul', year: '2026', status: 'ACTIVE', pathway: 'Class 2A', terminal: false, stream: 'A' },
+  { id: 'class-6a', name: 'Class 6A', level: 'Class 6', numericLevel: 6, stage: 'Primary', curriculum: 'NECTA Primary', students: 36, teacher: 'Mariam Saidi', year: '2026', status: 'ACTIVE', pathway: 'Form 1A', terminal: true, stream: 'A' },
+  { id: 'form-2a', name: 'Form 2A', level: 'Form 2', numericLevel: 2, stage: 'O-Level', curriculum: 'NECTA O-Level', students: 38, teacher: 'Neema John', year: '2026', status: 'ACTIVE', pathway: 'Form 3A', terminal: false, stream: 'A' },
+  { id: 'form-4a', name: 'Form 4A', level: 'Form 4', numericLevel: 4, stage: 'O-Level', curriculum: 'NECTA O-Level', students: 39, teacher: 'Joseph Mrema', year: '2026', status: 'ACTIVE', pathway: 'A-Level selection', terminal: true, stream: 'A' },
+  { id: 'form-5-pcm', name: 'Form 5 PCM', level: 'Form 5', numericLevel: 5, stage: 'A-Level', curriculum: 'NECTA A-Level', students: 24, teacher: 'Amina Rashidi', year: '2026', status: 'ACTIVE', pathway: 'Form 6 PCM', terminal: false, stream: 'PCM' },
+  { id: 'form-6-pcb', name: 'Form 6 PCB', level: 'Form 6', numericLevel: 6, stage: 'A-Level', curriculum: 'NECTA A-Level', students: 21, teacher: 'Peter Sanga', year: '2026', status: 'ACTIVE', pathway: 'Graduation', terminal: true, stream: 'PCB' },
 ];
 
 export const adminSubjects = [
-  { id: 'chemistry', name: 'Chemistry', code: 'CHEM', department: 'Science', status: 'ACTIVE', classes: 5, teachers: 3 },
-  { id: 'physics', name: 'Physics', code: 'PHY', department: 'Science', status: 'ACTIVE', classes: 4, teachers: 2 },
-  { id: 'mathematics', name: 'Mathematics', code: 'MATH', department: 'Mathematics', status: 'ACTIVE', classes: 6, teachers: 4 },
+  { id: 'english-primary', name: 'English', code: 'ENG-P', stage: 'Primary', department: 'Languages', status: 'ACTIVE', classes: 6, teachers: 2 },
+  { id: 'chemistry', name: 'Chemistry', code: 'CHEM', stage: 'O-Level', department: 'Science', status: 'ACTIVE', classes: 5, teachers: 3 },
+  { id: 'physics', name: 'Physics', code: 'PHY', stage: 'A-Level', department: 'Science', status: 'ACTIVE', classes: 4, teachers: 2 },
+  { id: 'mathematics', name: 'Mathematics', code: 'MATH', stage: 'All stages', department: 'Mathematics', status: 'ACTIVE', classes: 10, teachers: 4 },
+];
+
+export const classPathways = [
+  { id: 'pw-primary', from: 'Class 6A', to: 'Form 1A', type: 'Cross-stage', rule: 'Primary completion to O-Level intake' },
+  { id: 'pw-olevel', from: 'Form 4A', to: 'Form 5 PCM/PCB/EGM', type: 'Cross-stage', rule: 'Combination placement after O-Level results' },
+  { id: 'pw-alevel', from: 'Form 6 PCB', to: 'Graduation', type: 'Graduation', rule: 'Terminal A-Level class' },
+];
+
+export const subjectCombinations = [
+  { id: 'combo-pcm', code: 'PCM', name: 'Physics, Chemistry, Mathematics', stage: 'A-Level', subjects: 'Physics, Chemistry, Mathematics', students: 24, principal: 'Physics, Chemistry, Mathematics', subsidiary: 'General Studies' },
+  { id: 'combo-pcb', code: 'PCB', name: 'Physics, Chemistry, Biology', stage: 'A-Level', subjects: 'Physics, Chemistry, Biology', students: 21, principal: 'Physics, Chemistry, Biology', subsidiary: 'General Studies' },
+  { id: 'combo-egm', code: 'EGM', name: 'Economics, Geography, Mathematics', stage: 'A-Level', subjects: 'Economics, Geography, Mathematics', students: 18, principal: 'Economics, Geography, Mathematics', subsidiary: 'General Studies' },
+];
+
+export const mixedSchoolApiContracts = [
+  { method: 'POST', path: '/students/classes', purpose: 'Create Primary/O-Level/A-Level class with stage validation' },
+  { method: 'PATCH', path: '/students/classes/:id', purpose: 'Edit class stage, level, terminal year and teacher' },
+  { method: 'POST', path: '/students/class-pathways', purpose: 'Create promotion/cross-stage/graduation pathway' },
+  { method: 'POST', path: '/students/promotions/bulk', purpose: 'Bulk promote students from configured pathway' },
+  { method: 'POST', path: '/academics/subject-combinations', purpose: 'Create A-Level combination' },
+  { method: 'POST', path: '/academics/student-subject-enrollments/bulk-combination', purpose: 'Assign Form 5/6 students to all combination subjects' },
+  { method: 'POST', path: '/finance/fee-structures/student-groups', purpose: 'Create formal billing group' },
 ];
 
 export const gradingScales = [
-  { id: 'scale-2026', name: 'Kilimanjaro Standard 2026', active: true, boundaries: [{ label: 'A', min: 80, max: 100 }, { label: 'B', min: 65, max: 79 }, { label: 'C', min: 50, max: 64 }, { label: 'D', min: 35, max: 49 }, { label: 'F', min: 0, max: 34 }] },
+  { id: 'scale-primary-2026', name: 'Primary Standard 2026', scope: 'Primary Classes 1-6', active: true, boundaries: [{ label: 'A', min: 80, max: 100 }, { label: 'B', min: 65, max: 79 }, { label: 'C', min: 50, max: 64 }, { label: 'D', min: 35, max: 49 }, { label: 'F', min: 0, max: 34 }] },
+  { id: 'scale-olevel-2026', name: 'O-Level Standard 2026', scope: 'Forms 1-4', active: true, boundaries: [{ label: 'A', min: 80, max: 100 }, { label: 'B', min: 65, max: 79 }, { label: 'C', min: 50, max: 64 }, { label: 'D', min: 35, max: 49 }, { label: 'F', min: 0, max: 34 }] },
+  { id: 'scale-alevel-2026', name: 'A-Level Principal 2026', scope: 'Forms 5-6 combinations', active: false, boundaries: [{ label: 'A', min: 75, max: 100 }, { label: 'B', min: 65, max: 74 }, { label: 'C', min: 55, max: 64 }, { label: 'D', min: 45, max: 54 }, { label: 'S', min: 35, max: 44 }, { label: 'F', min: 0, max: 34 }] },
 ];
 
 export const assessmentTypes = [
-  { id: 'cat', name: 'CAT', weight: 20, maxScore: 100, scope: 'Term' },
-  { id: 'midterm', name: 'Midterm', weight: 30, maxScore: 100, scope: 'Term' },
-  { id: 'final', name: 'Final', weight: 50, maxScore: 100, scope: 'Term' },
+  { id: 'primary-weekly', name: 'Weekly Work', weight: 20, maxScore: 100, scope: 'Primary' },
+  { id: 'cat', name: 'CAT', weight: 20, maxScore: 100, scope: 'O-Level' },
+  { id: 'midterm', name: 'Midterm', weight: 30, maxScore: 100, scope: 'O-Level' },
+  { id: 'final', name: 'Final', weight: 50, maxScore: 100, scope: 'O-Level' },
+  { id: 'alevel-paper', name: 'A-Level Paper', weight: 50, maxScore: 100, scope: 'A-Level / subject-specific' },
 ];
 
 export const serviceHealth = [

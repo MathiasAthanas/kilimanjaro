@@ -62,7 +62,7 @@ export function LandingPage() {
           <a className="text-ks-muted transition hover:text-ks-blue" href="#security">Security</a>
         </nav>
         <div className="flex items-center gap-3">
-          <Link to="/status" className="hidden text-sm font-bold text-ks-navy transition hover:text-ks-blue sm:block">Status</Link>
+          <Link to="/admin/system-status" className="hidden text-sm font-bold text-ks-navy transition hover:text-ks-blue sm:block">System Status</Link>
           <Link to="/login">
             <Button className="flex items-center gap-2">
               Staff Login <ArrowRight className="h-4 w-4" />
@@ -98,25 +98,25 @@ export function LandingPage() {
           <div>
             <div className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 backdrop-blur-sm">
               <span className="h-2 w-2 animate-pulse rounded-full bg-ks-emerald" />
-              <span className="text-xs font-black uppercase tracking-wider text-white">Operational System Online</span>
+              <span className="text-xs font-black uppercase tracking-wider text-white">All systems running</span>
             </div>
             <h1 className="mt-6 font-display text-5xl font-bold leading-tight tracking-tight text-white md:text-6xl">
               Kilimanjaro Schools{' '}
-              <span className="text-ks-gold">Operational Portal</span>
+              <span className="text-ks-gold">Staff Portal</span>
             </h1>
             <p className="mt-6 max-w-xl text-lg leading-8 text-white/70">
-              The command center for academic excellence and administrative precision. Purpose-built for staff workflows across academics, finance, AQA, announcements and governance.
+              Everything your team needs, in one place. Manage classes, grades, fees, announcements and more — built around the way your school actually works.
             </p>
             <div className="mt-8 flex flex-wrap gap-4">
               <Link to="/login">
                 <Button className="flex items-center gap-2 bg-ks-gold px-8 py-3.5 text-base text-ks-slate hover:shadow-lg hover:shadow-ks-gold/30">
-                  Open Staff Portal <ArrowRight className="h-4 w-4" />
+                  Sign in to your workspace <ArrowRight className="h-4 w-4" />
                 </Button>
               </Link>
-              <Link to="/status">
+              <Link to="/admin/system-status">
                 <Button variant="outline-white" className="flex items-center gap-2 px-8 py-3.5 text-base">
                   <span className="h-2 w-2 rounded-full bg-ks-emerald" />
-                  System Status
+                  Check system health
                 </Button>
               </Link>
             </div>
@@ -134,7 +134,7 @@ export function LandingPage() {
               <div className="h-2 overflow-hidden rounded-full bg-ks-mist">
                 <div className="h-full w-3/4 bg-ks-blue" />
               </div>
-              <p className="mt-2 text-xs font-bold text-ks-muted">Syllabus Progress: 75%</p>
+              <p className="mt-2 text-xs font-bold text-ks-muted">Syllabus coverage · 75% complete</p>
               <div className="mt-4 flex gap-2">
                 {['MR', 'JK', 'AS'].map((initials) => (
                   <div key={initials} className="flex h-8 w-8 items-center justify-center rounded-full bg-ks-mist text-[10px] font-black text-ks-blue ring-2 ring-white">
@@ -147,18 +147,18 @@ export function LandingPage() {
             {/* Finance card */}
             <Card className="absolute bottom-10 right-20 z-40 w-80 rounded-xl border-ks-navy bg-ks-navy p-6 text-white shadow-2xl transition hover:scale-[1.02]">
               <div className="mb-5 flex items-center justify-between">
-                <span className="text-xs font-black uppercase tracking-wider text-ks-mist">Finance Hub</span>
+                <span className="text-xs font-black uppercase tracking-wider text-ks-mist">Finance</span>
                 <WalletCards className="h-5 w-5 text-ks-gold" />
               </div>
               <div className="font-display text-3xl font-bold">TZS 14.2M</div>
-              <p className="text-xs font-bold text-ks-mist/70">Collection this week</p>
+              <p className="text-xs font-bold text-ks-mist/70">Collected this week</p>
               <div className="mt-4 flex items-end gap-1" style={{ height: 48 }}>
                 {[50, 75, 100, 66, 84].map((h) => (
                   <div key={h} style={{ height: `${h}%` }} className="w-full rounded-t bg-ks-gold" />
                 ))}
               </div>
               <div className="mt-3 flex items-center gap-2 text-xs font-bold text-ks-emerald">
-                <TrendingUp className="h-3.5 w-3.5" /> +8.4% vs last week
+                <TrendingUp className="h-3.5 w-3.5" /> Up 8.4% from last week
               </div>
             </Card>
 
@@ -197,7 +197,7 @@ export function LandingPage() {
 
       {/* ── Stats strip ──────────────────────────────────── */}
       <section className="border-y border-ks-line bg-white px-5 lg:px-margin-page">
-        <div className="mx-auto grid max-w-7xl divide-x divide-ks-line md:grid-cols-4">
+        <div className="mx-auto grid max-w-7xl divide-y divide-ks-line md:grid-cols-4 md:divide-x md:divide-y-0">
           {stats.map(({ value, label }) => (
             <div key={label} className="flex flex-col items-center py-6 text-center">
               <p className="font-display text-4xl font-black text-ks-navy">{value}</p>
@@ -375,19 +375,19 @@ export function LandingPage() {
       <section className="bg-ks-navy px-5 py-20 text-center text-white lg:px-margin-page">
         <div className="mx-auto max-w-2xl">
           <p className="text-xs font-black uppercase tracking-[0.22em] text-ks-gold">Get started</p>
-          <h2 className="mt-4 font-display text-4xl font-bold">Ready to access your workspace?</h2>
+          <h2 className="mt-4 font-display text-4xl font-bold">Your workspace is ready.</h2>
           <p className="mt-5 text-lg leading-8 text-ks-mist/70">
-            Sign in with your staff credentials to access your role-specific dashboard and begin managing your workflows.
+            Sign in with your staff credentials and pick up right where your school day needs you.
           </p>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
             <Link to="/login">
               <Button className="flex items-center gap-2 bg-ks-gold px-10 py-4 text-base text-ks-slate hover:shadow-lg hover:shadow-ks-gold/30">
-                Staff Login <ArrowRight className="h-4 w-4" />
+                Sign in <ArrowRight className="h-4 w-4" />
               </Button>
             </Link>
-            <Link to="/status">
+            <Link to="/admin/system-status">
               <Button variant="outline-white" className="px-10 py-4 text-base">
-                View Status
+                System health
               </Button>
             </Link>
           </div>
@@ -405,7 +405,7 @@ export function LandingPage() {
                 <span className="font-display text-xl font-bold text-white">Kilimanjaro Schools</span>
               </div>
               <p className="mt-4 max-w-xs text-sm leading-7 text-ks-mist/60">
-                Tanzania's premier digital operational command center for academic excellence, finance, governance and staff productivity.
+                A practical tool for Tanzanian schools — helping teachers, administrators and finance teams do their work with less friction every day.
               </p>
               <div className="mt-6 flex flex-col gap-2.5 text-sm">
                 <div className="flex items-center gap-2.5"><MapPin className="h-4 w-4 shrink-0 text-ks-gold" /><span>Kilimanjaro Region, Tanzania</span></div>
@@ -420,7 +420,7 @@ export function LandingPage() {
               <ul className="space-y-3 text-sm">
                 {[
                   ['Staff Login', '/login'],
-                  ['System Status', '/status'],
+                  ['System Status', '/admin/system-status'],
                   ['Help & Support', '/app/help'],
                   ['About the Platform', '/app/about'],
                 ].map(([label, href]) => (
@@ -454,7 +454,7 @@ export function LandingPage() {
             </div>
             <div className="flex items-center gap-2">
               <span className="h-2 w-2 animate-pulse rounded-full bg-ks-emerald" />
-              <span className="font-bold text-ks-emerald/70">All systems operational · v1.0.0</span>
+              <span className="font-bold text-ks-emerald/70">All systems running · v1.0.0</span>
             </div>
           </div>
         </div>

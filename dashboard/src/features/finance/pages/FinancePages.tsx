@@ -25,7 +25,25 @@ import {
   invoices,
   payments,
   receipts,
+  studentGroups,
 } from '../api/financeApi';
+import {
+  useAssetSummary,
+  useAssets,
+  useAsset as useAssetById,
+  useFinanceAuditLogs,
+  useFinanceOverview,
+  useFeeAssignments,
+  useFeeCategories,
+  useFeeStructures,
+  useInvoice as useInvoiceById,
+  useInvoices,
+  usePendingPaymentApprovals,
+  usePayments,
+  useReceipts,
+  useReceipt as useReceiptById,
+  useStudentGroups,
+} from '../api/finance.hooks';
 import {
   ActionPanel,
   AmountDisplay,
@@ -52,41 +70,52 @@ import {
   Td,
 } from '../components/FinanceWorkspaceShell';
 import { formatTZS, overdueInvoices } from '../utils/money';
+import { DataError } from '../../../components/feedback/DataError';
+import { EmptyState } from '../../../components/feedback/EmptyState';
+import { SkeletonTable } from '../../../components/common/SkeletonTable';
+import { SkeletonCards } from '../../../components/common/SkeletonCards';
+
+// Zero-value overview — shown when API hasn't returned data yet (no fake numbers)
+const EMPTY_OVERVIEW: typeof financeOverview = { totalInvoiced: 0, totalCollected: 0, outstanding: 0, collectionRate: 0, today: 0, overdueInvoices: 0 };
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 
 export function FinanceHomePage() {
-  const overdue = overdueInvoices(invoices);
-  const collectedPct = Math.round((financeOverview.totalCollected / financeOverview.totalInvoiced) * 100);
-  const outstandingPct = Math.round((financeOverview.outstanding / financeOverview.totalInvoiced) * 100);
+  const { data: apiOverview = EMPTY_OVERVIEW } = useFinanceOverview() as { data: typeof financeOverview };
+  const { data: apiPayments = [] as typeof payments } = usePayments() as { data: typeof payments };
+  const { data: apiInvoices = [] as typeof invoices } = useInvoices() as { data: typeof invoices };
+  const overdue = overdueInvoices(apiInvoices);
+  const base = apiOverview.totalInvoiced || 1; // guard against division by zero before data loads
+  const collectedPct = Math.round((apiOverview.totalCollected / base) * 100);
+  const outstandingPct = Math.round((apiOverview.outstanding / base) * 100);
   return (
     <FinanceWorkspaceShell title="Finance Operations Desk" eyebrow="Precision Ledger">
       <FinanceMetricStrip items={[
         {
           label: 'Total Invoiced',
-          value: formatTZS(financeOverview.totalInvoiced),
+          value: formatTZS(apiOverview.totalInvoiced),
           detail: 'Term II 2026 base',
           tone: 'navy',
           progress: collectedPct,
         },
         {
           label: 'Collected',
-          value: formatTZS(financeOverview.totalCollected),
+          value: formatTZS(apiOverview.totalCollected),
           detail: `${collectedPct}% of invoiced · cash, bank, mobile`,
           tone: 'green',
           trend: 'up',
         },
         {
           label: 'Outstanding',
-          value: formatTZS(financeOverview.outstanding),
-          detail: `${financeOverview.overdueInvoices} overdue invoices`,
+          value: formatTZS(apiOverview.outstanding),
+          detail: `${apiOverview.overdueInvoices} overdue invoices`,
           tone: 'red',
           trend: 'down',
           progress: outstandingPct,
         },
         {
           label: 'Today',
-          value: formatTZS(financeOverview.today),
+          value: formatTZS(apiOverview.today),
           detail: 'Live collection desk',
           tone: 'gold',
           trend: 'up',
@@ -96,7 +125,7 @@ export function FinanceHomePage() {
       <div className="grid gap-gutter xl:grid-cols-[300px_minmax(0,1fr)_320px]">
         {/* ── Left: ring + bar chart ── */}
         <div className="space-y-gutter">
-          <CollectionRing rate={financeOverview.collectionRate} />
+          <CollectionRing rate={apiOverview.collectionRate} />
           <DenseBarChart values={[
             { label: 'Cash',         value: 740_000,   tone: 'bg-[#10b981]' },
             { label: 'Bank',         value: 880_000,   tone: 'bg-[#00334f]' },
@@ -107,9 +136,9 @@ export function FinanceHomePage() {
         {/* ── Center: recent data ── */}
         <div className="space-y-gutter">
           <SectionTitle title="Recent Payments" to="/finance/payments" />
-          <PaymentTable rows={payments.slice(0, 4)} />
+          <PaymentTable rows={apiPayments.slice(0, 4)} />
           <SectionTitle title="Overdue Invoices" to="/finance/invoices" />
-          <InvoiceTable rows={overdue.length ? overdue : invoices.filter((i) => i.status !== 'PAID')} />
+          <InvoiceTable rows={overdue.length ? overdue : apiInvoices.filter((i) => i.status !== 'PAID')} />
         </div>
 
         {/* ── Right: actions + approval notice ── */}
@@ -141,11 +170,20 @@ export function FinanceHomePage() {
 // ─── Invoice pages ────────────────────────────────────────────────────────────
 
 export function InvoiceListPage() {
+  const { data: apiInvoices = [] as typeof invoices, isLoading, isError, refetch } = useInvoices() as { data: typeof invoices; isLoading: boolean; isError: boolean; refetch: () => void };
   return (
     <FinanceWorkspaceShell title="Invoice Ledger" eyebrow="Find, filter, inspect">
       <FinanceBreadcrumb crumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Invoices' }]} />
       <FinanceFilters items={['Status', 'Class', 'Term', 'Due date', 'Outstanding amount', 'Student or invoice search']} />
-      <InvoiceTable rows={invoices} />
+      {isLoading ? (
+        <SkeletonTable cols={7} />
+      ) : isError ? (
+        <DataError onRetry={refetch} />
+      ) : !apiInvoices.length ? (
+        <EmptyState title="No invoices yet" description="Generate invoices for a term to begin tracking." action={{ label: 'Generate Invoices', href: '/finance/invoices/generate' }} />
+      ) : (
+        <InvoiceTable rows={apiInvoices} />
+      )}
     </FinanceWorkspaceShell>
   );
 }
@@ -178,6 +216,8 @@ export function GenerateInvoicesPage() {
 
 export function InvoiceDetailPage() {
   const invoice = useInvoice();
+  const { data: allPayments = [] as typeof payments } = usePayments() as { data: typeof payments };
+  const invoicePayments = allPayments.filter((p) => p.invoiceId === invoice.id || p.invoiceNumber === invoice.number);
   return (
     <FinanceWorkspaceShell title={invoice.number} eyebrow="Invoice investigation">
       <FinanceBreadcrumb crumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Invoices', to: '/finance/invoices' }, { label: invoice.number }]} />
@@ -225,7 +265,7 @@ export function InvoiceDetailPage() {
               </tr>
             ))}
           </FinanceTable>
-          <PaymentTable rows={payments.filter((p) => p.invoiceId === invoice.id || p.invoiceNumber === invoice.number)} />
+          <PaymentTable rows={invoicePayments} />
         </div>
         <ActionPanel
           title="Invoice Actions"
@@ -246,40 +286,53 @@ export function InvoiceDetailPage() {
 // ─── Payment pages ────────────────────────────────────────────────────────────
 
 export function RecordCashPaymentPage() {
+  const { data: apiInvoices = [] as typeof invoices } = useInvoices() as { data: typeof invoices };
+  const { data: apiPayments = [] as typeof payments } = usePayments() as { data: typeof payments };
   return (
     <FinanceWorkspaceShell title="Record Cash Payment" eyebrow="Cash desk entry">
       <FinanceBreadcrumb crumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Payments', to: '/finance/payments' }, { label: 'Record Cash' }]} />
-      <PaymentForm method="cash" invoices={invoices} references={payments.map((p) => p.reference ?? '')} />
+      <PaymentForm method="cash" invoices={apiInvoices} references={apiPayments.map((p) => p.reference ?? '')} />
     </FinanceWorkspaceShell>
   );
 }
 
 export function RecordBankTransferPage() {
+  const { data: apiInvoices = [] as typeof invoices } = useInvoices() as { data: typeof invoices };
+  const { data: apiPayments = [] as typeof payments } = usePayments() as { data: typeof payments };
   return (
     <FinanceWorkspaceShell title="Record Bank Transfer" eyebrow="Statement-safe posting">
       <FinanceBreadcrumb crumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Payments', to: '/finance/payments' }, { label: 'Record Bank Transfer' }]} />
-      <PaymentForm method="bank" invoices={invoices} references={payments.map((p) => p.reference ?? '')} />
+      <PaymentForm method="bank" invoices={apiInvoices} references={apiPayments.map((p) => p.reference ?? '')} />
     </FinanceWorkspaceShell>
   );
 }
 
 export function PaymentListPage() {
+  const { data: apiPayments = [] as typeof payments, isLoading, isError, refetch } = usePayments() as { data: typeof payments; isLoading: boolean; isError: boolean; refetch: () => void };
   return (
     <FinanceWorkspaceShell title="Payment Ledger" eyebrow="Search and reconcile">
       <FinanceBreadcrumb crumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Payments' }]} />
       <FinanceFilters items={['Method', 'Status', 'Date range', 'Amount range', 'Entered by']} />
-      <PaymentTable rows={payments} />
+      {isLoading ? (
+        <SkeletonTable cols={6} />
+      ) : isError ? (
+        <DataError onRetry={refetch} />
+      ) : !apiPayments.length ? (
+        <EmptyState title="No payments recorded" description="Payments will appear here once they are entered at the cash desk." />
+      ) : (
+        <PaymentTable rows={apiPayments} />
+      )}
     </FinanceWorkspaceShell>
   );
 }
 
 export function PendingPaymentApprovalsPage() {
-  const pending = payments.filter((p) => p.status === 'PENDING');
+  const { data: apiPending = [] as typeof payments } = usePendingPaymentApprovals() as { data: typeof payments };
   return (
     <FinanceWorkspaceShell title="Pending Payment Approvals" eyebrow="Read-only approval queue">
       <FinanceBreadcrumb crumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Payments', to: '/finance/payments' }, { label: 'Pending Approvals' }]} />
       <ReadOnlyApprovalNotice />
-      <PaymentTable rows={pending} />
+      <PaymentTable rows={apiPending} />
     </FinanceWorkspaceShell>
   );
 }
@@ -342,10 +395,19 @@ export function PaymentDetailPage() {
 // ─── Receipt pages ────────────────────────────────────────────────────────────
 
 export function ReceiptListPage() {
+  const { data: apiReceipts = [] as typeof receipts, isLoading, isError, refetch } = useReceipts() as { data: typeof receipts; isLoading: boolean; isError: boolean; refetch: () => void };
   return (
     <FinanceWorkspaceShell title="Receipt Ledger" eyebrow="Receipts and void controls">
       <FinanceBreadcrumb crumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Receipts' }]} />
-      <ReceiptList rows={receipts} />
+      {isLoading ? (
+        <SkeletonTable cols={5} />
+      ) : isError ? (
+        <DataError onRetry={refetch} />
+      ) : !apiReceipts.length ? (
+        <EmptyState title="No receipts yet" description="Receipts are generated automatically when payments are approved." />
+      ) : (
+        <ReceiptList rows={apiReceipts} />
+      )}
     </FinanceWorkspaceShell>
   );
 }
@@ -374,12 +436,20 @@ export function ReceiptDetailPage() {
 // ─── Fee setup pages ──────────────────────────────────────────────────────────
 
 export function FeeCategoriesPage() {
+  const { data: apiCategories = [] as typeof feeCategories, isLoading, isError, refetch } = useFeeCategories() as { data: typeof feeCategories; isLoading: boolean; isError: boolean; refetch: () => void };
   return (
     <FinanceWorkspaceShell title="Fee Categories" eyebrow="Setup and ordering">
       <FinanceBreadcrumb crumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Fee Setup' }, { label: 'Categories' }]} />
       <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_320px]">
+        {isLoading ? (
+          <SkeletonTable cols={9} />
+        ) : isError ? (
+          <DataError onRetry={refetch} />
+        ) : !apiCategories.length ? (
+          <EmptyState title="No fee categories" description="Create the first fee category to start building fee structures." action={{ label: 'Create Category', href: '/finance/fee-categories/create' }} />
+        ) : (
         <FinanceTable columns={['Order', 'Code', 'Name', 'Type', 'Default Amount', 'Frequency', 'Used By', 'Status', 'Actions']} minWidth={940}>
-          {feeCategories.map((category) => (
+          {apiCategories.map((category) => (
             <tr key={category.id} className="even:bg-[#f7f9fb]">
               <Td>{category.order}</Td>
               <Td>{category.code}</Td>
@@ -401,6 +471,7 @@ export function FeeCategoriesPage() {
             </tr>
           ))}
         </FinanceTable>
+        )}
         <ActionPanel title="Category Actions" items={['Create category', 'Save reordered list', 'Preview delete block', 'Sync matrix']} />
       </div>
     </FinanceWorkspaceShell>
@@ -416,7 +487,8 @@ export function EditFeeCategoryPage() {
 }
 
 function FeeCategoryForm({ title, mode }: { title: string; mode: 'create' | 'edit' }) {
-  const base = feeCategories[0];
+  const { data: apiCategories = [] as typeof feeCategories } = useFeeCategories() as { data: typeof feeCategories };
+  const base = apiCategories[0] ?? feeCategories[0];
   return (
     <FinanceFormPage
       title={title}
@@ -439,15 +511,55 @@ function FeeCategoryForm({ title, mode }: { title: string; mode: 'create' | 'edi
 }
 
 export function FeeStructuresPage() {
+  const { data: apiStructures = [] as typeof feeStructures } = useFeeStructures() as { data: typeof feeStructures };
+  const { data: apiGroups = [] as typeof studentGroups } = useStudentGroups() as { data: typeof studentGroups };
+  const stageTotals = apiStructures.reduce<Record<string, number>>((acc, structure) => {
+    acc[structure.educationStage] = (acc[structure.educationStage] ?? 0) + structure.amount;
+    return acc;
+  }, {});
+
   return (
     <FinanceWorkspaceShell title="Fee Structures" eyebrow="Class and term pricing">
       <FinanceBreadcrumb crumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Fee Setup' }, { label: 'Structures' }]} />
-      <FinanceTable columns={['Structure', 'Category', 'Class', 'Amount', 'Effective Term', 'Status', 'Actions']} minWidth={900}>
-        {feeStructures.map((structure) => (
+      <div className="grid gap-3 md:grid-cols-3">
+        {['Primary', 'O-Level', 'A-Level'].map((stage) => (
+          <div key={stage} className="rounded-[24px] border border-[#d7dee8] bg-white p-4 shadow-sm">
+            <p className="text-[11px] font-black uppercase tracking-[0.2em] text-[#6a7485]">{stage}</p>
+            <p className="mt-2 font-mono text-xl font-black text-[#10233f]">{formatTZS(stageTotals[stage] ?? 0)}</p>
+            <p className="mt-1 text-xs font-semibold text-[#6a7485]">Active fee targets in this stage</p>
+          </div>
+        ))}
+      </div>
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <FinanceTable columns={['Group Code', 'Name', 'Members', 'Fee Target', 'Status']} minWidth={760}>
+          {apiGroups.map((group) => (
+            <tr key={group.id} className="even:bg-[#f7f9fb]">
+              <Td>{group.code}</Td>
+              <Td>{group.name}</Td>
+              <Td>{group.members}</Td>
+              <Td>{group.feeTarget}</Td>
+              <Td><FinanceStatusBadge status="ACTIVE" /></Td>
+            </tr>
+          ))}
+        </FinanceTable>
+        <ActionPanel
+          title="Student Group Targeting"
+          items={[
+            'Create group: BOARDER, DAY_SCHOLAR, SCIENCE_COMBINATIONS',
+            'Assign students into billing groups',
+            'Preview group fees before invoice generation',
+            'Audit every group membership change',
+          ]}
+        />
+      </div>
+      <FinanceTable columns={['Structure', 'Category', 'Target', 'Stage', 'Group', 'Amount', 'Effective Term', 'Status', 'Actions']} minWidth={1060}>
+        {apiStructures.map((structure) => (
           <tr key={structure.id} className="even:bg-[#f7f9fb]">
             <Td>{structure.id}</Td>
             <Td>{structure.category}</Td>
             <Td>{structure.className}</Td>
+            <Td>{structure.educationStage}</Td>
+            <Td>{structure.studentGroup ?? `Level ${structure.classLevel ?? '-'}`}</Td>
             <Td amount><AmountDisplay amount={structure.amount} /></Td>
             <Td>{structure.effectiveTerm}</Td>
             <Td><FinanceStatusBadge status={structure.active ? 'ACTIVE' : 'INACTIVE'} /></Td>
@@ -467,7 +579,7 @@ export function FeeMatrixPage() {
       <FinanceBreadcrumb crumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Fee Setup' }, { label: 'Matrix' }]} />
       <FeeMatrixGrid
         categories={['Tuition', 'Boarding', 'Meals', 'Library and ICT', 'Exam Preparation', 'Science Lab']}
-        classes={['Form 1', 'Form 2', 'Form 3', 'Form 4', 'Form 5', 'Form 6']}
+        classes={['Class 1-3', 'Class 4-6/7', 'Form 1', 'Form 2', 'Form 3', 'Form 4', 'Form 5 PCM/PCB', 'Form 6']}
       />
     </FinanceWorkspaceShell>
   );
@@ -483,7 +595,7 @@ export function CreateFeeStructurePage() {
         { label: 'Fee Setup' },
         { label: 'Create Structure' },
       ]}
-      fields={['Category', 'Class or form', 'Amount', 'Effective term', 'Applicability rule', 'Approval reason']}
+      fields={['Category', 'Education stage', 'Class level or form', 'Student group or combination', 'Amount', 'Effective term', 'Applicability rule', 'Approval reason']}
       sideTitle="Impact Preview"
       sideItems={[
         ['Affected students', '184'],
@@ -496,12 +608,13 @@ export function CreateFeeStructurePage() {
 }
 
 export function FeeAssignmentsPage() {
+  const { data: apiAssignments = [] as typeof feeAssignments } = useFeeAssignments() as { data: typeof feeAssignments };
   return (
     <FinanceWorkspaceShell title="Optional Fee Assignments" eyebrow="Student and bulk assignment">
       <FinanceBreadcrumb crumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Fee Setup' }, { label: 'Assignments' }]} />
       <FinanceFilters items={['Fee category', 'Class', 'Term', 'Effective date']} />
       <FinanceTable columns={['Assignment', 'Student', 'Class', 'Category', 'Amount', 'Term', 'Effective', 'Actions']} minWidth={900}>
-        {feeAssignments.map((assignment) => (
+        {apiAssignments.map((assignment) => (
           <tr key={assignment.id} className="even:bg-[#f7f9fb]">
             <Td>{assignment.id}</Td>
             <Td>{assignment.student}</Td>
@@ -523,41 +636,53 @@ export function FeeAssignmentsPage() {
 // ─── Asset pages ──────────────────────────────────────────────────────────────
 
 export function AssetsListPage() {
+  const { data: apiAssets = [] as typeof assets, isLoading: assetsLoading, isError: assetsError, refetch: refetchAssets } = useAssets() as { data: typeof assets; isLoading: boolean; isError: boolean; refetch: () => void };
+  const { data: apiAssetSummary } = useAssetSummary() as { data: Record<string, unknown> | undefined };
+  const totalCost = (apiAssetSummary?.totalPurchaseCost as number | undefined) ?? 155_200_000;
+  const currentValue = (apiAssetSummary?.totalCurrentValue as number | undefined) ?? 110_300_000;
   return (
     <FinanceWorkspaceShell title="School Assets Ledger" eyebrow="Assets, values, disposal">
       <FinanceBreadcrumb crumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Assets' }]} />
       <FinanceMetricStrip items={[
         {
           label: 'Purchase Cost',
-          value: formatTZS(155_200_000),
-          detail: `${assets.length} tracked assets`,
+          value: formatTZS(totalCost),
+          detail: `${apiAssets.length} tracked assets`,
           tone: 'navy',
         },
         {
           label: 'Current Value',
-          value: formatTZS(110_300_000),
+          value: formatTZS(currentValue),
           detail: 'Depreciated book value',
           tone: 'green',
           trend: 'down',
-          progress: Math.round((110_300_000 / 155_200_000) * 100),
+          progress: totalCost > 0 ? Math.round((currentValue / totalCost) * 100) : 0,
         },
         {
           label: 'Service Due',
-          value: '4',
+          value: String((apiAssetSummary?.serviceDue as number | undefined) ?? 4),
           detail: 'Maintenance attention needed',
           tone: 'gold',
           trend: 'up',
         },
         {
           label: 'Disposed',
-          value: '2',
+          value: String((apiAssetSummary?.disposed as number | undefined) ?? 2),
           detail: 'This academic year',
           tone: 'slate',
         },
       ]} />
-      <div className="grid gap-gutter xl:grid-cols-3">
-        {assets.map((asset) => <AssetCard key={asset.id} asset={asset} />)}
-      </div>
+      {assetsLoading ? (
+        <SkeletonCards count={6} cols="xl:grid-cols-3" />
+      ) : assetsError ? (
+        <DataError onRetry={refetchAssets} />
+      ) : !apiAssets.length ? (
+        <EmptyState title="No assets registered" description="Register school assets to track their value and maintenance schedule." action={{ label: 'Register Asset', href: '/finance/assets/create' }} />
+      ) : (
+        <div className="grid gap-gutter xl:grid-cols-3">
+          {apiAssets.map((asset) => <AssetCard key={asset.id} asset={asset} />)}
+        </div>
+      )}
     </FinanceWorkspaceShell>
   );
 }
@@ -612,7 +737,7 @@ export function AssetDetailPage() {
               detail: `Condition: ${asset.condition}`,
               tone: 'green',
               trend: 'down',
-              progress: Math.round((asset.currentValue / asset.purchaseCost) * 100),
+              progress: asset.purchaseCost > 0 ? Math.round((asset.currentValue / asset.purchaseCost) * 100) : 0,
             },
             {
               label: 'Location',
@@ -725,7 +850,9 @@ export function DailyCollectionsReportPage() {
 }
 
 export function FeeDefaultersReportPage() {
-  const overdue = overdueInvoices(invoices);
+  const { data: apiInvoices = [] as typeof invoices } = useInvoices() as { data: typeof invoices };
+  const { data: apiOverview = EMPTY_OVERVIEW } = useFinanceOverview() as { data: typeof financeOverview };
+  const overdue = overdueInvoices(apiInvoices);
   return (
     <FinanceWorkspaceShell title="Fee Defaulters Report" eyebrow="Overdue follow-up">
       <FinanceBreadcrumb crumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Reports', to: '/finance/reports' }, { label: 'Fee Defaulters' }]} />
@@ -733,10 +860,10 @@ export function FeeDefaultersReportPage() {
         {
           label: 'Overdue Total',
           value: formatTZS(32_059_000),
-          detail: '47 outstanding invoices',
+          detail: `${overdue.length} outstanding invoices`,
           tone: 'red',
           trend: 'down',
-          progress: Math.round((32_059_000 / financeOverview.totalInvoiced) * 100),
+          progress: apiOverview.totalInvoiced > 0 ? Math.round((32_059_000 / apiOverview.totalInvoiced) * 100) : 0,
         },
         {
           label: '30+ Days',
@@ -759,7 +886,7 @@ export function FeeDefaultersReportPage() {
         },
       ]} />
       <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_320px]">
-        <InvoiceTable rows={overdue.length > 0 ? overdue : invoices.filter((i) => i.status !== 'PAID')} />
+        <InvoiceTable rows={overdue.length > 0 ? overdue : apiInvoices.filter((i) => i.status !== 'PAID')} />
         <ActionPanel
           title="Defaulter Actions"
           items={[
@@ -778,13 +905,14 @@ export function FeeDefaultersReportPage() {
 // ─── Audit + export pages ─────────────────────────────────────────────────────
 
 export function FinancialAuditLogPage() {
+  const { data: apiAudit = [] as typeof auditEntries } = useFinanceAuditLogs() as { data: typeof auditEntries };
   return (
     <FinanceWorkspaceShell title="Financial Audit Log" eyebrow="Immutable ledger events">
       <FinanceBreadcrumb crumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Audit Log' }]} />
       <AuditImmutableBanner />
       <FinanceFilters items={['Action', 'Actor', 'Entity', 'Date range', 'Correlation ID']} />
       <div className="space-y-3">
-        {auditEntries.map((entry) => <AuditLogRow key={entry.id} entry={entry} />)}
+        {apiAudit.map((entry) => <AuditLogRow key={entry.id} entry={entry} />)}
       </div>
     </FinanceWorkspaceShell>
   );
@@ -885,8 +1013,10 @@ function ReportPage({
   trendData: number[];
   overdue?: boolean;
 }) {
+  const { data: apiOverview = EMPTY_OVERVIEW } = useFinanceOverview() as { data: typeof financeOverview };
+  const { data: apiPayments = [] as typeof payments } = usePayments() as { data: typeof payments };
   const collected = overdue ? 32_059_000 : 89_621_000;
-  const collectedPct = Math.round((collected / financeOverview.totalInvoiced) * 100);
+  const collectedPct = apiOverview.totalInvoiced > 0 ? Math.round((collected / apiOverview.totalInvoiced) * 100) : 0;
   return (
     <FinanceWorkspaceShell title={title} eyebrow="Generated report workspace">
       <FinanceBreadcrumb crumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Reports', to: '/finance/reports' }, { label: reportBreadcrumb }]} />
@@ -940,7 +1070,7 @@ function ReportPage({
           ]}
         />
       </div>
-      <PaymentTable rows={payments} />
+      <PaymentTable rows={apiPayments} />
     </FinanceWorkspaceShell>
   );
 }
@@ -1056,20 +1186,27 @@ function SectionTitle({ title, to }: { title: string; to: string }) {
 
 function useInvoice() {
   const { id } = useParams();
-  return invoices.find((i) => i.id === id || i.number === id) ?? invoices[0];
+  const { data: apiInvoice } = useInvoiceById(id ?? '') as { data: (typeof invoices)[number] | undefined };
+  const { data: apiInvoices = [] as typeof invoices } = useInvoices() as { data: typeof invoices };
+  return apiInvoice ?? apiInvoices.find((i) => i.id === id || i.number === id) ?? invoices[0];
 }
 
 function usePayment() {
   const { id } = useParams();
-  return payments.find((p) => p.id === id) ?? payments[0];
+  const { data: apiPayments = [] as typeof payments } = usePayments() as { data: typeof payments };
+  return apiPayments.find((p) => p.id === id) ?? payments[0];
 }
 
 function useReceipt() {
   const { id } = useParams();
-  return receipts.find((r) => r.id === id || r.number === id) ?? receipts[0];
+  const { data: apiReceipt } = useReceiptById(id ?? '') as { data: (typeof receipts)[number] | undefined };
+  const { data: apiReceipts = [] as typeof receipts } = useReceipts() as { data: typeof receipts };
+  return apiReceipt ?? apiReceipts.find((r) => r.id === id || r.number === id) ?? receipts[0];
 }
 
 function useAsset() {
   const { id } = useParams();
-  return assets.find((a) => a.id === id) ?? assets[0];
+  const { data: apiAsset } = useAssetById(id ?? '') as { data: (typeof assets)[number] | undefined };
+  const { data: apiAssets = [] as typeof assets } = useAssets() as { data: typeof assets };
+  return apiAsset ?? apiAssets.find((a) => a.id === id) ?? assets[0];
 }

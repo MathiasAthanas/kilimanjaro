@@ -316,11 +316,13 @@ const adminSections: SidebarSection[] = [
   {
     title: 'Configuration',
     items: [
-      { to: '/admin/grading',                  icon: FileSpreadsheet,label: 'Grading',           end: true },
-      { to: '/admin/assessment-types',         icon: ClipboardCheck, label: 'Assessment Types'            },
-      { to: '/admin/finance/fee-categories',   icon: WalletCards,    label: 'Fee Categories'              },
-      { to: '/admin/performance/engine',       icon: TrendingUp,     label: 'Performance Engine'          },
-      { to: '/admin/settings/system',          icon: Settings,       label: 'System Settings'             },
+      { to: '/admin/grading',                              icon: FileSpreadsheet, label: 'Grading',             end: true },
+      { to: '/admin/assessment-types',                     icon: ClipboardCheck,  label: 'Assessment Types'              },
+      { to: '/admin/academic/stage-config',                icon: BookOpen,        label: 'Stage Config'                  },
+      { to: '/admin/academic/promotion/cross-stage',       icon: GraduationCap,   label: 'Cross-Stage Promotion'         },
+      { to: '/admin/finance/fee-categories',               icon: WalletCards,     label: 'Fee Categories'                },
+      { to: '/admin/performance/engine',                   icon: TrendingUp,      label: 'Performance Engine'            },
+      { to: '/admin/settings/system',                      icon: Settings,        label: 'System Settings'               },
     ],
   },
   {

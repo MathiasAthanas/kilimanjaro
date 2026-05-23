@@ -1,4 +1,4 @@
-import { createBrowserRouter } from 'react-router-dom';
+import { createBrowserRouter, Outlet } from 'react-router-dom';
 import { AppShell } from '../components/layout/AppShell';
 import { PublicShell } from '../components/layout/PublicShell';
 import { AuthCallbackPage } from '../features/auth/AuthCallbackPage';
@@ -63,6 +63,7 @@ import {
   ClassDetailPage as AdminClassDetailPage,
   CreateGradingScalePage,
   CreateUserPage,
+  CrossStagePromotionPage,
   EditUserPage,
   EnrolStudentPage,
   FinanceAuditAdminPage,
@@ -72,6 +73,7 @@ import {
   NotificationTemplatesPage,
   PerformanceEngineAdminPage,
   SendManualNotificationPage,
+  StageConfigPage,
   StudentAdminProfilePage,
   StudentsPage,
   SubjectDetailPage as AdminSubjectDetailPage,
@@ -231,7 +233,17 @@ export const router = createBrowserRouter([
       { path: '/forgot-password', element: <ForgotPasswordPage /> },
       { path: '/reset-password', element: <ResetPasswordPage /> },
       { path: '/auth/callback', element: <AuthCallbackPage /> },
-      { path: '/status', element: <StatusPage /> },
+    ],
+  },
+  // ── Admin-only standalone pages (auth required, no AppShell chrome) ────────
+  {
+    element: (
+      <ProtectedRoute>
+        <Outlet />
+      </ProtectedRoute>
+    ),
+    children: [
+      { path: '/admin/system-status', element: <StatusPage /> },
     ],
   },
   {
@@ -392,6 +404,8 @@ export const router = createBrowserRouter([
       { path: '/admin/users/:id', element: <UserDetailPage /> },
       { path: '/admin/users/:id/edit', element: <EditUserPage /> },
       { path: '/admin/academic/setup', element: <AcademicSetupHubPage /> },
+      { path: '/admin/academic/stage-config', element: <StageConfigPage /> },
+      { path: '/admin/academic/promotion/cross-stage', element: <CrossStagePromotionPage /> },
       { path: '/admin/classes', element: <ClassesPage /> },
       { path: '/admin/classes/:classId', element: <AdminClassDetailPage /> },
       { path: '/admin/subjects', element: <SubjectsPage /> },

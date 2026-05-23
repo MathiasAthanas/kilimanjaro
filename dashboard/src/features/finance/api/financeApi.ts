@@ -105,10 +105,20 @@ export const feeCategories: FeeCategory[] = [
 ];
 
 export const feeStructures: FeeStructure[] = [
-  { id: 'fs-f1-tuition', category: 'Tuition', className: 'Form 1', amount: 780_000, effectiveTerm: 'Term II 2026', active: true },
-  { id: 'fs-f2-tuition', category: 'Tuition', className: 'Form 2', amount: 820_000, effectiveTerm: 'Term II 2026', active: true },
-  { id: 'fs-f3-board', category: 'Boarding', className: 'Form 3', amount: 390_000, effectiveTerm: 'Term II 2026', active: true },
-  { id: 'fs-f4-exam', category: 'Exam Preparation', className: 'Form 4', amount: 240_000, effectiveTerm: 'Term II 2026', active: true },
+  { id: 'fs-primary-tuition', category: 'Tuition', className: 'Class 1-6', educationStage: 'Primary', studentGroup: 'Primary day scholars', amount: 420_000, effectiveTerm: 'Term II 2026', active: true },
+  { id: 'fs-f1-tuition', category: 'Tuition', className: 'Form 1', educationStage: 'O-Level', classLevel: 1, amount: 780_000, effectiveTerm: 'Term II 2026', active: true },
+  { id: 'fs-f2-tuition', category: 'Tuition', className: 'Form 2', educationStage: 'O-Level', classLevel: 2, amount: 820_000, effectiveTerm: 'Term II 2026', active: true },
+  { id: 'fs-f3-board', category: 'Boarding', className: 'Form 3', educationStage: 'O-Level', classLevel: 3, amount: 390_000, effectiveTerm: 'Term II 2026', active: true },
+  { id: 'fs-f4-exam', category: 'Exam Preparation', className: 'Form 4', educationStage: 'O-Level', classLevel: 4, amount: 240_000, effectiveTerm: 'Term II 2026', active: true },
+  { id: 'fs-f5-science', category: 'Science Lab', className: 'Form 5 PCM/PCB', educationStage: 'A-Level', classLevel: 5, studentGroup: 'Science combinations', amount: 310_000, effectiveTerm: 'Term II 2026', active: true },
+  { id: 'fs-f6-board', category: 'Boarding', className: 'Form 6', educationStage: 'A-Level', classLevel: 6, studentGroup: 'A-Level boarders', amount: 460_000, effectiveTerm: 'Term II 2026', active: true },
+];
+
+export const studentGroups = [
+  { id: 'grp-day', code: 'DAY_SCHOLAR', name: 'Day Scholars', members: 184, feeTarget: 'Meals optional, transport optional' },
+  { id: 'grp-board', code: 'BOARDER', name: 'Boarding Students', members: 96, feeTarget: 'Boarding and meals' },
+  { id: 'grp-science', code: 'SCIENCE_COMBINATIONS', name: 'A-Level Science Combinations', members: 45, feeTarget: 'Science lab and practicals' },
+  { id: 'grp-transport', code: 'TRANSPORT', name: 'Transport Users', members: 71, feeTarget: 'Route-based transport fees' },
 ];
 
 export const feeAssignments: FeeAssignment[] = [
@@ -136,6 +146,7 @@ export const financeApi = {
   getReceipts: async () => receipts,
   getFeeCategories: async () => feeCategories,
   getFeeStructures: async () => feeStructures,
+  getStudentGroups: async () => studentGroups,
   getFeeAssignments: async () => feeAssignments,
   getAssets: async () => assets,
   getAuditEntries: async () => auditEntries,
