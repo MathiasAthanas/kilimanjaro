@@ -5,12 +5,12 @@ import type { AuthSession, SessionUser } from '../../lib/auth/session';
 import type { UserRole } from '../../lib/auth/permissions';
 
 const roleByEmail: Record<string, { role: UserRole; name: string; department?: string }> = {
-  'rose.mhina@ks.ac.tz': { role: 'TEACHER', name: 'Mwalimu Rose Mhina', department: 'Mathematics' },
-  'james.kileo@ks.ac.tz': { role: 'HOD', name: 'Dr. James Kileo', department: 'Science Department' },
-  'qa.office@ks.ac.tz': { role: 'AQA', name: 'Ms. Fatuma Ally', department: 'Academic Quality Assurance' },
-  'finance.office@ks.ac.tz': { role: 'FINANCE', name: 'Ms. Grace Temba', department: 'Finance Office' },
-  'principal@ks.ac.tz': { role: 'PRINCIPAL', name: 'Mr. David Mwasimba', department: 'Executive Office' },
-  'admin@ks.ac.tz': { role: 'ADMIN', name: 'System Admin', department: 'System Administration' },
+  'admin@demo.kilimanjaro.test': { role: 'ADMIN', name: 'System Administrator', department: 'System Administration' },
+  'principal@demo.kilimanjaro.test': { role: 'PRINCIPAL', name: 'Dr. Miriam Kileo', department: 'Executive Office' },
+  'aqa@demo.kilimanjaro.test': { role: 'AQA', name: 'Quality Assurance', department: 'Academic Quality Assurance' },
+  'finance@demo.kilimanjaro.test': { role: 'FINANCE', name: 'Bursar Mtei', department: 'Finance Office' },
+  't-english@demo.kilimanjaro.test': { role: 'TEACHER', name: 'Mary Mallya', department: 'Languages' },
+  'hod-science@demo.kilimanjaro.test': { role: 'HOD', name: 'HOD Science Msuya', department: 'Science Department' },
 };
 
 const roleAliases: Record<string, UserRole> = {
@@ -51,60 +51,33 @@ function normalizeApiUser(raw: any, loginIdentifier: string): SessionUser {
   };
 }
 
-function demoSession(username: string): AuthSession {
-  const normalized = username.toLowerCase();
-  const profile = roleByEmail[normalized];
-  if (!profile) throw new Error('Demo login is not configured for this user.');
-
-  const user: SessionUser = {
-    id: `demo-${profile.role.toLowerCase()}`,
-    email: normalized,
-    name: profile.name,
-    role: profile.role,
-    department: profile.department,
-    status: 'ACTIVE',
-  };
-
-  return {
-    accessToken: `demo-access-${profile.role.toLowerCase()}`,
-    refreshToken: `demo-refresh-${profile.role.toLowerCase()}`,
-    user,
-  };
-}
-
 export async function login(username: string, password: string): Promise<AuthSession> {
-  if (import.meta.env.DEV && password === 'demo1234') {
-    return demoSession(username);
-  }
-
   try {
     const identifier = username.trim();
     const credentials = identifier.includes('@')
       ? { email: identifier.toLowerCase(), password }
       : { registrationNumber: identifier, password };
     const response = await api.post(endpoints.auth.login, credentials);
-    const accessToken = response.data.accessToken ?? response.data.access_token;
-    const refreshToken = response.data.refreshToken ?? response.data.refresh_token;
-    const rawUser = response.data.user;
+    const payload = response.data?.data ?? response.data;
+    const accessToken = payload.accessToken ?? payload.access_token;
+    const refreshToken = payload.refreshToken ?? payload.refresh_token;
+    const rawUser = payload.user;
 
     if (accessToken && rawUser) {
       const user = normalizeApiUser(rawUser, username);
       return { accessToken, refreshToken, user };
     }
 
-    return demoSession(username);
+    throw new Error('Login response was missing token or user data.');
   } catch (error) {
-    const normalized = normalizeApiError(error);
-    if (normalized.status === 0 || normalized.status === 404 || normalized.status >= 500) {
-      return demoSession(username);
-    }
-    throw normalized;
+    throw normalizeApiError(error);
   }
 }
 
 export async function getMe(): Promise<SessionUser> {
   const response = await api.get(endpoints.auth.me);
-  return response.data.user ?? response.data;
+  const payload = response.data?.data ?? response.data;
+  return normalizeApiUser(payload.user ?? payload, payload.email ?? '');
 }
 
 export async function requestPasswordReset(email: string) {

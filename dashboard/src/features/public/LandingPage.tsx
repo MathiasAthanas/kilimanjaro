@@ -96,11 +96,7 @@ export function LandingPage() {
         <div className="relative z-10 mx-auto grid max-w-7xl items-center gap-12 lg:grid-cols-2">
           {/* Left copy */}
           <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 backdrop-blur-sm">
-              <span className="h-2 w-2 animate-pulse rounded-full bg-ks-emerald" />
-              <span className="text-xs font-black uppercase tracking-wider text-white">All systems running</span>
-            </div>
-            <h1 className="mt-6 font-display text-5xl font-bold leading-tight tracking-tight text-white md:text-6xl">
+            <h1 className="font-display text-5xl font-bold leading-tight tracking-tight text-white md:text-6xl">
               Kilimanjaro Schools{' '}
               <span className="text-ks-gold">Staff Portal</span>
             </h1>
@@ -363,11 +359,6 @@ export function LandingPage() {
             ))}
           </div>
 
-          {/* Uptime pill */}
-          <div className="mt-10 inline-flex items-center gap-3 rounded-full border border-ks-blue/20 bg-ks-mist px-6 py-3 text-ks-navy">
-            <CheckCircle2 className="h-5 w-5 text-ks-emerald" />
-            <span className="text-sm font-black">System Health: 99.9% Uptime Verified</span>
-          </div>
         </div>
       </section>
 
@@ -452,13 +443,10 @@ export function LandingPage() {
               <a href="#" className="transition hover:text-ks-mist/70">Terms of Service</a>
               <a href="#" className="transition hover:text-ks-mist/70">Security</a>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="h-2 w-2 animate-pulse rounded-full bg-ks-emerald" />
-              <span className="font-bold text-ks-emerald/70">All systems running · v1.0.0</span>
-            </div>
           </div>
         </div>
       </footer>
     </main>
   );
 }
+

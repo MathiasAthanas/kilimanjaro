@@ -30,8 +30,9 @@ api.interceptors.response.use(
         const response = await axios.post(`${api.defaults.baseURL}${endpoints.auth.refresh}`, {
           refreshToken: session.refreshToken,
         });
-        useAuthStore.getState().setSession({ ...session, accessToken: response.data.accessToken }, true);
-        original.headers.Authorization = `Bearer ${response.data.accessToken}`;
+        const payload = response.data?.data ?? response.data;
+        useAuthStore.getState().setSession({ ...session, accessToken: payload.accessToken }, true);
+        original.headers.Authorization = `Bearer ${payload.accessToken}`;
         return api(original);
       } catch (refreshError) {
         useAuthStore.getState().logout();

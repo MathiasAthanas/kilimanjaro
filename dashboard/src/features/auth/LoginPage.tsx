@@ -13,12 +13,12 @@ import { login } from './api';
 import { loginSchema, type LoginForm } from './schemas';
 
 const demo = [
-  ['Principal', 'principal@ks.ac.tz'],
-  ['AQA', 'qa.office@ks.ac.tz'],
-  ['Finance', 'finance.office@ks.ac.tz'],
-  ['Teacher', 'rose.mhina@ks.ac.tz'],
-  ['HOD', 'james.kileo@ks.ac.tz'],
-  ['Admin', 'admin@ks.ac.tz'],
+  ['Admin', 'admin@demo.kilimanjaro.test', 'Admin@Kili2026'],
+  ['Principal', 'principal@demo.kilimanjaro.test', 'Principal@Kili2026'],
+  ['AQA', 'aqa@demo.kilimanjaro.test', 'Aqa@Kili2026'],
+  ['Finance', 'finance@demo.kilimanjaro.test', 'Finance@Kili2026'],
+  ['Teacher', 't-english@demo.kilimanjaro.test', 'Teacher@Kili2026'],
+  ['HOD', 'hod-science@demo.kilimanjaro.test', 'Hod@Kili2026'],
 ];
 
 export function LoginPage() {
@@ -38,9 +38,9 @@ export function LoginPage() {
     }
   }
 
-  function fill(email: string) {
+  function fill(email: string, password: string) {
     form.setValue('username', email, { shouldValidate: true });
-    form.setValue('password', 'demo1234', { shouldValidate: true });
+    form.setValue('password', password, { shouldValidate: true });
   }
 
   return (
@@ -86,7 +86,7 @@ export function LoginPage() {
           <div className="mt-8 w-full max-w-[440px] rounded-lg border border-ks-line bg-ks-mist/30 p-5">
             <div className="mb-4 flex items-center gap-2 text-ks-navy"><School className="h-5 w-5" /><span className="text-sm font-black">Quick Login (Dev Only)</span></div>
             <div className="grid gap-2">
-              {demo.map(([role, email]) => <button key={email} className="flex justify-between rounded-lg border border-ks-line bg-white p-3 text-left hover:border-ks-blue" onClick={() => fill(email)}><span className="font-bold text-ks-navy">{role}</span><span className="text-xs text-ks-muted">{email}</span></button>)}
+              {demo.map(([role, email, password]) => <button key={email} className="flex justify-between rounded-lg border border-ks-line bg-white p-3 text-left hover:border-ks-blue" onClick={() => fill(email, password)}><span className="font-bold text-ks-navy">{role}</span><span className="text-xs text-ks-muted">{email}</span></button>)}
             </div>
           </div>
         ) : null}
