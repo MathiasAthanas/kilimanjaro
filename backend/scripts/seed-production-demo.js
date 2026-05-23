@@ -863,8 +863,35 @@ async function seedNotificationsAnalyticsOperations() {
     'budget-lines': ['Academic', 'Transport', 'Boarding', 'ICT', 'Maintenance', 'Library'].map((name, i) => ({ id: uuid(`budget-${name}`), department: name, allocated: 8000000 + i * 2500000, spent: 3500000 + i * 1100000, fiscalYear: '2026' })),
     'cash-drawers': [{ id: uuid('cash-drawer-open'), status: 'OPEN', openedById: ids.users.finance, openingFloat: 250000, openedAt: date(0).toISOString(), note: 'Demo front office collection drawer' }],
     'bank-reconciliation-matches': Array.from({ length: 12 }, (_, i) => ({ id: uuid(`bank-match-${i}`), bankReference: `BANKREF${i + 100}`, paymentNumber: `PAY-2026-${String(i + 1).padStart(5, '0')}`, amount: 250000 + i * 50000, status: i % 4 === 0 ? 'PENDING' : 'CONFIRMED' })),
+    'bank-statement-imports': [{ id: uuid('bank-import-may-2026'), fileObjectId: uuid('file-bank-statement'), status: 'IMPORTED', totalRows: 216, matchedRows: 196, importedById: ids.users.finance, metadataJson: { bank: 'CRDB', period: '2026-05' } }],
+    'payment-evidence': [{ id: uuid('payment-evidence-demo'), paymentId: uuid(`payment-${ids.students[0].id}`), fileObjectId: uuid('file-bank-slip'), note: 'Demo scanned bank slip awaiting archive.', status: 'SUBMITTED', submittedById: ids.users.finance, submittedByRole: 'FINANCE' }],
+    'asset-maintenance': [{ id: uuid('asset-maintenance-bus'), assetId: uuid('asset-1'), type: 'SERVICE', cost: 420000, note: 'Scheduled bus service completed.', performedAt: date(-6).toISOString(), createdById: ids.users.finance }],
+    'asset-photos': [{ id: uuid('asset-photo-bus'), assetId: uuid('asset-1'), fileObjectId: uuid('file-asset-bus'), caption: 'Vehicle condition after May inspection.', uploadedById: ids.users.finance }],
+    'files': [
+      { id: uuid('file-bank-statement'), ownerService: 'finance', entityType: 'BankStatementImport', entityId: uuid('bank-import-may-2026'), uploadedById: ids.users.finance, originalName: 'may-2026-bank-statement.csv', mimeType: 'text/csv', sizeBytes: 18422, storageKey: 'local://demo/finance/may-2026-bank-statement.csv', visibility: 'PRIVATE', metadataJson: { demo: true } },
+      { id: uuid('file-bank-slip'), ownerService: 'finance', entityType: 'PaymentEvidence', entityId: uuid('payment-evidence-demo'), uploadedById: ids.users.finance, originalName: 'bank-slip-001.pdf', mimeType: 'application/pdf', sizeBytes: 94412, storageKey: 'local://demo/finance/bank-slip-001.pdf', visibility: 'PRIVATE', metadataJson: { demo: true } },
+      { id: uuid('file-asset-bus'), ownerService: 'finance', entityType: 'Asset', entityId: uuid('asset-1'), uploadedById: ids.users.finance, originalName: 'school-bus-photo.jpg', mimeType: 'image/jpeg', sizeBytes: 340112, storageKey: 'local://demo/assets/school-bus-photo.jpg', visibility: 'INTERNAL', metadataJson: { demo: true } },
+    ],
     'engine-runs': [{ id: uuid('engine-run-current'), status: 'COMPLETED', startedAt: date(-1).toISOString(), completedAt: date(-1).toISOString(), alertsGenerated: 42, pairingsSuggested: 18, runById: ids.users.aqa }],
     'report-jobs': [{ id: uuid('report-job-board'), type: 'BOARD_EXECUTIVE', title: 'Board Executive Demo Report', status: 'READY', requestedById: ids.users.principal, requestedByRole: 'PRINCIPAL', format: 'PDF', rowCount: 120, completedAt: date(-1).toISOString() }],
+    'report-templates': [
+      { id: uuid('report-template-academic'), name: 'Academic Department Review', type: 'CLASS_ACADEMIC', paramsJson: { termId: CURRENT_TERM_ID }, allowedRolesJson: ['PRINCIPAL', 'ACADEMIC_QA', 'HEAD_OF_DEPARTMENT'], createdById: ids.users.aqa },
+      { id: uuid('report-template-finance'), name: 'Finance Collection Board Pack', type: 'FINANCE_COLLECTION', paramsJson: { termId: CURRENT_TERM_ID }, allowedRolesJson: ['PRINCIPAL', 'FINANCE'], createdById: ids.users.finance },
+    ],
+    'scheduled-reports': [{ id: uuid('scheduled-report-weekly'), templateId: uuid('report-template-academic'), cron: '0 6 * * 1', recipientsJson: [ids.users.principal, ids.users.aqa], enabled: true, nextRunAt: date(3).toISOString(), createdById: ids.users.aqa }],
+    'report-card-jobs': [{ id: uuid('report-card-job-term2'), status: 'COMPLETED', termId: CURRENT_TERM_ID, academicYearId: SCHOOL_YEAR_ID, totalCards: ids.students.length, completedCards: ids.students.length, requestedById: ids.users.principal, completedAt: date(-1).toISOString() }],
+    'report-card-comments': [{ id: uuid('report-card-comment-batch'), scope: 'BATCH', reportCardIds: ids.students.slice(0, 12).map((s) => uuid(`report-card-${s.id}`)), comment: 'Maintain revision discipline and complete all e-learning work.', commentedById: ids.users.principal }],
+    'report-card-signatures': ids.students.slice(0, 12).map((s) => ({ id: uuid(`report-card-${s.id}`), reportCardId: uuid(`report-card-${s.id}`), signedById: ids.users.principal, signatureText: 'Approved for parent review', signedAt: date(-1).toISOString() })),
+    'principal-mark-locks': ids.classSubjects.slice(0, 6).map((cs) => ({ id: uuid(`assessment-${cs.id}-CAT1`), assessmentId: uuid(`assessment-${cs.id}-CAT1`), status: 'LOCKED', lockedById: ids.users.principal, reason: 'Term reporting locked after approval.', lockedAt: date(-1).toISOString() })),
+    'marks-autosaves': ids.classSubjects.slice(0, 4).map((cs, i) => ({ id: uuid(`marks-autosave-${cs.id}`), assessmentId: uuid(`assessment-${cs.id}-MIDTERM`), rows: ids.classStudents[cs.classId]?.slice(0, 6).map((studentId, row) => ({ studentId, score: 50 + row + i })) || [], version: 1, savedById: cs.teacherId, conflictCount: 0 })),
+    'marks-imports': [{ id: uuid('marks-import-form2-biology'), assessmentId: uuid(`assessment-${ids.classSubjects[0].id}-MIDTERM`), status: 'VALIDATED', fileObjectId: uuid('file-marks-import'), uploadedById: ids.teachers[0].id, totalRows: 32, validRows: 31, errorRows: 1 }],
+    'attendance-sessions': ids.classSubjects.slice(0, 5).map((cs) => ({ id: uuid(`attendance-session-${cs.id}`), classId: cs.classId, subjectId: cs.subjectId, date: date(0).toISOString().slice(0, 10), status: 'SUBMITTED', openedById: cs.teacherId, submittedById: cs.teacherId, submittedAt: date(0).toISOString(), records: ids.classStudents[cs.classId]?.slice(0, 10).map((studentId, i) => ({ studentId, status: i % 7 === 0 ? 'LATE' : 'PRESENT' })) || [] })),
+    'mobile-hod-decisions': ids.classSubjects.slice(0, 4).map((cs) => ({ id: uuid(`mobile-hod-decision-${cs.id}`), assessmentId: uuid(`assessment-${cs.id}-CAT1`), decision: 'APPROVED', note: 'Approved through mobile review flow.', decidedById: ids.users['hod-science'] || ids.teachers[0].id })),
+    'notification-archive': [{ id: uuid('notification-archive-demo'), notificationId: uuid(`notification-${ids.students[0].id}`), archivedById: ids.students[0].id, archivedAt: date(-1).toISOString() }],
+    'notification-jobs': [{ id: uuid('notification-job-defaulters'), type: 'FEE_DEFAULTERS', status: 'QUEUED', requestedById: ids.users.finance, filtersJson: { minBalance: 100000 }, channel: 'SMS' }],
+    'notification-retries': [{ id: uuid('notification-retry-demo'), logId: uuid(`sms-log-${uuid(`notification-${ids.students[0].id}`)}`), status: 'QUEUED', requestedById: ids.users.admin }],
+    'notification-template-tests': [{ id: uuid('notification-template-test-payment'), templateId: uuid('notification-template-PAYMENT_RECEIVED-SMS'), recipient: '+255712345678', channel: 'SMS', status: 'QUEUED', requestedById: ids.users.admin }],
+    'notification-template-versions': [{ id: uuid('notification-template-version-payment'), templateId: uuid('notification-template-PAYMENT_RECEIVED-SMS'), version: 1, body: 'Payment of {{amount}} has been received.', changedById: ids.users.admin }],
     'feature-flags': [{ id: 'mobile-live-api', key: 'mobile-live-api', enabled: false, audienceJson: {} }, { id: 'finance-reconciliation', key: 'finance-reconciliation', enabled: true, audienceJson: { roles: ['FINANCE'] } }],
   };
 
@@ -879,6 +906,369 @@ async function seedNotificationsAnalyticsOperations() {
         create: { collection, id: record.id, data, createdAt: new Date(data.createdAt), updatedAt: new Date(data.updatedAt) },
       });
     }
+  }
+}
+
+async function seedFullModuleCoverage() {
+  console.log('Seeding full module coverage records for secondary workflows...');
+
+  await auth.refreshToken.upsert({
+    where: { tokenHash: 'demo-refresh-token-admin' },
+    update: { isRevoked: false, expiresAt: date(14) },
+    create: {
+      id: uuid('auth-refresh-admin'),
+      tokenHash: 'demo-refresh-token-admin',
+      userId: ids.users.admin,
+      expiresAt: date(14),
+      ipAddress: '127.0.0.1',
+      userAgent: 'Kilimanjaro demo browser',
+    },
+  });
+  await auth.passwordResetToken.upsert({
+    where: { id: uuid('auth-reset-parent-demo') },
+    update: { isUsed: true },
+    create: {
+      id: uuid('auth-reset-parent-demo'),
+      userId: ids.guardians[0]?.userId || ids.users.admin,
+      otpHash: 'demo-used-reset-token',
+      expiresAt: date(-1),
+      isUsed: true,
+      ipAddress: '127.0.0.1',
+    },
+  });
+  for (const [key, action] of [['admin', 'LOGIN_SUCCESS'], ['teacher', 'TOKEN_REFRESHED'], ['principal', 'USER_CREATED']]) {
+    const userId = key === 'teacher' ? ids.teachers[0].id : ids.users[key];
+    await auth.auditLog.upsert({
+      where: { id: uuid(`auth-audit-${key}-${action}`) },
+      update: { metadata: { demo: true } },
+      create: {
+        id: uuid(`auth-audit-${key}-${action}`),
+        userId,
+        action,
+        ipAddress: '127.0.0.1',
+        userAgent: 'Kilimanjaro demo seed',
+        metadata: { demo: true, source: 'production-demo-seed' },
+      },
+    });
+  }
+
+  await students.performanceEngineConfig.upsert({
+    where: { id: uuid('performance-engine-config') },
+    update: { analysisEnabled: true, autoNotifyTeacher: true, autoNotifyParent: true, updatedBy: ids.users.aqa },
+    create: {
+      id: uuid('performance-engine-config'),
+      failureThreshold: 40,
+      atRiskThreshold: 50,
+      excellenceThreshold: 80,
+      primaryFailureThreshold: 50,
+      primaryAtRiskThreshold: 60,
+      aLevelFailureThreshold: 25,
+      aLevelAtRiskThreshold: 35,
+      autoNotifyTeacher: true,
+      autoNotifyAcademicDept: true,
+      autoNotifyParent: true,
+      updatedBy: ids.users.aqa,
+    },
+  });
+  await students.registrationSequence.upsert({
+    where: { year: 2026 },
+    update: { nextValue: ids.students.length + 1 },
+    create: { year: 2026, nextValue: ids.students.length + 1 },
+  });
+  for (const stage of ['PRIMARY', 'O_LEVEL', 'A_LEVEL']) {
+    await students.registrationSequenceByStage.upsert({
+      where: { year_stage: { year: 2026, stage } },
+      update: { nextValue: ids.students.filter((s) => s.stage === stage).length + 1 },
+      create: { year: 2026, stage, nextValue: ids.students.filter((s) => s.stage === stage).length + 1 },
+    });
+  }
+  const alerts = await students.performanceAlert.findMany({ take: 12, orderBy: { createdAt: 'desc' } });
+  for (let i = 0; i < Math.min(10, ids.students.length - 1); i++) {
+    const learner = ids.students[i];
+    const peer = ids.students.find((s) => s.classId === learner.classId && s.id !== learner.id) || ids.students[i + 1];
+    const cs = ids.classSubjects.find((item) => item.classId === learner.classId) || ids.classSubjects[i % ids.classSubjects.length];
+    await students.peerPairing.upsert({
+      where: { id: uuid(`peer-pairing-${learner.id}-${cs.subjectId}`) },
+      update: { status: i % 3 === 0 ? 'ACTIVE' : 'SUGGESTED' },
+      create: {
+        id: uuid(`peer-pairing-${learner.id}-${cs.subjectId}`),
+        studentId: learner.id,
+        peerId: peer.id,
+        subjectId: cs.subjectId,
+        subjectName: cs.subjectName,
+        classId: learner.classId,
+        termId: CURRENT_TERM_ID,
+        suggestedBy: 'SYSTEM',
+        status: i % 3 === 0 ? 'ACTIVE' : 'SUGGESTED',
+        reason: 'Demo peer support pairing based on recent performance trend.',
+        studentScoreAtPairing: 43 + i,
+        peerScoreAtPairing: 82 - i,
+        outcomeScore: i % 3 === 0 ? 55 + i : null,
+        outcomeDelta: i % 3 === 0 ? 8 + i : null,
+        activatedAt: i % 3 === 0 ? date(-6) : null,
+        completedAt: i % 4 === 0 ? date(-1) : null,
+        expiresAt: date(21),
+      },
+    });
+  }
+
+  for (const cs of ids.classSubjects.slice(0, 30)) {
+    const classStudents = ids.classStudents[cs.classId] || [];
+    for (const studentId of classStudents.slice(0, 6)) {
+      await academics.studentSubjectEnrollment.upsert({
+        where: { studentId_subjectId_academicYearId_termId: { studentId, subjectId: cs.subjectId, academicYearId: SCHOOL_YEAR_ID, termId: CURRENT_TERM_ID } },
+        update: { isActive: true, classId: cs.classId },
+        create: {
+          id: uuid(`subject-enrol-${studentId}-${cs.subjectId}`),
+          studentId,
+          classId: cs.classId,
+          subjectId: cs.subjectId,
+          academicYearId: SCHOOL_YEAR_ID,
+          termId: CURRENT_TERM_ID,
+          combinationId: cs.stage === 'A_LEVEL' ? uuid(`combo-${Object.values(ids.classes).find((c) => c.id === cs.classId)?.stream || 'PCM'}`) : null,
+          isActive: true,
+        },
+      });
+    }
+  }
+  for (let i = 0; i < alerts.length; i++) {
+    const alert = alerts[i];
+    await academics.academicIntervention.upsert({
+      where: { id: uuid(`academic-intervention-${alert.id}`) },
+      update: { isFollowedUp: i % 2 === 0 },
+      create: {
+        id: uuid(`academic-intervention-${alert.id}`),
+        alertId: alert.id,
+        studentId: alert.studentId,
+        subjectId: alert.subjectId,
+        subjectName: alert.subjectName,
+        type: i % 2 === 0 ? 'TEACHER_SUPPORT_GIVEN' : 'PARENT_MEETING_SCHEDULED',
+        performedById: pick(ids.teachers, i).id,
+        performedByRole: 'TEACHER',
+        note: 'Demo intervention logged from performance alert.',
+        outcome: i % 2 === 0 ? 'Follow-up exercises assigned and reviewed.' : null,
+        followUpDate: date(7 + i),
+        isFollowedUp: i % 2 === 0,
+      },
+    });
+  }
+  for (const [action, actor, payload] of [
+    ['MARKS_IMPORTED', ids.teachers[0].id, { rows: 32, status: 'validated' }],
+    ['REPORT_CARDS_BATCH_GENERATED', ids.users.principal, { termId: CURRENT_TERM_ID, count: ids.students.length }],
+    ['SYLLABUS_PROGRESS_REVIEWED', ids.users.aqa, { completion: 68 }],
+  ]) {
+    await academics.academicAuditLog.upsert({
+      where: { id: uuid(`academic-audit-${action}`) },
+      update: { payload },
+      create: { id: uuid(`academic-audit-${action}`), action, performedById: actor, payload },
+    });
+  }
+
+  const payment = await finance.payment.findFirst({ where: { status: 'CONFIRMED' } });
+  if (payment) {
+    await finance.manualPaymentApproval.upsert({
+      where: { paymentId: payment.id },
+      update: { decision: 'APPROVED', reviewedById: ids.users.finance },
+      create: {
+        id: uuid(`manual-payment-approval-${payment.id}`),
+        paymentId: payment.id,
+        requestedById: ids.users.finance,
+        reviewedById: ids.users.principal,
+        reviewedAt: date(-8),
+        decision: 'APPROVED',
+        notes: 'Demo manual bank transfer approval.',
+        supportingDocumentUrl: '/demo/finance/bank-slip-001.pdf',
+      },
+    });
+  }
+  const financeGroups = await finance.studentGroup.findMany();
+  for (let i = 0; i < financeGroups.length; i++) {
+    for (const s of ids.students.filter((student) => student.index % (i + 3) === 0).slice(0, 18)) {
+      await finance.studentGroupMembership.upsert({
+        where: { studentId_groupId: { studentId: s.id, groupId: financeGroups[i].id } },
+        update: { isActive: true },
+        create: {
+          id: uuid(`student-group-member-${s.id}-${financeGroups[i].id}`),
+          studentId: s.id,
+          groupId: financeGroups[i].id,
+          isActive: true,
+          assignedById: ids.users.finance,
+          notes: `Demo membership for ${financeGroups[i].name}.`,
+        },
+      });
+    }
+  }
+  for (const [id, year, value] of [['invoice-2026', 2026, ids.students.length + 1], ['payment-2026', 2026, ids.students.length + 1], ['receipt-2026', 2026, ids.students.length + 1]]) {
+    await finance.numberSequence.upsert({
+      where: { id },
+      update: { value },
+      create: { id, year, value },
+    });
+  }
+  for (const [action, entityType, entityId] of [
+    ['INVOICE_GENERATED', 'Invoice', uuid(`invoice-${ids.students[0].id}`)],
+    ['PAYMENT_CONFIRMED', 'Payment', payment?.id || uuid('payment-missing-demo')],
+    ['ASSET_CREATED', 'Asset', uuid('asset-1')],
+  ]) {
+    await finance.financialAuditLog.upsert({
+      where: { id: uuid(`finance-audit-${action}`) },
+      update: { newValue: { demo: true } },
+      create: {
+        id: uuid(`finance-audit-${action}`),
+        entityType,
+        entityId,
+        action,
+        performedById: ids.users.finance,
+        performedByRole: 'FINANCE',
+        newValue: { demo: true },
+        metadata: { source: 'production-demo-seed' },
+        ipAddress: '127.0.0.1',
+      },
+    });
+  }
+
+  const templates = [
+    ['ASSIGNMENT_PUBLISHED', 'IN_APP', 'New assignment published', 'A new assignment is available in {{courseName}}.'],
+    ['PAYMENT_RECEIVED', 'SMS', 'Payment received', 'Payment of {{amount}} has been received.'],
+    ['MARKS_APPROVED', 'EMAIL', 'Marks approved', 'Marks for {{assessmentName}} have been approved.'],
+  ];
+  for (const [eventType, channel, subject, body] of templates) {
+    await notifications.notificationTemplate.upsert({
+      where: { eventType_channel_language: { eventType, channel, language: 'en' } },
+      update: { body, isActive: true },
+      create: {
+        id: uuid(`notification-template-${eventType}-${channel}`),
+        eventType,
+        channel,
+        name: `${eventType.replace(/_/g, ' ')} ${channel}`,
+        subject,
+        body,
+        smsBody: body,
+        variables: { courseName: 'Biology Form 2', amount: 'TZS 250,000', assessmentName: 'Mid-Term Test' },
+        createdById: ids.users.admin,
+      },
+    });
+  }
+  const notificationRows = await notifications.notification.findMany({ take: 8 });
+  for (let i = 0; i < Math.min(16, ids.students.length); i++) {
+    const userId = i % 2 === 0 ? ids.students[i].id : ids.guardians[i % ids.guardians.length].userId;
+    await notifications.deviceToken.upsert({
+      where: { token: `demo-device-token-${i}` },
+      update: { isActive: true, lastUsedAt: date(-1) },
+      create: { id: uuid(`device-token-${i}`), userId, token: `demo-device-token-${i}`, platform: i % 3 === 0 ? 'ANDROID' : i % 3 === 1 ? 'IOS' : 'WEB', deviceInfo: 'Demo testing device', isActive: true, lastUsedAt: date(-1) },
+    });
+    for (const eventType of ['ASSIGNMENT_PUBLISHED', 'PAYMENT_RECEIVED']) {
+      await notifications.notificationPreference.upsert({
+        where: { userId_eventType_channel: { userId, eventType, channel: 'IN_APP' } },
+        update: { isEnabled: true },
+        create: { id: uuid(`notification-pref-${userId}-${eventType}`), userId, eventType, channel: 'IN_APP', isEnabled: true },
+      });
+    }
+  }
+  for (let i = 0; i < notificationRows.length; i++) {
+    const row = notificationRows[i];
+    await notifications.smsDeliveryLog.upsert({
+      where: { id: uuid(`sms-log-${row.id}`) },
+      update: { success: true },
+      create: {
+        id: uuid(`sms-log-${row.id}`),
+        notificationId: row.id,
+        provider: 'demo-sms-gateway',
+        phoneNumber: row.recipientPhone || '+255712345678',
+        messageBody: row.body,
+        requestPayload: { to: row.recipientPhone || '+255712345678', message: row.body },
+        responsePayload: { status: 'DELIVERED' },
+        success: true,
+        externalMessageId: `SMS-${i + 1000}`,
+        cost: '35',
+        attemptNumber: 1,
+        sentAt: date(-1),
+      },
+    });
+  }
+
+  const courses = await elearning.courseSpace.findMany({ take: 8 });
+  for (const course of courses) {
+    const lessons = await elearning.lesson.findMany({ where: { courseSpaceId: course.id }, take: 2 });
+    const enrolled = await elearning.courseEnrollment.findMany({ where: { courseSpaceId: course.id }, take: 5 });
+    for (const lesson of lessons) {
+      for (const enrol of enrolled) {
+        await elearning.lessonProgress.upsert({
+          where: { lessonId_studentId: { lessonId: lesson.id, studentId: enrol.studentId } },
+          update: { percentComplete: 100, completedAt: date(-1) },
+          create: { id: uuid(`lesson-progress-${lesson.id}-${enrol.studentId}`), lessonId: lesson.id, courseSpaceId: course.id, studentId: enrol.studentId, percentComplete: 100, completedAt: date(-1) },
+        });
+      }
+    }
+    const thread = await elearning.discussionThread.findFirst({ where: { courseSpaceId: course.id } });
+    if (thread) {
+      await elearning.discussionReply.upsert({
+        where: { id: uuid(`discussion-reply-${thread.id}`) },
+        update: { body: 'Demo student reply with a clarification question.' },
+        create: { id: uuid(`discussion-reply-${thread.id}`), threadId: thread.id, body: 'Demo student reply with a clarification question.', authorId: enrolled[0]?.studentId || ids.students[0].id, authorRole: 'STUDENT' },
+      });
+    }
+  }
+  const attempts = await elearning.quizAttempt.findMany({ take: 20 });
+  for (const attempt of attempts) {
+    const questions = await elearning.quizQuestion.findMany({ where: { quizId: attempt.quizId }, take: 5 });
+    for (const question of questions) {
+      const option = await elearning.quizOption.findFirst({ where: { questionId: question.id }, orderBy: { orderIndex: 'asc' } });
+      await elearning.quizAnswer.upsert({
+        where: { attemptId_questionId: { attemptId: attempt.id, questionId: question.id } },
+        update: { isCorrect: true, scoreAwarded: 1 },
+        create: { id: uuid(`quiz-answer-${attempt.id}-${question.id}`), attemptId: attempt.id, questionId: question.id, selectedOptionId: option?.id, textAnswer: question.type === 'SHORT_ANSWER' ? 'Demo short answer response' : null, isCorrect: true, scoreAwarded: 1, answeredAt: date(-4) },
+      });
+    }
+  }
+  for (const [action, entityType, entityId, actorId, actorRole] of [
+    ['COURSE_PUBLISHED', 'CourseSpace', courses[0]?.id, ids.teachers[0].id, 'TEACHER'],
+    ['ASSIGNMENT_GRADED', 'Assignment', uuid(`assignment-${uuid(`lesson-${courses[0]?.id || 'missing'}-1`)}`), ids.teachers[0].id, 'TEACHER'],
+    ['QUIZ_AUTO_GRADED', 'QuizAttempt', attempts[0]?.id, ids.students[0].id, 'STUDENT'],
+  ]) {
+    await elearning.elearningAuditLog.upsert({
+      where: { id: uuid(`elearning-audit-${action}`) },
+      update: { metadata: { demo: true } },
+      create: { id: uuid(`elearning-audit-${action}`), action, entityType, entityId, actorId, actorRole, metadata: { demo: true } },
+    });
+  }
+
+  for (const [reportType, title] of [
+    ['SCHOOL_OVERVIEW', 'Whole School Executive Overview'],
+    ['FINANCE_COLLECTION', 'Term 2 Finance Collection'],
+    ['TEACHER_PERFORMANCE', 'Teacher Performance Summary'],
+  ]) {
+    await analytics.generatedReport.upsert({
+      where: { id: uuid(`generated-report-${reportType}`) },
+      update: { status: 'READY', rowCount: 120, completedAt: date(-1) },
+      create: {
+        id: uuid(`generated-report-${reportType}`),
+        reportType,
+        title,
+        scope: 'school',
+        period: '2026-T2',
+        academicYearId: SCHOOL_YEAR_ID,
+        termId: CURRENT_TERM_ID,
+        generatedById: ids.users.principal,
+        generatedByRole: 'PRINCIPAL',
+        parameters: { demo: true },
+        pdfUrl: `/demo/reports/${reportType.toLowerCase()}.pdf`,
+        rowCount: 120,
+        status: 'READY',
+        completedAt: date(-1),
+      },
+    });
+  }
+  for (const [eventType, sourceService, payload] of [
+    ['student.attendance.marked', 'student-service', { count: 9504 }],
+    ['finance.payment.confirmed', 'finance-service', { count: 216 }],
+    ['elearning.quiz.submitted', 'elearning-service', { count: 128 }],
+  ]) {
+    await analytics.metricEvent.upsert({
+      where: { id: uuid(`metric-event-${eventType}`) },
+      update: { payload },
+      create: { id: uuid(`metric-event-${eventType}`), eventType, sourceService, payload },
+    });
   }
 }
 
@@ -917,11 +1307,48 @@ async function validateCounts() {
     assignments: await elearning.assignment.count(),
     quizzes: await elearning.quiz.count(),
     notifications: await notifications.notification.count(),
+    notificationTemplates: await notifications.notificationTemplate.count(),
+    notificationPreferences: await notifications.notificationPreference.count(),
+    smsLogs: await notifications.smsDeliveryLog.count(),
+    authAuditLogs: await auth.auditLog.count(),
+    academicAuditLogs: await academics.academicAuditLog.count(),
+    academicInterventions: await academics.academicIntervention.count(),
+    subjectEnrollments: await academics.studentSubjectEnrollment.count(),
+    financeAuditLogs: await finance.financialAuditLog.count(),
+    manualPaymentApprovals: await finance.manualPaymentApproval.count(),
+    studentGroupMemberships: await finance.studentGroupMembership.count(),
+    lessonProgress: await elearning.lessonProgress.count(),
+    quizAnswers: await elearning.quizAnswer.count(),
+    discussionReplies: await elearning.discussionReply.count(),
+    elearningAuditLogs: await elearning.elearningAuditLog.count(),
+    generatedReports: await analytics.generatedReport.count(),
+    metricEvents: await analytics.metricEvent.count(),
     operationRecords: await operations.operationRecord.count(),
   };
   console.log('Demo seed counts:', JSON.stringify(counts, null, 2));
   if (counts.students < 200) throw new Error(`Expected at least 200 students, found ${counts.students}`);
   if (!counts.courses || !counts.invoices || !counts.reportCards) throw new Error('Critical demo modules are empty.');
+  const required = [
+    'notificationTemplates',
+    'notificationPreferences',
+    'smsLogs',
+    'authAuditLogs',
+    'academicAuditLogs',
+    'academicInterventions',
+    'subjectEnrollments',
+    'financeAuditLogs',
+    'manualPaymentApprovals',
+    'studentGroupMemberships',
+    'lessonProgress',
+    'quizAnswers',
+    'discussionReplies',
+    'elearningAuditLogs',
+    'generatedReports',
+    'metricEvents',
+  ];
+  for (const key of required) {
+    if (!counts[key]) throw new Error(`Full module demo coverage missing: ${key}`);
+  }
 }
 
 async function main() {
@@ -933,6 +1360,7 @@ async function main() {
   await seedFinance();
   await seedElearning();
   await seedNotificationsAnalyticsOperations();
+  await seedFullModuleCoverage();
   writeCredentials();
   await validateCounts();
   console.log('Production-like demo seed completed.');
