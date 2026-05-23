@@ -1,6 +1,22 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../lib/api/client';
 
+function payloadOf(response: { data?: unknown }) {
+  const body = response.data as { data?: unknown } | undefined;
+  return body?.data ?? response.data;
+}
+
+function arrayFrom(value: unknown, keys: string[] = []) {
+  if (Array.isArray(value)) return value;
+  if (!value || typeof value !== 'object') return [];
+  const record = value as Record<string, unknown>;
+  if (Array.isArray(record.items)) return record.items;
+  for (const key of keys) {
+    if (Array.isArray(record[key])) return record[key] as unknown[];
+  }
+  return [];
+}
+
 // ─── Query key factory ────────────────────────────────────────────────────────
 
 export const commonKeys = {
@@ -19,8 +35,7 @@ export const commonKeys = {
 export function useNotifications() {
   return useQuery({
     queryKey: commonKeys.notifications(),
-    queryFn: () =>
-      api.get('/notifications').then((r) => r.data?.data?.items ?? r.data?.data ?? []),
+    queryFn: () => api.get('/notifications').then((r) => arrayFrom(payloadOf(r), ['notifications', 'logs'])),
     staleTime: 15_000,
   });
 }
@@ -41,8 +56,7 @@ export function useUnreadCount() {
 export function useAnnouncements() {
   return useQuery({
     queryKey: commonKeys.announcements(),
-    queryFn: () =>
-      api.get('/notifications/announcements').then((r) => r.data?.data?.items ?? r.data?.data ?? []),
+    queryFn: () => api.get('/notifications/announcements').then((r) => arrayFrom(payloadOf(r), ['announcements'])),
     staleTime: 60_000,
   });
 }
@@ -53,7 +67,7 @@ export function useActiveAnnouncements() {
     queryFn: () =>
       api
         .get('/notifications/announcements/active')
-        .then((r) => r.data?.data?.items ?? r.data?.data ?? []),
+        .then((r) => arrayFrom(payloadOf(r), ['announcements', 'activeAnnouncements'])),
     staleTime: 60_000,
   });
 }
@@ -62,7 +76,7 @@ export function useAnnouncement(id: string | undefined) {
   return useQuery({
     queryKey: commonKeys.announcement(id ?? ''),
     queryFn: () =>
-      api.get(`/notifications/announcements/${id}`).then((r) => r.data?.data ?? r.data),
+      api.get(`/notifications/announcements/${id}`).then(payloadOf),
     enabled: !!id,
   });
 }
@@ -71,7 +85,7 @@ export function useSearch(query: string) {
   return useQuery({
     queryKey: commonKeys.search(query),
     queryFn: () =>
-      api.get('/search', { params: { q: query } }).then((r) => r.data?.data?.items ?? r.data?.data ?? []),
+      api.get('/search', { params: { q: query } }).then((r) => arrayFrom(payloadOf(r), ['results'])),
     enabled: !!query && query.length > 2,
     staleTime: 10_000,
   });

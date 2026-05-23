@@ -40,7 +40,7 @@ const modules = [
 
 const stats = [
   { value: '6', label: 'Role workspaces' },
-  { value: '99.9%', label: 'System uptime' },
+  { value: '8', label: 'Staff access levels' },
   { value: '12+', label: 'Core modules' },
   { value: '100%', label: 'Tanzanian-focused' },
 ] as const;
@@ -62,7 +62,6 @@ export function LandingPage() {
           <a className="text-ks-muted transition hover:text-ks-blue" href="#security">Security</a>
         </nav>
         <div className="flex items-center gap-3">
-          <Link to="/admin/system-status" className="hidden text-sm font-bold text-ks-navy transition hover:text-ks-blue sm:block">System Status</Link>
           <Link to="/login">
             <Button className="flex items-center gap-2">
               Staff Login <ArrowRight className="h-4 w-4" />
@@ -107,12 +106,6 @@ export function LandingPage() {
               <Link to="/login">
                 <Button className="flex items-center gap-2 bg-ks-gold px-8 py-3.5 text-base text-ks-slate hover:shadow-lg hover:shadow-ks-gold/30">
                   Sign in to your workspace <ArrowRight className="h-4 w-4" />
-                </Button>
-              </Link>
-              <Link to="/admin/system-status">
-                <Button variant="outline-white" className="flex items-center gap-2 px-8 py-3.5 text-base">
-                  <span className="h-2 w-2 rounded-full bg-ks-emerald" />
-                  Check system health
                 </Button>
               </Link>
             </div>
@@ -376,11 +369,6 @@ export function LandingPage() {
                 Sign in <ArrowRight className="h-4 w-4" />
               </Button>
             </Link>
-            <Link to="/admin/system-status">
-              <Button variant="outline-white" className="px-10 py-4 text-base">
-                System health
-              </Button>
-            </Link>
           </div>
         </div>
       </section>
@@ -411,7 +399,6 @@ export function LandingPage() {
               <ul className="space-y-3 text-sm">
                 {[
                   ['Staff Login', '/login'],
-                  ['System Status', '/admin/system-status'],
                   ['Help & Support', '/app/help'],
                   ['About the Platform', '/app/about'],
                 ].map(([label, href]) => (
