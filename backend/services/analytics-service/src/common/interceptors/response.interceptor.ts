@@ -1,10 +1,10 @@
-import { CallHandler, ExecutionContext, Injectable, NestInterceptor } from '@nestjs/common';
+import { CallHandler, ExecutionContext, Injectable, NestInterceptor, StreamableFile } from '@nestjs/common';
 import { Decimal } from '@prisma/client/runtime/library';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 
 @Injectable()
-export class ResponseInterceptor<T> implements NestInterceptor<T, { success: boolean; data: T }> {
+export class ResponseInterceptor<T> implements NestInterceptor<T, { success: boolean; data: T } | StreamableFile> {
   private serialize(v: unknown): unknown {
     if (v === null || v === undefined) return v;
     if (v instanceof Decimal) return v.toString();
@@ -13,7 +13,13 @@ export class ResponseInterceptor<T> implements NestInterceptor<T, { success: boo
     return v;
   }
 
-  intercept(_context: ExecutionContext, next: CallHandler): Observable<{ success: boolean; data: T }> {
-    return next.handle().pipe(map((data) => ({ success: true, data: this.serialize(data) as T })));
+  intercept(_context: ExecutionContext, next: CallHandler): Observable<{ success: boolean; data: T } | StreamableFile> {
+    return next.handle().pipe(
+      map((data) => {
+        // Pass StreamableFile through unchanged so NestJS can stream it directly
+        if (data instanceof StreamableFile) return data;
+        return { success: true, data: this.serialize(data) as T };
+      }),
+    );
   }
 }

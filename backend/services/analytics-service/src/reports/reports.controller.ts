@@ -1,5 +1,7 @@
-import { Body, Controller, Get, Param, Post, Query, Res } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, Res, StreamableFile } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { createReadStream } from 'fs';
+import * as path from 'path';
 import { Response } from 'express';
 import { ROLES } from '../common/constants/roles';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -42,8 +44,12 @@ export class ReportsController {
 
   @Get(':id/download')
   @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA, ROLES.MANAGING_DIRECTOR, ROLES.BOARD_DIRECTOR, ROLES.FINANCE, ROLES.TEACHER, ROLES.HEAD_OF_DEPARTMENT)
-  async download(@Param('id') id: string, @CurrentUser() user: RequestUser, @Res() res: Response) {
-    const file = await this.service.getDownloadPath(id, user);
-    res.download(file);
+  async download(@Param('id') id: string, @CurrentUser() user: RequestUser, @Res({ passthrough: true }) res: Response): Promise<StreamableFile> {
+    const filePath = await this.service.getDownloadPath(id, user);
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="${path.basename(filePath)}"`,
+    });
+    return new StreamableFile(createReadStream(filePath));
   }
 }
