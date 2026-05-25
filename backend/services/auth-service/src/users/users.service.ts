@@ -40,11 +40,7 @@ export class UsersService {
     return user;
   }
 
-  async createUser(dto: CreateUserDto, createdBy: string): Promise<ReturnType<UsersService['toSafeUser']>> {
-    if (dto.role === Role.STUDENT && !dto.registrationNumber) {
-      throw new BadRequestException('registrationNumber is required for STUDENT role');
-    }
-
+  async createUser(dto: CreateUserDto, createdBy: string) {
     if (dto.role !== Role.STUDENT && !dto.email) {
       throw new BadRequestException('email is required for non-STUDENT roles');
     }
@@ -63,7 +59,8 @@ export class UsersService {
       }
     }
 
-    const passwordHash = await argon2.hash(dto.password);
+    const temporaryPassword = dto.password || this.generateNamePassword(dto.firstName, dto.lastName);
+    const passwordHash = await argon2.hash(temporaryPassword);
 
     try {
       const user = await this.prisma.user.create({
@@ -74,7 +71,10 @@ export class UsersService {
           role: dto.role,
           firstName: dto.firstName,
           lastName: dto.lastName,
+          department: dto.department,
           phoneNumber: dto.phoneNumber,
+          isActive: dto.isActive ?? true,
+          mustChangePassword: true,
           createdBy,
         },
       });
@@ -94,7 +94,10 @@ export class UsersService {
         createdAt: user.createdAt.toISOString(),
       });
 
-      return this.toSafeUser(user);
+      return {
+        ...this.toSafeUser(user),
+        temporaryPassword,
+      };
     } catch (error) {
       if (error instanceof PrismaClientKnownRequestError && error.code === 'P2002') {
         throw new ConflictException('User with this identifier already exists');
@@ -187,6 +190,7 @@ export class UsersService {
         registrationNumber: dto.registrationNumber === undefined ? undefined : dto.registrationNumber,
         firstName: dto.firstName,
         lastName: dto.lastName,
+        department: dto.department === undefined ? undefined : dto.department,
         phoneNumber: dto.phoneNumber === undefined ? undefined : dto.phoneNumber,
       },
     });
@@ -214,7 +218,7 @@ export class UsersService {
     await this.prisma.$transaction([
       this.prisma.user.update({
         where: { id: userId },
-        data: { passwordHash, failedLoginAttempts: 0, lockedUntil: null },
+        data: { passwordHash, failedLoginAttempts: 0, lockedUntil: null, mustChangePassword: true },
       }),
       ...(revokeSessions
         ? [this.prisma.refreshToken.updateMany({ where: { userId, isRevoked: false }, data: { isRevoked: true } })]
@@ -371,8 +375,10 @@ export class UsersService {
       firstName: user.firstName,
       lastName: user.lastName,
       phoneNumber: user.phoneNumber,
+      department: user.department,
       isActive: user.isActive,
       isEmailVerified: user.isEmailVerified,
+      mustChangePassword: user.mustChangePassword,
       failedLoginAttempts: user.failedLoginAttempts,
       lockedUntil: user.lockedUntil,
       lastLoginAt: user.lastLoginAt,
@@ -386,5 +392,13 @@ export class UsersService {
   private generateTemporaryPassword(): string {
     const random = Math.random().toString(36).slice(2, 10);
     return `Temp-${random}-Kili`;
+  }
+
+  private generateNamePassword(firstName: string, lastName: string): string {
+    const base = lastName.replace(/[^a-z0-9]/gi, '').toUpperCase();
+    if (base) {
+      return base;
+    }
+    return firstName.replace(/[^a-z0-9]/gi, '').toUpperCase() || 'KILIMANJARO';
   }
 }

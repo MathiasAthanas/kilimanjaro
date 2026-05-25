@@ -267,7 +267,7 @@ export class AuthService {
     await this.prisma.$transaction([
       this.prisma.user.update({
         where: { id: user.id },
-        data: { passwordHash },
+        data: { passwordHash, mustChangePassword: false },
       }),
       this.prisma.passwordResetToken.update({
         where: { id: validTokenId },
@@ -298,7 +298,7 @@ export class AuthService {
     const passwordHash = await argon2.hash(dto.newPassword);
 
     await this.prisma.$transaction([
-      this.prisma.user.update({ where: { id: userId }, data: { passwordHash } }),
+      this.prisma.user.update({ where: { id: userId }, data: { passwordHash, mustChangePassword: false } }),
       this.prisma.refreshToken.updateMany({
         where: { userId, isRevoked: false },
         data: { isRevoked: true },
@@ -338,6 +338,7 @@ export class AuthService {
         role: true,
         email: true,
         phoneNumber: true,
+        department: true,
         firstName: true,
         lastName: true,
       },
@@ -351,6 +352,7 @@ export class AuthService {
         role: user.role,
         email: user.email,
         phone: user.phoneNumber,
+        department: user.department,
         firstName: user.firstName,
         lastName: user.lastName,
       })),
@@ -368,8 +370,9 @@ export class AuthService {
       sub: user.id,
       role: user.role,
       email: user.email,
-      registrationNumber: user.registrationNumber,
-      jti,
+        registrationNumber: user.registrationNumber,
+        jti,
+        mustChangePassword: user.mustChangePassword,
     });
 
     const refreshTokenId = crypto.randomUUID();
@@ -397,6 +400,10 @@ export class AuthService {
         role: user.role,
         firstName: user.firstName,
         lastName: user.lastName,
+        email: user.email,
+        department: user.department,
+        mustChangePassword: user.mustChangePassword,
+        requiresPasswordChange: user.mustChangePassword,
       },
     };
   }

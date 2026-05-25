@@ -26,4 +26,9 @@ export class UpdateUserDto {
   @IsOptional()
   @IsString()
   phoneNumber?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  department?: string | null;
 }

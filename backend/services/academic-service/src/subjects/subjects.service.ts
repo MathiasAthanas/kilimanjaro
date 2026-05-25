@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateClassSubjectDto } from './dto/create-class-subject.dto';
 import { CreateSubjectDto } from './dto/create-subject.dto';
@@ -107,27 +107,34 @@ export class SubjectsService {
     }
     await this.assertCombinationSubjectsActive(dto.subjects.map((s) => s.subjectId));
     this.assertALevelCombinationValid(dto.subjects);
-    return this.prisma.subjectCombination.create({
-      data: {
-        code: dto.code,
-        name: dto.name,
-        educationStage: dto.educationStage ?? 'A_LEVEL',
-        academicYearId: dto.academicYearId,
-        isActive: dto.isActive ?? true,
-        subjects: {
-          create: dto.subjects.map((s, index) => {
-            const role = s.subjectRole ?? (s.isPrincipal === false ? 'SUBSIDIARY' : 'PRINCIPAL');
-            return {
-              subjectId: s.subjectId,
-              isPrincipal: role === 'PRINCIPAL',
-              subjectRole: role,
-              displayOrder: s.displayOrder ?? index,
-            };
-          }),
+    try {
+      return await this.prisma.subjectCombination.create({
+        data: {
+          code: dto.code,
+          name: dto.name,
+          educationStage: dto.educationStage ?? 'A_LEVEL',
+          academicYearId: dto.academicYearId,
+          isActive: dto.isActive ?? true,
+          subjects: {
+            create: dto.subjects.map((s, index) => {
+              const role = s.subjectRole ?? (s.isPrincipal === false ? 'SUBSIDIARY' : 'PRINCIPAL');
+              return {
+                subjectId: s.subjectId,
+                isPrincipal: role === 'PRINCIPAL',
+                subjectRole: role,
+                displayOrder: s.displayOrder ?? index,
+              };
+            }),
+          },
         },
-      },
-      include: { subjects: { include: { subject: true }, orderBy: { displayOrder: 'asc' } } },
-    });
+        include: { subjects: { include: { subject: true }, orderBy: { displayOrder: 'asc' } } },
+      });
+    } catch (error) {
+      if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002') {
+        throw new ConflictException(`Combination ${dto.code} already exists for this academic year`);
+      }
+      throw error;
+    }
   }
 
   private async assertCombinationSubjectsActive(subjectIds: string[]) {

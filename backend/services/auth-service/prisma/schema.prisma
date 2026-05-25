@@ -51,9 +51,11 @@ model User {
   role                 Role
   firstName            String
   lastName             String
+  department           String?
   phoneNumber          String?
   isActive             Boolean              @default(true)
   isEmailVerified      Boolean              @default(false)
+  mustChangePassword   Boolean              @default(false)
   failedLoginAttempts  Int                  @default(0)
   lockedUntil          DateTime?
   lastLoginAt          DateTime?

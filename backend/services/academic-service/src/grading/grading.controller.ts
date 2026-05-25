@@ -51,6 +51,12 @@ export class GradingController {
     return this.gradingService.createAssessmentType(dto);
   }
 
+  @Patch('assessment-types/:id')
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA)
+  updateAssessmentType(@Param('id') id: string, @Body() dto: Partial<CreateAssessmentTypeDto>) {
+    return this.gradingService.updateAssessmentType(id, dto);
+  }
+
   @Get('assessment-types')
   @Roles(
     ROLES.SYSTEM_ADMIN,

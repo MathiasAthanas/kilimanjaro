@@ -13,7 +13,7 @@ export class CreateClassPathwayDto {
 
   @IsOptional()
   @IsString()
-  toClassId?: string;
+  toClassId?: string | null;
 
   @IsString()
   academicYearId!: string;

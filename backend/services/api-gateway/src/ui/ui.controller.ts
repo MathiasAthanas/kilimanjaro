@@ -219,6 +219,52 @@ export class UiController {
     return this.ui.envelope(this.withCounts(data, ['approvals', 'payments', 'discipline']), warnings);
   }
 
+  @Get('principal/staff')
+  @Roles(...PRINCIPAL_ROLES)
+  async principalStaff(@CurrentUser() user: GatewayUser): Promise<UiEnvelope> {
+    const { data, warnings } = await this.ui.collect({
+      staff: { service: 'auth', path: '/auth/internal/users-by-role', params: { roles: 'TEACHER,HEAD_OF_DEPARTMENT' }, fallback: [] },
+      syllabus: { service: 'academic', path: '/academics/syllabus', fallback: [] },
+    }, user);
+    return this.ui.envelope({ staff: this.ui.asArray(data.staff), syllabus: this.ui.asArray(data.syllabus) }, warnings);
+  }
+
+  @Get('principal/students/:studentId/profile')
+  @Roles(...PRINCIPAL_ROLES)
+  async principalStudentProfile(@CurrentUser() user: GatewayUser, @Param('studentId') studentId: string): Promise<UiEnvelope> {
+    const { data, warnings } = await this.ui.collect({
+      student: { service: 'student', path: `/students/${studentId}`, fallback: null },
+      discipline: { service: 'student', path: `/students/discipline/${studentId}`, fallback: [] },
+      performance: { service: 'academic', path: `/academics/performance/student/${studentId}`, fallback: null },
+      balance: { service: 'finance', path: `/finance/internal/student/${studentId}/balance`, fallback: null },
+    }, user);
+    return this.ui.envelope({ studentId, ...data }, warnings);
+  }
+
+  @Get('principal/settings/school')
+  @Roles(...PRINCIPAL_ROLES)
+  async principalSchoolSettings(@CurrentUser() user: GatewayUser): Promise<UiEnvelope> {
+    const { data, warnings } = await this.ui.collect({
+      gradingScale: { service: 'academic', path: '/academics/grading-scales', fallback: [] },
+      assessmentTypes: { service: 'academic', path: '/academics/assessment-types', fallback: [] },
+    }, user);
+    return this.ui.envelope({ ...data }, warnings);
+  }
+
+  @Get('principal/audit')
+  @Roles(...PRINCIPAL_ROLES)
+  async principalAudit(@CurrentUser() user: GatewayUser): Promise<UiEnvelope> {
+    const { data, warnings } = await this.ui.collect({
+      financeAudit: { service: 'finance', path: '/finance/audit-logs', fallback: [] },
+      notificationLogs: { service: 'notification', path: '/notifications/logs', fallback: [] },
+    }, user);
+    const logs = [
+      ...this.ui.asArray(data.financeAudit).map((item) => ({ ...(item as Record<string, unknown>), _source: 'finance' })),
+      ...this.ui.asArray(data.notificationLogs).map((item) => ({ ...(item as Record<string, unknown>), _source: 'notification' })),
+    ];
+    return this.ui.envelope({ logs }, warnings);
+  }
+
   @Get('admin/system/health')
   @Roles(...ADMIN_ROLES)
   async adminSystemHealth(@CurrentUser() user: GatewayUser): Promise<UiEnvelope> {
