@@ -2,6 +2,7 @@ import { createBrowserRouter, Outlet } from 'react-router-dom';
 import { AppShell } from '../components/layout/AppShell';
 import { PublicShell } from '../components/layout/PublicShell';
 import { AuthCallbackPage } from '../features/auth/AuthCallbackPage';
+import { ChangePasswordRequiredPage } from '../features/auth/ChangePasswordRequiredPage';
 import { ForgotPasswordPage } from '../features/auth/ForgotPasswordPage';
 import { LoginPage } from '../features/auth/LoginPage';
 import { ResetPasswordPage } from '../features/auth/ResetPasswordPage';
@@ -255,6 +256,7 @@ export const router = createBrowserRouter([
     errorElement: <AppErrorPage />,
     children: [
       { path: '/app', element: <RoleRedirect /> },
+      { path: '/app/change-password', element: <ChangePasswordRequiredPage /> },
       { path: '/app/mobile-guidance', element: <RoleRedirect /> },
       { path: '/app/profile', element: <ProfilePage /> },
       { path: '/app/settings', element: <SettingsPage /> },

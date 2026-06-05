@@ -19,11 +19,20 @@ import {
 import { AnimatePresence, motion } from 'framer-motion';
 import type { ReactNode } from 'react';
 import { useRef, useState } from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import { Badge } from '../../../components/common/Badge';
 import { Button } from '../../../components/common/Button';
+import { toast } from '../../../lib/toast';
 import type { DisciplineIncident, PrincipalAssessment, PrincipalMetric, PrincipalPaymentApproval, SchoolHealth, Urgency } from '../types/principal.types';
 import { canApprovePayment, canLockMarks, canPublishResults, selectedClassLabel } from '../utils/principalDecision';
+import {
+  useApprovePaymentMutation,
+  useLockMarksMutation,
+  usePublishResultsMutation,
+  useRejectPaymentMutation,
+  useResolveDisciplineMutation,
+  useReturnMarksMutation,
+} from '../api/principal.hooks';
 
 // ─── Shell ────────────────────────────────────────────────────────────────────
 
@@ -422,11 +431,30 @@ export function Td({ children, className = '' }: { children: ReactNode; classNam
 
 // ─── Final lock panel ─────────────────────────────────────────────────────────
 
-export function FinalLockPanel() {
+export function FinalLockPanel({ assessmentId }: { assessmentId?: string }) {
+  const navigate = useNavigate();
   const [reviewed, setReviewed] = useState(false);
   const [understands, setUnderstands] = useState(false);
-  const [locked, setLocked] = useState(false);
+  const lockMutation = useLockMarksMutation();
+  const returnMutation = useReturnMarksMutation();
   const canLock = canLockMarks(reviewed, understands);
+
+  const handleLock = () => {
+    if (!assessmentId) return;
+    lockMutation.mutate({ assessmentId }, {
+      onSuccess: () => { toast('Marks locked and audit record created', 'success'); navigate('/principal/approvals'); },
+      onError: () => toast('Failed to lock marks. Please try again.', 'error'),
+    });
+  };
+
+  const handleReturn = () => {
+    if (!assessmentId) return;
+    returnMutation.mutate({ assessmentId, reason: 'Returned for correction by Principal' }, {
+      onSuccess: () => { toast('Assessment returned for correction', 'info'); navigate('/principal/approvals'); },
+      onError: () => toast('Failed to return assessment. Please try again.', 'error'),
+    });
+  };
+
   return (
     <div className="sticky top-24 rounded-2xl border border-ks-line bg-white p-5 shadow-layer">
       <div className="flex items-center gap-2 border-b border-ks-line pb-4">
@@ -452,20 +480,20 @@ export function FinalLockPanel() {
         </p>
       )}
       <Button
-        disabled={!canLock}
-        onClick={() => setLocked(true)}
+        disabled={!canLock || lockMutation.isPending}
+        onClick={handleLock}
         className="mt-5 w-full rounded-xl bg-ks-navy disabled:opacity-40"
       >
-        <Lock className="h-4 w-4" /> Lock Marks
+        <Lock className="h-4 w-4" /> {lockMutation.isPending ? 'Locking…' : 'Lock Marks'}
       </Button>
-      <Button variant="danger" className="mt-2 w-full rounded-xl">
-        Return for Correction
+      <Button
+        variant="danger"
+        disabled={returnMutation.isPending}
+        onClick={handleReturn}
+        className="mt-2 w-full rounded-xl"
+      >
+        {returnMutation.isPending ? 'Returning…' : 'Return for Correction'}
       </Button>
-      {locked && (
-        <div className="mt-4">
-          <IntelligencePanel context="Marks locked. No navigation occurred — the Principal stays in control of next steps." />
-        </div>
-      )}
     </div>
   );
 }
@@ -477,7 +505,15 @@ export function PublishResultsFlow({ classes }: { classes: Array<{ id: string; c
   const [finalConfirmed, setFinalConfirmed] = useState(false);
   const [visibilityConfirmed, setVisibilityConfirmed] = useState(false);
   const [published, setPublished] = useState(false);
+  const publishMutation = usePublishResultsMutation();
   const canPublish = canPublishResults(finalConfirmed, visibilityConfirmed, selected.length);
+
+  const handlePublish = () => {
+    publishMutation.mutate({ classIds: selected }, {
+      onSuccess: () => { setPublished(true); toast('Results published successfully', 'success'); },
+      onError: () => toast('Failed to publish results. Please try again.', 'error'),
+    });
+  };
   return (
     <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_380px]">
       {/* Class cards */}
@@ -540,11 +576,11 @@ export function PublishResultsFlow({ classes }: { classes: Array<{ id: string; c
           </div>
         </div>
         <Button
-          disabled={!canPublish}
-          onClick={() => setPublished(true)}
+          disabled={!canPublish || publishMutation.isPending}
+          onClick={handlePublish}
           className="mt-5 w-full rounded-xl bg-ks-navy disabled:opacity-40"
         >
-          Publish Results
+          {publishMutation.isPending ? 'Publishing…' : 'Publish Results'}
         </Button>
         {!canPublish && (
           <p className="mt-2 text-center text-xs font-bold text-ks-muted">Select classes and confirm both acknowledgments</p>
@@ -566,11 +602,30 @@ function Step({ label, done }: { label: string; done: boolean }) {
 // ─── Payment approval card ────────────────────────────────────────────────────
 
 export function PaymentApprovalCard({ approval }: { approval: PrincipalPaymentApproval }) {
+  const approveMutation = useApprovePaymentMutation();
+  const rejectMutation = useRejectPaymentMutation();
   const [confirmed, setConfirmed] = useState(false);
   const [reason, setReason] = useState('Bank evidence verified against reference.');
   const [removed, setRemoved] = useState(false);
   if (removed) return null;
   const allowed = canApprovePayment(confirmed, reason);
+  const busy = approveMutation.isPending || rejectMutation.isPending;
+
+  const handleApprove = () => {
+    approveMutation.mutate({ id: approval.id, notes: reason }, {
+      onSuccess: () => { setRemoved(true); toast('Payment approved', 'success'); },
+      onError: () => toast('Failed to approve payment. Please try again.', 'error'),
+    });
+  };
+
+  const handleReject = () => {
+    if (!reason.trim()) { toast('Reason required to reject', 'warning'); return; }
+    rejectMutation.mutate({ id: approval.id, reason }, {
+      onSuccess: () => { setRemoved(true); toast('Payment rejected', 'info'); },
+      onError: () => toast('Failed to reject payment. Please try again.', 'error'),
+    });
+  };
+
   return (
     <div className={`rounded-2xl border border-ks-line bg-white p-5 shadow-sm transition ${urgencyClass(approval.risk, 'border')}`}>
       <div className="flex items-start justify-between gap-4">
@@ -595,10 +650,12 @@ export function PaymentApprovalCard({ approval }: { approval: PrincipalPaymentAp
         I have reviewed the evidence and invoice context.
       </label>
       <div className="mt-4 flex flex-wrap gap-2">
-        <Button disabled={!allowed} onClick={() => setRemoved(true)} className="rounded-xl bg-ks-emerald disabled:opacity-40">
-          <CheckCircle2 className="h-4 w-4" /> Approve
+        <Button disabled={!allowed || busy} onClick={handleApprove} className="rounded-xl bg-ks-emerald disabled:opacity-40">
+          <CheckCircle2 className="h-4 w-4" /> {approveMutation.isPending ? 'Approving…' : 'Approve'}
         </Button>
-        <Button variant="danger" className="rounded-xl">Reject</Button>
+        <Button variant="danger" disabled={busy} onClick={handleReject} className="rounded-xl">
+          {rejectMutation.isPending ? 'Rejecting…' : 'Reject'}
+        </Button>
         <NavLink to={`/principal/finance/approvals/${approval.id}`}>
           <Button variant="secondary" className="rounded-xl">Full Detail</Button>
         </NavLink>
@@ -930,32 +987,48 @@ export function DecisionAuditTimeline({ rows }: { rows: Array<{ id: string; date
 
 // ─── Report tile ──────────────────────────────────────────────────────────────
 
-export function FancyReportTile({ title, detail, to }: { title: string; detail: string; to: string }) {
+export function FancyReportTile({ title, detail, onGenerate, loading = false, loadingLabel }: { title: string; detail: string; onGenerate: () => void; loading?: boolean; loadingLabel?: string }) {
   return (
-    <NavLink to={to} className="group relative overflow-hidden rounded-2xl border border-ks-line bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-layer">
+    <button
+      onClick={onGenerate}
+      disabled={loading}
+      className="group relative w-full overflow-hidden rounded-2xl border border-ks-line bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-layer disabled:cursor-wait disabled:opacity-60"
+    >
       <PieChart className="pointer-events-none absolute -right-4 -top-4 h-24 w-24 text-ks-gold/10" />
       <Download className="h-6 w-6 text-ks-gold" />
       <h3 className="mt-4 font-display text-lg font-black text-ks-navy">{title}</h3>
       <p className="mt-2 text-sm font-semibold text-ks-muted">{detail}</p>
       <span className="mt-5 inline-flex items-center gap-1 text-xs font-black uppercase tracking-widest text-ks-blue transition group-hover:gap-2">
-        Generate <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-1" />
+        {loading ? (loadingLabel ?? 'Queuing…') : 'Generate'} <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-1" />
       </span>
-    </NavLink>
+    </button>
   );
 }
 
 // ─── Expandable incident ──────────────────────────────────────────────────────
 
 export function ExpandableIncident({ incident }: { incident: DisciplineIncident }) {
+  const resolveMutation = useResolveDisciplineMutation();
   const [open, setOpen] = useState(false);
+  const [resolvedLocally, setResolvedLocally] = useState(false);
+
+  const handleResolve = () => {
+    resolveMutation.mutate({ id: incident.id, resolution: 'Resolved by Principal' }, {
+      onSuccess: () => { setResolvedLocally(true); toast('Incident marked as resolved', 'success'); },
+      onError: () => toast('Failed to resolve incident. Please try again.', 'error'),
+    });
+  };
+
+  const isOpen = !resolvedLocally && incident.status === 'OPEN';
+
   return (
     <div className={`overflow-hidden rounded-2xl border border-ks-line bg-white transition ${urgencyClass(incident.severity, 'border')}`}>
       <button className="flex w-full items-start justify-between gap-4 p-5 text-left" onClick={() => setOpen((v) => !v)}>
         <div>
           <div className="flex items-center gap-2">
             <p className="text-[10px] font-black uppercase tracking-widest text-ks-muted">{incident.category} · {incident.date}</p>
-            <Badge tone={incident.status === 'OPEN' ? (incident.severity === 'critical' ? 'rose' : 'amber') : 'slate'}>
-              {incident.status}
+            <Badge tone={isOpen ? (incident.severity === 'critical' ? 'rose' : 'amber') : 'slate'}>
+              {resolvedLocally ? 'RESOLVED' : incident.status}
             </Badge>
           </div>
           <h3 className="mt-1 font-display text-xl font-black text-ks-navy">{incident.student}</h3>
@@ -966,9 +1039,15 @@ export function ExpandableIncident({ incident }: { incident: DisciplineIncident 
       {open && (
         <div className="border-t border-ks-line bg-ks-paper p-5">
           <p className="text-sm font-semibold text-ks-slate">{incident.description}</p>
-          {incident.status === 'OPEN' && (
+          {isOpen && (
             <div className="mt-4 flex gap-2">
-              <Button className="rounded-xl bg-ks-navy py-2 text-xs">Mark Resolved</Button>
+              <Button
+                disabled={resolveMutation.isPending}
+                onClick={handleResolve}
+                className="rounded-xl bg-ks-navy py-2 text-xs"
+              >
+                {resolveMutation.isPending ? 'Resolving…' : 'Mark Resolved'}
+              </Button>
               <Button variant="secondary" className="rounded-xl py-2 text-xs">Escalate</Button>
             </div>
           )}

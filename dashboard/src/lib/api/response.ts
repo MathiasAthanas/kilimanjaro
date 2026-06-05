@@ -51,6 +51,20 @@ function toSnake(key: string): string {
  * `feeStructures`), the function still finds the array as long as it is the
  * only array in the payload object.
  */
+/**
+ * Remove duplicate objects from an array, keeping the first occurrence of each
+ * unique `id`. Guards against backend returning the same record more than once
+ * (pagination overlap, aggregation duplicates, etc.).
+ */
+export function dedupeById<T extends { id: string }>(items: T[]): T[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    if (seen.has(item.id)) return false;
+    seen.add(item.id);
+    return true;
+  });
+}
+
 export function arrayFromApi(value: unknown, keys: string[] = []): unknown[] {
   if (Array.isArray(value)) return value;
   if (!value || typeof value !== 'object') return [];

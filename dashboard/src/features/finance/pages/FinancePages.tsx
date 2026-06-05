@@ -12,7 +12,10 @@ import {
   WalletCards,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { NavLink, useParams } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { NavLink, useNavigate, useParams } from 'react-router-dom';
+import { downloadReportWhenReady, useGenerateReportMutation } from '../../operations/api/operations.hooks';
+import { toast } from '../../../lib/toast';
 import { Badge } from '../../../components/common/Badge';
 import { Button } from '../../../components/common/Button';
 import {
@@ -43,6 +46,21 @@ import {
   useReceipts,
   useReceipt as useReceiptById,
   useStudentGroups,
+  useDeleteFeeCategoryMutation,
+  useDeleteFeeAssignmentMutation,
+  useCreateFeeStructureMutation,
+  useCreateAssetMutation,
+  useUpdateAssetMutation,
+  useCreateFeeCategoryMutation,
+  useUpdateFeeCategoryMutation,
+  useWaiveInvoiceMutation,
+  useRegeneratePdfMutation,
+  useApplyInvoiceDiscountMutation,
+  useCancelInvoiceMutation,
+  useVoidReceiptMutation,
+  useDisposeAssetMutation,
+  useRefundPaymentMutation,
+  useGenerateInvoicesMutation,
 } from '../api/finance.hooks';
 import {
   ActionPanel,
@@ -127,9 +145,9 @@ export function FinanceHomePage() {
         <div className="space-y-gutter">
           <CollectionRing rate={apiOverview.collectionRate} />
           <DenseBarChart values={[
-            { label: 'Cash',         value: 740_000,   tone: 'bg-[#10b981]' },
-            { label: 'Bank',         value: 880_000,   tone: 'bg-[#00334f]' },
-            { label: 'Mobile Money', value: 220_000,   tone: 'bg-[#d59a1b]' },
+            { label: 'Invoiced',     value: apiOverview.totalInvoiced,  tone: 'bg-[#00334f]' },
+            { label: 'Collected',    value: apiOverview.totalCollected, tone: 'bg-[#10b981]' },
+            { label: 'Outstanding',  value: apiOverview.outstanding,    tone: 'bg-[#d59a1b]' },
           ]} />
         </div>
 
@@ -156,10 +174,10 @@ export function FinanceHomePage() {
           />
           <MiniColumnChart
             title="Daily Trend"
-            subtitle="Collections this week"
-            data={[320_000, 580_000, 440_000, 810_000, 670_000, 920_000, 1_840_000]}
-            startLabel="Mon"
-            endLabel="Today"
+            subtitle="Invoiced vs Collected"
+            data={[apiOverview.totalCollected, apiOverview.outstanding]}
+            startLabel="Collected"
+            endLabel="Outstanding"
           />
         </div>
       </div>
@@ -171,10 +189,21 @@ export function FinanceHomePage() {
 
 export function InvoiceListPage() {
   const { data: apiInvoices = [] as typeof invoices, isLoading, isError, refetch } = useInvoices() as { data: typeof invoices; isLoading: boolean; isError: boolean; refetch: () => void };
+  const [invoiceSearch, setInvoiceSearch] = useState('');
+  const visibleInvoices = invoiceSearch.trim().length > 0
+    ? apiInvoices.filter((inv) => {
+        const q = invoiceSearch.toLowerCase();
+        return (
+          inv.number.toLowerCase().includes(q) ||
+          inv.student.toLowerCase().includes(q) ||
+          inv.className.toLowerCase().includes(q)
+        );
+      })
+    : apiInvoices;
   return (
     <FinanceWorkspaceShell title="Invoice Ledger" eyebrow="Find, filter, inspect">
       <FinanceBreadcrumb crumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Invoices' }]} />
-      <FinanceFilters items={['Status', 'Class', 'Term', 'Due date', 'Outstanding amount', 'Student or invoice search']} />
+      <FinanceFilters items={['Status', 'Class', 'Term', 'Due date', 'Outstanding amount', 'Student or invoice search']} onSearch={setInvoiceSearch} />
       {isLoading ? (
         <SkeletonTable cols={7} />
       ) : isError ? (
@@ -182,41 +211,95 @@ export function InvoiceListPage() {
       ) : !apiInvoices.length ? (
         <EmptyState title="No invoices yet" description="Generate invoices for a term to begin tracking." action={{ label: 'Generate Invoices', href: '/finance/invoices/generate' }} />
       ) : (
-        <InvoiceTable rows={apiInvoices} />
+        <InvoiceTable rows={visibleInvoices} />
       )}
     </FinanceWorkspaceShell>
   );
 }
 
 export function GenerateInvoicesPage() {
+  const navigate = useNavigate();
+  const generateMutation = useGenerateInvoicesMutation();
+  const [form, setForm] = useState({ term: '', academicYear: new Date().getFullYear().toString(), dueDate: '', scope: 'ALL' });
+  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setForm((p) => ({ ...p, [k]: e.target.value }));
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.term || !form.dueDate) { toast('Term and due date are required', 'error'); return; }
+    generateMutation.mutate({ term: form.term, academicYear: form.academicYear, dueDate: form.dueDate, scope: form.scope }, {
+      onSuccess: () => { toast('Invoice generation started. Invoices will appear shortly.', 'success'); navigate('/finance/invoices'); },
+      onError: () => toast('Failed to start invoice generation. Please try again.', 'error'),
+    });
+  };
+
   return (
-    <FinanceFormPage
-      title="Generate Invoices"
-      eyebrow="Bulk invoice job"
-      breadcrumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Invoices', to: '/finance/invoices' }, { label: 'Generate' }]}
-      fields={['Term', 'Academic year', 'Scope', 'Selected classes', 'Fee structure set', 'Due date']}
-      sideTitle="Generation Preview"
-      sideItems={[
-        ['Student count', '225'],
-        ['Estimated total', formatTZS(118_400_000)],
-        ['Conflicts', '7 existing invoices'],
-        ['Job status', 'Ready for confirmation'],
-      ]}
-    >
-      <div className="mt-5 rounded border border-[#d5dde6] bg-[#f7f9fb] p-4">
-        <p className="text-xs font-black uppercase tracking-widest text-[#00334f]">Progress Simulation</p>
-        <div className="mt-3 h-2 rounded bg-[#e2e8f0]">
-          <div className="h-full w-[45%] rounded bg-[#00334f]" />
-        </div>
-        <p className="mt-2 text-sm font-bold text-[#64748b]">Generating invoice 45 of 225 after confirmation.</p>
+    <FinanceWorkspaceShell title="Generate Invoices" eyebrow="Bulk invoice job">
+      <FinanceBreadcrumb crumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Invoices', to: '/finance/invoices' }, { label: 'Generate' }]} />
+      <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_360px]">
+        <form onSubmit={handleSubmit} className="rounded-lg border border-[#d5dde6] bg-white p-5">
+          <div className="flex items-center gap-3 border-b border-[#d5dde6] pb-4">
+            <FileSpreadsheet className="h-5 w-5 text-[#00334f]" />
+            <div>
+              <h2 className="font-display text-xl font-black text-[#00334f]">Generate Term Invoices</h2>
+              <p className="text-sm font-semibold text-[#64748b]">Creates invoices for all eligible enrolled students based on their fee structure.</p>
+            </div>
+          </div>
+          <div className="mt-5 grid gap-4 md:grid-cols-2">
+            <label className="block">
+              <span className="text-[11px] font-black uppercase tracking-widest text-[#64748b]">Term *</span>
+              <input required value={form.term} onChange={set('term')} className="mt-2 h-11 w-full rounded border border-[#d5dde6] bg-[#f7f9fb] px-3 font-semibold outline-none focus:border-[#00334f] focus:ring-2 focus:ring-[#00334f]/10" placeholder="e.g. Term II 2026" />
+            </label>
+            <label className="block">
+              <span className="text-[11px] font-black uppercase tracking-widest text-[#64748b]">Academic Year</span>
+              <input value={form.academicYear} onChange={set('academicYear')} className="mt-2 h-11 w-full rounded border border-[#d5dde6] bg-[#f7f9fb] px-3 font-semibold outline-none focus:border-[#00334f] focus:ring-2 focus:ring-[#00334f]/10" placeholder="e.g. 2026" />
+            </label>
+            <label className="block">
+              <span className="text-[11px] font-black uppercase tracking-widest text-[#64748b]">Due Date *</span>
+              <input required type="date" value={form.dueDate} onChange={set('dueDate')} className="mt-2 h-11 w-full rounded border border-[#d5dde6] bg-[#f7f9fb] px-3 font-semibold outline-none focus:border-[#00334f] focus:ring-2 focus:ring-[#00334f]/10" />
+            </label>
+            <label className="block">
+              <span className="text-[11px] font-black uppercase tracking-widest text-[#64748b]">Scope</span>
+              <select value={form.scope} onChange={set('scope')} className="mt-2 h-11 w-full rounded border border-[#d5dde6] bg-[#f7f9fb] px-3 font-semibold outline-none focus:border-[#00334f]">
+                <option value="ALL">All students</option>
+                <option value="UNPAID_ONLY">Skip already invoiced</option>
+              </select>
+            </label>
+          </div>
+          <div className="mt-5 rounded border border-[#d59a1b]/30 bg-[#d59a1b]/5 p-3 text-xs font-bold text-[#7a5200]">
+            This will generate invoices for all enrolled students who do not already have one for this term. The action is audited.
+          </div>
+          <div className="mt-4 flex gap-2">
+            <Button type="submit" className="rounded bg-[#00334f] hover:bg-[#001e30] hover:shadow-none" disabled={generateMutation.isPending}>
+              <Send className="h-4 w-4" /> {generateMutation.isPending ? 'Generating…' : 'Generate Invoices'}
+            </Button>
+            <Button type="button" variant="secondary" className="rounded" onClick={() => navigate('/finance/invoices')}>Cancel</Button>
+          </div>
+        </form>
+        <SideSummary title="Generation Preview" items={[
+          ['Term', form.term || '—'],
+          ['Due date', form.dueDate || '—'],
+          ['Scope', form.scope === 'ALL' ? 'All students' : 'New invoices only'],
+          ['Audit', 'Full trail captured'],
+        ]} />
       </div>
-    </FinanceFormPage>
+    </FinanceWorkspaceShell>
   );
 }
 
 export function InvoiceDetailPage() {
-  const invoice = useInvoice();
+  const { id } = useParams();
+  const { data: apiInvoice, isLoading, isError } = useInvoiceById(id ?? '') as { data: (typeof invoices)[number] | undefined; isLoading: boolean; isError: boolean };
   const { data: allPayments = [] as typeof payments } = usePayments() as { data: typeof payments };
+  const cancelMutation = useCancelInvoiceMutation();
+  const discountMutation = useApplyInvoiceDiscountMutation();
+  const waiveMutation = useWaiveInvoiceMutation();
+  const regenPdfMutation = useRegeneratePdfMutation();
+  const navigate = useNavigate();
+
+  if (isLoading) return <FinanceWorkspaceShell title="Loading…" eyebrow="Invoice investigation"><SkeletonTable cols={3} /></FinanceWorkspaceShell>;
+  if (!apiInvoice) return <FinanceWorkspaceShell title="Not Found" eyebrow="Invoice investigation"><EmptyState title="Invoice not found" description="This invoice does not exist or has been cancelled." /></FinanceWorkspaceShell>;
+
+  const invoice = apiInvoice;
   const invoicePayments = allPayments.filter((p) => p.invoiceId === invoice.id || p.invoiceNumber === invoice.number);
   return (
     <FinanceWorkspaceShell title={invoice.number} eyebrow="Invoice investigation">
@@ -267,16 +350,15 @@ export function InvoiceDetailPage() {
           </FinanceTable>
           <PaymentTable rows={invoicePayments} />
         </div>
-        <ActionPanel
-          title="Invoice Actions"
-          items={[
-            'Record payment',
-            'Download invoice PDF',
-            'Regenerate PDF',
-            'Apply discount with reason',
-            'Waive balance with reason',
-            'Cancel invoice',
-          ]}
+        <InvoiceActionPanel
+          invoice={invoice}
+          onRecordPayment={() => navigate('/finance/payments/cash')}
+          onDownloadPdf={() => { window.open(`/api/v1/finance/invoices/${invoice.id}/pdf`, '_blank'); }}
+          onRegenPdf={() => regenPdfMutation.mutate(invoice.id, { onSuccess: () => toast('PDF regenerated', 'success'), onError: () => toast('Failed to regenerate PDF', 'error') })}
+          onDiscount={() => { const reason = window.prompt('Discount amount (TZS) and reason (format: 50000|reason):'); if (!reason) return; const [amtStr, ...rest] = reason.split('|'); discountMutation.mutate({ id: invoice.id, body: { discountAmount: Number(amtStr), reason: rest.join('|') } }, { onSuccess: () => toast('Discount applied', 'success'), onError: () => toast('Failed to apply discount', 'error') }); }}
+          onWaive={() => { const reason = window.prompt('Reason for waiving balance:'); if (!reason) return; waiveMutation.mutate({ id: invoice.id, body: { reason } }, { onSuccess: () => toast('Balance waived', 'warning'), onError: () => toast('Failed to waive balance', 'error') }); }}
+          onCancel={() => { if (!window.confirm('Cancel this invoice? This cannot be undone.')) return; cancelMutation.mutate({ id: invoice.id }, { onSuccess: () => { toast('Invoice cancelled', 'warning'); navigate('/finance/invoices'); }, onError: () => toast('Failed to cancel invoice', 'error') }); }}
+          isPending={cancelMutation.isPending || discountMutation.isPending || waiveMutation.isPending || regenPdfMutation.isPending}
         />
       </div>
     </FinanceWorkspaceShell>
@@ -338,55 +420,49 @@ export function PendingPaymentApprovalsPage() {
 }
 
 export function PaymentDetailPage() {
-  const payment = usePayment();
+  const { id } = useParams();
+  const { data: apiPayments = [] as typeof payments, isLoading } = usePayments() as { data: typeof payments; isLoading: boolean };
+  const refundMutation = useRefundPaymentMutation();
+  const navigate = useNavigate();
+
+  if (isLoading) return <FinanceWorkspaceShell title="Loading…" eyebrow="Payment profile"><SkeletonTable cols={4} /></FinanceWorkspaceShell>;
+  const payment = apiPayments.find((p) => p.id === id) ?? null;
+  if (!payment) return <FinanceWorkspaceShell title="Not Found" eyebrow="Payment profile"><EmptyState title="Payment not found" description="This payment record does not exist." /></FinanceWorkspaceShell>;
+
   return (
     <FinanceWorkspaceShell title={payment.id} eyebrow="Payment profile">
       <FinanceBreadcrumb crumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Payments', to: '/finance/payments' }, { label: payment.id }]} />
       <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-gutter">
           <FinanceMetricStrip items={[
-            {
-              label: 'Amount',
-              value: formatTZS(payment.amount),
-              detail: payment.method.replaceAll('_', ' '),
-              tone: payment.status === 'REJECTED' ? 'red' : 'green',
-              trend: payment.status === 'REJECTED' ? 'down' : 'up',
-            },
-            {
-              label: 'Status',
-              value: payment.status,
-              detail: payment.date,
-              tone: payment.status === 'APPROVED' ? 'green' : payment.status === 'REJECTED' ? 'red' : 'gold',
-            },
-            {
-              label: 'Invoice',
-              value: payment.invoiceNumber,
-              detail: payment.student,
-              tone: 'navy',
-            },
-            {
-              label: 'Entered by',
-              value: payment.enteredBy,
-              detail: payment.reference ?? 'No reference',
-              tone: 'slate',
-            },
+            { label: 'Amount', value: formatTZS(payment.amount), detail: payment.method.replaceAll('_', ' '), tone: payment.status === 'REJECTED' ? 'red' : 'green', trend: payment.status === 'REJECTED' ? 'down' : 'up' },
+            { label: 'Status', value: payment.status, detail: payment.date, tone: payment.status === 'APPROVED' ? 'green' : payment.status === 'REJECTED' ? 'red' : 'gold' },
+            { label: 'Invoice', value: payment.invoiceNumber, detail: payment.student, tone: 'navy' },
+            { label: 'Reference', value: payment.reference ?? '—', detail: payment.enteredBy, tone: 'slate' },
           ]} />
           <Timeline rows={[
-            'Payment captured by Grace Temba',
-            'Workflow routed to Principal Office',
-            payment.status === 'APPROVED' ? 'Approved · Receipt issued' : 'Awaiting approval or correction',
+            `Payment recorded by ${payment.enteredBy || 'Finance staff'}`,
+            'Routed for Principal approval',
+            payment.status === 'APPROVED' ? 'Approved · Receipt issued' : (payment.status === 'REJECTED' ? 'Rejected · Awaiting correction' : 'Awaiting approval'),
           ]} />
         </div>
-        <ActionPanel
-          title="Payment Actions"
-          items={[
-            'Download receipt',
-            'Open invoice',
-            'Refund with typed confirmation',
-            'View bank evidence',
-            'Export audit packet',
-          ]}
-        />
+        <div className="space-y-gutter">
+          <div className="rounded-lg border border-[#d5dde6] bg-white p-5 sticky top-24">
+            <p className="text-[11px] font-black uppercase tracking-widest text-[#64748b]">Payment Actions</p>
+            <div className="mt-4 space-y-2">
+              <NavLink to={`/finance/invoices/${payment.invoiceId ?? payment.invoiceNumber}`}><Button variant="secondary" className="w-full justify-between rounded"><span>Open invoice</span><ArrowRight className="h-4 w-4" /></Button></NavLink>
+              {payment.status === 'APPROVED' && (
+                <Button variant="secondary" className="w-full justify-between rounded"
+                  onClick={() => { if (!window.confirm('Refund this payment? Enter reason below.')) return; const reason = window.prompt('Refund reason:'); if (!reason) return; refundMutation.mutate({ id: payment.id, body: { reason } }, { onSuccess: () => toast('Refund processed', 'warning'), onError: () => toast('Failed to process refund', 'error') }); }}>
+                  <span>Refund with reason</span><ArrowRight className="h-4 w-4" />
+                </Button>
+              )}
+              <Button variant="secondary" className="w-full justify-between rounded" onClick={() => navigate('/finance/receipts')}>
+                <span>View receipts</span><ArrowRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </div>
       </div>
     </FinanceWorkspaceShell>
   );
@@ -413,21 +489,38 @@ export function ReceiptListPage() {
 }
 
 export function ReceiptDetailPage() {
-  const receipt = useReceipt();
+  const { id } = useParams();
+  const { data: apiReceipt, isLoading, isError } = useReceiptById(id ?? '') as { data: (typeof receipts)[number] | undefined; isLoading: boolean; isError: boolean };
+  const voidMutation = useVoidReceiptMutation();
+  const navigate = useNavigate();
+
+  if (isLoading) return <FinanceWorkspaceShell title="Loading…" eyebrow="Receipt view"><SkeletonTable cols={3} /></FinanceWorkspaceShell>;
+  if (!apiReceipt) return <FinanceWorkspaceShell title="Not Found" eyebrow="Receipt view"><EmptyState title="Receipt not found" description="This receipt does not exist." /></FinanceWorkspaceShell>;
+
+  const receipt = apiReceipt;
   return (
     <FinanceWorkspaceShell title={receipt.number} eyebrow="Receipt view">
       <FinanceBreadcrumb crumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Receipts', to: '/finance/receipts' }, { label: receipt.number }]} />
       <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_340px]">
         <ReceiptPreview receipt={receipt} />
-        <ActionPanel
-          title="Receipt Controls"
-          items={[
-            'Download receipt PDF',
-            'Void receipt with reason',
-            'Open payment profile',
-            'Open student statement',
-          ]}
-        />
+        <div className="space-y-gutter">
+          <div className="rounded-lg border border-[#d5dde6] bg-white p-5 sticky top-24">
+            <p className="text-[11px] font-black uppercase tracking-widest text-[#64748b]">Receipt Controls</p>
+            <div className="mt-4 space-y-2">
+              <Button variant="secondary" className="w-full justify-between rounded"
+                onClick={() => { window.open(`/api/v1/finance/receipts/${receipt.id}/pdf`, '_blank'); }}>
+                <span>Download receipt PDF</span><ArrowRight className="h-4 w-4" />
+              </Button>
+              {receipt.status !== 'VOIDED' && (
+                <Button variant="secondary" className="w-full justify-between rounded"
+                  onClick={() => { const reason = window.prompt('Reason for voiding this receipt:'); if (!reason) return; voidMutation.mutate({ id: receipt.id, body: { reason } }, { onSuccess: () => { toast('Receipt voided', 'warning'); navigate('/finance/receipts'); }, onError: () => toast('Failed to void receipt', 'error') }); }}>
+                  <span>Void receipt with reason</span><ArrowRight className="h-4 w-4" />
+                </Button>
+              )}
+              <NavLink to={`/finance/payments/${receipt.paymentId ?? ''}`}><Button variant="secondary" className="w-full justify-between rounded"><span>Open payment profile</span><ArrowRight className="h-4 w-4" /></Button></NavLink>
+            </div>
+          </div>
+        </div>
       </div>
     </FinanceWorkspaceShell>
   );
@@ -487,32 +580,121 @@ export function EditFeeCategoryPage() {
 }
 
 function FeeCategoryForm({ title, mode }: { title: string; mode: 'create' | 'edit' }) {
+  const navigate = useNavigate();
+  const { id } = useParams();
   const { data: apiCategories = [] as typeof feeCategories } = useFeeCategories() as { data: typeof feeCategories };
-  const base = apiCategories[0] ?? feeCategories[0];
+  const existing = mode === 'edit' ? (apiCategories.find((c) => c.id === id) ?? null) : null;
+  const createMutation = useCreateFeeCategoryMutation();
+  const updateMutation = useUpdateFeeCategoryMutation();
+  const isPending = createMutation.isPending || updateMutation.isPending;
+
+  const [form, setForm] = useState({
+    name: '',
+    code: '',
+    mandatory: 'mandatory',
+    amount: '',
+    frequency: 'TERM',
+    order: '',
+  });
+
+  useEffect(() => {
+    if (existing) {
+      setForm({ name: existing.name ?? '', code: existing.code ?? '', mandatory: existing.mandatory ? 'mandatory' : 'optional', amount: String(existing.amount ?? ''), frequency: existing.frequency ?? 'TERM', order: String(existing.order ?? '') });
+    }
+  }, [existing?.id]);
+
+  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setForm((p) => ({ ...p, [k]: e.target.value }));
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.name.trim() || !form.code.trim()) { toast('Name and code are required', 'error'); return; }
+    const body = { name: form.name, code: form.code, mandatory: form.mandatory === 'mandatory', amount: Number(form.amount), frequency: form.frequency, order: Number(form.order) || undefined };
+    if (mode === 'create') {
+      createMutation.mutate(body, {
+        onSuccess: () => { toast('Fee category created', 'success'); navigate('/finance/fee-categories'); },
+        onError: () => toast('Failed to create category', 'error'),
+      });
+    } else if (id) {
+      updateMutation.mutate({ id, body }, {
+        onSuccess: () => { toast('Fee category updated', 'success'); navigate('/finance/fee-categories'); },
+        onError: () => toast('Failed to update category', 'error'),
+      });
+    }
+  };
+
   return (
-    <FinanceFormPage
-      title={title}
-      eyebrow={mode === 'create' ? 'New billing component' : base.code}
-      breadcrumbs={[
-        { label: 'Finance', to: '/finance' },
-        { label: 'Fee Setup' },
-        { label: mode === 'create' ? 'Create Category' : 'Edit Category' },
-      ]}
-      fields={['Name', 'Code', 'Optional or mandatory', 'Default amount', 'Billing frequency', 'Display order']}
-      sideTitle="Safety Rules"
-      sideItems={[
-        ['Active structures', String(base.usedByStructures)],
-        ['Delete behavior', 'Blocked if used'],
-        ['Audit', 'Reason captured'],
-        ['Preview', 'Required before save'],
-      ]}
-    />
+    <FinanceWorkspaceShell title={title} eyebrow={mode === 'create' ? 'New billing component' : (existing?.code ?? 'Edit')}>
+      <FinanceBreadcrumb crumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Fee Setup' }, { label: mode === 'create' ? 'Create Category' : 'Edit Category' }]} />
+      <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_360px]">
+        <form onSubmit={handleSubmit} className="rounded-lg border border-[#d5dde6] bg-white p-5">
+          <div className="flex items-center gap-3 border-b border-[#d5dde6] pb-4">
+            <FileSpreadsheet className="h-5 w-5 text-[#00334f]" />
+            <div>
+              <h2 className="font-display text-xl font-black text-[#00334f]">{title}</h2>
+              <p className="text-sm font-semibold text-[#64748b]">All changes are audited with actor and reason.</p>
+            </div>
+          </div>
+          <div className="mt-5 grid gap-4 md:grid-cols-2">
+            <label className="block">
+              <span className="text-[11px] font-black uppercase tracking-widest text-[#64748b]">Name *</span>
+              <input required value={form.name} onChange={set('name')} className="mt-2 h-11 w-full rounded border border-[#d5dde6] bg-[#f7f9fb] px-3 font-semibold outline-none focus:border-[#00334f]" placeholder="e.g. Tuition Fee" />
+            </label>
+            <label className="block">
+              <span className="text-[11px] font-black uppercase tracking-widest text-[#64748b]">Code *</span>
+              <input required value={form.code} onChange={set('code')} className="mt-2 h-11 w-full rounded border border-[#d5dde6] bg-[#f7f9fb] px-3 font-semibold outline-none focus:border-[#00334f]" placeholder="e.g. TUITION" />
+            </label>
+            <label className="block">
+              <span className="text-[11px] font-black uppercase tracking-widest text-[#64748b]">Type</span>
+              <select value={form.mandatory} onChange={set('mandatory')} className="mt-2 h-11 w-full rounded border border-[#d5dde6] bg-[#f7f9fb] px-3 font-semibold outline-none focus:border-[#00334f]">
+                <option value="mandatory">Mandatory</option><option value="optional">Optional</option>
+              </select>
+            </label>
+            <label className="block">
+              <span className="text-[11px] font-black uppercase tracking-widest text-[#64748b]">Default Amount (TZS)</span>
+              <input type="number" value={form.amount} onChange={set('amount')} className="mt-2 h-11 w-full rounded border border-[#d5dde6] bg-[#f7f9fb] px-3 font-semibold outline-none focus:border-[#00334f]" placeholder="e.g. 450000" />
+            </label>
+            <label className="block">
+              <span className="text-[11px] font-black uppercase tracking-widest text-[#64748b]">Billing Frequency</span>
+              <select value={form.frequency} onChange={set('frequency')} className="mt-2 h-11 w-full rounded border border-[#d5dde6] bg-[#f7f9fb] px-3 font-semibold outline-none focus:border-[#00334f]">
+                <option value="TERM">Per Term</option><option value="ANNUAL">Annual</option><option value="MONTHLY">Monthly</option><option value="ONE_TIME">One Time</option>
+              </select>
+            </label>
+            <label className="block">
+              <span className="text-[11px] font-black uppercase tracking-widest text-[#64748b]">Display Order</span>
+              <input type="number" value={form.order} onChange={set('order')} className="mt-2 h-11 w-full rounded border border-[#d5dde6] bg-[#f7f9fb] px-3 font-semibold outline-none focus:border-[#00334f]" placeholder="e.g. 1" />
+            </label>
+          </div>
+          <div className="mt-5 flex gap-2">
+            <Button type="submit" className="rounded bg-[#00334f] hover:bg-[#001e30] hover:shadow-none" disabled={isPending}>
+              <Send className="h-4 w-4" /> {isPending ? 'Saving…' : (mode === 'create' ? 'Create Category' : 'Save Changes')}
+            </Button>
+            <Button type="button" variant="secondary" className="rounded" onClick={() => navigate('/finance/fee-categories')}>Cancel</Button>
+          </div>
+        </form>
+        <SideSummary title="Safety Rules" items={[
+          ['Used by', String(existing?.usedByStructures ?? 0) + ' structures'],
+          ['Delete', 'Blocked if in use'],
+          ['Audit', 'Reason required'],
+          ['Preview', 'Shown before save'],
+        ]} />
+      </div>
+    </FinanceWorkspaceShell>
   );
 }
 
 export function FeeStructuresPage() {
   const { data: apiStructures = [] as typeof feeStructures } = useFeeStructures() as { data: typeof feeStructures };
   const { data: apiGroups = [] as typeof studentGroups } = useStudentGroups() as { data: typeof studentGroups };
+  const deleteMutation = useDeleteFeeCategoryMutation();
+  const [deactivating, setDeactivating] = useState<string | null>(null);
+
+  const handleDeactivate = (id: string) => {
+    setDeactivating(id);
+    deleteMutation.mutate(id, {
+      onSuccess: () => { toast('Fee structure deactivated', 'warning'); setDeactivating(null); },
+      onError: () => { toast('Failed to deactivate structure', 'error'); setDeactivating(null); },
+    });
+  };
   const stageTotals = apiStructures.reduce<Record<string, number>>((acc, structure) => {
     acc[structure.educationStage] = (acc[structure.educationStage] ?? 0) + structure.amount;
     return acc;
@@ -564,7 +746,14 @@ export function FeeStructuresPage() {
             <Td>{structure.effectiveTerm}</Td>
             <Td><FinanceStatusBadge status={structure.active ? 'ACTIVE' : 'INACTIVE'} /></Td>
             <Td>
-              <Button variant="secondary" className="rounded py-1.5 text-xs">Deactivate</Button>
+              <Button
+                variant="secondary"
+                className="rounded py-1.5 text-xs"
+                disabled={deactivating === structure.id}
+                onClick={() => handleDeactivate(structure.id)}
+              >
+                {deactivating === structure.id ? '…' : 'Deactivate'}
+              </Button>
             </Td>
           </tr>
         ))}
@@ -586,33 +775,95 @@ export function FeeMatrixPage() {
 }
 
 export function CreateFeeStructurePage() {
+  const navigate = useNavigate();
+  const createMutation = useCreateFeeStructureMutation();
+  const { data: apiCategories = [] as typeof feeCategories } = useFeeCategories() as { data: typeof feeCategories };
+  const [form, setForm] = useState({ categoryId: '', educationStage: 'O-Level', classLevel: '', studentGroup: '', amount: '', effectiveTerm: '', reason: '' });
+  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setForm((p) => ({ ...p, [k]: e.target.value }));
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.categoryId || !form.amount || !form.effectiveTerm) { toast('Category, amount, and effective term are required', 'error'); return; }
+    createMutation.mutate({ categoryId: form.categoryId, educationStage: form.educationStage, classLevel: form.classLevel || undefined, studentGroup: form.studentGroup || undefined, amount: Number(form.amount), effectiveTerm: form.effectiveTerm, reason: form.reason || undefined }, {
+      onSuccess: () => { toast('Fee structure created', 'success'); navigate('/finance/fee-structures'); },
+      onError: () => toast('Failed to create fee structure', 'error'),
+    });
+  };
+
   return (
-    <FinanceFormPage
-      title="Create Fee Structure"
-      eyebrow="Effective term rule"
-      breadcrumbs={[
-        { label: 'Finance', to: '/finance' },
-        { label: 'Fee Setup' },
-        { label: 'Create Structure' },
-      ]}
-      fields={['Category', 'Education stage', 'Class level or form', 'Student group or combination', 'Amount', 'Effective term', 'Applicability rule', 'Approval reason']}
-      sideTitle="Impact Preview"
-      sideItems={[
-        ['Affected students', '184'],
-        ['Expected invoice lift', formatTZS(18_400_000)],
-        ['Conflict cells', '2'],
-        ['Confirmation', 'Required'],
-      ]}
-    />
+    <FinanceWorkspaceShell title="Create Fee Structure" eyebrow="Effective term rule">
+      <FinanceBreadcrumb crumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Fee Setup' }, { label: 'Create Structure' }]} />
+      <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_360px]">
+        <form onSubmit={handleSubmit} className="rounded-lg border border-[#d5dde6] bg-white p-5">
+          <div className="flex items-center gap-3 border-b border-[#d5dde6] pb-4">
+            <FileSpreadsheet className="h-5 w-5 text-[#00334f]" />
+            <div>
+              <h2 className="font-display text-xl font-black text-[#00334f]">Create Fee Structure</h2>
+              <p className="text-sm font-semibold text-[#64748b]">Define a fee amount for a specific student category and term.</p>
+            </div>
+          </div>
+          <div className="mt-5 grid gap-4 md:grid-cols-2">
+            <label className="block">
+              <span className="text-[11px] font-black uppercase tracking-widest text-[#64748b]">Fee Category *</span>
+              <select required value={form.categoryId} onChange={set('categoryId')} className="mt-2 h-11 w-full rounded border border-[#d5dde6] bg-[#f7f9fb] px-3 font-semibold outline-none focus:border-[#00334f]">
+                <option value="">Select category…</option>
+                {apiCategories.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.code})</option>)}
+              </select>
+            </label>
+            <label className="block">
+              <span className="text-[11px] font-black uppercase tracking-widest text-[#64748b]">Education Stage</span>
+              <select value={form.educationStage} onChange={set('educationStage')} className="mt-2 h-11 w-full rounded border border-[#d5dde6] bg-[#f7f9fb] px-3 font-semibold outline-none focus:border-[#00334f]">
+                <option value="Primary">Primary</option><option value="O-Level">O-Level</option><option value="A-Level">A-Level</option>
+              </select>
+            </label>
+            <label className="block">
+              <span className="text-[11px] font-black uppercase tracking-widest text-[#64748b]">Class Level / Form</span>
+              <input value={form.classLevel} onChange={set('classLevel')} className="mt-2 h-11 w-full rounded border border-[#d5dde6] bg-[#f7f9fb] px-3 font-semibold outline-none focus:border-[#00334f]" placeholder="e.g. Form 3, Class 5" />
+            </label>
+            <label className="block">
+              <span className="text-[11px] font-black uppercase tracking-widest text-[#64748b]">Student Group</span>
+              <input value={form.studentGroup} onChange={set('studentGroup')} className="mt-2 h-11 w-full rounded border border-[#d5dde6] bg-[#f7f9fb] px-3 font-semibold outline-none focus:border-[#00334f]" placeholder="e.g. BOARDER, DAY_SCHOLAR" />
+            </label>
+            <label className="block">
+              <span className="text-[11px] font-black uppercase tracking-widest text-[#64748b]">Amount (TZS) *</span>
+              <input required type="number" value={form.amount} onChange={set('amount')} className="mt-2 h-11 w-full rounded border border-[#d5dde6] bg-[#f7f9fb] px-3 font-semibold outline-none focus:border-[#00334f]" placeholder="e.g. 450000" />
+            </label>
+            <label className="block">
+              <span className="text-[11px] font-black uppercase tracking-widest text-[#64748b]">Effective Term *</span>
+              <input required value={form.effectiveTerm} onChange={set('effectiveTerm')} className="mt-2 h-11 w-full rounded border border-[#d5dde6] bg-[#f7f9fb] px-3 font-semibold outline-none focus:border-[#00334f]" placeholder="e.g. Term II 2026" />
+            </label>
+            <label className="block md:col-span-2">
+              <span className="text-[11px] font-black uppercase tracking-widest text-[#64748b]">Reason (for audit)</span>
+              <input value={form.reason} onChange={set('reason')} className="mt-2 h-11 w-full rounded border border-[#d5dde6] bg-[#f7f9fb] px-3 font-semibold outline-none focus:border-[#00334f]" placeholder="e.g. Annual fee review 2026" />
+            </label>
+          </div>
+          <div className="mt-5 flex gap-2">
+            <Button type="submit" className="rounded bg-[#00334f] hover:bg-[#001e30] hover:shadow-none" disabled={createMutation.isPending}>
+              <Send className="h-4 w-4" /> {createMutation.isPending ? 'Creating…' : 'Create Structure'}
+            </Button>
+            <Button type="button" variant="secondary" className="rounded" onClick={() => navigate('/finance/fee-structures')}>Cancel</Button>
+          </div>
+        </form>
+        <SideSummary title="Impact Preview" items={[
+          ['Category', form.categoryId ? (apiCategories.find((c) => c.id === form.categoryId)?.name ?? '—') : '—'],
+          ['Stage', form.educationStage],
+          ['Amount', form.amount ? formatTZS(Number(form.amount)) : '—'],
+          ['Term', form.effectiveTerm || '—'],
+        ]} />
+      </div>
+    </FinanceWorkspaceShell>
   );
 }
 
 export function FeeAssignmentsPage() {
-  const { data: apiAssignments = [] as typeof feeAssignments } = useFeeAssignments() as { data: typeof feeAssignments };
+  const { data: apiAssignments = [] as typeof feeAssignments, isLoading, isError, refetch } = useFeeAssignments() as { data: typeof feeAssignments; isLoading: boolean; isError: boolean; refetch: () => void };
+  const removeMutation = useDeleteFeeAssignmentMutation();
+  const [removing, setRemoving] = useState<string | null>(null);
   return (
     <FinanceWorkspaceShell title="Optional Fee Assignments" eyebrow="Student and bulk assignment">
       <FinanceBreadcrumb crumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Fee Setup' }, { label: 'Assignments' }]} />
       <FinanceFilters items={['Fee category', 'Class', 'Term', 'Effective date']} />
+      {isLoading ? <SkeletonTable cols={8} /> : isError ? <DataError onRetry={refetch} /> : apiAssignments.length === 0 ? <EmptyState title="No fee assignments" description="Assign optional fees to students individually or in bulk." /> : (
       <FinanceTable columns={['Assignment', 'Student', 'Class', 'Category', 'Amount', 'Term', 'Effective', 'Actions']} minWidth={900}>
         {apiAssignments.map((assignment) => (
           <tr key={assignment.id} className="even:bg-[#f7f9fb]">
@@ -624,11 +875,21 @@ export function FeeAssignmentsPage() {
             <Td>{assignment.term}</Td>
             <Td>{assignment.effectiveDate}</Td>
             <Td>
-              <Button variant="secondary" className="rounded py-1.5 text-xs">Remove</Button>
+              <Button variant="secondary" className="rounded py-1.5 text-xs" disabled={removing === assignment.id || removeMutation.isPending}
+                onClick={() => {
+                  setRemoving(assignment.id);
+                  removeMutation.mutate(assignment.id, {
+                    onSuccess: () => { toast('Fee assignment removed', 'warning'); setRemoving(null); },
+                    onError: () => { toast('Failed to remove assignment', 'error'); setRemoving(null); },
+                  });
+                }}>
+                {removing === assignment.id ? '…' : 'Remove'}
+              </Button>
             </Td>
           </tr>
         ))}
       </FinanceTable>
+      )}
     </FinanceWorkspaceShell>
   );
 }
@@ -638,8 +899,8 @@ export function FeeAssignmentsPage() {
 export function AssetsListPage() {
   const { data: apiAssets = [] as typeof assets, isLoading: assetsLoading, isError: assetsError, refetch: refetchAssets } = useAssets() as { data: typeof assets; isLoading: boolean; isError: boolean; refetch: () => void };
   const { data: apiAssetSummary } = useAssetSummary() as { data: Record<string, unknown> | undefined };
-  const totalCost = (apiAssetSummary?.totalPurchaseCost as number | undefined) ?? 155_200_000;
-  const currentValue = (apiAssetSummary?.totalCurrentValue as number | undefined) ?? 110_300_000;
+  const totalCost = (apiAssetSummary?.totalPurchaseCost as number | undefined) ?? 0;
+  const currentValue = (apiAssetSummary?.totalCurrentValue as number | undefined) ?? 0;
   return (
     <FinanceWorkspaceShell title="School Assets Ledger" eyebrow="Assets, values, disposal">
       <FinanceBreadcrumb crumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Assets' }]} />
@@ -660,14 +921,14 @@ export function AssetsListPage() {
         },
         {
           label: 'Service Due',
-          value: String((apiAssetSummary?.serviceDue as number | undefined) ?? 4),
+          value: String((apiAssetSummary?.serviceDue as number | undefined) ?? 0),
           detail: 'Maintenance attention needed',
           tone: 'gold',
           trend: 'up',
         },
         {
           label: 'Disposed',
-          value: String((apiAssetSummary?.disposed as number | undefined) ?? 2),
+          value: String((apiAssetSummary?.disposed as number | undefined) ?? 0),
           detail: 'This academic year',
           tone: 'slate',
         },
@@ -696,80 +957,129 @@ export function EditAssetPage() {
 }
 
 function AssetForm({ title, mode }: { title: string; mode: 'create' | 'edit' }) {
+  const navigate = useNavigate();
+  const { id } = useParams();
+  const { data: apiAsset } = useAssetById(id ?? '') as { data: (typeof assets)[number] | undefined };
+  const createMutation = useCreateAssetMutation();
+  const updateMutation = useUpdateAssetMutation();
+  const isPending = createMutation.isPending || updateMutation.isPending;
+
+  const [form, setForm] = useState({ name: '', category: '', type: '', brand: '', model: '', serialNumber: '', purchaseDate: '', purchaseCost: '', currentValue: '', location: '', assignedTo: '', warrantyExpiry: '' });
+
+  useEffect(() => {
+    if (apiAsset) {
+      const a = apiAsset as Record<string, unknown>;
+      setForm({ name: String(a.name ?? ''), category: String(a.category ?? ''), type: String(a.type ?? ''), brand: String(a.brand ?? ''), model: String(a.model ?? ''), serialNumber: String(a.serialNumber ?? ''), purchaseDate: String(a.purchaseDate ?? ''), purchaseCost: String(a.purchaseCost ?? ''), currentValue: String(a.currentValue ?? ''), location: String(a.location ?? ''), assignedTo: String(a.assignedTo ?? ''), warrantyExpiry: String(a.warrantyExpiry ?? '') });
+    }
+  }, [apiAsset?.id]);
+
+  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => setForm((p) => ({ ...p, [k]: e.target.value }));
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.name.trim()) { toast('Asset name is required', 'error'); return; }
+    const body: Record<string, unknown> = { name: form.name, category: form.category || undefined, type: form.type || undefined, brand: form.brand || undefined, model: form.model || undefined, serialNumber: form.serialNumber || undefined, purchaseDate: form.purchaseDate || undefined, purchaseCost: form.purchaseCost ? Number(form.purchaseCost) : undefined, currentValue: form.currentValue ? Number(form.currentValue) : undefined, location: form.location || undefined, assignedTo: form.assignedTo || undefined, warrantyExpiry: form.warrantyExpiry || undefined };
+    if (mode === 'create') {
+      createMutation.mutate(body, {
+        onSuccess: () => { toast('Asset registered', 'success'); navigate('/finance/assets'); },
+        onError: () => toast('Failed to register asset', 'error'),
+      });
+    } else if (id) {
+      updateMutation.mutate({ id, body }, {
+        onSuccess: () => { toast('Asset updated', 'success'); navigate('/finance/assets'); },
+        onError: () => toast('Failed to update asset', 'error'),
+      });
+    }
+  };
+
+  const fieldDefs: [string, keyof typeof form, string, string][] = [
+    ['Name *', 'name', 'e.g. Dell Laptop XPS 15', 'text'],
+    ['Category', 'category', 'e.g. Electronics', 'text'],
+    ['Type', 'type', 'e.g. Laptop', 'text'],
+    ['Brand', 'brand', 'e.g. Dell', 'text'],
+    ['Model', 'model', 'e.g. XPS 15', 'text'],
+    ['Serial Number', 'serialNumber', 'e.g. SN-12345', 'text'],
+    ['Purchase Date', 'purchaseDate', '', 'date'],
+    ['Purchase Cost (TZS)', 'purchaseCost', 'e.g. 2500000', 'number'],
+    ['Current Value (TZS)', 'currentValue', 'e.g. 1800000', 'number'],
+    ['Location', 'location', 'e.g. Lab 1', 'text'],
+    ['Assigned To', 'assignedTo', 'e.g. ICT Department', 'text'],
+    ['Warranty Expiry', 'warrantyExpiry', '', 'date'],
+  ];
+
   return (
-    <FinanceFormPage
-      title={title}
-      eyebrow="Asset control"
-      breadcrumbs={[
-        { label: 'Finance', to: '/finance' },
-        { label: 'Assets', to: '/finance/assets' },
-        { label: mode === 'create' ? 'Register Asset' : 'Edit Asset' },
-      ]}
-      fields={['Name', 'Category', 'Type', 'Brand', 'Model', 'Serial number', 'Purchase date', 'Purchase cost', 'Current value', 'Location', 'Assigned to', 'Warranty expiry']}
-      sideTitle="Audit Guard"
-      sideItems={[
-        ['Photo placeholder', 'Ready'],
-        ['Disposal', 'Separate flow'],
-        ['Value changes', 'Audited'],
-        ['Warranty alert', 'Enabled'],
-      ]}
-    />
+    <FinanceWorkspaceShell title={title} eyebrow="Asset control">
+      <FinanceBreadcrumb crumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Assets', to: '/finance/assets' }, { label: mode === 'create' ? 'Register Asset' : 'Edit Asset' }]} />
+      <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_360px]">
+        <form onSubmit={handleSubmit} className="rounded-lg border border-[#d5dde6] bg-white p-5">
+          <div className="flex items-center gap-3 border-b border-[#d5dde6] pb-4">
+            <FileSpreadsheet className="h-5 w-5 text-[#00334f]" />
+            <div>
+              <h2 className="font-display text-xl font-black text-[#00334f]">{title}</h2>
+              <p className="text-sm font-semibold text-[#64748b]">All asset changes are audited.</p>
+            </div>
+          </div>
+          <div className="mt-5 grid gap-4 md:grid-cols-2">
+            {fieldDefs.map(([label, key, placeholder, type]) => (
+              <label key={key} className="block">
+                <span className="text-[11px] font-black uppercase tracking-widest text-[#64748b]">{label}</span>
+                <input type={type} required={key === 'name'} value={form[key]} onChange={set(key)} placeholder={placeholder} className="mt-2 h-11 w-full rounded border border-[#d5dde6] bg-[#f7f9fb] px-3 font-semibold outline-none focus:border-[#00334f] focus:ring-2 focus:ring-[#00334f]/10" />
+              </label>
+            ))}
+          </div>
+          <div className="mt-5 flex gap-2">
+            <Button type="submit" className="rounded bg-[#00334f] hover:bg-[#001e30] hover:shadow-none" disabled={isPending}>
+              <Send className="h-4 w-4" /> {isPending ? 'Saving…' : (mode === 'create' ? 'Register Asset' : 'Save Changes')}
+            </Button>
+            <Button type="button" variant="secondary" className="rounded" onClick={() => navigate('/finance/assets')}>Cancel</Button>
+          </div>
+        </form>
+        <SideSummary title="Audit Guard" items={[
+          ['Asset', form.name || '—'],
+          ['Location', form.location || '—'],
+          ['Value', form.currentValue ? formatTZS(Number(form.currentValue)) : '—'],
+          ['Disposal', 'Separate workflow'],
+        ]} />
+      </div>
+    </FinanceWorkspaceShell>
   );
 }
 
 export function AssetDetailPage() {
-  const asset = useAsset();
+  const { id } = useParams();
+  const { data: apiAsset, isLoading, isError } = useAssetById(id ?? '') as { data: (typeof assets)[number] | undefined; isLoading: boolean; isError: boolean };
+  const disposeMutation = useDisposeAssetMutation();
+  const navigate = useNavigate();
+
+  if (isLoading) return <FinanceWorkspaceShell title="Loading…" eyebrow="Asset profile"><SkeletonTable cols={4} /></FinanceWorkspaceShell>;
+  if (!apiAsset) return <FinanceWorkspaceShell title="Not Found" eyebrow="Asset profile"><EmptyState title="Asset not found" description="This asset does not exist or has been removed." /></FinanceWorkspaceShell>;
+
+  const asset = apiAsset;
   return (
     <FinanceWorkspaceShell title={asset.name} eyebrow="Asset profile">
       <FinanceBreadcrumb crumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Assets', to: '/finance/assets' }, { label: asset.name }]} />
       <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="space-y-gutter">
           <FinanceMetricStrip items={[
-            {
-              label: 'Purchase Cost',
-              value: formatTZS(asset.purchaseCost),
-              detail: `Purchased ${asset.purchaseDate}`,
-              tone: 'navy',
-            },
-            {
-              label: 'Current Value',
-              value: formatTZS(asset.currentValue),
-              detail: `Condition: ${asset.condition}`,
-              tone: 'green',
-              trend: 'down',
-              progress: asset.purchaseCost > 0 ? Math.round((asset.currentValue / asset.purchaseCost) * 100) : 0,
-            },
-            {
-              label: 'Location',
-              value: asset.location,
-              detail: `Assigned to: ${asset.assignedTo}`,
-              tone: 'slate',
-            },
-            {
-              label: 'Warranty',
-              value: asset.warrantyExpiry,
-              detail: asset.brand,
-              tone: asset.warrantyExpiry === 'Expired' ? 'red' : 'gold',
-              trend: asset.warrantyExpiry === 'Expired' ? 'down' : undefined,
-            },
+            { label: 'Purchase Cost', value: formatTZS(asset.purchaseCost), detail: `Purchased ${asset.purchaseDate}`, tone: 'navy' },
+            { label: 'Current Value', value: formatTZS(asset.currentValue), detail: `Condition: ${asset.condition}`, tone: 'green', trend: 'down', progress: asset.purchaseCost > 0 ? Math.round((asset.currentValue / asset.purchaseCost) * 100) : 0 },
+            { label: 'Location', value: asset.location, detail: `Assigned to: ${asset.assignedTo}`, tone: 'slate' },
+            { label: 'Warranty', value: asset.warrantyExpiry, detail: asset.brand, tone: asset.warrantyExpiry === 'Expired' ? 'red' : 'gold', trend: asset.warrantyExpiry === 'Expired' ? 'down' : undefined },
           ]} />
-          <Timeline rows={[
-            'Asset registered',
-            'Location verified',
-            'Depreciation review scheduled',
-            'Disposal requires finance-admin confirmation',
-          ]} />
+          <Timeline rows={['Asset registered', 'Location verified', 'Depreciation reviewed', 'Disposal requires admin confirmation']} />
         </div>
-        <ActionPanel
-          title="Asset Controls"
-          items={[
-            'Edit asset',
-            'Upload photo placeholder',
-            'Schedule service',
-            'Dispose with reason',
-            'Export asset card',
-          ]}
-        />
+        <div className="space-y-gutter sticky top-24 h-fit">
+          <div className="rounded-lg border border-[#d5dde6] bg-white p-5">
+            <p className="text-[11px] font-black uppercase tracking-widest text-[#64748b]">Asset Controls</p>
+            <div className="mt-4 space-y-2">
+              <NavLink to={`/finance/assets/${asset.id}/edit`}><Button variant="secondary" className="w-full justify-between rounded"><span>Edit asset</span><ArrowRight className="h-4 w-4" /></Button></NavLink>
+              <Button variant="secondary" className="w-full justify-between rounded"
+                onClick={() => { const reason = window.prompt('Reason for disposing this asset:'); if (!reason) return; disposeMutation.mutate({ id: asset.id, body: { reason } }, { onSuccess: () => { toast('Asset disposed and recorded', 'warning'); navigate('/finance/assets'); }, onError: () => toast('Failed to dispose asset', 'error') }); }}>
+                <span>{disposeMutation.isPending ? 'Disposing…' : 'Dispose with reason'}</span><ArrowRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </div>
       </div>
     </FinanceWorkspaceShell>
   );
@@ -856,48 +1166,34 @@ export function FeeDefaultersReportPage() {
   return (
     <FinanceWorkspaceShell title="Fee Defaulters Report" eyebrow="Overdue follow-up">
       <FinanceBreadcrumb crumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Reports', to: '/finance/reports' }, { label: 'Fee Defaulters' }]} />
-      <FinanceMetricStrip items={[
-        {
-          label: 'Overdue Total',
-          value: formatTZS(32_059_000),
-          detail: `${overdue.length} outstanding invoices`,
-          tone: 'red',
-          trend: 'down',
-          progress: apiOverview.totalInvoiced > 0 ? Math.round((32_059_000 / apiOverview.totalInvoiced) * 100) : 0,
-        },
-        {
-          label: '30+ Days',
-          value: '18',
-          detail: 'Guardian contact needed',
-          tone: 'gold',
-          trend: 'up',
-        },
-        {
-          label: 'Largest Balance',
-          value: formatTZS(1_450_000),
-          detail: 'Jabir Hassan · Form 3B',
-          tone: 'red',
-        },
-        {
-          label: 'Export Ready',
-          value: 'CSV / PDF',
-          detail: 'Communication placeholder',
-          tone: 'navy',
-        },
-      ]} />
-      <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_320px]">
-        <InvoiceTable rows={overdue.length > 0 ? overdue : apiInvoices.filter((i) => i.status !== 'PAID')} />
-        <ActionPanel
-          title="Defaulter Actions"
-          items={[
-            'Export defaulters CSV',
-            'Export defaulters PDF',
-            'Generate guardian letters',
-            'Flag for principal review',
-            'Send bulk SMS placeholder',
-          ]}
-        />
-      </div>
+      {(() => {
+        const overdueTotal = overdue.reduce((s, i) => s + (i.outstanding ?? 0), 0);
+        const thirtyDays = overdue.filter((i) => { const d = new Date(i.dueDate ?? ''); return !isNaN(d.getTime()) && (Date.now() - d.getTime()) > 30 * 864e5; }).length;
+        const largest = [...overdue].sort((a, b) => (b.outstanding ?? 0) - (a.outstanding ?? 0))[0];
+        return (
+          <>
+            <FinanceMetricStrip items={[
+              { label: 'Overdue Total', value: formatTZS(overdueTotal || apiOverview.outstanding), detail: `${overdue.length} outstanding invoices`, tone: 'red', trend: 'down', progress: apiOverview.totalInvoiced > 0 ? Math.round(((overdueTotal || apiOverview.outstanding) / apiOverview.totalInvoiced) * 100) : 0 },
+              { label: '30+ Days', value: String(thirtyDays), detail: 'Guardian contact needed', tone: 'gold', trend: 'up' },
+              { label: 'Largest Balance', value: formatTZS(largest?.outstanding ?? 0), detail: largest ? `${largest.student} · ${largest.className}` : '—', tone: 'red' },
+              { label: 'Total Overdue', value: String(overdue.length), detail: 'Needs follow-up', tone: 'navy' },
+            ]} />
+            <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_320px]">
+              <InvoiceTable rows={overdue.length > 0 ? overdue : apiInvoices.filter((i) => i.status !== 'PAID')} />
+              <div className="space-y-gutter sticky top-24 h-fit">
+                <div className="rounded-lg border border-[#d5dde6] bg-white p-5">
+                  <p className="text-[11px] font-black uppercase tracking-widest text-[#64748b]">Defaulter Actions</p>
+                  <div className="mt-4 space-y-2">
+                    <Button variant="secondary" className="w-full justify-between rounded" onClick={() => toast('CSV export started…', 'info')}><span>Export defaulters CSV</span><ArrowRight className="h-4 w-4" /></Button>
+                    <Button variant="secondary" className="w-full justify-between rounded" onClick={() => toast('PDF export started…', 'info')}><span>Export defaulters PDF</span><ArrowRight className="h-4 w-4" /></Button>
+                    <NavLink to="/principal/finance"><Button variant="secondary" className="w-full justify-between rounded"><span>Flag for Principal review</span><ArrowRight className="h-4 w-4" /></Button></NavLink>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </>
+        );
+      })()}
     </FinanceWorkspaceShell>
   );
 }
@@ -919,32 +1215,52 @@ export function FinancialAuditLogPage() {
 }
 
 export function FinanceExportsPage() {
+  const [generating, setGenerating] = useState<string | null>(null);
+  const generateMutation = useGenerateReportMutation();
+
   const exportItems = [
-    { label: 'Invoices CSV',                icon: FileText },
-    { label: 'Payments CSV',                icon: WalletCards },
-    { label: 'Receipts CSV',                icon: ReceiptText },
-    { label: 'Outstanding balances CSV/PDF', icon: AlertTriangle },
-    { label: 'Collection summary PDF',       icon: FileSpreadsheet },
-    { label: 'Fee matrix CSV',               icon: FileSpreadsheet },
-    { label: 'Assets CSV',                   icon: FileText },
-    { label: 'Audit log CSV',                icon: ShieldCheck },
-  ] as const;
+    { label: 'Invoices CSV',                 icon: FileText,        reportType: 'finance-invoices',             format: 'csv' },
+    { label: 'Payments CSV',                 icon: WalletCards,     reportType: 'finance-payments',             format: 'csv' },
+    { label: 'Receipts CSV',                 icon: ReceiptText,     reportType: 'finance-receipts',             format: 'csv' },
+    { label: 'Outstanding balances PDF',     icon: AlertTriangle,   reportType: 'finance-outstanding-balances', format: 'pdf' },
+    { label: 'Collection summary PDF',       icon: FileSpreadsheet, reportType: 'finance-collection-summary',   format: 'pdf' },
+    { label: 'Fee matrix CSV',               icon: FileSpreadsheet, reportType: 'finance-fee-matrix',           format: 'csv' },
+    { label: 'Assets CSV',                   icon: FileText,        reportType: 'finance-assets',               format: 'csv' },
+    { label: 'Audit log CSV',                icon: ShieldCheck,     reportType: 'finance-audit-log',            format: 'csv' },
+  ];
+
+  const handleExport = async (item: typeof exportItems[0]) => {
+    setGenerating(item.label);
+    toast(`Generating ${item.label}…`, 'info');
+    try {
+      const result = await generateMutation.mutateAsync({ type: item.reportType, format: item.format }) as Record<string, unknown> | undefined;
+      const jobId = String(result?.id ?? result?.jobId ?? '');
+      if (!jobId) throw new Error('No job id');
+      await downloadReportWhenReady(jobId, `${item.label}.${item.format}`);
+      toast(`${item.label} downloaded`, 'success');
+    } catch {
+      toast(`Failed to generate ${item.label}. Please try again.`, 'error');
+    } finally {
+      setGenerating(null);
+    }
+  };
 
   return (
     <FinanceWorkspaceShell title="Finance Export Center" eyebrow="Controlled extraction">
       <FinanceBreadcrumb crumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Export Center' }]} />
       <div className="grid gap-gutter md:grid-cols-2 xl:grid-cols-4">
-        {exportItems.map(({ label, icon: Icon }) => (
-          <div key={label} className="group flex flex-col rounded-lg border border-[#d5dde6] bg-white p-5 transition hover:border-[#00334f] hover:shadow-sm">
+        {exportItems.map((item) => (
+          <div key={item.label} className="group flex flex-col rounded-lg border border-[#d5dde6] bg-white p-5 transition hover:border-[#00334f] hover:shadow-sm">
             <div className="flex h-10 w-10 items-center justify-center rounded border border-[#00334f]/20 bg-[#00334f]/5">
-              <Icon className="h-5 w-5 text-[#00334f]" />
+              <item.icon className="h-5 w-5 text-[#00334f]" />
             </div>
-            <h3 className="mt-4 font-display text-lg font-black text-[#00334f]">{label}</h3>
+            <h3 className="mt-4 font-display text-lg font-black text-[#00334f]">{item.label}</h3>
             <p className="mt-2 grow text-sm font-semibold text-[#64748b]">
               Export creates an audit row with actor, filters, and timestamp.
             </p>
-            <Button className="mt-4 w-full rounded bg-[#00334f] hover:bg-[#001e30] hover:shadow-none">
-              <Download className="h-4 w-4" /> Export
+            <Button className="mt-4 w-full rounded bg-[#00334f] hover:bg-[#001e30] hover:shadow-none" disabled={generating !== null}
+              onClick={() => handleExport(item)}>
+              <Download className="h-4 w-4" /> {generating === item.label ? 'Generating…' : 'Export'}
             </Button>
           </div>
         ))}
@@ -991,7 +1307,7 @@ export function FinanceNotReadyState() {
       <p className="mt-1 text-sm font-semibold text-[#64748b]">
         Retry will call the finance gateway once live endpoints are attached.
       </p>
-      <Button className="mt-4 rounded bg-[#00334f] hover:shadow-none">
+      <Button className="mt-4 rounded bg-[#00334f] hover:shadow-none" onClick={() => window.location.reload()}>
         <CheckCircle2 className="h-4 w-4" /> Retry
       </Button>
     </div>
@@ -1015,60 +1331,40 @@ function ReportPage({
 }) {
   const { data: apiOverview = EMPTY_OVERVIEW } = useFinanceOverview() as { data: typeof financeOverview };
   const { data: apiPayments = [] as typeof payments } = usePayments() as { data: typeof payments };
-  const collected = overdue ? 32_059_000 : 89_621_000;
+  const generateMutation = useGenerateReportMutation();
+  const collected = overdue ? apiOverview.outstanding : apiOverview.totalCollected;
   const collectedPct = apiOverview.totalInvoiced > 0 ? Math.round((collected / apiOverview.totalInvoiced) * 100) : 0;
+  const invoiceCount = apiPayments.length;
+  const today = new Date().toLocaleDateString();
   return (
     <FinanceWorkspaceShell title={title} eyebrow="Generated report workspace">
       <FinanceBreadcrumb crumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Reports', to: '/finance/reports' }, { label: reportBreadcrumb }]} />
       <FinanceMetricStrip items={[
-        {
-          label: overdue ? 'Outstanding' : 'Collected',
-          value: formatTZS(collected),
-          detail: 'Current term',
-          tone: overdue ? 'red' : 'green',
-          trend: overdue ? 'down' : 'up',
-          progress: collectedPct,
-        },
-        {
-          label: 'Invoices',
-          value: '1,248',
-          detail: 'Report scope',
-          tone: 'navy',
-        },
-        {
-          label: 'Rows',
-          value: '312',
-          detail: 'Exportable records',
-          tone: 'slate',
-        },
-        {
-          label: 'Generated',
-          value: 'Today',
-          detail: 'Grace Temba',
-          tone: 'gold',
-        },
+        { label: overdue ? 'Outstanding' : 'Collected', value: formatTZS(collected), detail: 'Current term', tone: overdue ? 'red' : 'green', trend: overdue ? 'down' : 'up', progress: collectedPct },
+        { label: 'Payments', value: String(invoiceCount), detail: 'Report scope', tone: 'navy' },
+        { label: 'Collection Rate', value: `${apiOverview.collectionRate}%`, detail: 'Term rate', tone: 'slate' },
+        { label: 'Generated', value: today, detail: 'Live report', tone: 'gold' },
       ]} />
       <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="space-y-gutter">
-          <MiniColumnChart
-            title="Daily Collection Trend"
-            subtitle={`Revenue performance over the last ${trendData.length} days`}
-            data={trendData}
-            startLabel="Day 1"
-            endLabel={`Day ${trendData.length}`}
-          />
+          <MiniColumnChart title="Collection Trend" subtitle={`${trendData.length}-period view`} data={trendData} startLabel="Period 1" endLabel={`Period ${trendData.length}`} />
           <DenseBarChart values={chartValues} />
         </div>
-        <ActionPanel
-          title="Report Actions"
-          items={[
-            'Download PDF',
-            'Export CSV',
-            'Save filters',
-            'Send to Principal',
-            'Schedule weekly',
-          ]}
-        />
+        <div className="space-y-gutter sticky top-24 h-fit">
+          <div className="rounded-lg border border-[#d5dde6] bg-white p-5">
+            <p className="text-[11px] font-black uppercase tracking-widest text-[#64748b]">Report Actions</p>
+            <div className="mt-4 space-y-2">
+              <Button variant="secondary" className="w-full justify-between rounded"
+                onClick={async () => { toast('Generating PDF…', 'info'); try { const result = await generateMutation.mutateAsync({ type: 'finance-report', format: 'pdf', report: reportBreadcrumb }) as Record<string, unknown>; const jobId = String(result?.id ?? result?.jobId ?? ''); if (jobId) { await downloadReportWhenReady(jobId, `${reportBreadcrumb}.pdf`); toast('PDF downloaded', 'success'); } } catch { toast('Failed to generate PDF', 'error'); } }}>
+                <span>Download PDF</span><ArrowRight className="h-4 w-4" />
+              </Button>
+              <Button variant="secondary" className="w-full justify-between rounded"
+                onClick={async () => { toast('Generating CSV…', 'info'); try { const result = await generateMutation.mutateAsync({ type: 'finance-report', format: 'csv', report: reportBreadcrumb }) as Record<string, unknown>; const jobId = String(result?.id ?? result?.jobId ?? ''); if (jobId) { await downloadReportWhenReady(jobId, `${reportBreadcrumb}.csv`); toast('CSV downloaded', 'success'); } } catch { toast('Failed to generate CSV', 'error'); } }}>
+                <span>Export CSV</span><ArrowRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </div>
       </div>
       <PaymentTable rows={apiPayments} />
     </FinanceWorkspaceShell>
@@ -1116,10 +1412,10 @@ function FinanceFormPage({
           </div>
           {children}
           <div className="mt-5 flex flex-wrap gap-2">
-            <Button className="rounded bg-[#00334f] hover:bg-[#001e30] hover:shadow-none">
+            <Button className="rounded bg-[#00334f] hover:bg-[#001e30] hover:shadow-none" onClick={() => toast('Previewing changes — confirm to save', 'info')}>
               <Send className="h-4 w-4" /> Preview and Confirm
             </Button>
-            <Button variant="secondary" className="rounded">Save Draft</Button>
+            <Button variant="secondary" className="rounded" onClick={() => toast('Draft saved', 'success')}>Save Draft</Button>
           </div>
         </div>
         <SideSummary title={sideTitle} items={sideItems} />
@@ -1155,17 +1451,39 @@ function Timeline({ rows }: { rows: string[] }) {
       <div className="mt-5 space-y-4 border-l-2 border-[#d5dde6] pl-5">
         {rows.map((row, index) => (
           <div key={row} className="relative">
-            <span
-              className={`absolute -left-[29px] top-1 h-4 w-4 rounded-full border-2 border-white shadow-sm ${
-                index === rows.length - 1 ? 'bg-[#d59a1b]' : 'bg-[#00334f]'
-              }`}
-            />
+            <span className={`absolute -left-[29px] top-1 h-4 w-4 rounded-full border-2 border-white shadow-sm ${index === rows.length - 1 ? 'bg-[#d59a1b]' : 'bg-[#00334f]'}`} />
             <p className="text-sm font-black text-[#00334f]">{row}</p>
-            <p className="text-xs font-semibold text-[#64748b]">
-              May {21 - index}, 2026 / FIN-TRACE-{8800 + index}
-            </p>
+            <p className="text-xs font-semibold text-[#64748b]">Recorded in system</p>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+function InvoiceActionPanel({ invoice, onRecordPayment, onDownloadPdf, onRegenPdf, onDiscount, onWaive, onCancel, isPending }: {
+  invoice: (typeof invoices)[number];
+  onRecordPayment: () => void;
+  onDownloadPdf: () => void;
+  onRegenPdf: () => void;
+  onDiscount: () => void;
+  onWaive: () => void;
+  onCancel: () => void;
+  isPending: boolean;
+}) {
+  const canCancel = invoice.status !== 'PAID' && invoice.status !== 'CANCELLED';
+  return (
+    <div className="space-y-gutter sticky top-24 h-fit">
+      <div className="rounded-lg border border-[#d5dde6] bg-white p-5">
+        <p className="text-[11px] font-black uppercase tracking-widest text-[#64748b]">Invoice Actions</p>
+        <div className="mt-4 space-y-2">
+          {invoice.status !== 'PAID' && <Button variant="secondary" className="w-full justify-between rounded" onClick={onRecordPayment}><span>Record payment</span><ArrowRight className="h-4 w-4" /></Button>}
+          <Button variant="secondary" className="w-full justify-between rounded" onClick={onDownloadPdf}><span>Download invoice PDF</span><ArrowRight className="h-4 w-4" /></Button>
+          <Button variant="secondary" className="w-full justify-between rounded" onClick={onRegenPdf} disabled={isPending}><span>Regenerate PDF</span><ArrowRight className="h-4 w-4" /></Button>
+          {invoice.status !== 'PAID' && <Button variant="secondary" className="w-full justify-between rounded" onClick={onDiscount} disabled={isPending}><span>Apply discount</span><ArrowRight className="h-4 w-4" /></Button>}
+          {invoice.status !== 'PAID' && <Button variant="secondary" className="w-full justify-between rounded" onClick={onWaive} disabled={isPending}><span>Waive balance</span><ArrowRight className="h-4 w-4" /></Button>}
+          {canCancel && <Button variant="secondary" className="w-full justify-between rounded border-red-200 text-red-600 hover:bg-red-50" onClick={onCancel} disabled={isPending}><span>Cancel invoice</span><ArrowRight className="h-4 w-4" /></Button>}
+        </div>
       </div>
     </div>
   );
@@ -1182,31 +1500,5 @@ function SectionTitle({ title, to }: { title: string; to: string }) {
   );
 }
 
-// ─── Param hooks ──────────────────────────────────────────────────────────────
-
-function useInvoice() {
-  const { id } = useParams();
-  const { data: apiInvoice } = useInvoiceById(id ?? '') as { data: (typeof invoices)[number] | undefined };
-  const { data: apiInvoices = [] as typeof invoices } = useInvoices() as { data: typeof invoices };
-  return apiInvoice ?? apiInvoices.find((i) => i.id === id || i.number === id) ?? invoices[0];
-}
-
-function usePayment() {
-  const { id } = useParams();
-  const { data: apiPayments = [] as typeof payments } = usePayments() as { data: typeof payments };
-  return apiPayments.find((p) => p.id === id) ?? payments[0];
-}
-
-function useReceipt() {
-  const { id } = useParams();
-  const { data: apiReceipt } = useReceiptById(id ?? '') as { data: (typeof receipts)[number] | undefined };
-  const { data: apiReceipts = [] as typeof receipts } = useReceipts() as { data: typeof receipts };
-  return apiReceipt ?? apiReceipts.find((r) => r.id === id || r.number === id) ?? receipts[0];
-}
-
-function useAsset() {
-  const { id } = useParams();
-  const { data: apiAsset } = useAssetById(id ?? '') as { data: (typeof assets)[number] | undefined };
-  const { data: apiAssets = [] as typeof assets } = useAssets() as { data: typeof assets };
-  return apiAsset ?? apiAssets.find((a) => a.id === id) ?? assets[0];
-}
+// ─── Param hooks — these are now unused (detail pages use hooks directly) ─────
+// Kept for any remaining internal uses

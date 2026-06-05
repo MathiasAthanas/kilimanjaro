@@ -44,16 +44,106 @@ export function useFinanceDashboard() {
 export function useFinanceOverview() {
   return useQuery({
     queryKey: financeKeys.overview(),
-    queryFn: () => api.get('/analytics/finance/overview').then(payloadOf),
+    queryFn: () =>
+      api.get('/analytics/finance/overview').then((r) => {
+        const payload = payloadOf(r) as Record<string, unknown>;
+        // The API nests financial totals under "billing"
+        const b = (payload?.billing ?? payload) as Record<string, unknown>;
+        return {
+          totalInvoiced:  decimalToNumber(b.totalInvoiced),
+          totalCollected: decimalToNumber(b.totalCollected),
+          outstanding:    decimalToNumber(b.totalOutstanding ?? b.outstanding),
+          collectionRate: Number(b.collectionRate ?? 0),
+          today:          decimalToNumber(b.todayCollection ?? b.today),
+          overdueInvoices: Number(b.overdueCount ?? b.overdueInvoices ?? 0),
+        };
+      }),
     staleTime: 60_000,
   });
+}
+
+// ─── Local helpers ────────────────────────────────────────────────────────────
+
+/** Unwrap a potentially-nested API object to a plain string. */
+function strOf(raw: unknown, ...fallbacks: Array<unknown>): string {
+  const resolve = (v: unknown): string => {
+    if (v === null || v === undefined) return '';
+    if (typeof v === 'string') return v;
+    if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+    if (typeof v === 'object') {
+      const o = v as Record<string, unknown>;
+      return resolve(o.name ?? o.fullName ?? o.label ?? o.title ?? o.value ?? '');
+    }
+    return String(v);
+  };
+  const primary = resolve(raw);
+  if (primary !== '') return primary;
+  for (const fb of fallbacks) {
+    const s = resolve(fb);
+    if (s !== '') return s;
+  }
+  return '';
+}
+
+/** Coerce any array/number/object to an integer count. */
+function countOf(v: unknown): number {
+  if (Array.isArray(v)) return v.length;
+  const n = Number(v ?? 0);
+  return isNaN(n) ? 0 : n;
+}
+
+/**
+ * The backend serialises Decimal.js values as { s, e, d } objects.
+ * Reconstruct the plain JS number from the internal representation.
+ *   s – sign  (1 = positive, -1 = negative)
+ *   e – exponent of the most-significant digit group
+ *   d – array of digit words; d[0] is the most-significant, the rest are
+ *       each 7-digit words (padded with leading zeros when necessary)
+ *
+ * Formula: join(d[0], pad7(d[1]), …) → digits string "1320000"
+ *          value = Number(digits) × 10^(e + 1 − digits.length)
+ */
+function decimalToNumber(raw: unknown): number {
+  if (typeof raw === 'number') return isNaN(raw) ? 0 : raw;
+  // Plain string numeric value (e.g. "187160000")
+  if (typeof raw === 'string') { const n = Number(raw); return isNaN(n) ? 0 : n; }
+  if (!raw || typeof raw !== 'object') return 0;
+  const { s = 1, e = 0, d } = raw as { s?: number; e?: number; d?: number[] };
+  if (!Array.isArray(d) || !d.length) return 0;
+  const digits = d.map((v, i) => (i === 0 ? String(v) : String(v).padStart(7, '0'))).join('');
+  const value = Number(digits) * Math.pow(10, e + 1 - digits.length);
+  return (s ?? 1) * (isNaN(value) ? 0 : value);
+}
+
+// ─── Normalised hooks ─────────────────────────────────────────────────────────
+
+function normaliseInvoice(raw: unknown) {
+  const inv = raw as Record<string, unknown>;
+  return {
+    ...inv,
+    id: strOf(inv.id) || crypto.randomUUID(),
+    number: strOf(inv.number, inv.invoiceNumber, inv.id),
+    student: strOf(inv.student, inv.studentName),
+    registration: strOf(inv.registration, inv.registrationNumber, inv.studentId),
+    guardian: strOf(inv.guardian, inv.guardianName),
+    className: strOf(inv.className, inv.class, inv.class_name),
+    term: strOf(inv.term, inv.termName),
+    dueDate: strOf(inv.dueDate, inv.due_date, inv.dueAt),
+    lastPayment: strOf(inv.lastPayment, inv.lastPaymentDate),
+    status: strOf(inv.status) || 'PENDING',
+    total: decimalToNumber(inv.total ?? inv.totalAmount ?? inv.amount),
+    paid: decimalToNumber(inv.paid ?? inv.paidAmount ?? inv.amountPaid),
+    outstanding: decimalToNumber(inv.outstanding ?? inv.outstandingBalance ?? inv.outstandingAmount ?? inv.balance),
+  };
 }
 
 export function useInvoices(params?: Record<string, unknown>) {
   return useQuery({
     queryKey: financeKeys.invoices(params),
     queryFn: () =>
-      api.get('/finance/invoices', { params }).then((r) => arrayFromApi(payloadOf(r), ['invoices'])),
+      api.get('/finance/invoices', { params }).then((r) =>
+        arrayFromApi(payloadOf(r), ['invoices']).map(normaliseInvoice),
+      ),
   });
 }
 
@@ -71,7 +161,7 @@ export function useStudentInvoices(studentId: string) {
     queryFn: () =>
       api
         .get(`/finance/invoices/student/${studentId}`)
-        .then((r) => arrayFromApi(payloadOf(r), ['invoices'])),
+        .then((r) => arrayFromApi(payloadOf(r), ['invoices']).map(normaliseInvoice)),
     enabled: Boolean(studentId),
   });
 }
@@ -80,7 +170,25 @@ export function usePayments() {
   return useQuery({
     queryKey: financeKeys.payments(),
     queryFn: () =>
-      api.get('/finance/payments').then((r) => arrayFromApi(payloadOf(r), ['payments'])),
+      api.get('/finance/payments').then((r) =>
+        arrayFromApi(payloadOf(r), ['payments']).map((raw) => {
+          const p = raw as Record<string, unknown>;
+          return {
+            ...p,
+            id: strOf(p.id) || crypto.randomUUID(),
+            invoiceId: strOf(p.invoiceId, p.invoice_id),
+            invoiceNumber: strOf(p.invoiceNumber, p.invoiceId),
+            student: strOf(p.student, p.studentName),
+            method: strOf(p.method, p.paymentMethod, p.payment_method),
+            amount: decimalToNumber(p.amount ?? p.total),
+            status: strOf(p.status, p.paymentStatus) || 'PENDING',
+            enteredBy: strOf(p.enteredBy, p.recordedBy, p.createdBy, p.staffName, p.confirmedById),
+            date: strOf(p.date, p.createdAt, p.created_at, p.paymentDate),
+            reference: strOf(p.reference, p.referenceNumber, p.bankReference),
+            notes: strOf(p.notes, p.comment, p.description),
+          };
+        }),
+      ),
   });
 }
 
@@ -90,7 +198,21 @@ export function usePendingPaymentApprovals() {
     queryFn: () =>
       api
         .get('/finance/payments/pending-approval')
-        .then((r) => arrayFromApi(payloadOf(r), ['approvals', 'payments'])),
+        .then((r) =>
+          arrayFromApi(payloadOf(r), ['approvals', 'payments']).map((raw) => {
+            const p = raw as Record<string, unknown>;
+            return {
+              ...p,
+              id: strOf(p.id) || crypto.randomUUID(),
+              student: strOf(p.student, p.studentName),
+              method: strOf(p.method, p.paymentMethod),
+              amount: Number(p.amount ?? p.total ?? 0),
+              status: strOf(p.status) || 'PENDING',
+              enteredBy: strOf(p.enteredBy, p.recordedBy, p.createdBy),
+              reference: strOf(p.reference, p.referenceNumber),
+            };
+          }),
+        ),
   });
 }
 
@@ -98,7 +220,22 @@ export function useReceipts() {
   return useQuery({
     queryKey: financeKeys.receipts(),
     queryFn: () =>
-      api.get('/finance/receipts').then((r) => arrayFromApi(payloadOf(r), ['receipts'])),
+      api.get('/finance/receipts').then((r) =>
+        arrayFromApi(payloadOf(r), ['receipts']).map((raw) => {
+          const rc = raw as Record<string, unknown>;
+          return {
+            ...rc,
+            id: strOf(rc.id) || crypto.randomUUID(),
+            number: strOf(rc.number, rc.receiptNumber, rc.id),
+            paymentId: strOf(rc.paymentId, rc.payment_id),
+            student: strOf(rc.student, rc.studentName),
+            amount: Number(rc.amount ?? rc.total ?? 0),
+            method: strOf(rc.method, rc.paymentMethod),
+            issuedAt: strOf(rc.issuedAt, rc.issued_at, rc.createdAt, rc.created_at),
+            status: strOf(rc.status) || 'ACTIVE',
+          };
+        }),
+      ),
   });
 }
 
@@ -116,7 +253,21 @@ export function useFeeCategories() {
     queryFn: () =>
       api
         .get('/finance/fee-categories')
-        .then((r) => arrayFromApi(payloadOf(r), ['feeCategories', 'categories'])),
+        .then((r) =>
+          arrayFromApi(payloadOf(r), ['feeCategories', 'categories']).map((raw) => {
+            const c = raw as Record<string, unknown>;
+            return {
+              ...c,
+              id: strOf(c.id) || crypto.randomUUID(),
+              name: strOf(c.name, c.categoryName),
+              code: strOf(c.code, c.categoryCode),
+              order: Number(c.order ?? c.sortOrder ?? c.displayOrder ?? 0),
+              amount: Number(c.amount ?? c.defaultAmount ?? 0),
+              frequency: strOf(c.frequency, c.billingFrequency, c.period),
+              usedByStructures: countOf(c.usedByStructures ?? c.usedBy ?? c.structureCount ?? 0),
+            };
+          }),
+        ),
   });
 }
 
@@ -126,7 +277,22 @@ export function useFeeStructures() {
     queryFn: () =>
       api
         .get('/finance/fee-structures')
-        .then((r) => arrayFromApi(payloadOf(r), ['feeStructures', 'structures'])),
+        .then((r) =>
+          arrayFromApi(payloadOf(r), ['feeStructures', 'structures']).map((raw) => {
+            const s = raw as Record<string, unknown>;
+            return {
+              ...s,
+              id: strOf(s.id) || crypto.randomUUID(),
+              category: strOf(s.category, s.feeCategory, s.feeCategoryName),
+              className: strOf(s.className, s.class, s.class_name),
+              educationStage: strOf(s.educationStage, s.stage, s.education_stage),
+              studentGroup: strOf(s.studentGroup, s.group, s.groupName),
+              effectiveTerm: strOf(s.effectiveTerm, s.term, s.termName),
+              amount: Number(s.amount ?? s.feeAmount ?? 0),
+              classLevel: Number(s.classLevel ?? s.level ?? 0),
+            };
+          }),
+        ),
   });
 }
 
@@ -143,7 +309,19 @@ export function useStudentGroups() {
     queryFn: () =>
       api
         .get('/finance/fee-structures/student-groups')
-        .then((r) => arrayFromApi(payloadOf(r), ['studentGroups', 'groups'])),
+        .then((r) =>
+          arrayFromApi(payloadOf(r), ['studentGroups', 'groups']).map((raw) => {
+            const g = raw as Record<string, unknown>;
+            return {
+              ...g,
+              id: strOf(g.id) || crypto.randomUUID(),
+              code: strOf(g.code, g.groupCode),
+              name: strOf(g.name, g.groupName),
+              members: countOf(g.members ?? g.memberCount ?? g.studentCount ?? 0),
+              feeTarget: strOf(g.feeTarget, g.feeDescription, g.description),
+            };
+          }),
+        ),
   });
 }
 
@@ -153,7 +331,21 @@ export function useFeeAssignments() {
     queryFn: () =>
       api
         .get('/finance/fee-assignments')
-        .then((r) => arrayFromApi(payloadOf(r), ['feeAssignments', 'assignments'])),
+        .then((r) =>
+          arrayFromApi(payloadOf(r), ['feeAssignments', 'assignments']).map((raw) => {
+            const a = raw as Record<string, unknown>;
+            return {
+              ...a,
+              id: strOf(a.id) || crypto.randomUUID(),
+              student: strOf(a.student, a.studentName),
+              className: strOf(a.className, a.class, a.class_name),
+              category: strOf(a.category, a.feeCategory, a.feeCategoryName),
+              amount: Number(a.amount ?? a.feeAmount ?? 0),
+              term: strOf(a.term, a.termName),
+              effectiveDate: strOf(a.effectiveDate, a.effective_date, a.startDate),
+            };
+          }),
+        ),
   });
 }
 
@@ -376,5 +568,89 @@ export function useDisposeAssetMutation() {
       qc.invalidateQueries({ queryKey: financeKeys.asset(id) });
       qc.invalidateQueries({ queryKey: financeKeys.assets() });
     },
+  });
+}
+
+export function useDeleteFeeAssignmentMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.delete(`/finance/fee-assignments/${id}`).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: financeKeys.feeAssignments() }),
+  });
+}
+
+export function useCreateFeeStructureMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Record<string, unknown>) =>
+      api.post('/finance/fee-structures', body).then((r) => r.data?.data ?? r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: financeKeys.feeStructures() }),
+  });
+}
+
+export function useUpdateFeeStructureMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: Record<string, unknown> }) =>
+      api.patch(`/finance/fee-structures/${id}`, body).then((r) => r.data?.data ?? r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: financeKeys.feeStructures() }),
+  });
+}
+
+export function useCreateAssetMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Record<string, unknown>) =>
+      api.post('/finance/assets', body).then((r) => r.data?.data ?? r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: financeKeys.assets() }),
+  });
+}
+
+export function useUpdateAssetMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: Record<string, unknown> }) =>
+      api.patch(`/finance/assets/${id}`, body).then((r) => r.data?.data ?? r.data),
+    onSuccess: (_d, { id }) => {
+      qc.invalidateQueries({ queryKey: financeKeys.asset(id) });
+      qc.invalidateQueries({ queryKey: financeKeys.assets() });
+    },
+  });
+}
+
+export function useWaiveInvoiceMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: { reason: string } }) =>
+      api.patch(`/finance/invoices/${id}/waive`, body).then((r) => r.data?.data ?? r.data),
+    onSuccess: (_d, { id }) => {
+      qc.invalidateQueries({ queryKey: financeKeys.invoice(id) });
+      qc.invalidateQueries({ queryKey: financeKeys.invoices() });
+    },
+  });
+}
+
+export function useRegeneratePdfMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api.post(`/finance/invoices/${id}/regenerate-pdf`).then((r) => r.data?.data ?? r.data),
+    onSuccess: (_d, id) => qc.invalidateQueries({ queryKey: financeKeys.invoice(id) }),
+  });
+}
+
+export function useDownloadInvoicePdf(id: string) {
+  return useQuery({
+    queryKey: [...financeKeys.invoice(id), 'pdf'],
+    queryFn: () => api.get(`/finance/invoices/${id}/pdf`, { responseType: 'blob' }).then((r) => r.data as Blob),
+    enabled: false,
+  });
+}
+
+export function useDownloadReceiptPdf(id: string) {
+  return useQuery({
+    queryKey: [...financeKeys.receipt(id), 'pdf'],
+    queryFn: () => api.get(`/finance/receipts/${id}/pdf`, { responseType: 'blob' }).then((r) => r.data as Blob),
+    enabled: false,
   });
 }

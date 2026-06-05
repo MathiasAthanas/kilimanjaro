@@ -304,7 +304,8 @@ export function AlertStaffCard({ alert }: { alert: Alert }) {
 }
 
 export function PairingCard({ pairing }: { pairing: Pairing }) {
-  const initials = (name: string) => name.split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase();
+  const initials = (name: string | undefined) =>
+    (name ?? '??').split(' ').map((p) => p[0] ?? '').join('').slice(0, 2).toUpperCase() || '??';
   return (
     <Card className="rounded-xl p-4 shadow-sm transition hover:shadow-layer">
       <div className="flex items-center justify-between">

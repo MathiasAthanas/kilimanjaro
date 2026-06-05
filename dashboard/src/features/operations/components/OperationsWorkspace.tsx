@@ -286,5 +286,5 @@ export function ReportTile({ title, detail, to }: { title: string; detail: strin
 }
 
 export function PendingIntegration({ feature }: { feature: string }) {
-  return <div className="rounded-2xl border border-dashed border-ks-amber bg-ks-amber/10 p-5 font-bold text-ks-amber"><Grid3X3 className="mr-2 inline h-5 w-5" /> Pending backend integration: {feature}</div>;
+  return <div className="rounded-2xl border border-slate-200 bg-white p-5 font-bold text-ks-muted"><Grid3X3 className="mr-2 inline h-5 w-5" /> {feature} is not available right now.</div>;
 }

@@ -20,7 +20,28 @@ export const commonKeys = {
 export function useNotifications() {
   return useQuery({
     queryKey: commonKeys.notifications(),
-    queryFn: () => api.get('/notifications').then((r) => arrayFromApi(payloadOf(r), ['notifications', 'logs'])),
+    queryFn: () =>
+      api.get('/notifications').then((r) =>
+        arrayFromApi(payloadOf(r), ['notifications', 'logs']).map((raw) => {
+          const n = raw as Record<string, unknown>;
+          const resolve = (v: unknown): string => {
+            if (!v || typeof v !== 'object') return String(v ?? '');
+            const o = v as Record<string, unknown>;
+            return String(o.name ?? o.fullName ?? o.label ?? o.title ?? '');
+          };
+          return {
+            ...n,
+            id: String(n.id ?? crypto.randomUUID()),
+            title: String(n.title ?? n.subject ?? n.heading ?? ''),
+            message: String(n.message ?? n.preview ?? n.body ?? n.content ?? ''),
+            category: String(n.category ?? n.type ?? n.notificationType ?? 'System'),
+            status: String(n.status ?? 'Unread'),
+            isRead: Boolean(n.isRead ?? n.is_read ?? false),
+            createdAt: String(n.createdAt ?? n.created_at ?? n.timestamp ?? ''),
+            actor: n.actor != null ? resolve(n.actor) : undefined,
+          };
+        }),
+      ),
     staleTime: 15_000,
   });
 }
@@ -38,10 +59,26 @@ export function useUnreadCount() {
   });
 }
 
+function normaliseAnnouncement(raw: Record<string, unknown>) {
+  return {
+    ...raw,
+    id: String(raw.id ?? crypto.randomUUID()),
+    title: String(raw.title ?? raw.subject ?? raw.heading ?? ''),
+    body: String(raw.body ?? raw.content ?? raw.message ?? ''),
+    status: String(raw.status ?? ''),
+    audience: String(raw.audience ?? raw.targetAudience ?? ''),
+    publishedAt: raw.publishedAt != null ? String(raw.publishedAt) : undefined,
+    createdAt: String(raw.createdAt ?? raw.created_at ?? ''),
+  };
+}
+
 export function useAnnouncements() {
   return useQuery({
     queryKey: commonKeys.announcements(),
-    queryFn: () => api.get('/notifications/announcements').then((r) => arrayFromApi(payloadOf(r), ['announcements'])),
+    queryFn: () =>
+      api.get('/notifications/announcements').then((r) =>
+        arrayFromApi(payloadOf(r), ['announcements']).map((raw) => normaliseAnnouncement(raw as Record<string, unknown>)),
+      ),
     staleTime: 60_000,
   });
 }
@@ -52,7 +89,11 @@ export function useActiveAnnouncements() {
     queryFn: () =>
       api
         .get('/notifications/announcements/active')
-        .then((r) => arrayFromApi(payloadOf(r), ['announcements', 'activeAnnouncements'])),
+        .then((r) =>
+          arrayFromApi(payloadOf(r), ['announcements', 'activeAnnouncements']).map((raw) =>
+            normaliseAnnouncement(raw as Record<string, unknown>),
+          ),
+        ),
     staleTime: 60_000,
   });
 }

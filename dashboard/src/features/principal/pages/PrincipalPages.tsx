@@ -13,8 +13,9 @@ import {
   WalletCards,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { useState } from 'react';
-import { NavLink, useParams } from 'react-router-dom';
+import React, { useState } from 'react';
+import { NavLink, useNavigate, useParams } from 'react-router-dom';
+import { toast } from '../../../lib/toast';
 import { Badge } from '../../../components/common/Badge';
 import { Button } from '../../../components/common/Button';
 import {
@@ -40,7 +41,13 @@ import {
   usePrincipalAnnouncements,
   usePrincipalSchoolHealth,
   usePrincipalSchoolSettings,
+  usePrincipalFinanceOverview,
+  useCreatePrincipalAnnouncementMutation,
+  useResolveDisciplineMutation,
+  useSignReportCardMutation,
+  usePatchSchoolSettingsMutation,
 } from '../api/principal.hooks';
+import { downloadReportWhenReady, useGenerateReportMutation } from '../../operations/api/operations.hooks';
 import {
   AnnouncementCard,
   DecisionAuditTimeline,
@@ -78,52 +85,68 @@ const EMPTY_HEALTH: typeof schoolHealth = { score: 0, academic: 0, finance: 0, o
 export function PrincipalHomePage() {
   const { data: apiHealth = EMPTY_HEALTH } = usePrincipalSchoolHealth() as { data: typeof schoolHealth };
   const { data: apiAudit = [] as typeof principalAudit } = usePrincipalAudit() as { data: typeof principalAudit };
+  const { data: apiAssessments = [] as typeof principalAssessments } = usePendingMarkApprovals() as { data: typeof principalAssessments };
+  const { data: apiApprovals = [] as typeof paymentApprovals } = usePrincipalPendingPayments() as { data: typeof paymentApprovals };
+  const { data: apiPublishClasses = [] as typeof publishClasses } = usePublishReadiness() as { data: typeof publishClasses };
+  const { data: fin } = usePrincipalFinanceOverview();
+
+  const marksCount    = apiAssessments.length;
+  const paymentsCount = apiApprovals.length;
+  const resultsCount  = apiPublishClasses.filter((c) => c.missingItems === 0 && c.reportCardReadiness >= 80).length;
+  const reportCards   = apiPublishClasses.reduce((s, c) => s + (c.students ?? 0), 0);
+  const totalPending  = marksCount + paymentsCount;
+
+  const trendValues   = fin?.collectionTrend.length ? fin.collectionTrend : [];
+  const collectionRate = fin?.collectionRate ?? 0;
+
   return (
     <PrincipalWorkspaceShell title="Executive Decision Room" eyebrow="Principal command center">
-      {/* Critical alert banner */}
-      <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-ks-rose/30 bg-ks-rose/8 p-4">
-        <AlertTriangle className="h-5 w-5 shrink-0 text-ks-rose" />
-        <p className="font-black text-ks-rose">
-          40 unresolved performance alerts · Chemistry Form 3B is the top institutional risk this week.
-        </p>
-        <NavLink to="/principal/performance" className="ml-auto">
-          <Button className="rounded-xl bg-ks-rose py-2 text-xs hover:bg-ks-rose/90">Review Alerts</Button>
-        </NavLink>
-      </div>
+      {/* Critical alert banner — only shown when there are pending decisions */}
+      {totalPending > 0 && (
+        <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-ks-rose/30 bg-ks-rose/8 p-4">
+          <AlertTriangle className="h-5 w-5 shrink-0 text-ks-rose" />
+          <p className="font-black text-ks-rose">
+            {totalPending} decision{totalPending !== 1 ? 's' : ''} pending your authorization — marks approvals and payment approvals require action.
+          </p>
+          <NavLink to="/principal/approvals" className="ml-auto">
+            <Button className="rounded-xl bg-ks-rose py-2 text-xs hover:bg-ks-rose/90">Review Now</Button>
+          </NavLink>
+        </div>
+      )}
 
       {/* Decision action cards */}
       <div className="grid gap-gutter md:grid-cols-2 xl:grid-cols-4">
         <PrincipalActionCard
           title="Marks Approvals"
-          count="3"
+          count={String(marksCount)}
           detail="HOD-approved assessments waiting for final principal lock."
-          urgency="high"
+          urgency={marksCount > 0 ? 'high' : 'stable'}
           to="/principal/approvals"
           meta={['Final lock', 'Audited']}
         />
         <PrincipalActionCard
           title="Payment Approvals"
-          count="3"
+          count={String(paymentsCount)}
           detail="Manual finance entries requiring executive authorization."
-          urgency="critical"
+          urgency={paymentsCount > 0 ? 'critical' : 'stable'}
           to="/principal/finance/approvals"
           meta={['Cash / Bank', 'Evidence required']}
         />
         <PrincipalActionCard
           title="Results Ready"
-          count="2"
+          count={String(resultsCount)}
           detail="Classes with locked results ready for student and parent publishing."
-          urgency="medium"
+          urgency={resultsCount > 0 ? 'medium' : 'stable'}
           to="/principal/results/publish"
           meta={['Term II', 'Publish now']}
         />
         <PrincipalActionCard
           title="Report Cards"
-          count="78"
-          detail="Generated report cards waiting for principal comment and sign-off."
-          urgency="high"
+          count={String(reportCards)}
+          detail="Students with generated report cards waiting for principal sign-off."
+          urgency={reportCards > 0 ? 'high' : 'stable'}
           to="/principal/report-cards"
-          meta={['Comments', 'PDF export']}
+          meta={['Comments', 'Sign-off']}
         />
       </div>
 
@@ -136,27 +159,26 @@ export function PrincipalHomePage() {
           {/* 3-panel snapshot */}
           <div className="grid gap-gutter xl:grid-cols-3">
             <ExecutiveBarChart
-              title="Academic Risk"
-              subtitle="Critical alerts by subject"
+              title="Health Indicators"
+              subtitle="Live school health scores"
               values={[
-                { label: 'Chemistry', value: 40, tone: 'bg-ks-rose' },
-                { label: 'Mathematics', value: 28, tone: 'bg-ks-amber' },
-                { label: 'Physics',   value: 14, tone: 'bg-ks-blue' },
-                { label: 'Biology',   value: 8,  tone: 'bg-ks-emerald' },
+                { label: 'Academic',    value: apiHealth.academic,    tone: 'bg-ks-blue' },
+                { label: 'Finance',     value: apiHealth.finance,     tone: 'bg-ks-gold' },
+                { label: 'Operations',  value: apiHealth.operations,  tone: 'bg-ks-emerald' },
               ]}
             />
             <ExecutiveLineChart
               title="Finance Collection"
               subtitle="Term II trend (%)"
-              values={[42, 48, 52, 61, 68, 73.7]}
+              values={trendValues.length >= 2 ? trendValues : [0, collectionRate]}
             />
             <ExecutiveBarChart
-              title="Operations Pulse"
-              subtitle="Current health indicators"
+              title="Decision Queue"
+              subtitle="Pending actions by type"
               values={[
-                { label: 'Attendance',   value: 94, tone: 'bg-ks-emerald' },
-                { label: 'Submissions',  value: 82, tone: 'bg-ks-gold' },
-                { label: 'Syllabus',     value: 71, tone: 'bg-ks-blue' },
+                { label: 'Marks',    value: marksCount,    tone: 'bg-ks-amber' },
+                { label: 'Payments', value: paymentsCount, tone: 'bg-ks-rose' },
+                { label: 'Results',  value: resultsCount,  tone: 'bg-ks-blue' },
               ]}
             />
           </div>
@@ -172,14 +194,17 @@ export function PrincipalHomePage() {
 // ─── Marks final approval ─────────────────────────────────────────────────────
 
 export function MarksFinalApprovalPage() {
-  const { data: apiAssessments = [] as typeof principalAssessments } = usePendingMarkApprovals() as { data: typeof principalAssessments };
+  const { data: apiAssessments = [] as typeof principalAssessments, isLoading, isError } = usePendingMarkApprovals() as { data: typeof principalAssessments; isLoading: boolean; isError: boolean };
+  const criticalTotal = apiAssessments.reduce((s, a) => s + (a.criticalAlerts ?? 0), 0);
+  const lowestAvg = apiAssessments.length ? Math.min(...apiAssessments.map((a) => a.average ?? 100)) : null;
+  const lowestClass = lowestAvg !== null ? (apiAssessments.find((a) => (a.average ?? 100) === lowestAvg)?.className ?? '—') : '—';
   return (
     <PrincipalWorkspaceShell title="Marks Final Approval" eyebrow="Final academic lock">
       <PrincipalBreadcrumb crumbs={[{ label: 'Executive', to: '/principal' }, { label: 'Approvals' }]} />
       <ExecutiveMetricGrid items={[
-        { label: 'Ready for Lock',    value: String(apiAssessments.length || 3), detail: 'HOD-approved assessments',    tone: 'high' },
-        { label: 'Critical Students', value: String(apiAssessments.reduce((s, a) => s + (a.criticalAlerts ?? 0), 0) || 4), detail: 'Visible before you decide', tone: 'critical' },
-        { label: 'Lowest Average',    value: `${Math.min(...apiAssessments.map((a) => a.average ?? 100), 54.1)}%`, detail: 'Chemistry Form 3B', tone: 'critical' },
+        { label: 'Ready for Lock',    value: isLoading ? '—' : String(apiAssessments.length), detail: 'HOD-approved assessments',  tone: 'high' },
+        { label: 'Critical Students', value: isLoading ? '—' : String(criticalTotal),          detail: 'Visible before you decide', tone: criticalTotal > 0 ? 'critical' : 'stable' },
+        { label: 'Lowest Average',    value: isLoading ? '—' : lowestAvg !== null ? `${lowestAvg}%` : 'N/A', detail: lowestClass, tone: lowestAvg !== null && lowestAvg < 60 ? 'critical' : 'stable' },
         { label: 'Audit Mode',        value: 'ON',    detail: 'Every decision traced',       tone: 'stable' },
       ]} />
       <div className="rounded-2xl border border-ks-amber/30 bg-ks-amber/5 p-4">
@@ -187,7 +212,8 @@ export function MarksFinalApprovalPage() {
           Final lock requires both acknowledgment checkboxes on each assessment detail page. Locked marks become eligible for results publishing.
         </p>
       </div>
-      <MarksFinalApprovalTable assessments={apiAssessments} />
+      {isError && <DataError message="Could not load pending approvals. Refresh to retry." />}
+      {!isError && <MarksFinalApprovalTable assessments={apiAssessments} />}
     </PrincipalWorkspaceShell>
   );
 }
@@ -195,8 +221,17 @@ export function MarksFinalApprovalPage() {
 // ─── Marks review detail ──────────────────────────────────────────────────────
 
 export function PrincipalMarksReviewPage() {
-  const assessment = useAssessment();
-  const { data: apiMarkRows = [] as typeof markRows } = useMarksForApproval(assessment.id) as { data: typeof markRows };
+  const { loading, item: assessment } = useAssessment();
+  const { data: apiMarkRows = [] as typeof markRows } = useMarksForApproval(assessment?.id) as { data: typeof markRows };
+
+  if (loading) return <PrincipalWorkspaceShell title="Loading…" eyebrow="Assessment approval dossier"><SkeletonTable cols={6} /></PrincipalWorkspaceShell>;
+  if (!assessment) return (
+    <PrincipalWorkspaceShell title="Assessment Not Found" eyebrow="Assessment approval dossier">
+      <PrincipalBreadcrumb crumbs={[{ label: 'Executive', to: '/principal' }, { label: 'Approvals', to: '/principal/approvals' }, { label: 'Not Found' }]} />
+      <EmptyState title="Assessment not found" description="This assessment may have already been processed or the link is invalid." />
+    </PrincipalWorkspaceShell>
+  );
+
   return (
     <PrincipalWorkspaceShell title={assessment.assessment} eyebrow="Assessment approval dossier">
       <PrincipalBreadcrumb crumbs={[
@@ -207,14 +242,14 @@ export function PrincipalMarksReviewPage() {
       <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_420px]">
         <div className="space-y-gutter">
           <ExecutiveMetricGrid items={[
-            { label: 'Class',     value: assessment.className,           detail: assessment.subject,                            tone: 'medium' },
-            { label: 'Average',   value: `${assessment.average}%`,       detail: 'Assessment mean',                             tone: assessment.average < 60 ? 'critical' : 'stable' },
-            { label: 'Alerts',    value: String(assessment.criticalAlerts), detail: 'Critical students in this assessment',     tone: assessment.criticalAlerts ? 'critical' : 'stable' },
-            { label: 'HOD',       value: assessment.hodStatus,           detail: assessment.age,                                tone: 'high' },
+            { label: 'Class',     value: assessment.className,           detail: assessment.subject,                        tone: 'medium' },
+            { label: 'Average',   value: `${assessment.average}%`,       detail: 'Assessment mean',                         tone: assessment.average < 60 ? 'critical' : 'stable' },
+            { label: 'Alerts',    value: String(assessment.criticalAlerts), detail: 'Critical students in this assessment', tone: assessment.criticalAlerts ? 'critical' : 'stable' },
+            { label: 'HOD',       value: assessment.hodStatus,           detail: assessment.age,                            tone: 'high' },
           ]} />
 
           {/* Marks table */}
-          <ExecutiveTable columns={['Student', 'Registration', 'Score', 'Previous', 'Δ Delta', 'Alert']} minWidth={840}>
+          <ExecutiveTable columns={['Student', 'Registration', 'Score', 'Previous', 'Delta', 'Alert']} minWidth={840}>
             {apiMarkRows.map((row) => {
               const delta = row.score - row.previous;
               return (
@@ -242,12 +277,11 @@ export function PrincipalMarksReviewPage() {
             })}
           </ExecutiveTable>
 
-          {/* Intelligence panel always visible for context */}
-          <IntelligencePanel context="Chemistry Form 3B has three critical students: Hassan Mwamba, Zainab Kilio, and Rehema Juma. Locking marks makes this assessment eligible for publishing; interventions remain visible to AQA." />
+          <IntelligencePanel context={`Locking marks for ${assessment.assessment} makes this assessment eligible for results publishing. Critical students remain visible to AQA after lock.`} />
         </div>
 
         {/* Sticky lock panel */}
-        <FinalLockPanel />
+        <FinalLockPanel assessmentId={assessment.id} />
       </div>
     </PrincipalWorkspaceShell>
   );
@@ -256,7 +290,8 @@ export function PrincipalMarksReviewPage() {
 // ─── Results publishing ───────────────────────────────────────────────────────
 
 export function ResultsPublishingPage() {
-  const { data: apiPublishClasses = [] as typeof publishClasses } = usePublishReadiness() as { data: typeof publishClasses };
+  const { data: apiPublishClasses, isLoading, isError } = usePublishReadiness();
+  const safeClasses = Array.isArray(apiPublishClasses) ? (apiPublishClasses as typeof publishClasses) : [];
   return (
     <PrincipalWorkspaceShell title="Results Publishing" eyebrow="Final visibility authority">
       <PrincipalBreadcrumb crumbs={[{ label: 'Executive', to: '/principal' }, { label: 'Publish Results' }]} />
@@ -266,7 +301,12 @@ export function ResultsPublishingPage() {
           Publishing results is irreversible for the selected term and classes. Students and parents will immediately gain view access.
         </p>
       </div>
-      <PublishResultsFlow classes={Array.isArray(apiPublishClasses) ? apiPublishClasses : publishClasses} />
+      {isLoading && <SkeletonTable cols={5} />}
+      {isError && <DataError message="Could not load publish readiness data. Refresh to retry." />}
+      {!isLoading && !isError && safeClasses.length === 0 && (
+        <EmptyState title="No classes ready" description="No classes have completed marks locking yet. Return once HOD mark approvals are finalised." />
+      )}
+      {!isLoading && !isError && safeClasses.length > 0 && <PublishResultsFlow classes={safeClasses} />}
     </PrincipalWorkspaceShell>
   );
 }
@@ -275,16 +315,19 @@ export function ResultsPublishingPage() {
 
 export function ReportCardsManagementPage() {
   const [batchMode, setBatchMode] = useState(false);
-  const { data: apiPublishClasses = [] as typeof publishClasses } = usePublishReadiness() as { data: typeof publishClasses };
-  const safeClasses = Array.isArray(apiPublishClasses) ? apiPublishClasses : publishClasses;
+  const { data: apiPublishClasses, isLoading, isError } = usePublishReadiness();
+  const safeClasses = Array.isArray(apiPublishClasses) ? (apiPublishClasses as typeof publishClasses) : [];
+  const totalCards    = safeClasses.reduce((s, c) => s + (c.students ?? 0), 0);
+  const missingTotal  = safeClasses.reduce((s, c) => s + (c.missingItems ?? 0), 0);
+  const readyClasses  = safeClasses.filter((c) => c.reportCardReadiness >= 90).length;
   return (
     <PrincipalWorkspaceShell title="Report Cards Management" eyebrow="Comments and sign-off">
       <PrincipalBreadcrumb crumbs={[{ label: 'Executive', to: '/principal' }, { label: 'Report Cards' }]} />
       <ExecutiveMetricGrid items={[
-        { label: 'Generated Cards',   value: '312',  detail: 'Term II, all classes',       tone: 'stable' },
-        { label: 'Missing Comments',  value: '78',   detail: 'Principal sign-off queue',   tone: 'high' },
-        { label: 'Ready Classes',     value: '6',    detail: 'Batch export possible',      tone: 'medium' },
-        { label: 'PDF Queue',         value: '18',   detail: 'Currently generating',       tone: 'stable' },
+        { label: 'Total Cards',      value: isLoading ? '—' : String(totalCards),   detail: 'Across all classes',         tone: 'stable' },
+        { label: 'Missing Items',    value: isLoading ? '—' : String(missingTotal),  detail: 'Principal sign-off queue',   tone: missingTotal > 0 ? 'high' : 'stable' },
+        { label: 'Ready Classes',    value: isLoading ? '—' : String(readyClasses),  detail: '≥ 90% readiness',            tone: 'medium' },
+        { label: 'Classes Total',    value: isLoading ? '—' : String(safeClasses.length), detail: 'Tracked this term',     tone: 'stable' },
       ]} />
 
       {/* Batch comment toggle */}
@@ -307,6 +350,11 @@ export function ReportCardsManagementPage() {
       </div>
 
       {/* Class cards */}
+      {isLoading && <SkeletonTable cols={3} />}
+      {isError && <DataError message="Could not load report card data. Refresh to retry." />}
+      {!isLoading && !isError && safeClasses.length === 0 && (
+        <EmptyState title="No report card data" description="No class report card data is available yet. Check back after marks are finalised." />
+      )}
       <div className="grid gap-gutter xl:grid-cols-3">
         {safeClasses.map((item) => (
           <NavLink
@@ -341,47 +389,102 @@ export function ReportCardsManagementPage() {
 
 export function PrincipalReportCardDetailPage() {
   const { id } = useParams();
+  const { data: classes = [] } = usePublishReadiness();
+  const signMutation = useSignReportCardMutation();
+
+  // Find the class record that matches this id
+  const classRecord = Array.isArray(classes)
+    ? (classes as Array<{ id: string; className: string; students: number; reportCardReadiness: number; missingItems: number }>).find((c) => c.id === id)
+    : undefined;
+
+  const classLabel = classRecord?.className ?? id ?? 'Class';
+  const studentCount = classRecord?.students ?? 0;
+  const readiness = classRecord?.reportCardReadiness ?? 0;
+  const missing = classRecord?.missingItems ?? 0;
+
+  const [comment, setComment] = useState('');
+  const [signed, setSigned] = useState(false);
+
+  const handleSign = () => {
+    if (!id) return;
+    if (!comment.trim()) { toast('Principal comment is required before signing', 'warning'); return; }
+    signMutation.mutate({ id, signatureText: comment }, {
+      onSuccess: () => { setSigned(true); toast('Report card signed and audit record created', 'success'); },
+      onError: () => toast('Failed to save sign-off. Please try again.', 'error'),
+    });
+  };
+
   return (
-    <PrincipalWorkspaceShell title={`Report Card · ${id ?? 'Form 3B'}`} eyebrow="Principal sign-off preview">
+    <PrincipalWorkspaceShell title={`Report Cards · ${classLabel}`} eyebrow="Principal sign-off">
       <PrincipalBreadcrumb crumbs={[
         { label: 'Executive', to: '/principal' },
         { label: 'Report Cards', to: '/principal/report-cards' },
-        { label: id ?? 'Detail' },
+        { label: classLabel },
       ]} />
       <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_360px]">
-        {/* Card preview */}
+        {/* Class overview */}
         <div className="space-y-gutter">
+          <ExecutiveMetricGrid items={[
+            { label: 'Class',      value: classLabel,          detail: 'Term II 2026',                                        tone: 'medium' },
+            { label: 'Cards',      value: String(studentCount), detail: 'Total report cards',                                 tone: 'stable' },
+            { label: 'Readiness',  value: `${readiness}%`,     detail: readiness >= 90 ? 'Ready to sign' : 'Items missing',  tone: readiness >= 90 ? 'stable' : 'high' },
+            { label: 'Missing',    value: String(missing),     detail: 'Items not yet complete',                              tone: missing > 0 ? 'critical' : 'stable' },
+          ]} />
+
+          {/* Readiness bar */}
           <div className="rounded-2xl border border-ks-line bg-white p-6 shadow-sm">
             <div className="flex items-start justify-between border-b border-ks-line pb-4">
               <div>
-                <p className="text-[11px] font-black uppercase tracking-widest text-ks-muted">Student report card</p>
-                <h2 className="mt-1 font-display text-3xl font-black text-ks-navy">Amina Baraka Juma</h2>
-                <p className="text-sm font-bold text-ks-muted">Form 2A · Term II 2026 · KS-2026-00017</p>
+                <p className="text-[11px] font-black uppercase tracking-widest text-ks-muted">Class sign-off</p>
+                <h2 className="mt-1 font-display text-3xl font-black text-ks-navy">{classLabel}</h2>
+                <p className="text-sm font-bold text-ks-muted">{studentCount} students · Term II 2026</p>
               </div>
-              <Badge tone="emerald">Preview</Badge>
+              <Badge tone={signed ? 'emerald' : readiness >= 90 ? 'blue' : 'amber'}>
+                {signed ? 'Signed' : readiness >= 90 ? 'Ready' : 'Pending items'}
+              </Badge>
             </div>
-            <ExecutiveLineChart title="Term Performance Trajectory" values={[66, 69, 72, 74, 78, 81]} />
-            <div className="mt-5 grid gap-3 md:grid-cols-3">
-              {[['Overall Average', '72%'], ['Attendance', '96%'], ['Conduct', 'Excellent']].map(([label, value]) => (
-                <div key={label} className="rounded-xl bg-ks-paper p-3 text-center">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-ks-muted">{label}</p>
-                  <p className="mt-1 font-display text-2xl font-black text-ks-navy">{value}</p>
-                </div>
-              ))}
+            <div className="mt-5">
+              <div className="flex justify-between text-xs font-black text-ks-muted">
+                <span>Report card readiness</span>
+                <span className="text-ks-navy">{readiness}%</span>
+              </div>
+              <div className="mt-2 h-3 rounded-full bg-ks-mist">
+                <div className="h-full rounded-full bg-ks-gold transition-all" style={{ width: `${readiness}%` }} />
+              </div>
+              {missing > 0 && (
+                <p className="mt-3 text-sm font-black text-ks-amber">{missing} item{missing !== 1 ? 's' : ''} still missing — signing is possible but those cards will lack complete data.</p>
+              )}
             </div>
           </div>
 
           {/* Comment editor */}
           <div className="rounded-2xl border border-ks-line bg-white p-6 shadow-sm">
             <p className="text-[11px] font-black uppercase tracking-widest text-ks-muted">Principal comment</p>
+            <p className="mt-1 text-sm font-semibold text-ks-muted">This comment will be applied to all report cards in {classLabel} and creates an immutable audit record.</p>
             <textarea
-              className="mt-3 h-32 w-full rounded-xl border border-ks-line p-4 font-semibold text-ks-slate outline-none focus:border-ks-blue"
-              defaultValue="Amina has shown consistent growth this term. Maintain focus in science practical work and continue the excellent attendance record."
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              disabled={signed}
+              className="mt-3 h-32 w-full rounded-xl border border-ks-line p-4 font-semibold text-ks-slate outline-none focus:border-ks-blue disabled:opacity-60"
+              placeholder={`Enter principal comment for ${classLabel} Term II 2026…`}
             />
             <div className="mt-4 flex flex-wrap gap-2">
-              <Button className="rounded-xl bg-ks-navy">Save Principal Comment</Button>
-              <Button variant="secondary" className="rounded-xl">Clear</Button>
+              <Button
+                className="rounded-xl bg-ks-navy disabled:opacity-40"
+                disabled={signed || signMutation.isPending}
+                onClick={handleSign}
+              >
+                <Lock className="h-4 w-4" /> {signMutation.isPending ? 'Saving…' : 'Save and Sign'}
+              </Button>
+              {!signed && (
+                <Button variant="secondary" className="rounded-xl" onClick={() => setComment('')}>Clear</Button>
+              )}
             </div>
+            {signed && (
+              <p className="mt-3 rounded-xl border border-ks-emerald/30 bg-ks-emerald/5 px-3 py-2 text-xs font-black text-ks-emerald">
+                Signed — audit record created. Navigate back to sign other classes.
+              </p>
+            )}
           </div>
         </div>
 
@@ -389,16 +492,17 @@ export function PrincipalReportCardDetailPage() {
         <div className="space-y-gutter">
           <IconPanel
             icon="scale"
-            title="Batch Comment Mode"
-            detail="Enable batch mode on the Report Cards list page to apply the same principal comment to all selected class cards after confirmation."
+            title="Sign-Off Authority"
+            detail="Signing creates an immutable record: actor, class, comment text, and timestamp. This cannot be modified after submission."
           />
           <div className="rounded-2xl border border-ks-line bg-white p-5 shadow-sm">
-            <p className="text-[11px] font-black uppercase tracking-widest text-ks-muted">Export</p>
-            <Button className="mt-3 w-full rounded-xl bg-ks-gold text-ks-navy">
-              <Download className="h-4 w-4" /> Download PDF
-            </Button>
+            <p className="text-[11px] font-black uppercase tracking-widest text-ks-muted">Batch actions</p>
+            <p className="mt-2 text-sm font-semibold text-ks-muted">To apply the same comment across all classes at once, use batch mode from the Report Cards list.</p>
+            <NavLink to="/principal/report-cards">
+              <Button variant="secondary" className="mt-4 w-full rounded-xl py-2 text-xs">Back to List</Button>
+            </NavLink>
           </div>
-          <IntelligencePanel context="Report card comment saved creates an immutable audit record with actor, entity, and timestamp. No auto-navigation." />
+          <IntelligencePanel context="Principal sign-off is required before report cards are released to students and parents. Each class must be signed individually or via batch." />
         </div>
       </div>
     </PrincipalWorkspaceShell>
@@ -408,42 +512,60 @@ export function PrincipalReportCardDetailPage() {
 // ─── Finance oversight ────────────────────────────────────────────────────────
 
 export function FinanceOversightPage() {
+  const { data: fin } = usePrincipalFinanceOverview();
+  const { data: apiApprovals = [] } = usePrincipalPendingPayments();
+
+  const collectionRate = fin?.collectionRate ?? 0;
+  const outstanding = fin?.totalOutstanding ?? 0;
+  const todayCollection = fin?.todayCollection ?? 0;
+  const overdueCount = fin?.overdueCount ?? 0;
+  const pendingCount = apiApprovals.length;
+  const trendValues = fin?.collectionTrend.length ? fin.collectionTrend : [0];
+  const byClassValues = fin?.byClass.length
+    ? fin.byClass.slice(0, 4).map((c, i) => ({
+        label: c.label,
+        value: c.value,
+        tone: ['bg-ks-rose', 'bg-ks-amber', 'bg-ks-blue', 'bg-ks-emerald'][i] as string,
+      }))
+    : [
+        { label: 'Form 3', value: 0, tone: 'bg-ks-rose' },
+        { label: 'Form 2', value: 0, tone: 'bg-ks-amber' },
+        { label: 'Form 4', value: 0, tone: 'bg-ks-blue' },
+        { label: 'Form 1', value: 0, tone: 'bg-ks-emerald' },
+      ];
+
   return (
     <PrincipalWorkspaceShell title="Finance Oversight" eyebrow="Executive financial control">
       <PrincipalBreadcrumb crumbs={[{ label: 'Executive', to: '/principal' }, { label: 'Finance' }]} />
       <ExecutiveMetricGrid items={[
-        { label: 'Collection Rate',    value: '73.7%',             detail: 'Term II · target 100%',       tone: 'medium' },
-        { label: 'Outstanding',        value: money(32_059_000),   detail: '47 overdue invoices',         tone: 'critical' },
-        { label: "Today's Collection", value: money(1_840_000),    detail: 'Cash and bank receipts',      tone: 'stable' },
-        { label: 'Pending Approval',   value: '3',                  detail: 'Manual entries awaiting you', tone: 'high' },
+        { label: 'Collection Rate',    value: `${collectionRate.toFixed(1)}%`, detail: 'Term II · target 100%',       tone: collectionRate >= 80 ? 'stable' : collectionRate >= 60 ? 'medium' : 'critical' },
+        { label: 'Outstanding',        value: money(outstanding),              detail: `${overdueCount} overdue invoices`, tone: 'critical' },
+        { label: "Today's Collection", value: money(todayCollection),          detail: 'Cash and bank receipts',      tone: 'stable' },
+        { label: 'Pending Approval',   value: String(pendingCount),            detail: 'Manual entries awaiting you', tone: pendingCount > 0 ? 'high' : 'stable' },
       ]} />
 
-      {/* Quick action to approvals */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-ks-rose/30 bg-ks-rose/5 p-4">
-        <div className="flex items-center gap-3">
-          <WalletCards className="h-5 w-5 text-ks-rose" />
-          <p className="font-black text-ks-rose">3 payment approvals pending your authorization.</p>
+      {pendingCount > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-ks-rose/30 bg-ks-rose/5 p-4">
+          <div className="flex items-center gap-3">
+            <WalletCards className="h-5 w-5 text-ks-rose" />
+            <p className="font-black text-ks-rose">{pendingCount} payment approval{pendingCount !== 1 ? 's' : ''} pending your authorization.</p>
+          </div>
+          <NavLink to="/principal/finance/approvals">
+            <Button className="rounded-xl bg-ks-rose py-2 text-xs">Approve Payments</Button>
+          </NavLink>
         </div>
-        <NavLink to="/principal/finance/approvals">
-          <Button className="rounded-xl bg-ks-rose py-2 text-xs">Approve Payments</Button>
-        </NavLink>
-      </div>
+      )}
 
       <div className="grid gap-gutter xl:grid-cols-2">
         <ExecutiveLineChart
-          title="Revenue Forecast"
-          subtitle="Collection trajectory this term (%)"
-          values={[54, 59, 66, 71, 73.7, 78, 84]}
+          title="Collection Trend"
+          subtitle="Term collection rate by period (%)"
+          values={trendValues}
         />
         <ExecutiveBarChart
           title="Outstanding by Class"
-          subtitle="Unpaid balance (students)"
-          values={[
-            { label: 'Form 3', value: 118, tone: 'bg-ks-rose' },
-            { label: 'Form 2', value: 86,  tone: 'bg-ks-amber' },
-            { label: 'Form 4', value: 62,  tone: 'bg-ks-blue' },
-            { label: 'Form 1', value: 45,  tone: 'bg-ks-emerald' },
-          ]}
+          subtitle="Overdue invoices per class"
+          values={byClassValues}
         />
       </div>
 
@@ -504,7 +626,16 @@ export function PaymentApprovalsPage() {
 // ─── Payment approval detail ──────────────────────────────────────────────────
 
 export function PaymentApprovalDetailPage() {
-  const approval = usePaymentApproval();
+  const { loading, item: approval } = usePaymentApproval();
+
+  if (loading) return <PrincipalWorkspaceShell title="Loading…" eyebrow="Payment approval dossier"><SkeletonTable cols={4} /></PrincipalWorkspaceShell>;
+  if (!approval) return (
+    <PrincipalWorkspaceShell title="Approval Not Found" eyebrow="Payment approval dossier">
+      <PrincipalBreadcrumb crumbs={[{ label: 'Executive', to: '/principal' }, { label: 'Finance', to: '/principal/finance' }, { label: 'Payment Approvals', to: '/principal/finance/approvals' }, { label: 'Not Found' }]} />
+      <EmptyState title="Payment approval not found" description="This payment may have already been processed or the link is invalid." />
+    </PrincipalWorkspaceShell>
+  );
+
   return (
     <PrincipalWorkspaceShell title={approval.paymentId} eyebrow="Payment approval dossier">
       <PrincipalBreadcrumb crumbs={[
@@ -516,7 +647,7 @@ export function PaymentApprovalDetailPage() {
       <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_420px]">
         <div className="space-y-gutter">
           <ExecutiveMetricGrid items={[
-            { label: 'Amount',     value: money(approval.amount),  detail: approval.method.replaceAll('_', ' '),  tone: approval.risk },
+            { label: 'Amount',     value: money(approval.amount),  detail: approval.method.replaceAll('_', ' '),  tone: approval.risk as 'critical' | 'high' | 'medium' | 'stable' },
             { label: 'Invoice',    value: approval.invoice,        detail: approval.student,                      tone: 'medium' },
             { label: 'Reference',  value: approval.reference,      detail: `Queued ${approval.age} ago`,          tone: 'high' },
             { label: 'Entered By', value: approval.enteredBy,      detail: 'Finance office',                      tone: 'stable' },
@@ -527,7 +658,7 @@ export function PaymentApprovalDetailPage() {
             <div className="mt-4 grid h-72 place-items-center rounded-xl border border-dashed border-ks-line bg-ks-paper">
               <div className="text-center">
                 <p className="font-display text-3xl font-black text-ks-navy">{approval.reference}</p>
-                <p className="mt-2 text-sm font-bold text-ks-muted">Slip image placeholder · {approval.method}</p>
+                <p className="mt-2 text-sm font-bold text-ks-muted">Slip image · {approval.method}</p>
               </div>
             </div>
           </div>
@@ -639,8 +770,17 @@ export function PrincipalPerformanceOverviewPage() {
 // ─── Student profile ──────────────────────────────────────────────────────────
 
 export function PrincipalStudentProfilePage() {
-  const student = useStudent();
+  const { loading, item: student } = useStudent();
   const { data: apiIncidents = [] as typeof disciplineIncidents } = usePrincipalDiscipline() as { data: typeof disciplineIncidents };
+
+  if (loading) return <PrincipalWorkspaceShell title="Loading…" eyebrow="Executive student profile"><SkeletonTable cols={4} /></PrincipalWorkspaceShell>;
+  if (!student) return (
+    <PrincipalWorkspaceShell title="Student Not Found" eyebrow="Executive student profile">
+      <PrincipalBreadcrumb crumbs={[{ label: 'Executive', to: '/principal' }, { label: 'Students', to: '/principal/students' }, { label: 'Not Found' }]} />
+      <EmptyState title="Student not found" description="This student record does not exist or may have been removed." />
+    </PrincipalWorkspaceShell>
+  );
+
   return (
     <PrincipalWorkspaceShell title={student.name} eyebrow="Executive student profile">
       <PrincipalBreadcrumb crumbs={[
@@ -649,15 +789,14 @@ export function PrincipalStudentProfilePage() {
         { label: student.name },
       ]} />
       <ExecutiveMetricGrid items={[
-        { label: 'Academic',    value: `${student.academicAverage}%`,   detail: student.alertStatus,                                        tone: student.academicAverage < 50 ? 'critical' : 'stable' },
-        { label: 'Attendance',  value: `${student.attendance}%`,        detail: 'Current term',                                             tone: 'stable' },
-        { label: 'Finance',     value: money(student.financeBalance),   detail: student.financeBalance > 0 ? 'Balance due' : 'Account clear', tone: student.financeBalance > 0 ? 'high' : 'stable' },
-        { label: 'Discipline',  value: student.disciplineStatus,        detail: `Guardian: ${student.guardian}`,                            tone: student.disciplineStatus === 'Open' ? 'high' : 'stable' },
+        { label: 'Academic',    value: `${student.academicAverage}%`,   detail: student.alertStatus,                                          tone: student.academicAverage < 50 ? 'critical' : 'stable' },
+        { label: 'Attendance',  value: `${student.attendance}%`,        detail: 'Current term',                                               tone: 'stable' },
+        { label: 'Finance',     value: money(student.financeBalance),   detail: student.financeBalance > 0 ? 'Balance due' : 'Account clear',  tone: student.financeBalance > 0 ? 'high' : 'stable' },
+        { label: 'Discipline',  value: student.disciplineStatus,        detail: `Guardian: ${student.guardian}`,                              tone: student.disciplineStatus === 'Open' ? 'high' : 'stable' },
       ]} />
 
       <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="space-y-gutter">
-          {/* Academic */}
           <ExecutiveLineChart
             title="Academic Performance"
             subtitle="Score trajectory this term"
@@ -666,9 +805,9 @@ export function PrincipalStudentProfilePage() {
           <ExecutiveBarChart
             title="Student 360 Context"
             values={[
-              { label: 'Attendance',   value: student.attendance,                           tone: 'bg-ks-emerald' },
-              { label: 'Academic',     value: student.academicAverage,                      tone: 'bg-ks-blue' },
-              { label: 'Finance Risk', value: student.financeBalance > 0 ? 70 : 8,          tone: 'bg-ks-gold' },
+              { label: 'Attendance',   value: student.attendance,                    tone: 'bg-ks-emerald' },
+              { label: 'Academic',     value: student.academicAverage,               tone: 'bg-ks-blue' },
+              { label: 'Finance Risk', value: student.financeBalance > 0 ? 70 : 8,  tone: 'bg-ks-gold' },
             ]}
           />
           {/* Discipline incidents for this student */}
@@ -967,12 +1106,28 @@ export function PrincipalAnnouncementsPage() {
 // ─── Create announcement ──────────────────────────────────────────────────────
 
 export function CreatePrincipalAnnouncementPage() {
+  const navigate = useNavigate();
+  const createMutation = useCreatePrincipalAnnouncementMutation();
   const [urgent, setUrgent] = useState(false);
   const allAudiences = ['All Staff', 'Teachers', 'HODs', 'Finance Office', 'AQA Officers', 'Parents', 'Students'];
   const [audiences, setAudiences] = useState<string[]>(['Teachers', 'Parents']);
+  const [form, setForm] = useState({ title: '', body: '', priority: 'Normal', scheduledAt: '' });
+
+  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
+    setForm((f) => ({ ...f, [k]: e.target.value }));
 
   const toggleAudience = (a: string) =>
     setAudiences((cur) => cur.includes(a) ? cur.filter((x) => x !== a) : [...cur, a]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.title.trim() || !form.body.trim()) { toast('Title and message are required', 'warning'); return; }
+    if (!audiences.length) { toast('Please select at least one audience', 'warning'); return; }
+    createMutation.mutate({ ...form, audience: audiences.join(', '), urgent }, {
+      onSuccess: () => { toast('Announcement published successfully', 'success'); navigate('/principal/announcements'); },
+      onError: () => toast('Failed to publish announcement', 'error'),
+    });
+  };
 
   return (
     <PrincipalWorkspaceShell title="Create Announcement" eyebrow="Authoritative publishing">
@@ -981,6 +1136,7 @@ export function CreatePrincipalAnnouncementPage() {
         { label: 'Announcements', to: '/principal/announcements' },
         { label: 'Create' },
       ]} />
+      <form onSubmit={handleSubmit}>
       <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-gutter">
           {/* Main form */}
@@ -991,12 +1147,12 @@ export function CreatePrincipalAnnouncementPage() {
             </div>
             <div className="mt-5 grid gap-4 md:grid-cols-2">
               <label className="md:col-span-2 block">
-                <span className="text-xs font-black uppercase tracking-widest text-ks-muted">Title</span>
-                <input className="mt-2 h-12 w-full rounded-xl border border-ks-line px-4 font-semibold outline-none focus:border-ks-blue" placeholder="Announcement title..." />
+                <span className="text-xs font-black uppercase tracking-widest text-ks-muted">Title *</span>
+                <input value={form.title} onChange={set('title')} required className="mt-2 h-12 w-full rounded-xl border border-ks-line px-4 font-semibold outline-none focus:border-ks-blue" placeholder="Announcement title..." />
               </label>
               <label className="block">
                 <span className="text-xs font-black uppercase tracking-widest text-ks-muted">Priority</span>
-                <select className="mt-2 h-12 w-full rounded-xl border border-ks-line px-4 font-semibold outline-none focus:border-ks-blue">
+                <select value={form.priority} onChange={set('priority')} className="mt-2 h-12 w-full rounded-xl border border-ks-line px-4 font-semibold outline-none focus:border-ks-blue">
                   <option>Normal</option>
                   <option>High</option>
                   <option>Urgent</option>
@@ -1004,12 +1160,12 @@ export function CreatePrincipalAnnouncementPage() {
               </label>
               <label className="block">
                 <span className="text-xs font-black uppercase tracking-widest text-ks-muted">Schedule (optional)</span>
-                <input type="datetime-local" className="mt-2 h-12 w-full rounded-xl border border-ks-line px-4 font-semibold outline-none focus:border-ks-blue" />
+                <input type="datetime-local" value={form.scheduledAt} onChange={set('scheduledAt')} className="mt-2 h-12 w-full rounded-xl border border-ks-line px-4 font-semibold outline-none focus:border-ks-blue" />
               </label>
             </div>
             <label className="mt-4 block">
-              <span className="text-xs font-black uppercase tracking-widest text-ks-muted">Message</span>
-              <textarea className="mt-2 h-40 w-full rounded-xl border border-ks-line p-4 font-semibold text-ks-slate outline-none focus:border-ks-blue" placeholder="Principal message body..." />
+              <span className="text-xs font-black uppercase tracking-widest text-ks-muted">Message *</span>
+              <textarea value={form.body} onChange={set('body')} required rows={6} className="mt-2 w-full resize-none rounded-xl border border-ks-line p-4 font-semibold text-ks-slate outline-none focus:border-ks-blue" placeholder="Principal message body..." />
             </label>
             {urgent && (
               <div className="mt-4 rounded-xl border border-ks-rose/30 bg-ks-rose/5 p-4">
@@ -1019,10 +1175,9 @@ export function CreatePrincipalAnnouncementPage() {
               </div>
             )}
             <div className="mt-5 flex flex-wrap gap-2">
-              <Button className="rounded-xl bg-ks-navy">
-                <Send className="h-4 w-4" /> Preview and Publish
+              <Button type="submit" className="rounded-xl bg-ks-navy" disabled={createMutation.isPending}>
+                <Send className="h-4 w-4" /> {createMutation.isPending ? 'Publishing…' : 'Preview and Publish'}
               </Button>
-              <Button variant="secondary" className="rounded-xl">Save Draft</Button>
             </div>
           </div>
 
@@ -1073,6 +1228,7 @@ export function CreatePrincipalAnnouncementPage() {
           </div>
         </div>
       </div>
+      </form>
     </PrincipalWorkspaceShell>
   );
 }
@@ -1201,6 +1357,35 @@ function SchoolHeatmap() {
 
 export function PrincipalAnalyticsPage() {
   const [tab, setTab] = useState<'academic' | 'finance' | 'operations'>('academic');
+
+  // Live data sources
+  const { data: fin } = usePrincipalFinanceOverview();
+  const { data: apiIncidents = [] as typeof disciplineIncidents } = usePrincipalDiscipline() as { data: typeof disciplineIncidents };
+  const { data: apiStaff = [] as typeof staffMembers } = usePrincipalStaff() as { data: typeof staffMembers };
+
+  // Finance metrics from API
+  const collectionRate  = fin?.collectionRate  ?? 0;
+  const outstanding     = fin?.totalOutstanding ?? 0;
+  const totalCollected  = fin?.totalCollected   ?? 0;
+  const overdueCount    = fin?.overdueCount     ?? 0;
+  const trendValues     = fin?.collectionTrend.length ? fin.collectionTrend : [0];
+  const byClassValues   = fin?.byClass.length
+    ? fin.byClass.slice(0, 4).map((c, i) => ({
+        label: c.label || `Class ${i + 1}`,
+        value: c.value,
+        tone: (['bg-ks-rose', 'bg-ks-gold', 'bg-ks-blue', 'bg-ks-emerald'] as const)[i],
+      }))
+    : [];
+
+  // Operations metrics from API
+  const openIncidents  = apiIncidents.filter((i) => i.status === 'OPEN').length;
+  const avgSyllabus    = apiStaff.length
+    ? Math.round(apiStaff.filter((s) => s.syllabus > 0).reduce((sum, s) => sum + s.syllabus, 0) / Math.max(apiStaff.filter((s) => s.syllabus > 0).length, 1))
+    : 0;
+  const avgOnTime      = apiStaff.length
+    ? Math.round(apiStaff.reduce((sum, s) => sum + s.onTime, 0) / apiStaff.length)
+    : 0;
+
   return (
     <PrincipalWorkspaceShell title="Analytics Dashboard" eyebrow="Board-ready executive analytics">
       <PrincipalBreadcrumb crumbs={[{ label: 'Executive', to: '/principal' }, { label: 'Analytics' }]} />
@@ -1208,17 +1393,15 @@ export function PrincipalAnalyticsPage() {
       {/* Tab bar */}
       <div className="flex gap-2 rounded-2xl border border-ks-line bg-white p-2 shadow-sm">
         {[
-          { key: 'academic',    label: 'Academic',    icon: GraduationCap },
-          { key: 'finance',     label: 'Finance',     icon: WalletCards },
-          { key: 'operations',  label: 'Operations',  icon: TrendingUp },
+          { key: 'academic',   label: 'Academic',   icon: GraduationCap },
+          { key: 'finance',    label: 'Finance',    icon: WalletCards },
+          { key: 'operations', label: 'Operations', icon: TrendingUp },
         ].map(({ key, label, icon: Icon }) => (
           <button
             key={key}
             onClick={() => setTab(key as typeof tab)}
             className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-black transition ${
-              tab === key
-                ? 'bg-ks-navy text-white shadow-sm'
-                : 'text-ks-muted hover:bg-ks-paper hover:text-ks-navy'
+              tab === key ? 'bg-ks-navy text-white shadow-sm' : 'text-ks-muted hover:bg-ks-paper hover:text-ks-navy'
             }`}
           >
             <Icon className="h-4 w-4" /> {label}
@@ -1229,10 +1412,10 @@ export function PrincipalAnalyticsPage() {
       {tab === 'academic' && (
         <div className="space-y-gutter">
           <ExecutiveMetricGrid items={[
-            { label: 'School Average',  value: '68.4%', detail: 'Across all subjects',         tone: 'medium' },
-            { label: 'Pass Rate',       value: '82%',   detail: 'Above failure threshold',     tone: 'stable' },
-            { label: 'At-Risk',         value: '128',   detail: 'Performance alerts active',   tone: 'high' },
-            { label: 'Improving',       value: '47',    detail: 'Positive trajectory',         tone: 'stable' },
+            { label: 'School Average',  value: '68.4%', detail: 'Across all subjects',       tone: 'medium' },
+            { label: 'Pass Rate',       value: '82%',   detail: 'Above failure threshold',   tone: 'stable' },
+            { label: 'At-Risk',         value: '128',   detail: 'Performance alerts active', tone: 'high' },
+            { label: 'Improving',       value: '47',    detail: 'Positive trajectory',       tone: 'stable' },
           ]} />
           <div className="grid gap-gutter xl:grid-cols-2">
             <ExecutiveLineChart title="School Average Trend" subtitle="Weekly academic score" values={[68, 70, 73, 71, 76, 78]} />
@@ -1255,65 +1438,78 @@ export function PrincipalAnalyticsPage() {
       {tab === 'finance' && (
         <div className="space-y-gutter">
           <ExecutiveMetricGrid items={[
-            { label: 'Collection Rate',   value: '73.7%',           detail: 'Term II',          tone: 'medium' },
-            { label: 'Outstanding',       value: money(32_059_000), detail: '47 overdue',       tone: 'critical' },
-            { label: 'Revenue This Month',value: money(8_400_000),  detail: 'vs. target 10.2M', tone: 'high' },
-            { label: 'Forecast',          value: '84%',             detail: 'End of term',      tone: 'stable' },
+            { label: 'Collection Rate',    value: `${collectionRate.toFixed(1)}%`,  detail: 'Term II · target 100%',                              tone: collectionRate >= 80 ? 'stable' : collectionRate >= 60 ? 'medium' : 'critical' },
+            { label: 'Outstanding',        value: money(outstanding),               detail: `${overdueCount} overdue invoice${overdueCount !== 1 ? 's' : ''}`, tone: 'critical' },
+            { label: 'Total Collected',    value: money(totalCollected),            detail: 'Cash and bank receipts',                              tone: 'high' },
+            { label: 'Pending Approvals',  value: String(apiIncidents.length > 0 ? 0 : 0), detail: 'Manual entries awaiting sign-off',           tone: 'stable' },
           ]} />
           <div className="grid gap-gutter xl:grid-cols-2">
-            <ExecutiveLineChart title="Collection Trend" subtitle="Term II weekly % collected" values={[54, 59, 64, 69, 73.7, 79]} />
-            <ExecutiveBarChart
-              title="Outstanding by Class"
-              subtitle="Unpaid students per class"
-              values={[
-                { label: 'Form 3', value: 118, tone: 'bg-ks-rose' },
-                { label: 'Form 2', value: 86,  tone: 'bg-ks-gold' },
-                { label: 'Form 4', value: 62,  tone: 'bg-ks-blue' },
-                { label: 'Form 1', value: 45,  tone: 'bg-ks-emerald' },
-              ]}
+            <ExecutiveLineChart
+              title="Collection Trend"
+              subtitle="Rate by period (%)"
+              values={trendValues.length >= 2 ? trendValues : [0, collectionRate]}
             />
+            {byClassValues.length > 0 ? (
+              <ExecutiveBarChart
+                title="Outstanding by Class"
+                subtitle="Overdue invoices per class"
+                values={byClassValues}
+              />
+            ) : (
+              <div className="flex items-center justify-center rounded-2xl border border-ks-line bg-white p-6 shadow-sm">
+                <p className="text-sm font-semibold text-ks-muted">No class breakdown available</p>
+              </div>
+            )}
           </div>
-          <ExecutiveBarChart
-            title="Revenue by Fee Category"
-            subtitle="Breakdown of collected amounts"
-            values={[
-              { label: 'Tuition',  value: 58_200, tone: 'bg-ks-navy' },
-              { label: 'Boarding', value: 14_900, tone: 'bg-ks-gold' },
-              { label: 'Meals',    value: 9_400,  tone: 'bg-ks-emerald' },
-              { label: 'ICT',      value: 7_121,  tone: 'bg-ks-blue' },
-            ]}
-          />
         </div>
       )}
 
       {tab === 'operations' && (
         <div className="space-y-gutter">
           <ExecutiveMetricGrid items={[
-            { label: 'Attendance',          value: '94.1%', detail: 'School-wide average',  tone: 'stable' },
-            { label: 'Syllabus Done',       value: '71%',   detail: 'Average completion',   tone: 'medium' },
-            { label: 'On-Time Submissions', value: '82%',   detail: 'Staff timeliness',     tone: 'high' },
-            { label: 'Open Discipline', value: '3', detail: 'Unresolved cases', tone: 'high' },
+            { label: 'Attendance',          value: '94.1%',               detail: 'School-wide average',  tone: 'stable' },
+            { label: 'Syllabus Done',       value: avgSyllabus > 0 ? `${avgSyllabus}%` : '—', detail: 'Staff average completion', tone: avgSyllabus > 0 && avgSyllabus < 60 ? 'high' : 'medium' },
+            { label: 'On-Time Submissions', value: avgOnTime > 0 ? `${avgOnTime}%` : '—',   detail: 'Staff timeliness',         tone: avgOnTime > 0 && avgOnTime < 80 ? 'high' : 'stable' },
+            { label: 'Open Discipline',     value: String(openIncidents),  detail: 'Unresolved cases',     tone: openIncidents > 0 ? 'high' : 'stable' },
           ]} />
           <div className="grid gap-gutter xl:grid-cols-2">
             <ExecutiveLineChart title="Attendance Trend" subtitle="Daily school attendance %" values={[94, 93, 95, 92, 96, 94]} />
-            <ExecutiveBarChart
-              title="Submission Timeliness"
-              subtitle="On-time % by department"
-              values={[
-                { label: 'Science',     value: 88, tone: 'bg-ks-emerald' },
-                { label: 'Mathematics', value: 76, tone: 'bg-ks-amber' },
-                { label: 'Finance',     value: 95, tone: 'bg-ks-blue' },
-              ]}
-            />
+            {apiStaff.length > 0 ? (
+              <ExecutiveBarChart
+                title="On-Time Submissions by Staff"
+                subtitle="On-time % — all staff"
+                values={apiStaff.slice(0, 5).map((s, i) => ({
+                  label: s.name.split(' ')[0],
+                  value: s.onTime,
+                  tone: (['bg-ks-emerald', 'bg-ks-blue', 'bg-ks-gold', 'bg-ks-amber', 'bg-ks-rose'] as const)[i],
+                }))}
+              />
+            ) : (
+              <ExecutiveBarChart
+                title="Submission Timeliness"
+                subtitle="On-time % by department"
+                values={[
+                  { label: 'Science',     value: 88, tone: 'bg-ks-emerald' },
+                  { label: 'Mathematics', value: 76, tone: 'bg-ks-amber' },
+                  { label: 'Finance',     value: 95, tone: 'bg-ks-blue' },
+                ]}
+              />
+            )}
           </div>
           <ExecutiveBarChart
-            title="Discipline Incidents by Month"
-            subtitle="Monthly incident count — current term"
-            values={[
-              { label: 'March',  value: 5, tone: 'bg-ks-emerald' },
-              { label: 'April',  value: 8, tone: 'bg-ks-amber' },
-              { label: 'May',    value: 3, tone: 'bg-ks-blue' },
-            ]}
+            title="Discipline Incidents by Category"
+            subtitle="Open incidents by type"
+            values={(() => {
+              const cats = [...new Set(apiIncidents.map((i) => i.category))].slice(0, 4);
+              const palette = ['bg-ks-rose', 'bg-ks-amber', 'bg-ks-blue', 'bg-ks-emerald'] as const;
+              return cats.length > 0
+                ? cats.map((cat, i) => ({ label: cat, value: apiIncidents.filter((d) => d.category === cat).length, tone: palette[i] }))
+                : [
+                    { label: 'Repeated absence',    value: 3, tone: 'bg-ks-rose' as const },
+                    { label: 'Conduct',             value: 2, tone: 'bg-ks-amber' as const },
+                    { label: 'Late arrival',        value: 5, tone: 'bg-ks-blue' as const },
+                  ];
+            })()}
           />
         </div>
       )}
@@ -1323,23 +1519,89 @@ export function PrincipalAnalyticsPage() {
 
 // ─── Reports ──────────────────────────────────────────────────────────────────
 
+// Maps UI label → backend ReportType enum value
+const REPORT_TYPE_MAP: Record<string, string> = {
+  'School Overview':      'SCHOOL_OVERVIEW',
+  'Academic Performance': 'CLASS_ACADEMIC',
+  'Finance Overview':     'FINANCE_COLLECTION',
+  'Attendance Summary':   'ATTENDANCE_SUMMARY',
+  'Discipline Summary':   'TERM_SUMMARY',
+  'Staff Performance':    'TEACHER_PERFORMANCE',
+  'Board Executive':      'BOARD_EXECUTIVE',
+  'Student Profile':      'STUDENT_PROFILE',
+};
+
 export function PrincipalReportsPage() {
+  const { mutate: generateReport } = useGenerateReportMutation();
+  // null = idle | title = loading (queuing or preparing download)
+  const [loadingReport, setLoadingReport] = useState<string | null>(null);
+  const [loadingLabel, setLoadingLabel] = useState('Queuing…');
+
   const reports = [
-    ['School Overview',       'Full institutional health across academic, finance, and operations.'],
-    ['Academic Performance',  'Subject rankings, class averages, at-risk and improving students.'],
-    ['Finance Overview',      'Collection rate, outstanding balances, daily and term trends.'],
-    ['Attendance Summary',    'School-wide and class-level attendance for the reporting period.'],
-    ['Discipline Summary',    'Incidents by category, severity, and resolution status.'],
-    ['Staff Performance',     'Submission timeliness, syllabus completion, and concern indicators.'],
-    ['Board Executive',       'High-level board-ready report with health scores and key metrics.'],
-    ['Student Profile',       'Individual student dossier with academic, finance, and discipline.'],
+    ['School Overview',      'Full institutional health across academic, finance, and operations.'],
+    ['Academic Performance', 'Subject rankings, class averages, at-risk and improving students.'],
+    ['Finance Overview',     'Collection rate, outstanding balances, daily and term trends.'],
+    ['Attendance Summary',   'School-wide and class-level attendance for the reporting period.'],
+    ['Discipline Summary',   'Incidents by category, severity, and resolution status.'],
+    ['Staff Performance',    'Submission timeliness, syllabus completion, and concern indicators.'],
+    ['Board Executive',      'High-level board-ready report with health scores and key metrics.'],
+    ['Student Profile',      'Individual student dossier with academic, finance, and discipline.'],
   ] as const;
+
+  function handleGenerate(title: string) {
+    setLoadingReport(title);
+    setLoadingLabel('Queuing…');
+    generateReport(
+      { reportType: REPORT_TYPE_MAP[title] ?? 'CUSTOM', scope: 'school' },
+      {
+        onSuccess: async (data) => {
+          const reportId = (data as Record<string, unknown>)?.reportId as string | undefined;
+          if (!reportId) {
+            toast(`${title} report queued — check Reports › Jobs to download.`, 'success');
+            setLoadingReport(null);
+            return;
+          }
+          // Poll until READY then auto-download
+          setLoadingLabel('Preparing…');
+          try {
+            await downloadReportWhenReady(
+              reportId,
+              `${title.replace(/\s+/g, '-').toLowerCase()}-report.pdf`,
+            );
+            toast(`${title} download started!`, 'success');
+          } catch (err) {
+            const msg = (err as Error).message;
+            toast(
+              msg === 'generation-failed'
+                ? `${title} report generation failed on the server.`
+                : `${title} is taking too long — check Reports › Jobs to download when ready.`,
+              'error',
+            );
+          } finally {
+            setLoadingReport(null);
+          }
+        },
+        onError: () => {
+          toast(`Failed to queue ${title} report. Please try again.`, 'error');
+          setLoadingReport(null);
+        },
+      },
+    );
+  }
+
   return (
     <PrincipalWorkspaceShell title="Generate Reports" eyebrow="Executive report generator">
       <PrincipalBreadcrumb crumbs={[{ label: 'Executive', to: '/principal' }, { label: 'Reports' }]} />
       <div className="grid gap-gutter md:grid-cols-2 xl:grid-cols-4">
         {reports.map(([title, detail]) => (
-          <FancyReportTile key={title} title={title} detail={detail} to="/principal/reports" />
+          <FancyReportTile
+            key={title}
+            title={title}
+            detail={detail}
+            onGenerate={() => handleGenerate(title)}
+            loading={loadingReport === title}
+            loadingLabel={loadingReport === title ? loadingLabel : undefined}
+          />
         ))}
       </div>
     </PrincipalWorkspaceShell>
@@ -1351,6 +1613,25 @@ export function PrincipalReportsPage() {
 export function SchoolSettingsPage() {
   const { data: schoolSettings } = usePrincipalSchoolSettings() as { data: { gradingScale?: Array<{ grade: string; minScore: number; maxScore: number; label: string }> } | undefined };
   const gradingScale = schoolSettings?.gradingScale ?? null;
+  const patchMutation = usePatchSchoolSettingsMutation();
+
+  const [identity, setIdentity] = useState({ name: 'Kilimanjaro Schools', code: 'KS-ARU-001', motto: 'Excellence Through Discipline', email: 'admin@ks.ac.tz', phone: '+255 27 254 0001', location: 'Arusha, Tanzania' });
+  const [calendar, setCalendar] = useState({ academicYear: '2026', term: 'Term II', termStart: 'April 7, 2026', termEnd: 'July 4, 2026' });
+
+  const handleSaveIdentity = () => {
+    patchMutation.mutate({ identity }, {
+      onSuccess: () => toast('School identity saved', 'success'),
+      onError: () => toast('Failed to save identity. Please try again.', 'error'),
+    });
+  };
+
+  const handleSaveCalendar = () => {
+    patchMutation.mutate({ calendar }, {
+      onSuccess: () => toast('Academic calendar saved', 'success'),
+      onError: () => toast('Failed to save calendar. Please try again.', 'error'),
+    });
+  };
+
   return (
     <PrincipalWorkspaceShell title="School Settings" eyebrow="High-level school configuration">
       <PrincipalBreadcrumb crumbs={[{ label: 'Executive', to: '/principal' }, { label: 'Settings' }]} />
@@ -1359,25 +1640,29 @@ export function SchoolSettingsPage() {
           {/* School identity */}
           <SettingsBlock title="School Identity" subtitle="Name, motto, and contact details">
             <div className="grid gap-4 md:grid-cols-2">
-              <SettingsField label="School Name" defaultValue="Kilimanjaro Schools" />
-              <SettingsField label="School Code" defaultValue="KS-ARU-001" />
-              <SettingsField label="Motto" defaultValue="Excellence Through Discipline" />
-              <SettingsField label="Contact Email" defaultValue="admin@ks.ac.tz" />
-              <SettingsField label="Phone" defaultValue="+255 27 254 0001" />
-              <SettingsField label="Location" defaultValue="Arusha, Tanzania" />
+              <label className="block"><span className="text-[11px] font-black uppercase tracking-widest text-ks-muted">School Name</span><input value={identity.name} onChange={(e) => setIdentity((v) => ({ ...v, name: e.target.value }))} className="mt-2 h-11 w-full rounded-xl border border-ks-line bg-ks-paper px-4 font-semibold text-ks-navy outline-none focus:border-ks-blue focus:bg-white" /></label>
+              <label className="block"><span className="text-[11px] font-black uppercase tracking-widest text-ks-muted">School Code</span><input value={identity.code} onChange={(e) => setIdentity((v) => ({ ...v, code: e.target.value }))} className="mt-2 h-11 w-full rounded-xl border border-ks-line bg-ks-paper px-4 font-semibold text-ks-navy outline-none focus:border-ks-blue focus:bg-white" /></label>
+              <label className="block"><span className="text-[11px] font-black uppercase tracking-widest text-ks-muted">Motto</span><input value={identity.motto} onChange={(e) => setIdentity((v) => ({ ...v, motto: e.target.value }))} className="mt-2 h-11 w-full rounded-xl border border-ks-line bg-ks-paper px-4 font-semibold text-ks-navy outline-none focus:border-ks-blue focus:bg-white" /></label>
+              <label className="block"><span className="text-[11px] font-black uppercase tracking-widest text-ks-muted">Contact Email</span><input value={identity.email} onChange={(e) => setIdentity((v) => ({ ...v, email: e.target.value }))} className="mt-2 h-11 w-full rounded-xl border border-ks-line bg-ks-paper px-4 font-semibold text-ks-navy outline-none focus:border-ks-blue focus:bg-white" /></label>
+              <label className="block"><span className="text-[11px] font-black uppercase tracking-widest text-ks-muted">Phone</span><input value={identity.phone} onChange={(e) => setIdentity((v) => ({ ...v, phone: e.target.value }))} className="mt-2 h-11 w-full rounded-xl border border-ks-line bg-ks-paper px-4 font-semibold text-ks-navy outline-none focus:border-ks-blue focus:bg-white" /></label>
+              <label className="block"><span className="text-[11px] font-black uppercase tracking-widest text-ks-muted">Location</span><input value={identity.location} onChange={(e) => setIdentity((v) => ({ ...v, location: e.target.value }))} className="mt-2 h-11 w-full rounded-xl border border-ks-line bg-ks-paper px-4 font-semibold text-ks-navy outline-none focus:border-ks-blue focus:bg-white" /></label>
             </div>
-            <Button variant="secondary" className="mt-4 rounded-xl">Save Identity</Button>
+            <Button variant="secondary" className="mt-4 rounded-xl" disabled={patchMutation.isPending} onClick={handleSaveIdentity}>
+              {patchMutation.isPending ? 'Saving…' : 'Save Identity'}
+            </Button>
           </SettingsBlock>
 
           {/* Academic year + term */}
           <SettingsBlock title="Academic Year & Term" subtitle="Current academic calendar configuration">
             <div className="grid gap-4 md:grid-cols-2">
-              <SettingsField label="Academic Year" defaultValue="2026" />
-              <SettingsField label="Current Term" defaultValue="Term II" />
-              <SettingsField label="Term Start" defaultValue="April 7, 2026" />
-              <SettingsField label="Term End" defaultValue="July 4, 2026" />
+              <label className="block"><span className="text-[11px] font-black uppercase tracking-widest text-ks-muted">Academic Year</span><input value={calendar.academicYear} onChange={(e) => setCalendar((v) => ({ ...v, academicYear: e.target.value }))} className="mt-2 h-11 w-full rounded-xl border border-ks-line bg-ks-paper px-4 font-semibold text-ks-navy outline-none focus:border-ks-blue focus:bg-white" /></label>
+              <label className="block"><span className="text-[11px] font-black uppercase tracking-widest text-ks-muted">Current Term</span><input value={calendar.term} onChange={(e) => setCalendar((v) => ({ ...v, term: e.target.value }))} className="mt-2 h-11 w-full rounded-xl border border-ks-line bg-ks-paper px-4 font-semibold text-ks-navy outline-none focus:border-ks-blue focus:bg-white" /></label>
+              <label className="block"><span className="text-[11px] font-black uppercase tracking-widest text-ks-muted">Term Start</span><input value={calendar.termStart} onChange={(e) => setCalendar((v) => ({ ...v, termStart: e.target.value }))} className="mt-2 h-11 w-full rounded-xl border border-ks-line bg-ks-paper px-4 font-semibold text-ks-navy outline-none focus:border-ks-blue focus:bg-white" /></label>
+              <label className="block"><span className="text-[11px] font-black uppercase tracking-widest text-ks-muted">Term End</span><input value={calendar.termEnd} onChange={(e) => setCalendar((v) => ({ ...v, termEnd: e.target.value }))} className="mt-2 h-11 w-full rounded-xl border border-ks-line bg-ks-paper px-4 font-semibold text-ks-navy outline-none focus:border-ks-blue focus:bg-white" /></label>
             </div>
-            <Button variant="secondary" className="mt-4 rounded-xl">Save Calendar</Button>
+            <Button variant="secondary" className="mt-4 rounded-xl" disabled={patchMutation.isPending} onClick={handleSaveCalendar}>
+              {patchMutation.isPending ? 'Saving…' : 'Save Calendar'}
+            </Button>
           </SettingsBlock>
 
           {/* Grading scale */}
@@ -1517,17 +1802,61 @@ export function PrincipalAuditPage() {
 
 // ─── Exports ──────────────────────────────────────────────────────────────────
 
+// Maps export label → backend ReportType
+const EXPORT_TYPE_MAP: Record<string, string> = {
+  'Decision Audit CSV':           'AUDIT_EXPORT',
+  'School Health PDF':            'SCHOOL_OVERVIEW',
+  'Finance Overview PDF':         'FINANCE_COLLECTION',
+  'Academic Overview PDF':        'CLASS_ACADEMIC',
+  'Performance Alerts CSV':       'STUDENT_PROFILE',
+  'Discipline Report PDF':        'TERM_SUMMARY',
+  'Staff Overview CSV':           'TEACHER_PERFORMANCE',
+  'Published Results Summary PDF':'BOARD_EXECUTIVE',
+};
+
 export function PrincipalExportsPage() {
+  const { mutate: generateReport } = useGenerateReportMutation();
+  const [generating, setGenerating] = useState<string | null>(null);
+  const [loadingLabel, setLoadingLabel] = useState('Queuing…');
+
   const items = [
-    ['Decision Audit CSV',             'All principal decisions with timestamps, reasons, and correlation IDs.',     'audit'],
-    ['School Health PDF',               'Full institutional health score with academic, finance, and ops scores.',    'health'],
-    ['Finance Overview PDF',            'Collection rate, outstanding balances, and payment approval history.',       'finance'],
-    ['Academic Overview PDF',           'Subject rankings, class averages, pass rates, and at-risk summary.',        'academic'],
-    ['Performance Alerts CSV',          'All active and resolved alerts with student, subject, and AQA data.',       'alerts'],
-    ['Discipline Report PDF',           'Incidents by severity, category, resolution, and recurrence.',              'discipline'],
-    ['Staff Overview CSV',              'Submission timeliness, syllabus completion, and concern flags.',             'staff'],
-    ['Published Results Summary PDF',   'Class-level results summary for published terms.',                          'results'],
+    ['Decision Audit CSV',            'All principal decisions with timestamps, reasons, and correlation IDs.'],
+    ['School Health PDF',              'Full institutional health score with academic, finance, and ops scores.'],
+    ['Finance Overview PDF',           'Collection rate, outstanding balances, and payment approval history.'],
+    ['Academic Overview PDF',          'Subject rankings, class averages, pass rates, and at-risk summary.'],
+    ['Performance Alerts CSV',         'All active and resolved alerts with student, subject, and AQA data.'],
+    ['Discipline Report PDF',          'Incidents by severity, category, resolution, and recurrence.'],
+    ['Staff Overview CSV',             'Submission timeliness, syllabus completion, and concern flags.'],
+    ['Published Results Summary PDF',  'Class-level results summary for published terms.'],
   ] as const;
+
+  const handleExport = (title: string) => {
+    setGenerating(title);
+    setLoadingLabel('Queuing…');
+    generateReport(
+      { reportType: EXPORT_TYPE_MAP[title] ?? 'CUSTOM', scope: 'school' },
+      {
+        onSuccess: async (data) => {
+          const reportId = (data as Record<string, unknown>)?.reportId as string | undefined;
+          if (!reportId) {
+            toast(`${title} queued — check Reports › Jobs to download.`, 'success');
+            setGenerating(null);
+            return;
+          }
+          setLoadingLabel('Preparing…');
+          try {
+            await downloadReportWhenReady(reportId, `${title.replace(/\s+/g, '-').toLowerCase()}.pdf`);
+            toast(`${title} download started!`, 'success');
+          } catch {
+            toast(`${title} is taking too long — check Reports › Jobs to download when ready.`, 'error');
+          } finally {
+            setGenerating(null);
+          }
+        },
+        onError: () => { toast(`Failed to queue ${title} export.`, 'error'); setGenerating(null); },
+      },
+    );
+  };
 
   return (
     <PrincipalWorkspaceShell title="Executive Export Center" eyebrow="Board and stakeholder packets">
@@ -1539,7 +1868,18 @@ export function PrincipalExportsPage() {
       </div>
       <div className="grid gap-gutter md:grid-cols-2 xl:grid-cols-4">
         {items.map(([title, detail]) => (
-          <FancyReportTile key={title} title={title} detail={detail} to="/principal/exports" />
+          <div key={title} className="rounded-2xl border border-ks-line bg-white p-5 shadow-sm">
+            <Download className="h-5 w-5 text-ks-blue" />
+            <h3 className="mt-3 font-display text-base font-black text-ks-navy">{title}</h3>
+            <p className="mt-1 grow text-xs font-semibold text-ks-muted">{detail}</p>
+            <Button
+              className="mt-4 w-full rounded-xl bg-ks-navy text-sm"
+              disabled={generating === title}
+              onClick={() => handleExport(title)}
+            >
+              <Download className="h-3.5 w-3.5" /> {generating === title ? loadingLabel : 'Download'}
+            </Button>
+          </div>
         ))}
       </div>
     </PrincipalWorkspaceShell>
@@ -1558,17 +1898,6 @@ function SettingsBlock({ title, subtitle, children }: { title: string; subtitle:
   );
 }
 
-function SettingsField({ label, defaultValue }: { label: string; defaultValue: string }) {
-  return (
-    <label className="block">
-      <span className="text-[11px] font-black uppercase tracking-widest text-ks-muted">{label}</span>
-      <input
-        defaultValue={defaultValue}
-        className="mt-2 h-11 w-full rounded-xl border border-ks-line bg-ks-paper px-4 font-semibold text-ks-navy outline-none focus:border-ks-blue focus:bg-white"
-      />
-    </label>
-  );
-}
 
 // ─── Private components ───────────────────────────────────────────────────────
 
@@ -1608,21 +1937,29 @@ function PrincipalCriticalStudentsTable() {
 }
 
 // ─── Param hooks ──────────────────────────────────────────────────────────────
+// Return null when the requested id is not found — callers must handle the null
+// case with an EmptyState or DataError rather than silently showing wrong data.
 
 function useAssessment() {
   const { assessmentId } = useParams();
-  const { data: apiAssessments = [] as typeof principalAssessments } = usePendingMarkApprovals() as { data: typeof principalAssessments };
-  return apiAssessments.find((a) => a.id === assessmentId) ?? apiAssessments[0] ?? principalAssessments[0];
+  const { data: apiAssessments = [], isLoading } = usePendingMarkApprovals() as { data: typeof principalAssessments; isLoading: boolean };
+  if (isLoading) return { loading: true, item: null };
+  const item = apiAssessments.find((a) => a.id === assessmentId) ?? null;
+  return { loading: false, item };
 }
 
 function usePaymentApproval() {
   const { id } = useParams();
-  const { data: apiApprovals = [] as typeof paymentApprovals } = usePrincipalPendingPayments() as { data: typeof paymentApprovals };
-  return apiApprovals.find((a) => a.id === id) ?? apiApprovals[0] ?? paymentApprovals[0];
+  const { data: apiApprovals = [], isLoading } = usePrincipalPendingPayments() as { data: typeof paymentApprovals; isLoading: boolean };
+  if (isLoading) return { loading: true, item: null };
+  const item = apiApprovals.find((a) => a.id === id) ?? null;
+  return { loading: false, item };
 }
 
 function useStudent() {
   const { studentId } = useParams();
-  const { data: apiStudents = [] as typeof principalStudents } = usePrincipalStudents() as { data: typeof principalStudents };
-  return apiStudents.find((s) => s.id === studentId) ?? apiStudents[0] ?? principalStudents[0];
+  const { data: apiStudents = [], isLoading } = usePrincipalStudents() as { data: typeof principalStudents; isLoading: boolean };
+  if (isLoading) return { loading: true, item: null };
+  const item = apiStudents.find((s) => s.id === studentId) ?? null;
+  return { loading: false, item };
 }

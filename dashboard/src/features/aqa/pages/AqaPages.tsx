@@ -18,12 +18,13 @@ import {
   Zap,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useMemo, useState } from 'react';
-import { NavLink, useParams } from 'react-router-dom';
+import React, { useMemo, useState } from 'react';
+import { NavLink, useNavigate, useParams } from 'react-router-dom';
+import { toast } from '../../../lib/toast';
 import { Badge } from '../../../components/common/Badge';
 import { Button } from '../../../components/common/Button';
 import { Card } from '../../../components/common/Card';
-import { aqaAlerts, heatmap, interventions, pairings, reports, thresholds } from '../api/aqaApi';
+import { heatmap, reports, thresholds } from '../api/aqaApi';
 import {
   useAqaAlerts,
   useAqaHeatmap,
@@ -36,7 +37,17 @@ import {
   useAqaAnnouncements,
   useRunEngineMutation,
   useUpdateEngineConfigMutation,
+  useResolveAqaAlertMutation,
+  useEscalateAlertMutation,
+  useActivateAqaPairingMutation,
+  useCreateAqaInterventionMutation,
+  useCreateAqaAnnouncementMutation,
+  useGenerateAqaReportMutation,
 } from '../api/aqa.hooks';
+import { DataError } from '../../../components/feedback/DataError';
+import { EmptyState } from '../../../components/feedback/EmptyState';
+import { SkeletonTable } from '../../../components/common/SkeletonTable';
+import { downloadReportWhenReady, useGenerateReportMutation } from '../../operations/api/operations.hooks';
 import {
   AlertCard,
   AqaMetricStrip,
@@ -55,7 +66,32 @@ import { hasUnsavedThresholdChanges, validateThresholdOrder } from '../utils/aqa
 // ─── Home ────────────────────────────────────────────────────────────────────
 
 export function AqaHomePage() {
+  const navigate = useNavigate();
+  const [exporting, setExporting] = useState(false);
   const { data: apiHeatmap = [] as typeof heatmap } = useAqaHeatmap() as { data: typeof heatmap };
+  const { data: apiAlerts = [] } = useAqaAlerts();
+  const { data: apiInterventions = [] } = useAqaInterventions();
+  const generateMutation = useGenerateReportMutation();
+
+  const criticalCount = (apiAlerts as Array<{ severity: string }>).filter((a) => a.severity === 'CRITICAL').length;
+  const openInterventions = (apiInterventions as Array<{ status: string }>).filter((i) => ['OPEN', 'PENDING'].includes(i.status)).length;
+
+  const handleExportPdf = async () => {
+    setExporting(true);
+    toast('Generating institutional overview PDF…', 'info');
+    try {
+      const result = await generateMutation.mutateAsync({ type: 'aqa-school-overview', format: 'pdf' }) as Record<string, unknown> | undefined;
+      const jobId = String(result?.id ?? result?.jobId ?? '');
+      if (!jobId) throw new Error('No job id');
+      await downloadReportWhenReady(jobId, 'school-overview.pdf');
+      toast('PDF downloaded', 'success');
+    } catch {
+      toast('Failed to generate PDF. Please try again.', 'error');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <AqaWorkspaceShell
       title="Academic QA Command Center"
@@ -75,10 +111,10 @@ export function AqaHomePage() {
           <p className="mt-1 text-sm font-semibold text-ks-muted">Academic Term: Phase 2 · Week 12</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="secondary" className="rounded-xl">
-            <Download className="h-4 w-4" /> Export PDF
+          <Button variant="secondary" className="rounded-xl" disabled={exporting} onClick={handleExportPdf}>
+            <Download className="h-4 w-4" /> {exporting ? 'Generating…' : 'Export PDF'}
           </Button>
-          <Button className="rounded-xl">
+          <Button className="rounded-xl" onClick={() => navigate('/aqa/interventions/create')}>
             <Plus className="h-4 w-4" /> New Intervention
           </Button>
         </div>
@@ -95,14 +131,11 @@ export function AqaHomePage() {
         <section className="space-y-gutter">
           <SchoolHeatmap cells={apiHeatmap} />
           <div className="grid gap-gutter md:grid-cols-2">
-            {[
-              { text: 'Chemistry Form 3B has 5 critical heat cells across all classes.', tone: 'rose' as const },
-              { text: 'John Mwangi requires Mathematics escalation to principal.', tone: 'rose' as const },
-              { text: 'Pairing effectiveness is at 62% — above last term benchmark.', tone: 'emerald' as const },
-              { text: 'At-risk queue has 4 high-priority students needing HOD follow-up.', tone: 'blue' as const },
-            ].map(({ text, tone }) => (
-              <InsightCard key={text} text={text} tone={tone} />
-            ))}
+            {criticalCount > 0 && <InsightCard text={`${criticalCount} student${criticalCount > 1 ? 's' : ''} flagged as critical — immediate intervention required.`} tone="rose" />}
+            {openInterventions > 0 && <InsightCard text={`${openInterventions} open intervention${openInterventions > 1 ? 's' : ''} pending follow-up from teachers and HODs.`} tone="amber" />}
+            {criticalCount === 0 && openInterventions === 0 && apiAlerts.length === 0 && (
+              <InsightCard text="No critical alerts at this time. School performance is within target thresholds." tone="emerald" />
+            )}
           </div>
         </section>
 
@@ -139,7 +172,7 @@ export function PerformanceCommandCenterPage() {
         <section className="grid gap-gutter md:grid-cols-2">
           {apiAlerts.map((alert) => <AlertCard key={alert.id} alert={alert} />)}
         </section>
-        <InvestigationPanel alert={apiAlerts[0] ?? aqaAlerts[0]} />
+        {apiAlerts[0] && <InvestigationPanel alert={apiAlerts[0] as Parameters<typeof InvestigationPanel>[0]['alert']} />}
       </div>
     </AqaWorkspaceShell>
   );
@@ -148,7 +181,9 @@ export function PerformanceCommandCenterPage() {
 // ─── Alert detail ─────────────────────────────────────────────────────────────
 
 export function AqaAlertDetailPage() {
-  const alert = useAlert();
+  const { loading, alert } = useAlert();
+  if (loading) return <AqaWorkspaceShell title="Loading…" eyebrow="Alert investigation"><SkeletonTable cols={5} /></AqaWorkspaceShell>;
+  if (!alert) return <AqaWorkspaceShell title="Not Found" eyebrow="Alert investigation"><EmptyState title="Alert not found" description="This alert may have been resolved or the link is invalid." /></AqaWorkspaceShell>;
   return (
     <AqaWorkspaceShell title={alert.student} eyebrow={`${alert.type} investigation`}>
       <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_360px]">
@@ -323,20 +358,32 @@ export function EngineConfigPage() {
 export function AcademicAnalyticsPage() {
   const { data: apiHeatmap = [] as typeof heatmap } = useAqaHeatmap() as { data: typeof heatmap };
   const { data: schoolSummary } = useAqaSchoolSummary() as { data: Record<string, unknown> | undefined };
-  const schoolMean = schoolSummary?.mean ?? schoolSummary?.averageScore ?? '74.2%';
+  const { data: apiAlerts = [] } = useAqaAlerts();
+  const { data: apiInterventions = [] } = useAqaInterventions();
+  const schoolMean = schoolSummary?.mean ?? schoolSummary?.averageScore ?? null;
+  const criticalCount = (apiAlerts as Array<{ severity: string }>).filter((a) => a.severity === 'CRITICAL').length;
+  const activeInterventions = (apiInterventions as Array<{ status: string }>).filter((i) => ['OPEN', 'PENDING'].includes(i.status)).length;
+  const attendanceRate = schoolSummary?.attendanceRate ?? schoolSummary?.attendance ?? null;
   return (
     <AqaWorkspaceShell title="Academic Radar" eyebrow="School-wide analytics dashboard">
       <AqaMetricStrip items={[
-        { label: 'School mean',       value: typeof schoolMean === 'number' ? `${Math.round(schoolMean as number)}%` : String(schoolMean), detail: '+2.4% term trend', tone: 'bg-ks-blue',    trend: 'down' },
-        { label: 'Interventions',     value: '128',   detail: 'Currently active',  tone: 'bg-ks-amber',   trend: 'up'   },
-        { label: 'Critical alerts',   value: '12',    detail: 'Needs attention',   tone: 'bg-ks-rose',    trend: 'up'   },
-        { label: 'Attendance rate',   value: '93%',   detail: 'Stable context',    tone: 'bg-ks-emerald', inverted: true},
+        { label: 'School mean', value: schoolMean !== null ? `${Math.round(schoolMean as number)}%` : '—', detail: 'Current term average', tone: 'bg-ks-blue', trend: 'down' },
+        { label: 'Active interventions', value: String(activeInterventions), detail: 'Open follow-ups', tone: 'bg-ks-amber', trend: 'up' },
+        { label: 'Critical alerts', value: String(criticalCount), detail: 'Needs attention', tone: 'bg-ks-rose', trend: 'up' },
+        { label: 'Attendance rate', value: attendanceRate !== null ? `${Math.round(attendanceRate as number)}%` : '—', detail: 'School-wide', tone: 'bg-ks-emerald', inverted: true },
       ]} />
       <SchoolHeatmap cells={apiHeatmap} />
       <div className="grid gap-gutter xl:grid-cols-3">
         <TrendBoard student="School Average" subject="All subjects" />
-        <RankingsCard title="Most improved" students={['Zahara Mushi', 'Joel Komba', 'Amina Baraka Juma']} gains={[18, 15, 12]} />
-        <RankingsCard title="Top performers" students={['Salma Kitwana', 'David Kapinga', 'Fatuma Juma']}  gains={[94, 91, 88]} isAbsolute />
+        <Card className="overflow-hidden rounded-xl">
+          <div className="border-b border-ks-line px-5 py-4">
+            <h2 className="font-display text-base font-black text-ks-navy">Performance Rankings</h2>
+          </div>
+          <div className="px-5 py-4">
+            <p className="text-sm font-semibold text-ks-muted">Rankings are generated from the latest engine run. View the full at-risk table for detailed student data.</p>
+            <NavLink to="/aqa/performance" className="mt-3 block font-black text-ks-blue hover:underline text-sm">View performance table →</NavLink>
+          </div>
+        </Card>
       </div>
     </AqaWorkspaceShell>
   );
@@ -365,7 +412,9 @@ export function AqaClassAnalyticsPage() {
 // ─── Student profile ──────────────────────────────────────────────────────────
 
 export function AqaStudentProfilePage() {
-  const alert = useStudentAlert();
+  const { loading, alert } = useStudentAlert();
+  if (loading) return <AqaWorkspaceShell title="Loading…" eyebrow="Student profile — AQA view"><SkeletonTable cols={4} /></AqaWorkspaceShell>;
+  if (!alert) return <AqaWorkspaceShell title="Not Found" eyebrow="Student profile — AQA view"><EmptyState title="Student not found" description="No performance record found for this student." /></AqaWorkspaceShell>;
   return (
     <AqaWorkspaceShell title={alert.student} eyebrow="Student profile — AQA view">
       <AqaMetricStrip items={[
@@ -385,13 +434,18 @@ export function AqaStudentProfilePage() {
 // ─── At-risk students ────────────────────────────────────────────────────────
 
 export function AtRiskStudentsPage() {
+  const { data: apiAlerts = [] } = useAqaAlerts();
+  const liveAlerts = apiAlerts as Array<{ severity: string }>;
+  const criticalCount = liveAlerts.filter((a) => a.severity === 'CRITICAL').length;
+  const highCount     = liveAlerts.filter((a) => a.severity === 'HIGH').length;
+  const mediumCount   = liveAlerts.filter((a) => a.severity === 'MEDIUM').length;
   return (
     <AqaWorkspaceShell title="Academic Risk Management" eyebrow="School-wide risk queue">
       <AqaMetricStrip items={[
-        { label: 'Critical risk', value: '03', detail: '↑ 2 since last session', tone: 'bg-ks-rose',    trend: 'up'      },
-        { label: 'High risk',     value: '12', detail: '↓ 4 resolved today',     tone: 'bg-ks-amber',   trend: 'down'    },
-        { label: 'Medium risk',   value: '24', detail: 'Steady trend detected',  tone: 'bg-ks-sky',     trend: 'neutral' },
-        { label: 'Success rate',  value: '88%', detail: 'AQA target exceeded',   tone: 'bg-ks-emerald', inverted: true   },
+        { label: 'Critical risk', value: String(criticalCount).padStart(2, '0'), detail: 'Immediate action required', tone: 'bg-ks-rose',    trend: 'up'      },
+        { label: 'High risk',     value: String(highCount).padStart(2, '0'),     detail: 'Needs intervention',        tone: 'bg-ks-amber',   trend: 'neutral' },
+        { label: 'Medium risk',   value: String(mediumCount).padStart(2, '0'),   detail: 'Monitor closely',           tone: 'bg-ks-sky',     trend: 'neutral' },
+        { label: 'Total flagged', value: String(liveAlerts.length),              detail: 'All risk levels',           tone: 'bg-ks-emerald', inverted: true   },
       ]} />
       <FilterBar items={['Severity', 'Subject', 'Class', 'Pairing status', 'Intervention status', 'HOD']} />
       <AtRiskTable />
@@ -402,19 +456,26 @@ export function AtRiskStudentsPage() {
 // ─── Interventions ────────────────────────────────────────────────────────────
 
 export function AqaInterventionsPage() {
-  const { data: apiInterventions = [] as typeof interventions } = useAqaInterventions() as { data: typeof interventions };
+  const { data: apiInterventions = [], isLoading, isError, refetch } = useAqaInterventions() as { data: Array<Record<string, unknown>>; isLoading: boolean; isError: boolean; refetch: () => void };
+  const openCount = apiInterventions.filter((i) => ['OPEN', 'PENDING', 'FOLLOW_UP_REQUIRED'].includes(String(i.status))).length;
+  const completedCount = apiInterventions.filter((i) => ['CLOSED', 'RESOLVED', 'COMPLETED'].includes(String(i.status))).length;
   return (
     <AqaWorkspaceShell title="School-Wide Interventions" eyebrow="Academic support operations">
       <AqaMetricStrip items={[
-        { label: 'Open interventions', value: String(apiInterventions.filter((i) => ['OPEN', 'PENDING'].includes(i.status as string)).length || 18), detail: 'Pending follow-up', tone: 'bg-ks-amber',   trend: 'neutral' },
-        { label: 'Completed',          value: String(apiInterventions.filter((i) => ['CLOSED', 'RESOLVED', 'COMPLETED'].includes(i.status as string)).length || 9), detail: 'This week', tone: 'bg-ks-emerald', trend: 'down' },
-        { label: 'Overdue',            value: '3',  detail: 'Needs escalation',  tone: 'bg-ks-rose',    trend: 'up'      },
-        { label: 'Avg. response',      value: '4.2h', detail: 'Target < 6.0h',   tone: 'bg-ks-blue', inverted: true     },
+        { label: 'Open interventions', value: isLoading ? '—' : String(openCount), detail: 'Pending follow-up', tone: 'bg-ks-amber',   trend: 'neutral' },
+        { label: 'Completed',          value: isLoading ? '—' : String(completedCount), detail: 'This term', tone: 'bg-ks-emerald', trend: 'down' },
+        { label: 'Total',              value: isLoading ? '—' : String(apiInterventions.length), detail: 'All interventions', tone: 'bg-ks-rose', trend: 'neutral' },
+        { label: 'Types',              value: isLoading ? '—' : String(new Set(apiInterventions.map((i) => i.type)).size), detail: 'Distinct types', tone: 'bg-ks-blue', inverted: true },
       ]} />
       <FilterBar items={['Pending follow-up', 'Type', 'Staff role', 'Subject', 'Class', 'Severity']} />
-      <div className="grid gap-gutter xl:grid-cols-3">
-        {apiInterventions.map((item) => <InterventionCard key={item.id} item={item} />)}
-      </div>
+      {isLoading && <SkeletonTable cols={4} />}
+      {isError && <DataError onRetry={refetch} />}
+      {!isLoading && !isError && apiInterventions.length === 0 && <EmptyState title="No interventions" description="Academic interventions will appear here once created by teachers or HODs." />}
+      {!isLoading && !isError && apiInterventions.length > 0 && (
+        <div className="grid gap-gutter xl:grid-cols-3">
+          {apiInterventions.map((item) => <InterventionCard key={String(item.id)} item={item as Parameters<typeof InterventionCard>[0]['item']} />)}
+        </div>
+      )}
     </AqaWorkspaceShell>
   );
 }
@@ -457,42 +518,191 @@ export function AqaAnnouncementsPage() {
 }
 
 export function CreateAqaAnnouncementPage() {
+  const navigate = useNavigate();
+  const createMutation = useCreateAqaAnnouncementMutation();
+  const [form, setForm] = useState({
+    title: '',
+    body: '',
+    priority: 'NORMAL',
+    audience: 'All academic staff',
+    classTargets: '',
+    subjectTargets: '',
+    scheduledAt: '',
+  });
+
+  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
+    setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.title.trim() || !form.body.trim()) {
+      toast('Title and body are required', 'warning');
+      return;
+    }
+    createMutation.mutate({ title: form.title, body: form.body, priority: form.priority, audience: form.audience, scheduledAt: form.scheduledAt || undefined }, {
+      onSuccess: () => {
+        toast('Announcement published successfully', 'success');
+        navigate('/aqa/announcements');
+      },
+      onError: () => toast('Failed to publish announcement', 'error'),
+    });
+  };
+
   return (
-    <AqaFormPage
-      title="Create Academic Announcement"
-      eyebrow="Academic staff and class targets"
-      fields={['Title', 'Body', 'Priority', 'Audience', 'Class targets', 'Subject targets', 'Schedule']}
-      preview="Academic announcement preview for teachers, HODs, students, parents, and academic staff."
-    />
+    <AqaWorkspaceShell title="Create Academic Announcement" eyebrow="Academic staff and class targets">
+      <form onSubmit={handleSubmit}>
+        <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_380px]">
+          <Card className="rounded-xl p-6">
+            <div className="flex items-center gap-3">
+              <Send className="h-5 w-5 text-ks-blue" />
+              <h2 className="font-display text-xl font-black text-ks-navy">Create Academic Announcement</h2>
+            </div>
+            <div className="mt-5 grid gap-4 md:grid-cols-2">
+              <label className="block md:col-span-2">
+                <span className="text-xs font-black uppercase tracking-wider text-ks-muted">Title *</span>
+                <input value={form.title} onChange={set('title')} required
+                  className="mt-2 h-11 w-full rounded-xl border border-ks-line px-4 font-semibold outline-none transition focus:border-ks-blue focus:ring-2 focus:ring-ks-blue/10"
+                  placeholder="e.g. At-risk register published" />
+              </label>
+              <label className="block md:col-span-2">
+                <span className="text-xs font-black uppercase tracking-wider text-ks-muted">Body *</span>
+                <textarea value={form.body} onChange={set('body')} required rows={5}
+                  className="mt-2 w-full resize-none rounded-xl border border-ks-line px-4 py-3 font-semibold outline-none transition focus:border-ks-blue focus:ring-2 focus:ring-ks-blue/10"
+                  placeholder="Full announcement text…" />
+              </label>
+              <label className="block">
+                <span className="text-xs font-black uppercase tracking-wider text-ks-muted">Priority</span>
+                <select value={form.priority} onChange={set('priority')}
+                  className="mt-2 h-11 w-full rounded-xl border border-ks-line px-4 font-semibold outline-none transition focus:border-ks-blue focus:ring-2 focus:ring-ks-blue/10">
+                  <option value="NORMAL">Normal</option>
+                  <option value="HIGH">High</option>
+                  <option value="URGENT">Urgent</option>
+                </select>
+              </label>
+              <label className="block">
+                <span className="text-xs font-black uppercase tracking-wider text-ks-muted">Audience</span>
+                <select value={form.audience} onChange={set('audience')}
+                  className="mt-2 h-11 w-full rounded-xl border border-ks-line px-4 font-semibold outline-none transition focus:border-ks-blue focus:ring-2 focus:ring-ks-blue/10">
+                  <option>All academic staff</option>
+                  <option>Teachers only</option>
+                  <option>HODs only</option>
+                  <option>Science department</option>
+                  <option>All staff</option>
+                </select>
+              </label>
+              <label className="block">
+                <span className="text-xs font-black uppercase tracking-wider text-ks-muted">Class targets</span>
+                <input value={form.classTargets} onChange={set('classTargets')}
+                  className="mt-2 h-11 w-full rounded-xl border border-ks-line px-4 font-semibold outline-none transition focus:border-ks-blue focus:ring-2 focus:ring-ks-blue/10"
+                  placeholder="e.g. Form 3A, Form 3B" />
+              </label>
+              <label className="block">
+                <span className="text-xs font-black uppercase tracking-wider text-ks-muted">Subject targets</span>
+                <input value={form.subjectTargets} onChange={set('subjectTargets')}
+                  className="mt-2 h-11 w-full rounded-xl border border-ks-line px-4 font-semibold outline-none transition focus:border-ks-blue focus:ring-2 focus:ring-ks-blue/10"
+                  placeholder="e.g. Chemistry, Mathematics" />
+              </label>
+              <label className="block md:col-span-2">
+                <span className="text-xs font-black uppercase tracking-wider text-ks-muted">Schedule (optional)</span>
+                <input type="datetime-local" value={form.scheduledAt} onChange={set('scheduledAt')}
+                  className="mt-2 h-11 w-full rounded-xl border border-ks-line px-4 font-semibold outline-none transition focus:border-ks-blue focus:ring-2 focus:ring-ks-blue/10" />
+              </label>
+            </div>
+            <div className="mt-6 flex gap-3">
+              <Button type="submit" className="rounded-xl" disabled={createMutation.isPending}>
+                <Send className="h-4 w-4" />
+                {createMutation.isPending ? 'Publishing…' : 'Publish announcement'}
+              </Button>
+              <Button type="button" variant="secondary" className="rounded-xl" onClick={() => navigate('/aqa/announcements')}>
+                Cancel
+              </Button>
+            </div>
+          </Card>
+          <Card className="sticky top-24 h-fit rounded-xl p-5">
+            <p className="text-xs font-black uppercase tracking-wider text-ks-muted">Live Preview</p>
+            {form.title || form.body ? (
+              <div className="mt-3 rounded-xl border border-ks-line bg-ks-paper p-4 space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-black ${form.priority === 'URGENT' ? 'bg-ks-rose/10 text-ks-rose' : form.priority === 'HIGH' ? 'bg-ks-amber/10 text-ks-amber' : 'bg-ks-blue/10 text-ks-blue'}`}>
+                    {form.priority}
+                  </span>
+                  <span className="text-[11px] font-semibold text-ks-muted">{form.audience}</span>
+                </div>
+                {form.title && <p className="font-display font-black text-ks-navy">{form.title}</p>}
+                {form.body && <p className="text-sm font-semibold leading-relaxed text-ks-slate">{form.body}</p>}
+                {(form.classTargets || form.subjectTargets) && (
+                  <p className="text-[11px] font-semibold text-ks-muted">
+                    {[form.classTargets, form.subjectTargets].filter(Boolean).join(' · ')}
+                  </p>
+                )}
+                {form.scheduledAt && (
+                  <p className="text-[11px] font-semibold text-ks-muted">Scheduled: {new Date(form.scheduledAt).toLocaleString()}</p>
+                )}
+              </div>
+            ) : (
+              <div className="mt-3 rounded-xl border border-ks-line bg-ks-paper p-4">
+                <p className="text-sm font-semibold leading-relaxed text-ks-muted">Fill in the form to see a live preview of your announcement.</p>
+              </div>
+            )}
+          </Card>
+        </div>
+      </form>
+    </AqaWorkspaceShell>
   );
 }
 
 // ─── Exports ──────────────────────────────────────────────────────────────────
 
 export function AqaExportsPage() {
+  const [generating, setGenerating] = useState<string | null>(null);
+  const generateMutation = useGenerateReportMutation();
+
   const exportItems = [
-    { title: 'Alert list',           type: 'CSV', icon: AlertTriangle },
-    { title: 'At-risk students',     type: 'CSV', icon: XCircle       },
-    { title: 'Engine configuration', type: 'PDF', icon: Settings      },
-    { title: 'Engine run history',   type: 'CSV', icon: Zap           },
-    { title: 'School heatmap',       type: 'PDF', icon: BookOpen      },
-    { title: 'Pairing effectiveness',type: 'PDF', icon: TrendingUp    },
-    { title: 'Intervention log',     type: 'CSV', icon: CheckCircle2  },
-    { title: 'Class analytics',      type: 'PDF', icon: ShieldCheck   },
+    { title: 'Alert list',            type: 'CSV', icon: AlertTriangle, reportType: 'aqa-alert-list'            },
+    { title: 'At-risk students',      type: 'CSV', icon: XCircle,       reportType: 'aqa-at-risk-students'      },
+    { title: 'Engine configuration',  type: 'PDF', icon: Settings,      reportType: 'aqa-engine-config'         },
+    { title: 'Engine run history',    type: 'CSV', icon: Zap,           reportType: 'aqa-engine-history'        },
+    { title: 'School heatmap',        type: 'PDF', icon: BookOpen,      reportType: 'aqa-school-heatmap'        },
+    { title: 'Pairing effectiveness', type: 'PDF', icon: TrendingUp,    reportType: 'aqa-pairing-effectiveness' },
+    { title: 'Intervention log',      type: 'CSV', icon: CheckCircle2,  reportType: 'aqa-interventions'         },
+    { title: 'Class analytics',       type: 'PDF', icon: ShieldCheck,   reportType: 'aqa-class-analytics'       },
   ];
+
+  const handleGenerate = async (item: typeof exportItems[0]) => {
+    setGenerating(item.title);
+    toast(`Generating ${item.title} ${item.type}…`, 'info');
+    try {
+      const result = await generateMutation.mutateAsync({ type: item.reportType, format: item.type.toLowerCase() }) as Record<string, unknown> | undefined;
+      const jobId = String(result?.id ?? result?.jobId ?? '');
+      if (!jobId) throw new Error('No job id');
+      await downloadReportWhenReady(jobId, `${item.title}.${item.type.toLowerCase()}`);
+      toast(`${item.title} downloaded`, 'success');
+    } catch {
+      toast(`Failed to generate ${item.title}. Please try again.`, 'error');
+    } finally {
+      setGenerating(null);
+    }
+  };
+
   return (
     <AqaWorkspaceShell title="AQA Export Center" eyebrow="Operational academic QA data">
       <div className="grid gap-gutter md:grid-cols-2 xl:grid-cols-4">
-        {exportItems.map(({ title, type, icon: Icon }) => (
-          <Card key={title} className="group rounded-xl p-6 transition hover:shadow-layer">
+        {exportItems.map((item) => (
+          <Card key={item.title} className="group rounded-xl p-6 transition hover:shadow-layer">
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-ks-blue/10 text-ks-blue transition group-hover:bg-ks-blue group-hover:text-white">
-              <Icon className="h-5 w-5" />
+              <item.icon className="h-5 w-5" />
             </div>
-            <h3 className="mt-4 font-display text-lg font-black text-ks-navy">{title}</h3>
-            <p className="mt-1 text-sm font-semibold text-ks-muted">AQA export · {type} format</p>
+            <h3 className="mt-4 font-display text-lg font-black text-ks-navy">{item.title}</h3>
+            <p className="mt-1 text-sm font-semibold text-ks-muted">AQA export · {item.type} format</p>
             <div className="mt-4 flex items-center gap-2">
-              <Button variant="secondary" className="flex-1 rounded-xl text-xs">
-                <Download className="h-3.5 w-3.5" /> Generate {type}
+              <Button
+                variant="secondary"
+                className="flex-1 rounded-xl text-xs"
+                disabled={generating !== null}
+                onClick={() => handleGenerate(item)}
+              >
+                <Download className="h-3.5 w-3.5" />
+                {generating === item.title ? 'Generating…' : `Generate ${item.type}`}
               </Button>
             </div>
           </Card>
@@ -505,15 +715,7 @@ export function AqaExportsPage() {
 // ─── Audit ────────────────────────────────────────────────────────────────────
 
 export function AqaAuditPage() {
-  const fallbackEvents = [
-    { label: 'Engine run completed',                       severity: 'success', day: 0 },
-    { label: 'Engine configuration changed',               severity: 'info',    day: 0 },
-    { label: 'Alert escalated — Jabir Hassan',             severity: 'critical',day: 1 },
-    { label: 'Pairing activated — Pendo Shayo',            severity: 'success', day: 1 },
-    { label: 'Report generated: At-Risk Students',         severity: 'info',    day: 2 },
-    { label: 'Announcement published',                     severity: 'info',    day: 2 },
-  ];
-  const { data: apiAudit = [] as typeof fallbackEvents } = useAqaAudit() as { data: typeof fallbackEvents };
+  const { data: apiAudit = [], isLoading, isError, refetch } = useAqaAudit() as { data: Array<{ label?: string; action?: string; description?: string; severity?: string; day?: number }>; isLoading: boolean; isError: boolean; refetch: () => void };
   const events = apiAudit.map((e, i) => ({
     label: (e as { label?: string; action?: string; description?: string }).label
       ?? (e as { action?: string }).action
@@ -524,6 +726,10 @@ export function AqaAuditPage() {
   }));
   return (
     <AqaWorkspaceShell title="Academic Quality Audit Trail" eyebrow="Important AQA actions">
+      {isLoading && <SkeletonTable cols={3} />}
+      {isError && <DataError onRetry={refetch} />}
+      {!isLoading && !isError && events.length === 0 && <EmptyState title="No audit events" description="AQA decisions and engine runs will be recorded here." />}
+      {!isLoading && !isError && events.length > 0 && (
       <Card className="overflow-hidden rounded-xl">
         <div className="border-b border-ks-line bg-ks-paper/60 px-6 py-4">
           <h2 className="font-display text-xl font-black text-ks-navy">Audit Log</h2>
@@ -537,6 +743,7 @@ export function AqaAuditPage() {
           </div>
         </div>
       </Card>
+      )}
     </AqaWorkspaceShell>
   );
 }
@@ -587,7 +794,45 @@ function CriticalBanner() {
 }
 
 function InvestigationPanel({ alert }: { alert: (typeof aqaAlerts)[number] }) {
+  const navigate = useNavigate();
+  const resolveMutation = useResolveAqaAlertMutation();
+  const escalateMutation = useEscalateAlertMutation();
+  const pairingMutation = useActivateAqaPairingMutation();
+  const interventionMutation = useCreateAqaInterventionMutation();
+  const [note, setNote] = useState('');
+  const [showNote, setShowNote] = useState(false);
+
   const initials = alert.student.split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase();
+
+  const handleEscalate = () => {
+    escalateMutation.mutate({ id: alert.id, body: { reason: 'Critical performance decline' } }, {
+      onSuccess: () => { toast('Alert escalated to principal', 'warning'); navigate('/aqa/performance'); },
+      onError: () => toast('Failed to escalate alert', 'error'),
+    });
+  };
+
+  const handleResolve = () => {
+    if (!note.trim()) { setShowNote(true); return; }
+    resolveMutation.mutate({ id: alert.id, body: { note } }, {
+      onSuccess: () => { toast('Alert resolved successfully', 'success'); navigate('/aqa/performance'); },
+      onError: () => toast('Failed to resolve alert', 'error'),
+    });
+  };
+
+  const handleAssignPairing = () => {
+    pairingMutation.mutate({ id: alert.id, body: { studentId: alert.studentId } }, {
+      onSuccess: () => toast('Pairing assigned to student', 'success'),
+      onError: () => toast('Failed to assign pairing', 'error'),
+    });
+  };
+
+  const handleCreateIntervention = () => {
+    interventionMutation.mutate({ studentId: alert.studentId, alertId: alert.id, type: 'ACADEMIC', note: `Auto-created for ${alert.student}` }, {
+      onSuccess: () => { toast('Intervention created', 'success'); navigate('/aqa/interventions'); },
+      onError: () => toast('Failed to create intervention', 'error'),
+    });
+  };
+
   return (
     <Card className="sticky top-24 h-fit overflow-hidden rounded-xl">
       <div className="border-b border-ks-line bg-ks-paper/60 px-5 py-4">
@@ -617,11 +862,31 @@ function InvestigationPanel({ alert }: { alert: (typeof aqaAlerts)[number] }) {
             <p className={`mt-1 font-display text-xl font-black ${alert.change < 0 ? 'text-ks-rose' : 'text-ks-emerald'}`}>{alert.change}%</p>
           </div>
         </div>
+        {showNote && (
+          <div className="mt-4">
+            <label className="text-[11px] font-black uppercase tracking-wider text-ks-muted">Resolution note (required)</label>
+            <textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              rows={3}
+              className="mt-2 w-full rounded-xl border border-ks-line px-4 py-3 text-sm font-semibold outline-none transition focus:border-ks-blue focus:ring-2 focus:ring-ks-blue/10 resize-none"
+              placeholder="Describe the resolution action taken…"
+            />
+          </div>
+        )}
         <div className="mt-4 space-y-2">
-          <Button variant="danger"     className="w-full rounded-xl">Escalate</Button>
-          <Button variant="success"    className="w-full rounded-xl">Resolve with note</Button>
-          <Button variant="secondary"  className="w-full rounded-xl">Assign pairing</Button>
-          <Button variant="quiet"      className="w-full rounded-xl">Create intervention</Button>
+          <Button variant="danger"    className="w-full rounded-xl" disabled={escalateMutation.isPending}   onClick={handleEscalate}>
+            {escalateMutation.isPending ? 'Escalating…' : 'Escalate'}
+          </Button>
+          <Button variant="success"   className="w-full rounded-xl" disabled={resolveMutation.isPending}    onClick={handleResolve}>
+            {resolveMutation.isPending ? 'Resolving…' : 'Resolve with note'}
+          </Button>
+          <Button variant="secondary" className="w-full rounded-xl" disabled={pairingMutation.isPending}    onClick={handleAssignPairing}>
+            {pairingMutation.isPending ? 'Assigning…' : 'Assign pairing'}
+          </Button>
+          <Button variant="quiet"     className="w-full rounded-xl" disabled={interventionMutation.isPending} onClick={handleCreateIntervention}>
+            {interventionMutation.isPending ? 'Creating…' : 'Create intervention'}
+          </Button>
         </div>
       </div>
     </Card>
@@ -840,6 +1105,18 @@ function ReportsPreview() {
 }
 
 function ReportGenerator() {
+  const generateMutation = useGenerateAqaReportMutation();
+  const [selected, setSelected] = useState<string | null>(null);
+  const templates = ['School Overview', 'Class Academic', 'Student Profile', 'Performance Engine', 'At-Risk Students'];
+
+  const handleGenerate = () => {
+    if (!selected) { toast('Please select a report template first', 'warning'); return; }
+    generateMutation.mutate({ template: selected, format: 'PDF' }, {
+      onSuccess: () => toast(`"${selected}" report generated successfully`, 'success'),
+      onError: () => toast('Failed to generate report', 'error'),
+    });
+  };
+
   return (
     <Card className="sticky top-24 h-fit overflow-hidden rounded-xl">
       <div className="border-b border-ks-line bg-ks-paper/60 px-6 py-4">
@@ -848,14 +1125,27 @@ function ReportGenerator() {
       </div>
       <div className="p-6">
         <div className="space-y-2">
-          {['School Overview', 'Class Academic', 'Student Profile', 'Performance Engine', 'At-Risk Students'].map((item) => (
-            <button key={item} className="w-full rounded-xl border border-ks-line bg-ks-paper px-4 py-3 text-left text-sm font-bold text-ks-navy transition hover:border-ks-blue hover:bg-ks-mist">
+          {templates.map((item) => (
+            <button
+              key={item}
+              onClick={() => setSelected(item)}
+              className={`w-full rounded-xl border px-4 py-3 text-left text-sm font-bold transition ${
+                selected === item
+                  ? 'border-ks-blue bg-ks-blue/10 text-ks-blue'
+                  : 'border-ks-line bg-ks-paper text-ks-navy hover:border-ks-blue hover:bg-ks-mist'
+              }`}
+            >
               {item}
             </button>
           ))}
         </div>
-        <Button className="mt-5 w-full rounded-xl">
-          <Send className="h-4 w-4" /> Generate report
+        <Button
+          className="mt-5 w-full rounded-xl"
+          disabled={!selected || generateMutation.isPending}
+          onClick={handleGenerate}
+        >
+          <Send className="h-4 w-4" />
+          {generateMutation.isPending ? 'Generating…' : 'Generate report'}
         </Button>
       </div>
     </Card>
@@ -863,6 +1153,19 @@ function ReportGenerator() {
 }
 
 function ReportTile({ report }: { report: (typeof reports)[number] }) {
+  const [downloading, setDownloading] = useState(false);
+  const handleDownload = async () => {
+    if (report.status !== 'READY') { toast('Report is not yet ready for download', 'warning'); return; }
+    setDownloading(true);
+    try {
+      await downloadReportWhenReady(String(report.id), `${report.title}.pdf`);
+      toast(`${report.title} downloaded`, 'success');
+    } catch {
+      toast(`Failed to download ${report.title}`, 'error');
+    } finally {
+      setDownloading(false);
+    }
+  };
   return (
     <Card className="rounded-xl p-5 transition hover:shadow-layer">
       <div className="flex items-start justify-between gap-2">
@@ -874,8 +1177,13 @@ function ReportTile({ report }: { report: (typeof reports)[number] }) {
       <p className="mt-3 text-[11px] font-black uppercase tracking-wider text-ks-muted">{report.type}</p>
       <h3 className="mt-1 font-display text-lg font-black text-ks-navy">{report.title}</h3>
       <p className="mt-1 text-xs font-semibold text-ks-muted">{report.generatedAt}</p>
-      <Button variant="secondary" className="mt-4 w-full rounded-xl text-xs">
-        <Download className="h-3.5 w-3.5" /> Download
+      <Button
+        variant="secondary"
+        className="mt-4 w-full rounded-xl text-xs"
+        disabled={downloading}
+        onClick={handleDownload}
+      >
+        <Download className="h-3.5 w-3.5" /> {downloading ? 'Downloading…' : 'Download'}
       </Button>
     </Card>
   );
@@ -907,21 +1215,19 @@ function RankingsCard({
 }
 
 function AnnouncementsTable() {
-  const fallbackRows = [
-    { id: '1', title: 'Engine run scheduled tonight',      status: 'ACTIVE', audience: 'Academic staff', priority: 'High',   scheduledAt: 'Now', createdBy: 'Fatuma Ally' },
-    { id: '2', title: 'Chemistry interventions due Friday', status: 'ACTIVE', audience: 'Science HOD',   priority: 'High',   scheduledAt: 'Now', createdBy: 'Fatuma Ally' },
-    { id: '3', title: 'At-risk register published',         status: 'ACTIVE', audience: 'All staff',     priority: 'Medium', scheduledAt: 'Now', createdBy: 'Fatuma Ally' },
-  ];
-  const { data: apiAnnouncements = [] as typeof fallbackRows } = useAqaAnnouncements() as { data: typeof fallbackRows };
+  const { data: apiAnnouncements = [], isLoading, isError, refetch } = useAqaAnnouncements() as { data: Array<Record<string, unknown>>; isLoading: boolean; isError: boolean; refetch: () => void };
+  if (isLoading) return <SkeletonTable cols={6} />;
+  if (isError) return <DataError onRetry={refetch} />;
+  if (apiAnnouncements.length === 0) return <EmptyState title="No announcements" description="Create an announcement to communicate with academic staff." />;
   return (
     <AqaTable columns={['Title', 'Status', 'Audience', 'Priority', 'Schedule', 'Published by', 'Actions']}>
-      {apiAnnouncements.map((row) => {
-        const title = row.title ?? (row as { subject?: string }).subject ?? 'Announcement';
-        const status = row.status ?? 'ACTIVE';
-        const audience = row.audience ?? (row as { targetAudience?: string }).targetAudience ?? 'All staff';
-        const priority = row.priority ?? (row as { level?: string }).level ?? 'Medium';
-        const scheduledAt = row.scheduledAt ?? (row as { scheduledFor?: string }).scheduledFor ?? 'Now';
-        const createdBy = row.createdBy ?? (row as { author?: string }).author ?? '—';
+      {apiAnnouncements.map((row: Record<string, unknown>) => {
+        const title = String(row.title ?? row.subject ?? 'Announcement');
+        const status = String(row.status ?? 'ACTIVE');
+        const audience = String(row.audience ?? row.targetAudience ?? 'All staff');
+        const priority = String(row.priority ?? row.level ?? 'Normal');
+        const scheduledAt = String(row.scheduledAt ?? row.scheduledFor ?? row.createdAt ?? '—');
+        const createdBy = String(row.createdBy ?? row.author ?? row.publishedBy ?? '—');
         return (
           <tr key={row.id} className="transition hover:bg-ks-paper">
             <Td><span className="font-bold text-ks-navy">{title}</span></Td>
@@ -940,35 +1246,6 @@ function AnnouncementsTable() {
   );
 }
 
-function AqaFormPage({ title, eyebrow, fields, preview }: { title: string; eyebrow: string; fields: string[]; preview: string }) {
-  return (
-    <AqaWorkspaceShell title={title} eyebrow={eyebrow}>
-      <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_380px]">
-        <Card className="rounded-xl p-6">
-          <div className="flex items-center gap-3">
-            <Settings className="h-5 w-5 text-ks-blue" />
-            <h2 className="font-display text-xl font-black text-ks-navy">{title}</h2>
-          </div>
-          <div className="mt-5 grid gap-4 md:grid-cols-2">
-            {fields.map((field) => (
-              <label key={field} className="block">
-                <span className="text-xs font-black uppercase tracking-wider text-ks-muted">{field}</span>
-                <input className="mt-2 h-11 w-full rounded-xl border border-ks-line px-4 font-semibold outline-none transition focus:border-ks-blue focus:ring-2 focus:ring-ks-blue/10" />
-              </label>
-            ))}
-          </div>
-          <Button className="mt-5 rounded-xl"><Send className="h-4 w-4" /> Publish</Button>
-        </Card>
-        <Card className="sticky top-24 h-fit rounded-xl p-5">
-          <p className="text-xs font-black uppercase tracking-wider text-ks-muted">Preview</p>
-          <div className="mt-3 rounded-xl border border-ks-line bg-ks-paper p-4">
-            <p className="text-sm font-semibold leading-relaxed text-ks-slate">{preview}</p>
-          </div>
-        </Card>
-      </div>
-    </AqaWorkspaceShell>
-  );
-}
 
 function FilterBar({ items }: { items: string[] }) {
   const [active, setActive] = useState<string | null>(null);
@@ -1038,12 +1315,18 @@ function Td({ children, className }: { children: ReactNode; className?: string }
 
 function useAlert() {
   const { id } = useParams();
-  const { data: apiAlerts = [] as typeof aqaAlerts } = useAqaAlerts() as { data: typeof aqaAlerts };
-  return useMemo(() => apiAlerts.find((a) => a.id === id) ?? apiAlerts[0] ?? aqaAlerts[0], [id, apiAlerts]);
+  const { data: apiAlerts = [] as typeof aqaAlerts, isLoading } = useAqaAlerts() as { data: typeof aqaAlerts; isLoading: boolean };
+  return useMemo(() => ({
+    loading: isLoading,
+    alert: isLoading ? null : (apiAlerts.find((a) => a.id === id) ?? null),
+  }), [id, apiAlerts, isLoading]);
 }
 
 function useStudentAlert() {
   const { studentId } = useParams();
-  const { data: apiAlerts = [] as typeof aqaAlerts } = useAqaAlerts() as { data: typeof aqaAlerts };
-  return useMemo(() => apiAlerts.find((a) => a.studentId === studentId) ?? apiAlerts[0] ?? aqaAlerts[0], [studentId, apiAlerts]);
+  const { data: apiAlerts = [] as typeof aqaAlerts, isLoading } = useAqaAlerts() as { data: typeof aqaAlerts; isLoading: boolean };
+  return useMemo(() => ({
+    loading: isLoading,
+    alert: isLoading ? null : (apiAlerts.find((a) => a.studentId === studentId) ?? null),
+  }), [studentId, apiAlerts, isLoading]);
 }

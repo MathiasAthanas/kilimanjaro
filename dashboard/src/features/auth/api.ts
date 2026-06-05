@@ -68,6 +68,8 @@ function normalizeApiUser(raw: any, loginIdentifier: string): SessionUser {
     phone: raw?.phone ?? raw?.phoneNumber,
     department: raw?.department ?? roleByEmail[email]?.department,
     status: raw?.status ?? (raw?.isActive === false ? 'INACTIVE' : 'ACTIVE'),
+    mustChangePassword: Boolean(raw?.mustChangePassword ?? raw?.requiresPasswordChange ?? false),
+    requiresPasswordChange: Boolean(raw?.requiresPasswordChange ?? raw?.mustChangePassword ?? false),
   };
 }
 

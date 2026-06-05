@@ -312,8 +312,9 @@ export function FinanceTable({ columns, children, minWidth = 1100 }: { columns: 
 
 // ─── Finance filters ──────────────────────────────────────────────────────────
 
-export function FinanceFilters({ items }: { items: string[] }) {
+export function FinanceFilters({ items, onSearch }: { items: string[]; onSearch?: (q: string) => void }) {
   const [active, setActive] = useState<string | null>(null);
+  const [searchValue, setSearchValue] = useState('');
   return (
     <div className="flex flex-wrap items-center gap-3 rounded-lg border border-[#d5dde6] bg-white px-4 py-3">
       <div className="flex items-center gap-2 text-[#00334f]">
@@ -349,6 +350,11 @@ export function FinanceFilters({ items }: { items: string[] }) {
         <input
           type="text"
           placeholder="Search..."
+          value={searchValue}
+          onChange={(e) => {
+            setSearchValue(e.target.value);
+            onSearch?.(e.target.value);
+          }}
           className="w-40 bg-transparent text-sm font-semibold text-[#334155] outline-none placeholder:text-[#94a3b8]"
         />
       </div>
@@ -877,7 +883,20 @@ export function Td({ children, amount = false }: { children: ReactNode; amount?:
 
 // ─── Action panel ─────────────────────────────────────────────────────────────
 
-export function ActionPanel({ title, items }: { title: string; items: string[] }) {
+export function ActionPanel({ title, items, onAction }: { title: string; items: string[]; onAction?: (item: string) => void }) {
+  const handleClick = (item: string) => {
+    if (onAction) { onAction(item); return; }
+    // Default: show a lightweight toast via DOM so ActionPanel has no extra deps
+    const host = document.getElementById('toast-host');
+    if (!host) return;
+    const el = document.createElement('div');
+    el.style.cssText = 'background:#1E293B;color:white;padding:12px 18px;border-radius:12px;font-size:13px;font-weight:700;border-left:4px solid #0284C7;box-shadow:0 8px 24px rgba(0,0,0,.2);display:flex;align-items:center;gap:10px;max-width:340px;opacity:0;transform:translateX(20px);transition:opacity .2s,transform .2s;margin-top:8px;pointer-events:auto;';
+    el.textContent = item;
+    host.appendChild(el);
+    requestAnimationFrame(() => requestAnimationFrame(() => { el.style.opacity = '1'; el.style.transform = 'translateX(0)'; }));
+    setTimeout(() => { el.style.opacity = '0'; el.style.transform = 'translateX(20px)'; setTimeout(() => el.parentNode?.removeChild(el), 220); }, 3000);
+  };
+
   return (
     <div className="rounded-lg border border-[#d5dde6] bg-white">
       <div className="border-b border-[#d5dde6] bg-[#f7f9fb] px-5 py-3">
@@ -888,6 +907,7 @@ export function ActionPanel({ title, items }: { title: string; items: string[] }
           {items.map((item) => (
             <button
               key={item}
+              onClick={() => handleClick(item)}
               className="flex w-full items-center justify-between rounded border border-transparent bg-transparent px-4 py-3 text-left text-sm font-bold text-[#334155] transition hover:border-[#d5dde6] hover:bg-[#f7f9fb] hover:text-[#00334f]"
             >
               {item}

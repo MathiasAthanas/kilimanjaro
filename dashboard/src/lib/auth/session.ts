@@ -8,6 +8,8 @@ export type SessionUser = {
   phone?: string;
   department?: string;
   status?: string;
+  mustChangePassword?: boolean;
+  requiresPasswordChange?: boolean;
 };
 
 export type AuthSession = {

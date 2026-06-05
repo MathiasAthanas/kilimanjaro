@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { toast } from '../../../lib/toast';
 import {
   BarChart3,
   Bell,
@@ -157,9 +158,9 @@ export function CourseBuilderPage() {
             `${display.enrolledCount} students enrolled`,
           ].map((item) => <CheckRow key={item} label={item} />)}
           <div className="mt-4 flex flex-wrap gap-3">
-            <ButtonLike>Save draft</ButtonLike>
-            <ButtonLike tone="primary">Publish course</ButtonLike>
-            <ButtonLike tone="danger">Archive</ButtonLike>
+            <ButtonLike onClick={() => toast('Course draft saved', 'success')}>Save draft</ButtonLike>
+            <ButtonLike tone="primary" onClick={() => toast('Course published successfully', 'success')}>Publish course</ButtonLike>
+            <ButtonLike tone="danger" onClick={() => toast('Course archived', 'warning')}>Archive</ButtonLike>
           </div>
         </Panel>
       </div>
@@ -222,9 +223,9 @@ export function LessonEditorPage() {
           <FormGrid fields={['Lesson title', 'Topic / syllabus unit', 'Week number', 'Estimated minutes']} />
           <TextArea label="Description and teacher guide" value={lesson?.topic ?? ''} />
           <div className="mt-4 flex flex-wrap gap-3">
-            <ButtonLike><Save className="h-4 w-4" />Save draft</ButtonLike>
-            <ButtonLike tone="primary">Publish lesson</ButtonLike>
-            <ButtonLike><MonitorCheck className="h-4 w-4" />Preview as student</ButtonLike>
+            <ButtonLike onClick={() => toast('Lesson draft saved', 'success')}><Save className="h-4 w-4" />Save draft</ButtonLike>
+            <ButtonLike tone="primary" onClick={() => toast('Lesson published', 'success')}>Publish lesson</ButtonLike>
+            <ButtonLike onClick={() => toast('Opening student preview…', 'info')}><MonitorCheck className="h-4 w-4" />Preview as student</ButtonLike>
           </div>
         </Panel>
         <Panel title="Lesson Build Blocks" icon={<Layers3 />}>
@@ -263,9 +264,9 @@ export function MaterialStudioPage() {
             <p className="mt-1 text-sm font-semibold text-ks-muted">Targets POST /api/v1/elearning/uploads/local before attaching returned fileKey.</p>
           </div>
           <div className="mt-5 flex flex-wrap gap-3">
-            <ButtonLike>Save draft</ButtonLike>
-            <ButtonLike tone="primary">Publish material</ButtonLike>
-            <ButtonLike><MonitorCheck className="h-4 w-4" />Student preview</ButtonLike>
+            <ButtonLike onClick={() => toast('Material draft saved', 'success')}>Save draft</ButtonLike>
+            <ButtonLike tone="primary" onClick={() => toast('Material published', 'success')}>Publish material</ButtonLike>
+            <ButtonLike onClick={() => toast('Opening student preview…', 'info')}><MonitorCheck className="h-4 w-4" />Student preview</ButtonLike>
           </div>
         </Panel>
       </div>
@@ -297,9 +298,9 @@ export function AssignmentsPage() {
         <FormGrid fields={['Title', 'Submission mode', 'Due date and time', 'Max score', 'Allow late submission', 'Late penalty percent']} />
         <TextArea label="Instructions" value="Solve all questions and show workings. Type answers or upload a clear photo." />
         <div className="mt-4 flex flex-wrap gap-3">
-          <ButtonLike>Save draft</ButtonLike>
-          <ButtonLike tone="primary">Publish and notify</ButtonLike>
-          <ButtonLike>Preview as student</ButtonLike>
+          <ButtonLike onClick={() => toast('Assignment draft saved', 'success')}>Save draft</ButtonLike>
+          <ButtonLike tone="primary" onClick={() => toast('Assignment published — students notified', 'success')}>Publish and notify</ButtonLike>
+          <ButtonLike onClick={() => toast('Opening student preview…', 'info')}>Preview as student</ButtonLike>
         </div>
       </Panel>
     </ElearningShell>
@@ -412,9 +413,9 @@ export function SubmissionGradingDeskPage() {
             <FormGrid fields={['Score', 'Max score']} />
             <TextArea label="Feedback comment" value={submission.feedback ?? ''} />
             <div className="mt-4 flex flex-wrap gap-3">
-              <ButtonLike tone="primary">Save grade</ButtonLike>
-              <ButtonLike>Return for correction</ButtonLike>
-              <ButtonLike>Grade next</ButtonLike>
+              <ButtonLike tone="primary" onClick={() => toast('Grade saved successfully', 'success')}>Save grade</ButtonLike>
+              <ButtonLike onClick={() => toast('Submission returned to student for correction', 'warning')}>Return for correction</ButtonLike>
+              <ButtonLike onClick={() => toast('Moving to next submission…', 'info')}>Grade next</ButtonLike>
             </div>
           </Panel>
         </div>
@@ -434,9 +435,9 @@ export function QuizBuilderPage() {
         <Panel title="Quiz Settings" icon={<HelpCircle />}>
           <FormGrid fields={['Title', 'Time limit', 'Max attempts', 'Passing score', 'Reveal policy', 'Shuffle questions']} />
           <div className="mt-4 flex flex-wrap gap-3">
-            <ButtonLike>Save draft</ButtonLike>
-            <ButtonLike tone="primary">Publish quiz</ButtonLike>
-            <ButtonLike>Preview attempt</ButtonLike>
+            <ButtonLike onClick={() => toast('Quiz draft saved', 'success')}>Save draft</ButtonLike>
+            <ButtonLike tone="primary" onClick={() => toast('Quiz published — students can now attempt', 'success')}>Publish quiz</ButtonLike>
+            <ButtonLike onClick={() => toast('Opening quiz preview…', 'info')}>Preview attempt</ButtonLike>
           </div>
         </Panel>
         <Panel title="Question Builder" icon={<PenLine />}>
@@ -509,7 +510,7 @@ export function ManualMarkingPage() {
               <PublishBadge status="MANUAL_PENDING" />
             </div>
             <FormGrid fields={['Score awarded', 'Feedback']} />
-            <div className="mt-4"><ButtonLike tone="primary">Save manual mark</ButtonLike></div>
+            <div className="mt-4"><ButtonLike tone="primary" onClick={() => toast('Manual mark saved', 'success')}>Save manual mark</ButtonLike></div>
           </div>
         ))}
         {!isLoading && pending.length === 0 && (
@@ -597,7 +598,7 @@ export function CourseCommunicationPage() {
         <Panel title="Course Announcements" icon={<Bell />}>
           <FormGrid fields={['Title', 'Audience', 'Status']} />
           <TextArea label="Announcement body" value="" />
-          <div className="mt-4 flex flex-wrap gap-3"><ButtonLike>Save draft</ButtonLike><ButtonLike tone="primary">Publish and notify</ButtonLike></div>
+          <div className="mt-4 flex flex-wrap gap-3"><ButtonLike onClick={() => toast('Announcement draft saved', 'success')}>Save draft</ButtonLike><ButtonLike tone="primary" onClick={() => toast('Announcement published — students notified', 'success')}>Publish and notify</ButtonLike></div>
           {loadingAnn && <LoadingPlaceholder />}
           <div className="mt-5 space-y-3">
             {announcements.map((item) => (
@@ -623,7 +624,7 @@ export function CourseCommunicationPage() {
             )}
           </div>
           <TextArea label="Teacher reply" value="" />
-          <div className="mt-4 flex flex-wrap gap-3"><ButtonLike tone="primary">Reply</ButtonLike><ButtonLike>Resolve thread</ButtonLike><ButtonLike>Pin</ButtonLike></div>
+          <div className="mt-4 flex flex-wrap gap-3"><ButtonLike tone="primary" onClick={() => toast('Reply posted', 'success')}>Reply</ButtonLike><ButtonLike onClick={() => toast('Thread marked as resolved', 'success')}>Resolve thread</ButtonLike><ButtonLike onClick={() => toast('Thread pinned', 'info')}>Pin</ButtonLike></div>
         </Panel>
       </div>
     </ElearningShell>
@@ -837,7 +838,7 @@ function LessonUnit({ lesson, courseId, index }: { lesson: ElearningLesson; cour
         <div className="flex flex-wrap items-center gap-2">
           <PublishBadge status={lesson.status} />
           <NavLink to={`/teacher/elearning/courses/${courseId}/lessons/${lesson.id}`} className="rounded-2xl bg-slate-100 px-3 py-1 text-xs font-black text-ks-slate">Edit</NavLink>
-          <ButtonLike>Publish</ButtonLike>
+          <ButtonLike onClick={() => toast('Lesson published', 'success')}>Publish</ButtonLike>
         </div>
       </div>
     </div>
@@ -979,9 +980,9 @@ function QuickGrid({ items }: { items: [string, string][] }) {
   );
 }
 
-function ButtonLike({ children, tone = 'default' }: { children: ReactNode; tone?: 'default' | 'primary' | 'danger' }) {
+function ButtonLike({ children, tone = 'default', onClick, disabled }: { children: ReactNode; tone?: 'default' | 'primary' | 'danger'; onClick?: () => void; disabled?: boolean }) {
   const styles = tone === 'primary' ? 'bg-[#6C63FF] text-white' : tone === 'danger' ? 'bg-red-50 text-red-700' : 'bg-slate-100 text-ks-slate';
-  return <button className={`inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-xs font-black uppercase tracking-widest ${styles}`}>{children}</button>;
+  return <button onClick={onClick} disabled={disabled} className={`inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-xs font-black uppercase tracking-widest ${styles} disabled:opacity-40`}>{children}</button>;
 }
 
 function MetricPill({ label, value }: { label: string; value: string }) {

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../lib/api/client';
-import { arrayFromApi, payloadOf } from '../../../lib/api/response';
+import { arrayFromApi, dedupeById, payloadOf } from '../../../lib/api/response';
 
 // ─── Query key factory ────────────────────────────────────────────────────────
 
@@ -305,18 +305,49 @@ export function mapApiCourse(c: ElearningCourse): CourseDisplay {
 
 // ─── Queries — Courses ────────────────────────────────────────────────────────
 
+function normaliseCourse(raw: Record<string, unknown>): ElearningCourse {
+  const resolve = (v: unknown): string => {
+    if (!v || typeof v !== 'object') return String(v ?? '');
+    const o = v as Record<string, unknown>;
+    return String(o.name ?? o.fullName ?? o.label ?? o.title ?? '');
+  };
+  const lessonsRaw = raw.lessons;
+  return {
+    ...(raw as Partial<ElearningCourse>),
+    id: String(raw.id ?? crypto.randomUUID()),
+    classSubjectId: String(raw.classSubjectId ?? raw.class_subject_id ?? raw.classId ?? ''),
+    subjectName: resolve(raw.subjectName ?? raw.subject ?? raw.subjectId),
+    className: resolve(raw.className ?? raw.class ?? raw.class_name),
+    term: resolve(raw.term ?? raw.termName),
+    academicYear: String(raw.academicYear ?? raw.academic_year ?? ''),
+    status: String(raw.status ?? ''),
+    teacherId: String(raw.teacherId ?? raw.teacher_id ?? ''),
+    enrolledCount: Number(raw.enrolledCount ?? raw.enrolled_count ?? raw.students ?? 0),
+    lessons: Array.isArray(lessonsRaw) ? lessonsRaw as ElearningLesson[] : [],
+    isActive: Boolean(raw.isActive ?? raw.is_active ?? raw.status === 'ACTIVE'),
+    createdAt: String(raw.createdAt ?? raw.created_at ?? ''),
+    updatedAt: String(raw.updatedAt ?? raw.updated_at ?? ''),
+  } as ElearningCourse;
+}
+
 export function useElearningCourses() {
   return useQuery({
     queryKey: elKeys.courses(),
     queryFn: () =>
-      api.get('/elearning/courses').then((r) => arrayFromApi(payloadOf(r), ['courses']) as ElearningCourse[]),
+      api.get('/elearning/courses').then((r) =>
+        dedupeById(arrayFromApi(payloadOf(r), ['courses']).map((raw) => normaliseCourse(raw as Record<string, unknown>))),
+      ),
   });
 }
 
 export function useElearningCourse(courseId: string | undefined) {
   return useQuery({
     queryKey: elKeys.course(courseId ?? ''),
-    queryFn: () => api.get(`/elearning/courses/${courseId}`).then(payloadOf) as Promise<ElearningCourse>,
+    queryFn: () =>
+      api.get(`/elearning/courses/${courseId}`).then((r) => {
+        const raw = payloadOf(r);
+        return normaliseCourse(raw as Record<string, unknown>);
+      }),
     enabled: Boolean(courseId),
   });
 }
@@ -357,7 +388,25 @@ export function useElearningLessons(courseId: string | undefined) {
     queryFn: () =>
       api
         .get(`/elearning/courses/${courseId}/lessons`)
-        .then((r) => arrayFromApi(payloadOf(r), ['lessons']) as ElearningLesson[]),
+        .then((r) =>
+          arrayFromApi(payloadOf(r), ['lessons']).map((raw) => {
+            const l = raw as Record<string, unknown>;
+            return {
+              ...l,
+              id: String(l.id ?? crypto.randomUUID()),
+              courseSpaceId: String(l.courseSpaceId ?? l.courseId ?? l.course_space_id ?? ''),
+              title: String(l.title ?? l.name ?? l.lessonTitle ?? ''),
+              topic: l.topic != null ? String(l.topic) : undefined,
+              week: l.week != null ? Number(l.week) : undefined,
+              orderIndex: Number(l.orderIndex ?? l.order ?? l.order_index ?? 0),
+              estimatedMinutes: l.estimatedMinutes != null ? Number(l.estimatedMinutes) : undefined,
+              status: String(l.status ?? 'DRAFT'),
+              description: l.description != null ? String(l.description) : undefined,
+              createdAt: String(l.createdAt ?? l.created_at ?? ''),
+              updatedAt: String(l.updatedAt ?? l.updated_at ?? ''),
+            } as ElearningLesson;
+          }),
+        ),
     enabled: Boolean(courseId),
   });
 }
@@ -405,7 +454,32 @@ export function useAssignmentSubmissions(courseId: string | undefined, assignmen
     queryFn: () =>
       api
         .get(`/elearning/courses/${courseId}/assignments/${assignmentId}/submissions`)
-        .then((r) => arrayFromApi(payloadOf(r), ['submissions']) as ElearningSubmission[]),
+        .then((r) =>
+          arrayFromApi(payloadOf(r), ['submissions']).map((raw) => {
+            const s = raw as Record<string, unknown>;
+            const resolve = (v: unknown): string => {
+              if (!v || typeof v !== 'object') return String(v ?? '');
+              const o = v as Record<string, unknown>;
+              return String(o.name ?? o.fullName ?? o.label ?? '');
+            };
+            return {
+              ...s,
+              id: String(s.id ?? crypto.randomUUID()),
+              assignmentId: String(s.assignmentId ?? s.assignment_id ?? ''),
+              courseSpaceId: String(s.courseSpaceId ?? s.course_space_id ?? ''),
+              studentId: String(s.studentId ?? s.student_id ?? ''),
+              studentName: s.studentName != null ? resolve(s.studentName ?? s.student) : undefined,
+              status: String(s.status ?? 'PENDING'),
+              score: s.score != null ? Number(s.score) : undefined,
+              maxScore: s.maxScore != null ? Number(s.maxScore) : undefined,
+              feedback: s.feedback != null ? String(s.feedback) : undefined,
+              isLate: Boolean(s.isLate ?? s.is_late ?? false),
+              submittedAt: s.submittedAt != null ? String(s.submittedAt) : undefined,
+              gradedAt: s.gradedAt != null ? String(s.gradedAt) : undefined,
+              createdAt: String(s.createdAt ?? s.created_at ?? ''),
+            } as ElearningSubmission;
+          }),
+        ),
     enabled: Boolean(courseId) && Boolean(assignmentId),
   });
 }
@@ -471,7 +545,31 @@ export function useQuizResults(courseId: string | undefined, quizId: string | un
     queryFn: () =>
       api
         .get(`/elearning/courses/${courseId}/quizzes/${quizId}/results`)
-        .then((r) => arrayFromApi(payloadOf(r), ['attempts', 'results']) as ElearningQuizAttempt[]),
+        .then((r) =>
+          arrayFromApi(payloadOf(r), ['attempts', 'results']).map((raw) => {
+            const a = raw as Record<string, unknown>;
+            const resolve = (v: unknown): string => {
+              if (!v || typeof v !== 'object') return String(v ?? '');
+              const o = v as Record<string, unknown>;
+              return String(o.name ?? o.fullName ?? o.label ?? '');
+            };
+            return {
+              ...a,
+              id: String(a.id ?? crypto.randomUUID()),
+              quizId: String(a.quizId ?? a.quiz_id ?? ''),
+              studentId: String(a.studentId ?? a.student_id ?? ''),
+              studentName: a.studentName != null ? resolve(a.studentName ?? a.student) : undefined,
+              status: String(a.status ?? ''),
+              score: a.score != null ? Number(a.score) : undefined,
+              maxScore: a.maxScore != null ? Number(a.maxScore) : undefined,
+              percentScore: a.percentScore != null ? Number(a.percentScore) : undefined,
+              isPassed: a.isPassed != null ? Boolean(a.isPassed) : undefined,
+              startedAt: String(a.startedAt ?? a.started_at ?? ''),
+              submittedAt: a.submittedAt != null ? String(a.submittedAt) : undefined,
+              manualMarksPending: a.manualMarksPending != null ? Number(a.manualMarksPending) : undefined,
+            } as ElearningQuizAttempt;
+          }),
+        ),
     enabled: Boolean(courseId) && Boolean(quizId),
   });
 }
@@ -509,7 +607,23 @@ export function useElearningAnnouncements(courseId: string | undefined) {
     queryFn: () =>
       api
         .get(`/elearning/courses/${courseId}/announcements`)
-        .then((r) => arrayFromApi(payloadOf(r), ['announcements']) as ElearningAnnouncement[]),
+        .then((r) =>
+          arrayFromApi(payloadOf(r), ['announcements']).map((raw) => {
+            const a = raw as Record<string, unknown>;
+            return {
+              ...a,
+              id: String(a.id ?? crypto.randomUUID()),
+              courseSpaceId: String(a.courseSpaceId ?? a.course_space_id ?? ''),
+              title: String(a.title ?? a.subject ?? a.heading ?? ''),
+              body: String(a.body ?? a.content ?? a.message ?? ''),
+              status: String(a.status ?? 'DRAFT'),
+              isPinned: Boolean(a.isPinned ?? a.is_pinned ?? false),
+              audience: String(a.audience ?? a.targetAudience ?? 'STUDENTS'),
+              publishedAt: a.publishedAt != null ? String(a.publishedAt) : undefined,
+              createdAt: String(a.createdAt ?? a.created_at ?? ''),
+            } as ElearningAnnouncement;
+          }),
+        ),
     enabled: Boolean(courseId),
   });
 }
@@ -542,7 +656,26 @@ export function useElearningAuditLogs() {
     queryFn: () =>
       api
         .get('/elearning/admin/audit-logs')
-        .then((r) => arrayFromApi(payloadOf(r), ['logs', 'auditLogs']) as AuditLog[]),
+        .then((r) =>
+          arrayFromApi(payloadOf(r), ['logs', 'auditLogs']).map((raw) => {
+            const l = raw as Record<string, unknown>;
+            const resolve = (v: unknown): string => {
+              if (!v || typeof v !== 'object') return String(v ?? '');
+              const o = v as Record<string, unknown>;
+              return String(o.name ?? o.fullName ?? o.label ?? '');
+            };
+            return {
+              ...l,
+              id: String(l.id ?? crypto.randomUUID()),
+              action: String(l.action ?? l.eventType ?? l.event ?? ''),
+              actorId: String(l.actorId ?? l.actor_id ?? l.userId ?? ''),
+              actorName: l.actorName != null ? resolve(l.actorName ?? l.actor) : undefined,
+              entityType: String(l.entityType ?? l.entity_type ?? l.resourceType ?? ''),
+              entityId: String(l.entityId ?? l.entity_id ?? l.resourceId ?? ''),
+              createdAt: String(l.createdAt ?? l.created_at ?? l.timestamp ?? ''),
+            } as AuditLog;
+          }),
+        ),
     staleTime: 60_000,
   });
 }

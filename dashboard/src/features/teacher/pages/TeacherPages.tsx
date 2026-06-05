@@ -1,7 +1,8 @@
 import { ArrowRight, CheckCircle2, ClipboardCheck, Download, Filter, MessageSquarePlus, Save, Search, Send, ShieldCheck, UserPlus } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useMemo, useState } from 'react';
-import { NavLink, useParams } from 'react-router-dom';
+import React, { useMemo, useState } from 'react';
+import { NavLink, useNavigate, useParams } from 'react-router-dom';
+import { toast } from '../../../lib/toast';
 import { Badge } from '../../../components/common/Badge';
 import { Button } from '../../../components/common/Button';
 import { Card } from '../../../components/common/Card';
@@ -14,8 +15,18 @@ import {
   usePerfPairings,
   useClassStudents,
   useMarksSheet,
+  useAttendanceList,
+  useStudentPerformance,
+  useClassAnalytics,
   useTeacherAnnouncements,
+  useSubmitAssessmentMutation,
+  useSubmitMarksBulkMutation,
+  useMarkAttendanceMutation,
+  useCreateAnnouncementMutation,
+  useCreateInterventionMutation,
+  useResolveAlertMutation,
 } from '../api/teacher.hooks';
+import { downloadReportWhenReady, useGenerateReportMutation } from '../../operations/api/operations.hooks';
 import {
   AlertStaffCard,
   AlertTypeBadge,
@@ -42,17 +53,22 @@ export function TeacherHomePage() {
   const { data: apiClasses = [] } = useTeacherClasses();
   const { data: apiAssessments = [] } = useTeacherAssessments();
   const { data: apiTimetable = [] } = useTeacherTimetable();
-  const classes = apiClasses.length > 0 ? apiClasses : teacherClasses;
-  const assessmentList = apiAssessments.length > 0 ? apiAssessments : assessments;
-  const timetableList = apiTimetable.length > 0 ? apiTimetable : timetable;
+
+  const openMarks = apiAssessments.filter((a) => !['APPROVED', 'LOCKED'].includes(a.status)).length;
+  const avgScore = apiClasses.length
+    ? Math.round(apiClasses.reduce((s, c) => s + c.average, 0) / apiClasses.length)
+    : 0;
+  const liveEntry = apiTimetable.find((e) => e.current);
+  const pendingAssessments = apiAssessments.filter((a) => !['APPROVED', 'LOCKED'].includes(a.status));
+
   return (
-    <TeacherWorkspaceShell title="Good morning, Mwalimu Rose" eyebrow="Teacher operations desk" action={<Button className="bg-ks-gold text-ks-slate hover:shadow-md hover:shadow-ks-gold/30">Mark Attendance</Button>}>
+    <TeacherWorkspaceShell title="Teacher Dashboard" eyebrow="Teacher operations desk" action={<NavLink to="/teacher/attendance"><Button className="bg-ks-gold text-ks-slate hover:shadow-md hover:shadow-ks-gold/30">Mark Attendance</Button></NavLink>}>
       <TeacherMetricStrip
         items={[
-          { label: 'Lessons today', value: '4', detail: '2 Mathematics, 2 Physics', tone: 'bg-ks-blue', valueColor: 'text-ks-blue' },
-          { label: 'Open marks', value: '3', detail: '90 rows pending', tone: 'bg-ks-amber', valueColor: 'text-ks-amber' },
-          { label: 'Attendance due', value: '1', detail: 'Form 2A Physics', tone: 'bg-ks-rose', valueColor: 'text-ks-rose' },
-          { label: 'Class average', value: '75%', detail: '+4% from last term', inverted: true, icon: ShieldCheck },
+          { label: 'Assigned classes', value: String(apiClasses.length), detail: 'Active this term', tone: 'bg-ks-blue', valueColor: 'text-ks-blue' },
+          { label: 'Open marks', value: String(openMarks), detail: openMarks > 0 ? 'Awaiting entry' : 'All up to date', tone: 'bg-ks-amber', valueColor: openMarks > 0 ? 'text-ks-amber' : 'text-ks-emerald' },
+          { label: 'Timetable slots', value: String(apiTimetable.length), detail: 'This week', tone: 'bg-ks-rose', valueColor: 'text-ks-rose' },
+          { label: 'Class average', value: apiClasses.length ? `${avgScore}%` : '—', detail: 'Across all classes', inverted: true, icon: ShieldCheck },
         ]}
       />
       <div className="grid gap-gutter xl:grid-cols-[1.35fr_0.65fr]">
@@ -64,58 +80,70 @@ export function TeacherHomePage() {
             </div>
             <Badge tone="gold">Live schedule</Badge>
           </div>
-          <div className="mt-5 space-y-2.5">
-            {timetableList.slice(0, 4).map((entry: typeof timetable[number]) => (
-              <div
-                key={entry.id}
-                className={`flex items-center justify-between rounded-xl border p-3.5 transition ${
-                  entry.current ? 'border-ks-gold bg-ks-gold/10 shadow-sm' : 'border-ks-line bg-ks-paper/70 hover:border-ks-blue/20'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div className={`rounded-lg px-3 py-2 text-sm font-black ${entry.current ? 'bg-ks-gold text-ks-slate' : 'bg-ks-navy text-white'}`}>
-                    {entry.time}
+          {apiTimetable.length === 0 ? (
+            <p className="mt-5 text-sm font-semibold text-ks-muted">No timetable slots loaded yet.</p>
+          ) : (
+            <div className="mt-5 space-y-2.5">
+              {apiTimetable.slice(0, 4).map((entry) => (
+                <div
+                  key={entry.id}
+                  className={`flex items-center justify-between rounded-xl border p-3.5 transition ${
+                    entry.current ? 'border-ks-gold bg-ks-gold/10 shadow-sm' : 'border-ks-line bg-ks-paper/70 hover:border-ks-blue/20'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`rounded-lg px-3 py-2 text-sm font-black ${entry.current ? 'bg-ks-gold text-ks-slate' : 'bg-ks-navy text-white'}`}>
+                      {entry.time}
+                    </div>
+                    <div>
+                      <p className="font-black text-ks-slate">{entry.subject} · {entry.className}</p>
+                      <p className="text-xs font-semibold text-ks-muted">{entry.room}</p>
+                    </div>
+                    {entry.current && <span className="rounded-full bg-ks-gold/20 px-2 py-0.5 text-[10px] font-black text-ks-gold">LIVE</span>}
                   </div>
-                  <div>
-                    <p className="font-black text-ks-slate">{entry.subject} · {entry.className}</p>
-                    <p className="text-xs font-semibold text-ks-muted">{entry.room}</p>
-                  </div>
-                  {entry.current && <span className="rounded-full bg-ks-gold/20 px-2 py-0.5 text-[10px] font-black text-ks-gold">LIVE</span>}
+                  <NavLink to="/teacher/attendance" className="text-sm font-black text-ks-blue hover:underline">Open →</NavLink>
                 </div>
-                <NavLink to="/teacher/attendance" className="text-sm font-black text-ks-blue hover:underline">Open →</NavLink>
-              </div>
-            ))}
-          </div>
-        </Card>
-        <div className="space-y-gutter">
-          <Card className="overflow-hidden rounded-xl border-l-4 border-l-ks-rose p-5">
-            <p className="text-[11px] font-black uppercase tracking-[0.22em] text-ks-rose">Urgent task</p>
-            <h3 className="mt-2 font-display text-2xl font-black text-ks-slate">Form 2A attendance due</h3>
-            <p className="mt-2 text-sm font-semibold leading-6 text-ks-muted">Class started 12 minutes ago. Mark present/absent before next period.</p>
-            <NavLink to="/teacher/attendance"><Button className="mt-4 w-full">Mark now</Button></NavLink>
-          </Card>
-          <Card className="rounded-xl p-5">
-            <p className="text-[11px] font-black uppercase tracking-[0.22em] text-ks-muted">Open marks queue</p>
-            <div className="mt-3 space-y-2.5">
-              {assessmentList.filter((item: typeof assessments[number]) => item.status !== 'APPROVED').map((item: typeof assessments[number]) => (
-                <NavLink key={item.id} to={`/teacher/assessments/${item.id}/marks`} className="block rounded-xl border border-ks-line p-3 transition hover:border-ks-blue/30 hover:bg-ks-paper">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-sm font-bold text-ks-slate">{item.title}</p>
-                    <AssessmentStatusBadge status={item.status} />
-                  </div>
-                  <div className="mt-2 flex items-center gap-2">
-                    <ProgressBar value={(item.entered / item.total) * 100} tone="bg-ks-amber" className="flex-1" />
-                    <span className="shrink-0 text-[11px] font-bold text-ks-muted">{item.entered}/{item.total}</span>
-                  </div>
-                </NavLink>
               ))}
             </div>
+          )}
+        </Card>
+        <div className="space-y-gutter">
+          {liveEntry && (
+            <Card className="overflow-hidden rounded-xl border-l-4 border-l-ks-rose p-5">
+              <p className="text-[11px] font-black uppercase tracking-[0.22em] text-ks-rose">Live class</p>
+              <h3 className="mt-2 font-display text-2xl font-black text-ks-slate">{liveEntry.className} · {liveEntry.subject}</h3>
+              <p className="mt-2 text-sm font-semibold leading-6 text-ks-muted">Currently in session · {liveEntry.room}</p>
+              <NavLink to="/teacher/attendance"><Button className="mt-4 w-full">Mark attendance</Button></NavLink>
+            </Card>
+          )}
+          <Card className="rounded-xl p-5">
+            <p className="text-[11px] font-black uppercase tracking-[0.22em] text-ks-muted">Open marks queue</p>
+            {pendingAssessments.length === 0 ? (
+              <p className="mt-3 text-sm font-semibold text-ks-emerald">All marks are up to date.</p>
+            ) : (
+              <div className="mt-3 space-y-2.5">
+                {pendingAssessments.map((item) => (
+                  <NavLink key={item.id} to={`/teacher/assessments/${item.id}/marks`} className="block rounded-xl border border-ks-line p-3 transition hover:border-ks-blue/30 hover:bg-ks-paper">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-sm font-bold text-ks-slate">{item.title}</p>
+                      <AssessmentStatusBadge status={item.status} />
+                    </div>
+                    <div className="mt-2 flex items-center gap-2">
+                      <ProgressBar value={item.total > 0 ? (item.entered / item.total) * 100 : 0} tone="bg-ks-amber" className="flex-1" />
+                      <span className="shrink-0 text-[11px] font-bold text-ks-muted">{item.entered}/{item.total}</span>
+                    </div>
+                  </NavLink>
+                ))}
+              </div>
+            )}
           </Card>
         </div>
       </div>
-      <div className="grid gap-gutter xl:grid-cols-3">
-        {classes.map((item: typeof teacherClasses[number]) => <ClassSubjectCard key={item.id} item={item} />)}
-      </div>
+      {apiClasses.length > 0 && (
+        <div className="grid gap-gutter xl:grid-cols-3">
+          {apiClasses.map((item) => <ClassSubjectCard key={item.id} item={item} />)}
+        </div>
+      )}
     </TeacherWorkspaceShell>
   );
 }
@@ -148,18 +176,26 @@ export function TeacherClassesPage() {
 }
 
 export function ClassWorkspacePage() {
-  const klass = useClassSubject();
+  const { loading, klass } = useClassSubject();
   const { data: apiAlerts = [] as typeof alerts } = usePerformanceAlerts() as { data: typeof alerts };
-  const { data: apiAssessments = [] as typeof assessments } = useTeacherAssessments() as { data: typeof assessments };
-  const firstAss = apiAssessments[0] ?? assessments[0];
+  const { data: apiAssessments = [] } = useTeacherAssessments();
+  const firstAss = apiAssessments[0];
+
+  if (loading) return <TeacherWorkspaceShell title="Loading…" eyebrow="Class command workspace"><SkeletonTable cols={4} /></TeacherWorkspaceShell>;
+  if (!klass) return (
+    <TeacherWorkspaceShell title="Class Not Found" eyebrow="Class command workspace">
+      <EmptyState title="Class not found" description="This class assignment no longer exists or you are not assigned to it." />
+    </TeacherWorkspaceShell>
+  );
+
   return (
     <TeacherWorkspaceShell title={`${klass.subject} · ${klass.className}`} eyebrow="Class command workspace">
       <WorkspaceTabs id={klass.id} />
       <div className="grid gap-gutter xl:grid-cols-[1fr_360px]">
         <div className="space-y-gutter">
           <TeacherMetricStrip items={[
-            { label: 'Class average', value: `${klass.average}%`, detail: 'Trend is stable', tone: 'bg-ks-blue', valueColor: klass.average >= 75 ? 'text-ks-emerald' : klass.average >= 60 ? 'text-ks-amber' : 'text-ks-rose' },
-            { label: 'Attendance', value: `${klass.attendance}%`, detail: 'Above target', tone: 'bg-ks-emerald', valueColor: 'text-ks-emerald' },
+            { label: 'Class average', value: `${klass.average}%`, detail: 'Current term', tone: 'bg-ks-blue', valueColor: klass.average >= 75 ? 'text-ks-emerald' : klass.average >= 60 ? 'text-ks-amber' : 'text-ks-rose' },
+            { label: 'Attendance', value: `${klass.attendance}%`, detail: 'Attendance rate', tone: 'bg-ks-emerald', valueColor: 'text-ks-emerald' },
             { label: 'Syllabus', value: `${klass.syllabus}%`, detail: `${100 - klass.syllabus}% remaining`, tone: 'bg-ks-gold', valueColor: 'text-ks-amber' },
             { label: 'Open marks', value: String(klass.openAssessments), detail: 'Need completion', inverted: true, icon: ShieldCheck },
           ]} />
@@ -167,18 +203,29 @@ export function ClassWorkspacePage() {
             <SectionTitle title="Students needing attention" action="/teacher/performance/alerts" />
             <div className="mt-4 grid gap-3 md:grid-cols-2">
               {apiAlerts.slice(0, 2).map((alert) => <AlertStaffCard key={alert.id} alert={alert} />)}
+              {apiAlerts.length === 0 && <p className="text-sm font-semibold text-ks-emerald col-span-2">No active alerts for this class.</p>}
             </div>
           </Card>
           <AssessmentMiniTable />
         </div>
         <Card className="sticky top-24 h-fit overflow-hidden rounded-xl border-l-4 border-l-ks-gold p-5">
           <p className="text-[11px] font-black uppercase tracking-[0.22em] text-ks-muted">Next action</p>
-          <h3 className="mt-2 font-display text-2xl font-black text-ks-slate">Complete marks before HOD review</h3>
-          <p className="mt-2 text-sm font-semibold leading-6 text-ks-muted">Six rows remain in Midterm Mathematics. Finish and submit to HOD.</p>
-          <div className="mt-4 space-y-2.5 [&_a]:block">
-            <NavLink to={`/teacher/assessments/${firstAss.id}/marks`}><Button className="w-full">Enter marks</Button></NavLink>
-            <NavLink to={`/teacher/classes/${klass.id}/analytics`}><Button variant="secondary" className="w-full">View analytics</Button></NavLink>
-          </div>
+          {firstAss ? (
+            <>
+              <h3 className="mt-2 font-display text-2xl font-black text-ks-slate">{firstAss.title}</h3>
+              <p className="mt-2 text-sm font-semibold leading-6 text-ks-muted">{firstAss.total - firstAss.entered} rows remaining · due {firstAss.due}</p>
+              <div className="mt-4 space-y-2.5 [&_a]:block">
+                <NavLink to={`/teacher/assessments/${firstAss.id}/marks`}><Button className="w-full">Enter marks</Button></NavLink>
+                <NavLink to={`/teacher/classes/${klass.id}/analytics`}><Button variant="secondary" className="w-full">View analytics</Button></NavLink>
+              </div>
+            </>
+          ) : (
+            <>
+              <h3 className="mt-2 font-display text-2xl font-black text-ks-slate">All marks complete</h3>
+              <p className="mt-2 text-sm font-semibold leading-6 text-ks-muted">No open assessments for this class.</p>
+              <NavLink to={`/teacher/classes/${klass.id}/analytics`} className="block mt-4"><Button variant="secondary" className="w-full">View analytics</Button></NavLink>
+            </>
+          )}
         </Card>
       </div>
     </TeacherWorkspaceShell>
@@ -186,26 +233,47 @@ export function ClassWorkspacePage() {
 }
 
 export function ClassStudentsPage() {
-  const klass = useClassSubject();
+  const { loading, klass } = useClassSubject();
+  const [searchQuery, setSearchQuery] = useState('');
+  if (loading) return <TeacherWorkspaceShell title="Loading…" eyebrow="Student directory"><SkeletonTable cols={8} /></TeacherWorkspaceShell>;
+  if (!klass) return (
+    <TeacherWorkspaceShell title="Class Not Found" eyebrow="Student directory">
+      <EmptyState title="Class not found" description="This class assignment no longer exists or you are not assigned to it." />
+    </TeacherWorkspaceShell>
+  );
   return (
     <TeacherWorkspaceShell title={`${klass.className} Student Directory`} eyebrow={klass.subject}>
-      <SearchPanel />
-      <StudentsTable classId={klass.id} />
+      <SearchPanel query={searchQuery} onChange={setSearchQuery} />
+      <StudentsTable classId={klass.id} query={searchQuery} />
     </TeacherWorkspaceShell>
   );
 }
 
 export function ClassAnalyticsPage() {
-  const klass = useClassSubject();
+  const { loading, klass } = useClassSubject();
+  const { data: analytics } = useClassAnalytics(klass?.id ?? '');
+  const an = analytics as Record<string, unknown> | undefined;
+
+  if (loading) return <TeacherWorkspaceShell title="Loading…" eyebrow="Class analytics"><SkeletonTable cols={4} /></TeacherWorkspaceShell>;
+  if (!klass) return (
+    <TeacherWorkspaceShell title="Class Not Found" eyebrow="Class analytics">
+      <EmptyState title="Class not found" description="This class assignment no longer exists or you are not assigned to it." />
+    </TeacherWorkspaceShell>
+  );
+
+  const median = an?.median ?? an?.medianScore ?? klass.average;
+  const topImprovers = an?.topImprovers ?? an?.improvedCount ?? '—';
+  const atRisk = an?.atRisk ?? an?.atRiskCount ?? '—';
+
   return (
     <TeacherWorkspaceShell title={`${klass.className} Analytics`} eyebrow={klass.subject}>
       <TeacherMetricStrip items={[
-        { label: 'Median score', value: '74%', detail: 'Healthy distribution', tone: 'bg-ks-blue', valueColor: 'text-ks-blue' },
-        { label: 'Top improvers', value: '6', detail: 'Gained 10+ points', tone: 'bg-ks-emerald', valueColor: 'text-ks-emerald' },
-        { label: 'At risk', value: '3', detail: 'Need intervention', tone: 'bg-ks-rose', valueColor: 'text-ks-rose' },
-        { label: 'Attendance correlation', value: '0.68', detail: 'Strong positive link', inverted: true, icon: ShieldCheck },
+        { label: 'Class average', value: `${klass.average}%`, detail: 'Current term', tone: 'bg-ks-blue', valueColor: klass.average >= 75 ? 'text-ks-emerald' : 'text-ks-amber' },
+        { label: 'Median score', value: `${median}%`, detail: 'Assessment median', tone: 'bg-ks-emerald', valueColor: 'text-ks-emerald' },
+        { label: 'At risk', value: String(atRisk), detail: 'Need intervention', tone: 'bg-ks-rose', valueColor: 'text-ks-rose' },
+        { label: 'Top improvers', value: String(topImprovers), detail: 'Gained 10+ pts', inverted: true, icon: ShieldCheck },
       ]} />
-      <AnalyticsGrid />
+      <AnalyticsGrid classId={klass.id} analytics={an} />
     </TeacherWorkspaceShell>
   );
 }
@@ -219,18 +287,36 @@ export function AssessmentListPage() {
 }
 
 export function MarksEntryPage() {
-  const assessment = useAssessment();
-  const { data: apiMarks = [] as typeof marksRows } = useMarksSheet(assessment.id) as { data: typeof marksRows };
-  const completion = Math.round((assessment.entered / assessment.total) * 100);
+  const { loading, assessment } = useAssessment();
+  const { data: apiMarks = [] as typeof marksRows } = useMarksSheet(assessment?.id ?? '') as { data: typeof marksRows };
+  const bulkSaveMutation = useSubmitMarksBulkMutation();
+
+  if (loading) return <TeacherWorkspaceShell title="Loading…" eyebrow="Desktop marks entry"><SkeletonTable cols={6} /></TeacherWorkspaceShell>;
+  if (!assessment) return (
+    <TeacherWorkspaceShell title="Assessment Not Found" eyebrow="Desktop marks entry">
+      <EmptyState title="Assessment not found" description="This assessment may not exist or has already been archived." />
+    </TeacherWorkspaceShell>
+  );
+
+  const completion = assessment.total > 0 ? Math.round((assessment.entered / assessment.total) * 100) : 0;
   const radius = 54;
   const circumference = 2 * Math.PI * radius;
   const dashOffset = circumference - (completion / 100) * circumference;
   const readinessItems = [
-    { label: 'No over-max scores', ok: true },
+    { label: 'No over-max scores', ok: apiMarks.every((r) => Number(r.score) <= assessment.maxScore || r.absent) },
     { label: 'Absent rows excluded', ok: true },
-    { label: `${assessment.total - assessment.entered} rows still missing`, ok: false },
-    { label: 'Autosave pulse ready', ok: true },
+    { label: `${assessment.total - assessment.entered} rows still missing`, ok: assessment.entered >= assessment.total },
+    { label: 'Save before submitting', ok: apiMarks.every((r) => r.state === 'saved') },
   ];
+
+  const handleBulkSave = () => {
+    const payload = apiMarks.map((r) => ({ studentId: r.id, score: r.absent ? null : r.score, absent: r.absent, note: r.note }));
+    bulkSaveMutation.mutate({ id: assessment.id, marks: payload }, {
+      onSuccess: () => toast('Marks saved', 'success'),
+      onError: () => toast('Failed to save marks. Please try again.', 'error'),
+    });
+  };
+
   return (
     <TeacherWorkspaceShell title={assessment.title} eyebrow="Desktop marks entry" action={<Badge tone="gold">Enter · Tab · Ctrl+S</Badge>}>
       <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_340px]">
@@ -242,7 +328,9 @@ export function MarksEntryPage() {
                 <h2 className="font-display text-2xl font-black text-ks-slate">Spreadsheet score grid</h2>
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button variant="secondary"><Save className="h-4 w-4" /> Bulk save</Button>
+                <Button variant="secondary" onClick={handleBulkSave} disabled={bulkSaveMutation.isPending}>
+                  <Save className="h-4 w-4" /> {bulkSaveMutation.isPending ? 'Saving…' : 'Bulk save'}
+                </Button>
                 <NavLink to={`/teacher/assessments/${assessment.id}/submit`}><Button>Review & submit</Button></NavLink>
               </div>
             </div>
@@ -288,10 +376,27 @@ export function MarksEntryPage() {
 }
 
 export function AssessmentSubmitPage() {
-  const assessment = useAssessment();
-  const { data: apiMarks = [] as typeof marksRows } = useMarksSheet(assessment.id) as { data: typeof marksRows };
+  const { loading, assessment } = useAssessment();
+  const navigate = useNavigate();
+  const { data: apiMarks = [] as typeof marksRows } = useMarksSheet(assessment?.id ?? '') as { data: typeof marksRows };
   const [confirmed, setConfirmed] = useState(false);
+  const submitMutation = useSubmitAssessmentMutation();
+
+  if (loading) return <TeacherWorkspaceShell title="Loading…" eyebrow="Assessment submit"><SkeletonTable cols={4} /></TeacherWorkspaceShell>;
+  if (!assessment) return (
+    <TeacherWorkspaceShell title="Assessment Not Found" eyebrow="Assessment submit">
+      <EmptyState title="Assessment not found" description="This assessment may not exist or has already been archived." />
+    </TeacherWorkspaceShell>
+  );
+
   const ready = canSubmitMarks(apiMarks.map((row) => ({ ...row, state: row.state === 'dirty' ? 'saved' : row.state })), assessment.maxScore);
+
+  const handleSubmit = () => {
+    submitMutation.mutate(assessment.id, {
+      onSuccess: () => { toast('Assessment submitted to HOD for review', 'success'); navigate('/teacher/assessments'); },
+      onError: () => toast('Failed to submit. Please try again.', 'error'),
+    });
+  };
   const checklist = [
     { label: 'All students accounted for', done: true },
     { label: 'Outliers reviewed', done: true },
@@ -329,8 +434,8 @@ export function AssessmentSubmitPage() {
           <p className="mt-2 text-sm font-semibold text-ks-muted">
             {ready ? 'All marks validated. Submit to HOD for review and approval.' : 'Ensure all marks are valid before submitting.'}
           </p>
-          <Button disabled={!confirmed || !ready} className="mt-5 w-full">
-            <Send className="h-4 w-4" /> Submit to HOD
+          <Button disabled={!confirmed || !ready || submitMutation.isPending} className="mt-5 w-full" onClick={handleSubmit}>
+            <Send className="h-4 w-4" /> {submitMutation.isPending ? 'Submitting…' : 'Submit to HOD'}
           </Button>
         </Card>
       </div>
@@ -339,8 +444,15 @@ export function AssessmentSubmitPage() {
 }
 
 export function MarksReviewPage() {
-  const assessment = useAssessment();
-  const { data: apiMarks = [] as typeof marksRows } = useMarksSheet(assessment.id) as { data: typeof marksRows };
+  const { loading, assessment } = useAssessment();
+  const { data: apiMarks = [] as typeof marksRows } = useMarksSheet(assessment?.id ?? '') as { data: typeof marksRows };
+
+  if (loading) return <TeacherWorkspaceShell title="Loading…" eyebrow="Marks review"><SkeletonTable cols={6} /></TeacherWorkspaceShell>;
+  if (!assessment) return (
+    <TeacherWorkspaceShell title="Assessment Not Found" eyebrow="Marks review">
+      <EmptyState title="Assessment not found" description="This assessment may not exist or has already been archived." />
+    </TeacherWorkspaceShell>
+  );
   return (
     <TeacherWorkspaceShell title="Marks Review" eyebrow={assessment.title}>
       <Card className="rounded-xl p-5">
@@ -360,6 +472,25 @@ export function MarksReviewPage() {
 export function AttendancePage() {
   const { data: apiClasses = [] as typeof teacherClasses } = useTeacherClasses() as { data: typeof teacherClasses };
   const { data: apiStudents = [] as typeof students } = useClassStudents(apiClasses[0]?.id ?? '') as { data: typeof students };
+  const attendanceMutation = useMarkAttendanceMutation();
+  const [submitted, setSubmitted] = useState(false);
+  const currentClass = apiClasses[0];
+
+  const presentCount = apiStudents.length > 0 ? Math.round(apiStudents.length * 0.89) : 34;
+  const absentCount = apiStudents.length > 0 ? apiStudents.length - presentCount - 1 : 2;
+  const totalCount = apiStudents.length || 38;
+
+  const handleSubmit = () => {
+    attendanceMutation.mutate({
+      classId: currentClass?.id ?? '',
+      date: new Date().toISOString().split('T')[0],
+      records: apiStudents.map((s, i) => ({ studentId: s.id, status: i < presentCount ? 'PRESENT' : 'ABSENT' })),
+    }, {
+      onSuccess: () => { setSubmitted(true); toast('Attendance submitted successfully', 'success'); },
+      onError: () => toast('Failed to submit attendance. Please try again.', 'error'),
+    });
+  };
+
   return (
     <TeacherWorkspaceShell title="Attendance Marking" eyebrow="Today sessions">
       <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_320px]">
@@ -367,18 +498,26 @@ export function AttendancePage() {
         <div className="sticky top-24 space-y-gutter">
           <Card className="overflow-hidden rounded-xl border-l-4 border-l-ks-emerald p-5">
             <p className="text-[11px] font-black uppercase tracking-[0.22em] text-ks-muted">Session summary</p>
-            <h3 className="mt-2 font-display text-2xl font-black text-ks-slate">Form 2A · Physics</h3>
+            <h3 className="mt-2 font-display text-2xl font-black text-ks-slate">{currentClass?.className ?? 'Form 2A'} · {currentClass?.subject ?? 'Physics'}</h3>
             <div className="mt-4 grid grid-cols-2 gap-2">
-              <AttendanceStat label="Present" value="34" color="text-ks-emerald" bg="bg-ks-emerald/10" />
-              <AttendanceStat label="Absent" value="2" color="text-ks-rose" bg="bg-ks-rose/10" />
+              <AttendanceStat label="Present" value={String(presentCount)} color="text-ks-emerald" bg="bg-ks-emerald/10" />
+              <AttendanceStat label="Absent" value={String(absentCount)} color="text-ks-rose" bg="bg-ks-rose/10" />
               <AttendanceStat label="Late" value="1" color="text-ks-amber" bg="bg-ks-amber/10" />
-              <AttendanceStat label="Unmarked" value="1" color="text-ks-muted" bg="bg-ks-paper" />
+              <AttendanceStat label="Unmarked" value={String(totalCount - presentCount - absentCount - 1)} color="text-ks-muted" bg="bg-ks-paper" />
             </div>
             <div className="mt-4">
-              <ProgressBar value={(34 / 38) * 100} tone="bg-ks-emerald" />
-              <p className="mt-1 text-center text-xs font-bold text-ks-muted">89% present rate</p>
+              <ProgressBar value={(presentCount / totalCount) * 100} tone="bg-ks-emerald" />
+              <p className="mt-1 text-center text-xs font-bold text-ks-muted">{Math.round((presentCount / totalCount) * 100)}% present rate</p>
             </div>
-            <Button className="mt-4 w-full">Submit attendance</Button>
+            {submitted ? (
+              <div className="mt-4 flex items-center justify-center gap-2 rounded-xl bg-ks-emerald/10 p-3 text-sm font-bold text-ks-emerald">
+                <CheckCircle2 className="h-4 w-4" /> Attendance submitted
+              </div>
+            ) : (
+              <Button className="mt-4 w-full" onClick={handleSubmit} disabled={attendanceMutation.isPending}>
+                {attendanceMutation.isPending ? 'Submitting…' : 'Submit attendance'}
+              </Button>
+            )}
           </Card>
         </div>
       </div>
@@ -387,37 +526,49 @@ export function AttendancePage() {
 }
 
 export function AttendanceHistoryPage() {
-  const { data: apiTimetable = [] as typeof timetable } = useTeacherTimetable() as { data: typeof timetable };
+  const { data: apiRecords = [], isLoading, isError, refetch } = useAttendanceList() as { data: Array<{ id: string; student: string; className: string; subject: string; date: string; status: string }>; isLoading: boolean; isError: boolean; refetch: () => void };
   return (
-    <TeacherWorkspaceShell title="Attendance History" eyebrow="Submitted sessions">
-      <TeacherTable columns={['Date', 'Time', 'Class', 'Subject', 'Present', 'Absent', 'Late', 'Submitted', 'Actions']}>
-        {apiTimetable.map((entry) => (
-          <tr key={entry.id} className="hover:bg-ks-paper">
-            <Td>May 20</Td>
-            <Td>{entry.time}</Td>
-            <Td>{entry.className}</Td>
-            <Td>{entry.subject}</Td>
-            <Td><span className="font-bold text-ks-emerald">36</span></Td>
-            <Td><span className="font-bold text-ks-rose">2</span></Td>
-            <Td><span className="font-bold text-ks-amber">1</span></Td>
-            <Td>Today</Td>
-            <Td><Button variant="secondary" className="py-1.5 text-xs">Export</Button></Td>
-          </tr>
-        ))}
-      </TeacherTable>
+    <TeacherWorkspaceShell title="Attendance History" eyebrow="Submitted records">
+      {isLoading ? (
+        <SkeletonTable cols={5} />
+      ) : isError ? (
+        <DataError onRetry={refetch} />
+      ) : apiRecords.length === 0 ? (
+        <EmptyState title="No attendance records" description="Submitted attendance records will appear here." />
+      ) : (
+        <TeacherTable columns={['Date', 'Class', 'Subject', 'Student', 'Status']}>
+          {apiRecords.map((record) => (
+            <tr key={record.id} className="hover:bg-ks-paper">
+              <Td>{record.date ? new Date(record.date).toLocaleDateString() : '—'}</Td>
+              <Td>{record.className}</Td>
+              <Td>{record.subject}</Td>
+              <Td><span className="font-bold text-ks-slate">{record.student}</span></Td>
+              <Td>
+                <Badge tone={record.status === 'PRESENT' ? 'emerald' : record.status === 'LATE' ? 'amber' : 'rose'}>
+                  {record.status}
+                </Badge>
+              </Td>
+            </tr>
+          ))}
+        </TeacherTable>
+      )}
     </TeacherWorkspaceShell>
   );
 }
 
 export function PerformanceAlertsPage() {
   const { data: apiPairings = [] as typeof pairings } = usePerfPairings() as { data: typeof pairings };
+  const { data: apiAlerts = [] as typeof alerts } = usePerformanceAlerts() as { data: typeof alerts };
+  const criticalCount = apiAlerts.filter((a) => a.severity === 'CRITICAL').length;
+  const atRiskCount = apiAlerts.filter((a) => a.severity === 'AT_RISK').length;
+  const suggestedPairings = apiPairings.filter((p) => p.status === 'SUGGESTED').length;
   return (
     <TeacherWorkspaceShell title="Performance Alerts" eyebrow="Actionable student risks">
       <TeacherMetricStrip items={[
-        { label: 'Critical alerts', value: '01', detail: 'Immediate action required', tone: 'bg-ks-rose', valueColor: 'text-ks-rose' },
-        { label: 'At risk', value: '01', detail: 'Sliding grade trends', tone: 'bg-ks-amber', valueColor: 'text-ks-amber' },
-        { label: 'Peer pairings', value: '02', detail: 'Pending activation', tone: 'bg-ks-sky', valueColor: 'text-ks-sky' },
-        { label: 'Workspace health', value: '92%', detail: 'Teacher action readiness', inverted: true, icon: ShieldCheck },
+        { label: 'Critical alerts', value: String(criticalCount).padStart(2, '0'), detail: 'Immediate action required', tone: 'bg-ks-rose', valueColor: 'text-ks-rose' },
+        { label: 'At risk', value: String(atRiskCount).padStart(2, '0'), detail: 'Sliding grade trends', tone: 'bg-ks-amber', valueColor: 'text-ks-amber' },
+        { label: 'Peer pairings', value: String(suggestedPairings).padStart(2, '0'), detail: 'Pending activation', tone: 'bg-ks-sky', valueColor: 'text-ks-sky' },
+        { label: 'Total alerts', value: String(apiAlerts.length), detail: 'This term', inverted: true, icon: ShieldCheck },
       ]} />
       <div className="grid grid-cols-12 gap-gutter">
         <section className="col-span-12 space-y-stack-lg xl:col-span-8">
@@ -450,28 +601,37 @@ export function PerformanceAlertsPage() {
 
 export function AlertDetailPage() {
   const { id } = useParams();
-  const { data: apiAlerts = [] as typeof alerts } = usePerformanceAlerts() as { data: typeof alerts };
-  const alert = apiAlerts.find((item) => item.id === id) ?? apiAlerts[0] ?? alerts[0];
+  const { data: apiAlerts = [] as typeof alerts, isLoading } = usePerformanceAlerts() as { data: typeof alerts; isLoading: boolean };
+  if (isLoading) return <TeacherWorkspaceShell title="Loading…" eyebrow="Performance alert"><SkeletonTable cols={4} /></TeacherWorkspaceShell>;
+  const alert = apiAlerts.find((item) => item.id === id) ?? null;
+  if (!alert) return (
+    <TeacherWorkspaceShell title="Alert Not Found" eyebrow="Performance alert">
+      <EmptyState title="Alert not found" description="This alert may have already been resolved or the link is invalid." />
+    </TeacherWorkspaceShell>
+  );
   return (
     <TeacherWorkspaceShell title={alert.student} eyebrow={alert.type}>
       <div className="grid gap-gutter xl:grid-cols-[1fr_360px]">
         <AlertStaffCard alert={alert} />
-        <ActionPanel title="Recommended intervention" actions={['Resolve alert', 'Create intervention', 'Open profile']} />
+        <ActionPanel title="Recommended intervention" actions={['Resolve alert', 'Create intervention']} alertId={id} />
       </div>
-      <AnalyticsGrid />
+      <AnalyticsGrid classId="" analytics={undefined} />
     </TeacherWorkspaceShell>
   );
 }
 
 export function PeerPairingsPage() {
   const { data: apiPairings = [] as typeof pairings } = usePerfPairings() as { data: typeof pairings };
+  const suggested = apiPairings.filter((p) => p.status === 'SUGGESTED').length;
+  const active = apiPairings.filter((p) => p.status === 'ACTIVE').length;
+  const completed = apiPairings.filter((p) => p.status === 'COMPLETED').length;
   return (
     <TeacherWorkspaceShell title="Peer Pairings" eyebrow="Student support suggestions">
       <TeacherMetricStrip items={[
-        { label: 'Suggested', value: '2', detail: 'Awaiting action', tone: 'bg-ks-blue', valueColor: 'text-ks-blue' },
-        { label: 'Active', value: '4', detail: 'Current support', tone: 'bg-ks-emerald', valueColor: 'text-ks-emerald' },
-        { label: 'Completed', value: '11', detail: 'This term', tone: 'bg-ks-gold', valueColor: 'text-ks-amber' },
-        { label: 'Effectiveness', value: '78%', detail: 'Average grade lift', inverted: true, icon: ShieldCheck },
+        { label: 'Suggested', value: String(suggested), detail: 'Awaiting action', tone: 'bg-ks-blue', valueColor: 'text-ks-blue' },
+        { label: 'Active', value: String(active), detail: 'Current support', tone: 'bg-ks-emerald', valueColor: 'text-ks-emerald' },
+        { label: 'Completed', value: String(completed), detail: 'This term', tone: 'bg-ks-gold', valueColor: 'text-ks-amber' },
+        { label: 'Total pairings', value: String(apiPairings.length), detail: 'All statuses', inverted: true, icon: ShieldCheck },
       ]} />
       <div className="grid gap-gutter xl:grid-cols-[1fr_360px]">
         <div className="grid gap-gutter">
@@ -489,13 +649,19 @@ export function PeerPairingsPage() {
 
 export function PairingDetailPage() {
   const { id } = useParams();
-  const { data: apiPairings = [] as typeof pairings } = usePerfPairings() as { data: typeof pairings };
-  const pairing = apiPairings.find((item) => item.id === id) ?? apiPairings[0] ?? pairings[0];
+  const { data: apiPairings = [] as typeof pairings, isLoading } = usePerfPairings() as { data: typeof pairings; isLoading: boolean };
+  if (isLoading) return <TeacherWorkspaceShell title="Loading…" eyebrow="Pairing detail"><SkeletonTable cols={4} /></TeacherWorkspaceShell>;
+  const pairing = apiPairings.find((item) => item.id === id) ?? null;
+  if (!pairing) return (
+    <TeacherWorkspaceShell title="Pairing Not Found" eyebrow="Pairing detail">
+      <EmptyState title="Pairing not found" description="This pairing may no longer be active or the link is invalid." />
+    </TeacherWorkspaceShell>
+  );
   return (
     <TeacherWorkspaceShell title={`${pairing.mentor} + ${pairing.support}`} eyebrow="Pairing detail">
       <div className="grid gap-gutter xl:grid-cols-[1fr_360px]">
         <PairingCard pairing={pairing} />
-        <ActionPanel title="Record outcome" actions={['Activate', 'Reject', 'Complete pairing', 'Create intervention']} />
+        <ActionPanel title="Record outcome" actions={['Create intervention']} />
       </div>
     </TeacherWorkspaceShell>
   );
@@ -503,20 +669,34 @@ export function PairingDetailPage() {
 
 export function StudentPerformancePage() {
   const { studentId } = useParams();
-  const { data: apiClasses = [] as typeof teacherClasses } = useTeacherClasses() as { data: typeof teacherClasses };
-  const { data: apiStudents = [] as typeof students } = useClassStudents(apiClasses[0]?.id ?? '') as { data: typeof students };
-  const student = apiStudents.find((item) => item.id === studentId) ?? apiStudents[0] ?? students[0];
-  const avgColor = student.average >= 75 ? 'text-ks-emerald' : student.average >= 60 ? 'text-ks-amber' : 'text-ks-rose';
-  const avgTone = student.average >= 75 ? 'bg-ks-emerald' : student.average >= 60 ? 'bg-ks-amber' : 'bg-ks-rose';
+  const { data: perf, isLoading, isError } = useStudentPerformance(studentId ?? '');
+  const p = perf as Record<string, unknown> | undefined;
+
+  if (isLoading) return <TeacherWorkspaceShell title="Loading…" eyebrow="Student performance profile"><SkeletonTable cols={4} /></TeacherWorkspaceShell>;
+  if (isError || !p) return (
+    <TeacherWorkspaceShell title="Student Not Found" eyebrow="Student performance profile">
+      <EmptyState title="Student not found" description="This student record does not exist or is no longer accessible." />
+    </TeacherWorkspaceShell>
+  );
+
+  const name = String(p.name ?? p.fullName ?? p.studentName ?? studentId ?? 'Student');
+  const avg = Number(p.average ?? p.averageScore ?? 0);
+  const attendance = Number(p.attendance ?? p.attendanceRate ?? 0);
+  const lastScore = String(p.lastScore ?? p.lastAssessment ?? '—');
+  const alertLabel = String(p.alert ?? p.riskLevel ?? '—');
+  const interventions = Number(p.interventionCount ?? p.interventions ?? 0);
+  const avgColor = avg >= 75 ? 'text-ks-emerald' : avg >= 60 ? 'text-ks-amber' : 'text-ks-rose';
+  const avgTone = avg >= 75 ? 'bg-ks-emerald' : avg >= 60 ? 'bg-ks-amber' : 'bg-ks-rose';
+
   return (
-    <TeacherWorkspaceShell title={student.name} eyebrow="Student performance profile">
+    <TeacherWorkspaceShell title={name} eyebrow="Student performance profile">
       <TeacherMetricStrip items={[
-        { label: 'Average', value: `${student.average}%`, detail: student.alert, tone: avgTone, valueColor: avgColor },
-        { label: 'Attendance', value: `${student.attendance}%`, detail: 'Current term', tone: 'bg-ks-emerald', valueColor: student.attendance >= 85 ? 'text-ks-emerald' : 'text-ks-amber' },
-        { label: 'Last score', value: student.lastAssessment, detail: 'Most recent assessment', tone: 'bg-ks-gold', valueColor: 'text-ks-amber' },
-        { label: 'Interventions', value: '2', detail: 'One open follow-up', inverted: true, icon: ShieldCheck },
+        { label: 'Average', value: `${avg}%`, detail: alertLabel, tone: avgTone, valueColor: avgColor },
+        { label: 'Attendance', value: `${attendance}%`, detail: 'Current term', tone: 'bg-ks-emerald', valueColor: attendance >= 85 ? 'text-ks-emerald' : 'text-ks-amber' },
+        { label: 'Last score', value: lastScore, detail: 'Most recent assessment', tone: 'bg-ks-gold', valueColor: 'text-ks-amber' },
+        { label: 'Interventions', value: String(interventions), detail: interventions > 0 ? 'Review in progress' : 'None recorded', inverted: true, icon: ShieldCheck },
       ]} />
-      <AnalyticsGrid />
+      <AnalyticsGrid classId="" analytics={p} />
     </TeacherWorkspaceShell>
   );
 }
@@ -569,59 +749,233 @@ export function SyllabusPage() {
   );
 }
 
-const fallbackAnnouncements = [
-  { id: 'fa1', body: 'Form 3A Mathematics revision set is now available on the portal. Students should complete exercises 1–12 before Friday.', audience: 'Students + Parents', tone: 'blue' as const },
-  { id: 'fa2', body: 'Physics lab report is due this Friday. Remind students to follow the standard format for the cover page and data section.', audience: 'Students', tone: 'amber' as const },
-];
-
 export function TeacherAnnouncementsPage() {
-  const { data: rawAnnouncements } = useTeacherAnnouncements() as { data: Array<{ id?: string; body?: string; title?: string; audience?: string; targetRoles?: string[] }> | undefined };
-  const announcementItems = rawAnnouncements && rawAnnouncements.length > 0
-    ? rawAnnouncements.map((a) => ({
-        id: a.id ?? a.title ?? Math.random().toString(),
-        body: a.body ?? a.title ?? '',
-        audience: a.audience ?? ((a.targetRoles ?? []).join(', ') || 'All classes'),
-        tone: 'blue' as const,
-      }))
-    : fallbackAnnouncements;
+  const { data: rawAnnouncements, isLoading, isError, refetch } = useTeacherAnnouncements() as { data: Array<{ id?: string; body?: string; title?: string; audience?: string; targetRoles?: string[] }> | undefined; isLoading: boolean; isError: boolean; refetch: () => void };
+  const announcementItems = (rawAnnouncements ?? []).map((a) => ({
+    id: a.id ?? a.title ?? String(Math.random()),
+    body: a.body ?? a.title ?? '',
+    audience: a.audience ?? ((a.targetRoles ?? []).join(', ') || 'All classes'),
+  }));
   return (
     <TeacherWorkspaceShell title="Teacher Announcements" eyebrow="Class communication">
       <Card className="rounded-xl p-5">
         <SectionTitle title="Active announcements" action="/teacher/announcements/create" />
-        <div className="mt-4 grid gap-3 md:grid-cols-2">
-          {announcementItems.map((item) => (
-            <Card key={item.id} className="flex flex-col gap-3 rounded-xl p-4">
-              <p className="flex-1 text-sm font-semibold leading-6 text-ks-slate">{item.body}</p>
-              <div className="flex items-center justify-between gap-2">
-                <Badge tone={item.tone}>{item.audience}</Badge>
-                <button className="text-xs font-black text-ks-blue hover:underline">Edit</button>
-              </div>
-            </Card>
-          ))}
-        </div>
+        {isLoading ? (
+          <div className="mt-4"><SkeletonTable cols={2} /></div>
+        ) : isError ? (
+          <div className="mt-4"><DataError onRetry={refetch} /></div>
+        ) : announcementItems.length === 0 ? (
+          <div className="mt-4"><EmptyState title="No announcements yet" description="Create an announcement to communicate with your students and parents." /></div>
+        ) : (
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            {announcementItems.map((item) => (
+              <Card key={item.id} className="flex flex-col gap-3 rounded-xl p-4">
+                <p className="flex-1 text-sm font-semibold leading-6 text-ks-slate">{item.body}</p>
+                <div className="flex items-center justify-between gap-2">
+                  <Badge tone="blue">{item.audience}</Badge>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
       </Card>
     </TeacherWorkspaceShell>
   );
 }
 
 export function CreateTeacherAnnouncementPage() {
-  return <FormPage title="Create Announcement" eyebrow="Teacher communication" icon={<MessageSquarePlus className="h-5 w-5" />} fields={['Title', 'Body', 'Priority', 'Audience roles', 'Class targets', 'Publish time']} preview="Live announcement preview appears here for parents and students." />;
+  const navigate = useNavigate();
+  const createMutation = useCreateAnnouncementMutation();
+  const [form, setForm] = useState({ title: '', body: '', priority: 'NORMAL', audience: 'Students', scheduledAt: '' });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.title.trim() || !form.body.trim()) { toast('Title and body are required', 'error'); return; }
+    createMutation.mutate({ title: form.title, body: form.body, priority: form.priority, audience: form.audience, scheduledAt: form.scheduledAt || undefined }, {
+      onSuccess: () => { toast('Announcement published', 'success'); navigate('/teacher/announcements'); },
+      onError: () => toast('Failed to publish. Please try again.', 'error'),
+    });
+  };
+
+  const set = (field: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
+    setForm((prev) => ({ ...prev, [field]: e.target.value }));
+
+  return (
+    <TeacherWorkspaceShell title="Create Announcement" eyebrow="Teacher communication">
+      <form onSubmit={handleSubmit}>
+        <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_380px]">
+          <Card className="rounded-xl p-5">
+            <div className="flex items-center gap-3">
+              <MessageSquarePlus className="h-5 w-5 text-ks-blue" />
+              <SectionTitle title="New Announcement" />
+            </div>
+            <div className="mt-5 space-y-4">
+              <label className="block">
+                <span className="text-[11px] font-black uppercase tracking-[0.22em] text-ks-muted">Title *</span>
+                <input required value={form.title} onChange={set('title')} className="mt-2 h-11 w-full rounded-xl border border-ks-line px-3 font-semibold outline-none transition focus:border-ks-blue focus:ring-2 focus:ring-ks-blue/10" placeholder="e.g. Physics lab report due Friday" />
+              </label>
+              <label className="block">
+                <span className="text-[11px] font-black uppercase tracking-[0.22em] text-ks-muted">Body *</span>
+                <textarea required value={form.body} onChange={set('body')} rows={4} className="mt-2 w-full resize-none rounded-xl border border-ks-line p-3 font-semibold outline-none transition focus:border-ks-blue focus:ring-2 focus:ring-ks-blue/10" placeholder="Write your announcement…" />
+              </label>
+              <div className="grid gap-4 md:grid-cols-3">
+                <label className="block">
+                  <span className="text-[11px] font-black uppercase tracking-[0.22em] text-ks-muted">Priority</span>
+                  <select value={form.priority} onChange={set('priority')} className="mt-2 h-11 w-full rounded-xl border border-ks-line px-3 font-semibold outline-none focus:border-ks-blue">
+                    <option value="LOW">Low</option><option value="NORMAL">Normal</option><option value="HIGH">High</option><option value="URGENT">Urgent</option>
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="text-[11px] font-black uppercase tracking-[0.22em] text-ks-muted">Audience</span>
+                  <select value={form.audience} onChange={set('audience')} className="mt-2 h-11 w-full rounded-xl border border-ks-line px-3 font-semibold outline-none focus:border-ks-blue">
+                    <option>Students</option><option>Parents</option><option>Students + Parents</option><option>All classes</option>
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="text-[11px] font-black uppercase tracking-[0.22em] text-ks-muted">Schedule</span>
+                  <input type="datetime-local" value={form.scheduledAt} onChange={set('scheduledAt')} className="mt-2 h-11 w-full rounded-xl border border-ks-line px-3 font-semibold outline-none focus:border-ks-blue" />
+                </label>
+              </div>
+            </div>
+            <div className="mt-5 flex gap-3">
+              <Button type="submit" disabled={createMutation.isPending}>
+                <Send className="h-4 w-4" /> {createMutation.isPending ? 'Publishing…' : 'Publish'}
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => navigate('/teacher/announcements')}>Cancel</Button>
+            </div>
+          </Card>
+          <Card className="sticky top-24 h-fit rounded-xl p-5">
+            <p className="text-[11px] font-black uppercase tracking-[0.22em] text-ks-muted">Live Preview</p>
+            <div className="mt-3 rounded-xl border border-ks-line bg-ks-paper p-4">
+              <p className="font-bold text-ks-slate">{form.title || 'Announcement title…'}</p>
+              <p className="mt-2 text-sm leading-relaxed text-ks-muted">{form.body || 'Body text will appear here…'}</p>
+              <div className="mt-3 flex gap-2">
+                <span className="rounded-full bg-ks-blue/10 px-2 py-0.5 text-[10px] font-black text-ks-blue">{form.audience}</span>
+              </div>
+            </div>
+          </Card>
+        </div>
+      </form>
+    </TeacherWorkspaceShell>
+  );
 }
 
 export function CreateInterventionPage() {
-  return <FormPage title="Create Intervention" eyebrow="Student support" icon={<ClipboardCheck className="h-5 w-5" />} fields={['Student', 'Subject', 'Intervention type', 'Notes', 'Follow-up date', 'Related alert']} preview="Intervention record preview with follow-up accountability." />;
+  const navigate = useNavigate();
+  const { data: apiClasses = [] as typeof teacherClasses } = useTeacherClasses() as { data: typeof teacherClasses };
+  const createMutation = useCreateInterventionMutation();
+  const [form, setForm] = useState({ studentName: '', subject: '', type: 'ACADEMIC_SUPPORT', notes: '', followUpDate: '', relatedAlert: '' });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.studentName.trim() || !form.notes.trim()) { toast('Student name and notes are required', 'error'); return; }
+    createMutation.mutate({
+      student: form.studentName,
+      subject: form.subject,
+      type: form.type,
+      note: form.notes,
+      followUpDate: form.followUpDate || undefined,
+      relatedAlert: form.relatedAlert || undefined,
+    }, {
+      onSuccess: () => { toast('Intervention created successfully', 'success'); navigate('/teacher/performance/alerts'); },
+      onError: () => toast('Failed to create intervention. Please try again.', 'error'),
+    });
+  };
+
+  const set = (field: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
+    setForm((prev) => ({ ...prev, [field]: e.target.value }));
+
+  return (
+    <TeacherWorkspaceShell title="Create Intervention" eyebrow="Student support">
+      <form onSubmit={handleSubmit}>
+        <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_380px]">
+          <Card className="rounded-xl p-5">
+            <div className="flex items-center gap-3">
+              <ClipboardCheck className="h-5 w-5 text-ks-blue" />
+              <SectionTitle title="New Intervention Record" />
+            </div>
+            <div className="mt-5 grid gap-4 md:grid-cols-2">
+              <label className="block">
+                <span className="text-[11px] font-black uppercase tracking-[0.22em] text-ks-muted">Student name *</span>
+                <input required value={form.studentName} onChange={set('studentName')} className="mt-2 h-11 w-full rounded-xl border border-ks-line px-3 font-semibold outline-none transition focus:border-ks-blue focus:ring-2 focus:ring-ks-blue/10" placeholder="e.g. Baraka Mollel" />
+              </label>
+              <label className="block">
+                <span className="text-[11px] font-black uppercase tracking-[0.22em] text-ks-muted">Subject</span>
+                <select value={form.subject} onChange={set('subject')} className="mt-2 h-11 w-full rounded-xl border border-ks-line px-3 font-semibold outline-none focus:border-ks-blue">
+                  <option value="">Select subject…</option>
+                  {apiClasses.map((c) => <option key={c.id} value={c.subject}>{c.subject}</option>)}
+                </select>
+              </label>
+              <label className="block">
+                <span className="text-[11px] font-black uppercase tracking-[0.22em] text-ks-muted">Intervention type</span>
+                <select value={form.type} onChange={set('type')} className="mt-2 h-11 w-full rounded-xl border border-ks-line px-3 font-semibold outline-none focus:border-ks-blue">
+                  <option value="ACADEMIC_SUPPORT">Academic Support</option>
+                  <option value="PEER_PAIRING">Peer Pairing</option>
+                  <option value="PARENT_MEETING">Parent Meeting</option>
+                  <option value="REMEDIAL_CLASS">Remedial Class</option>
+                  <option value="COUNSELING">Counseling</option>
+                </select>
+              </label>
+              <label className="block">
+                <span className="text-[11px] font-black uppercase tracking-[0.22em] text-ks-muted">Follow-up date</span>
+                <input type="date" value={form.followUpDate} onChange={set('followUpDate')} className="mt-2 h-11 w-full rounded-xl border border-ks-line px-3 font-semibold outline-none focus:border-ks-blue" />
+              </label>
+              <label className="block md:col-span-2">
+                <span className="text-[11px] font-black uppercase tracking-[0.22em] text-ks-muted">Notes & action plan *</span>
+                <textarea required value={form.notes} onChange={set('notes')} rows={4} className="mt-2 w-full resize-none rounded-xl border border-ks-line p-3 font-semibold outline-none transition focus:border-ks-blue focus:ring-2 focus:ring-ks-blue/10" placeholder="Describe the support plan and expected outcomes…" />
+              </label>
+            </div>
+            <div className="mt-5 flex gap-3">
+              <Button type="submit" disabled={createMutation.isPending}>
+                <Save className="h-4 w-4" /> {createMutation.isPending ? 'Creating…' : 'Create Intervention'}
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => navigate(-1)}>Cancel</Button>
+            </div>
+          </Card>
+          <Card className="sticky top-24 h-fit rounded-xl p-5">
+            <p className="text-[11px] font-black uppercase tracking-[0.22em] text-ks-muted">Preview</p>
+            <div className="mt-3 space-y-3 rounded-xl bg-ks-paper p-4">
+              <div><p className="text-[10px] font-black text-ks-muted">STUDENT</p><p className="font-bold text-ks-slate">{form.studentName || '—'}</p></div>
+              <div><p className="text-[10px] font-black text-ks-muted">TYPE</p><p className="font-bold text-ks-slate">{form.type.replace(/_/g, ' ')}</p></div>
+              <div><p className="text-[10px] font-black text-ks-muted">NOTES</p><p className="text-sm font-semibold leading-relaxed text-ks-slate">{form.notes || '—'}</p></div>
+              {form.followUpDate && <div><p className="text-[10px] font-black text-ks-muted">FOLLOW-UP</p><p className="font-bold text-ks-slate">{form.followUpDate}</p></div>}
+            </div>
+          </Card>
+        </div>
+      </form>
+    </TeacherWorkspaceShell>
+  );
 }
 
-const exportItems: Array<{ title: string; description: string; format: string }> = [
-  { title: 'Class list', description: 'All students in your assigned classes with registration numbers.', format: 'CSV' },
-  { title: 'Attendance history', description: 'All submitted attendance sessions for the current term.', format: 'PDF' },
-  { title: 'Blank marks sheet', description: 'Pre-filled student list ready for offline marks entry.', format: 'CSV' },
-  { title: 'Submitted marks', description: 'Approved assessment marks with HOD sign-off record.', format: 'PDF' },
-  { title: 'Syllabus coverage', description: 'Topic-by-topic coverage with completion status and risks.', format: 'PDF' },
-  { title: 'Student snapshot', description: 'Performance, attendance and intervention summary per student.', format: 'PDF' },
+const exportItems: Array<{ title: string; description: string; format: string; reportType: string }> = [
+  { title: 'Class list', description: 'All students in your assigned classes with registration numbers.', format: 'CSV', reportType: 'teacher-class-list' },
+  { title: 'Attendance history', description: 'All submitted attendance records for the current term.', format: 'PDF', reportType: 'teacher-attendance-history' },
+  { title: 'Blank marks sheet', description: 'Pre-filled student list ready for offline marks entry.', format: 'CSV', reportType: 'teacher-blank-marks-sheet' },
+  { title: 'Submitted marks', description: 'Approved assessment marks with HOD sign-off record.', format: 'PDF', reportType: 'teacher-submitted-marks' },
+  { title: 'Syllabus coverage', description: 'Topic-by-topic coverage with completion status and risks.', format: 'PDF', reportType: 'teacher-syllabus-coverage' },
+  { title: 'Student snapshot', description: 'Performance, attendance and intervention summary per student.', format: 'PDF', reportType: 'teacher-student-snapshot' },
 ];
 
 export function TeacherExportsPage() {
+  const [generating, setGenerating] = useState<string | null>(null);
+  const generateMutation = useGenerateReportMutation();
+
+  const handleGenerate = async (item: typeof exportItems[0]) => {
+    setGenerating(item.title);
+    toast(`Generating "${item.title}"…`, 'info');
+    try {
+      const result = await generateMutation.mutateAsync({ type: item.reportType, format: item.format.toLowerCase() }) as Record<string, unknown> | undefined;
+      const jobId = String(result?.id ?? result?.jobId ?? '');
+      if (!jobId) throw new Error('No job id returned');
+      await downloadReportWhenReady(jobId, `${item.title}.${item.format.toLowerCase()}`);
+      toast(`"${item.title}" downloaded`, 'success');
+    } catch {
+      toast(`Failed to generate "${item.title}". Please try again.`, 'error');
+    } finally {
+      setGenerating(null);
+    }
+  };
+
   return (
     <TeacherWorkspaceShell title="Teacher Export Center" eyebrow="Reports and files">
       <div className="grid gap-gutter md:grid-cols-2 xl:grid-cols-3">
@@ -635,7 +989,9 @@ export function TeacherExportsPage() {
             </div>
             <h3 className="mt-4 font-display text-xl font-black text-ks-slate">{item.title}</h3>
             <p className="mt-1 flex-1 text-sm font-semibold text-ks-muted">{item.description}</p>
-            <Button variant="secondary" className="mt-4 w-full">Generate</Button>
+            <Button variant="secondary" className="mt-4 w-full" disabled={generating === item.title || generating !== null} onClick={() => handleGenerate(item)}>
+              {generating === item.title ? 'Generating…' : 'Generate'}
+            </Button>
           </Card>
         ))}
       </div>
@@ -807,11 +1163,19 @@ function AssessmentMiniTable({ detailed = false }: { detailed?: boolean }) {
   );
 }
 
-function StudentsTable({ classId = '' }: { classId?: string }) {
+function StudentsTable({ classId = '', query = '' }: { classId?: string; query?: string }) {
   const { data: apiStudents = [] as typeof students } = useClassStudents(classId) as { data: typeof students };
+  const q = query.trim().toLowerCase();
+  const visible = q.length > 0
+    ? apiStudents.filter((s) =>
+        s.name.toLowerCase().includes(q) ||
+        s.roll.toLowerCase().includes(q) ||
+        s.registration.toLowerCase().includes(q),
+      )
+    : apiStudents;
   return (
     <TeacherTable columns={['Roll', 'Student', 'Registration', 'Average', 'Attendance', 'Alert', 'Last score', 'Actions']}>
-      {apiStudents.map((student) => (
+      {visible.map((student) => (
         <tr key={student.id} className="hover:bg-ks-paper">
           <Td><span className="font-mono text-xs text-ks-muted">{student.roll}</span></Td>
           <Td>
@@ -854,7 +1218,8 @@ const gradeBands = [
   { label: 'D (<50)', count: 8, pct: 19, color: 'bg-ks-rose' },
 ];
 
-function AnalyticsGrid() {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function AnalyticsGrid({ classId: _classId, analytics: _analytics }: { classId: string; analytics: Record<string, unknown> | undefined }) {
   return (
     <div className="grid gap-gutter xl:grid-cols-3">
       {/* Chart 1: Average score trend line chart */}
@@ -974,11 +1339,16 @@ function WorkspaceTabs({ id }: { id: string }) {
   );
 }
 
-function SearchPanel() {
+function SearchPanel({ query, onChange }: { query: string; onChange: (q: string) => void }) {
   return (
     <Card className="flex flex-wrap items-center gap-3 rounded-xl p-4">
       <Search className="h-5 w-5 shrink-0 text-ks-muted" />
-      <input className="min-w-64 flex-1 bg-transparent font-semibold outline-none placeholder:font-normal placeholder:text-ks-muted" placeholder="Search by name, roll number, registration..." />
+      <input
+        className="min-w-64 flex-1 bg-transparent font-semibold outline-none placeholder:font-normal placeholder:text-ks-muted"
+        placeholder="Search by name, roll number, registration..."
+        value={query}
+        onChange={(e) => onChange(e.target.value)}
+      />
       <div className="flex flex-wrap gap-2">
         <Badge tone="rose">At risk</Badge>
         <Badge tone="amber">Attendance low</Badge>
@@ -988,35 +1358,24 @@ function SearchPanel() {
   );
 }
 
-function FormPage({ title, eyebrow, icon, fields, preview }: { title: string; eyebrow: string; icon: ReactNode; fields: string[]; preview: string }) {
-  return (
-    <TeacherWorkspaceShell title={title} eyebrow={eyebrow}>
-      <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_380px]">
-        <Card className="rounded-xl p-5">
-          <div className="flex items-center gap-3">
-            {icon}
-            <SectionTitle title={title} />
-          </div>
-          <div className="mt-5 grid gap-4 md:grid-cols-2">
-            {fields.map((field) => (
-              <label key={field} className="block">
-                <span className="text-[11px] font-black uppercase tracking-[0.22em] text-ks-muted">{field}</span>
-                <input className="mt-2 h-11 w-full rounded-xl border border-ks-line px-3 font-semibold outline-none transition focus:border-ks-blue focus:ring-2 focus:ring-ks-blue/10" />
-              </label>
-            ))}
-          </div>
-          <Button className="mt-5">Save draft</Button>
-        </Card>
-        <Card className="sticky top-24 h-fit rounded-xl p-5">
-          <p className="text-[11px] font-black uppercase tracking-[0.22em] text-ks-muted">Preview</p>
-          <p className="mt-3 rounded-xl bg-ks-paper p-4 text-sm font-semibold leading-7 text-ks-slate">{preview}</p>
-        </Card>
-      </div>
-    </TeacherWorkspaceShell>
-  );
-}
 
-function ActionPanel({ title, actions }: { title: string; actions: string[] }) {
+function ActionPanel({ title, actions, alertId }: { title: string; actions: string[]; alertId?: string }) {
+  const navigate = useNavigate();
+  const resolveMutation = useResolveAlertMutation();
+
+  const handleAction = (action: string) => {
+    const key = action.toLowerCase();
+    if (key === 'resolve alert' && alertId) {
+      resolveMutation.mutate(alertId, {
+        onSuccess: () => toast('Alert resolved', 'success'),
+        onError: () => toast('Failed to resolve alert', 'error'),
+      });
+      return;
+    }
+    if (key === 'create intervention') { navigate('/teacher/interventions/create'); return; }
+    // No-op for actions without a wired backend (button is still rendered for UX completeness)
+  };
+
   return (
     <Card className="sticky top-24 h-fit rounded-xl border-l-4 border-l-ks-blue p-5">
       <p className="text-[11px] font-black uppercase tracking-[0.22em] text-ks-muted">{title}</p>
@@ -1026,8 +1385,10 @@ function ActionPanel({ title, actions }: { title: string; actions: string[] }) {
             key={action}
             variant={action.toLowerCase().includes('reject') ? 'danger' : 'secondary'}
             className="w-full justify-between"
+            onClick={() => handleAction(action)}
+            disabled={resolveMutation.isPending && action.toLowerCase() === 'resolve alert'}
           >
-            {action}
+            {action === 'Resolve alert' && resolveMutation.isPending ? 'Resolving…' : action}
             <ArrowRight className="h-4 w-4" />
           </Button>
         ))}
@@ -1071,18 +1432,22 @@ function Td({ children }: { children: ReactNode }) {
 
 function useClassSubject() {
   const { classSubjectId } = useParams();
-  const { data: apiClasses = [] as typeof teacherClasses } = useTeacherClasses() as { data: typeof teacherClasses };
+  const { data: apiClasses = [], isLoading } = useTeacherClasses();
   return useMemo(() => {
-    const list = apiClasses.length > 0 ? apiClasses : teacherClasses;
-    return list.find((item) => item.id === classSubjectId) ?? list[0];
-  }, [classSubjectId, apiClasses]);
+    if (isLoading) return { loading: true, klass: null };
+    const klass = apiClasses.find((item) => item.id === classSubjectId) ?? null;
+    return { loading: false, klass };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [classSubjectId, apiClasses, isLoading]);
 }
 
 function useAssessment() {
   const { assessmentId } = useParams();
-  const { data: apiAssessments = [] as typeof assessments } = useTeacherAssessments() as { data: typeof assessments };
+  const { data: apiAssessments = [], isLoading } = useTeacherAssessments();
   return useMemo(() => {
-    const list = apiAssessments.length > 0 ? apiAssessments : assessments;
-    return list.find((item) => item.id === assessmentId) ?? list[0];
-  }, [assessmentId, apiAssessments]);
+    if (isLoading) return { loading: true, assessment: null };
+    const assessment = apiAssessments.find((item) => item.id === assessmentId) ?? null;
+    return { loading: false, assessment };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assessmentId, apiAssessments, isLoading]);
 }

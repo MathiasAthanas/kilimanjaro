@@ -1,16 +1,20 @@
 import {
   AlertTriangle, ArrowRight, CheckCircle2, ChevronDown, Copy,
-  Download, Eye, FileText, Lock, Plus, Search, Settings,
+  Download, Eye, FileText, Lock, Plus, Settings,
   Shield, Trash2, Upload, XCircle,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
+import React from 'react';
 import type { ReactNode } from 'react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { Badge } from '../../../components/common/Badge';
 import { Button } from '../../../components/common/Button';
 import type { ServiceState } from '../api/adminApi';
 import { handlebarsIsValid, typedConfirmationIsValid } from '../utils/adminValidation';
+import { useQueryClient } from '@tanstack/react-query';
+import { api } from '../../../lib/api/client';
+import { adminKeys } from '../api/admin.hooks';
 
 // ─── Shell ────────────────────────────────────────────────────────────────────
 
@@ -110,19 +114,9 @@ export function AdminStatusIndicator({ service, state, uptime, latency }: { serv
 
 // ─── Data table ───────────────────────────────────────────────────────────────
 
-export function AdminDataTable({ columns, children, minWidth = 980 }: { columns: string[]; children: ReactNode; minWidth?: number }) {
+export function AdminDataTable({ columns, children, minWidth = 980 }: { columns: string[]; children: ReactNode; minWidth?: number; onSearch?: (q: string) => void }) {
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-slate-50 px-4 py-3">
-        <Search className="h-4 w-4 text-slate-400" />
-        <input
-          className="h-9 flex-1 rounded-lg border border-slate-200 px-3 text-sm font-semibold outline-none focus:border-[#4338CA]"
-          placeholder="Search or filter…"
-        />
-        <Button variant="secondary" className="rounded-lg py-2 text-xs">Columns</Button>
-        <Button variant="secondary" className="rounded-lg py-2 text-xs"><Download className="h-3.5 w-3.5" /> Export</Button>
-        <Button variant="secondary" className="rounded-lg py-2 text-xs">Bulk Actions ▾</Button>
-      </div>
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm" style={{ minWidth }}>
           <thead className="sticky top-0 bg-[#1E1B4B] text-[11px] font-black uppercase tracking-widest text-white">
@@ -132,10 +126,6 @@ export function AdminDataTable({ columns, children, minWidth = 980 }: { columns:
           </thead>
           <tbody className="divide-y divide-slate-100">{children}</tbody>
         </table>
-      </div>
-      <div className="flex items-center justify-between border-t border-slate-200 px-5 py-3 text-xs font-bold text-slate-500">
-        <span>Pagination ready · results from live API</span>
-        <span>Rows 1–25</span>
       </div>
     </div>
   );
@@ -149,15 +139,18 @@ export function Td({ children, className = '' }: { children: ReactNode; classNam
 
 /** Single-line text / date / number / email / tel input */
 export function Field({
-  label, value = '', type = 'text', placeholder = '', readOnly = false,
+  label, value, type = 'text', placeholder = '', readOnly = false, onChange,
 }: {
   label: string; value?: string; type?: string; placeholder?: string; readOnly?: boolean;
+  onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }) {
+  const controlled = onChange !== undefined;
   return (
     <label className="block">
       <span className="text-[11px] font-black uppercase tracking-widest text-slate-500">{label}</span>
       <input
-        defaultValue={value}
+        {...(controlled ? { value: value ?? '' } : { defaultValue: value ?? '' })}
+        onChange={onChange}
         type={type}
         placeholder={placeholder}
         readOnly={readOnly}
@@ -219,7 +212,7 @@ export function AdminFormSection({ title, subtitle, children, badge }: { title: 
   const [open, setOpen] = useState(true);
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-      <button className="flex w-full items-start justify-between gap-4 text-left" onClick={() => setOpen((v) => !v)}>
+      <button type="button" className="flex w-full items-start justify-between gap-4 text-left" onClick={() => setOpen((v) => !v)}>
         <div>
           <h2 className="font-display text-xl font-black text-slate-950">{title}</h2>
           <p className="mt-0.5 text-sm font-semibold text-slate-500">{subtitle}</p>
@@ -248,32 +241,436 @@ export function AdminFormSection({ title, subtitle, children, badge }: { title: 
 
 // ─── CSV bulk import zone ─────────────────────────────────────────────────────
 
+type CsvPreviewState = {
+  headers: string[];
+  previewRows: Record<string, string>[];
+  allRows: Record<string, string>[];
+};
+
+type ImportLookup = {
+  classes: Array<{ id: string; name?: string; academicYearId?: string }>;
+  academicYears: Array<{ id: string; name?: string; isCurrent?: boolean }>;
+};
+
+const CSV_TEMPLATES: Record<string, { comments: string[]; headers: string[]; sample: string[] }> = {
+  'staff user': {
+    comments: [
+      '# Staff User Import Template — Kilimanjaro Schools',
+      '# role values: SYSTEM_ADMIN | BOARD_DIRECTOR | MANAGING_DIRECTOR | PRINCIPAL | ACADEMIC_QA | FINANCE | HEAD_OF_DEPARTMENT | TEACHER | PARENT',
+      '# phone_number: include country code e.g. +255712345678',
+      '# password is created automatically from LAST_NAME in uppercase',
+      '# registration_number is optional and normally only used for student accounts',
+    ],
+    headers: ['first_name', 'last_name', 'email', 'phone_number', 'role', 'department', 'registration_number'],
+    sample: ['John', 'Doe', 'john.doe@school.ac.tz', '+255712345678', 'TEACHER', 'Science', ''],
+  },
+  student: {
+    comments: [
+      '# Student Import Template — Kilimanjaro Schools',
+      '# gender: MALE | FEMALE',
+      '# guardian_relationship: FATHER | MOTHER | GUARDIAN | SIBLING | OTHER',
+      '# date_of_birth and admission_date format: YYYY-MM-DD  e.g. 2010-03-15',
+      '# class_name: must match an existing class name exactly  e.g. "Form 2 A"',
+      '# academic_year: optional; uses current academic year when blank',
+      '# password is created automatically from LAST_NAME in uppercase',
+    ],
+    headers: [
+      'first_name', 'middle_name', 'last_name', 'date_of_birth', 'gender', 'nationality',
+      'class_name', 'academic_year', 'admission_date',
+      'guardian_first_name', 'guardian_last_name', 'guardian_relationship', 'guardian_phone', 'guardian_email',
+    ],
+    sample: [
+      'Amina', 'Juma', 'Mwanga', '2010-03-15', 'FEMALE', 'Tanzanian',
+      'Form 2 A', '', '2024-01-15',
+      'Juma', 'Mwanga', 'FATHER', '+255712345678', 'juma.mwanga@email.com',
+    ],
+  },
+};
+
+const STAFF_ROLES = new Set([
+  'SYSTEM_ADMIN', 'BOARD_DIRECTOR', 'MANAGING_DIRECTOR', 'PRINCIPAL', 'ACADEMIC_QA',
+  'FINANCE', 'HEAD_OF_DEPARTMENT', 'TEACHER', 'PARENT',
+]);
+const STUDENT_GENDERS = new Set(['MALE', 'FEMALE']);
+const GUARDIAN_RELATIONSHIPS = new Set(['FATHER', 'MOTHER', 'GUARDIAN', 'SIBLING', 'OTHER']);
+
+function buildCsvContent(tpl: { comments: string[]; headers: string[]; sample: string[] }): string {
+  const esc = (v: string) => (v.includes(',') || v.includes('"') ? `"${v.replace(/"/g, '""')}"` : v);
+  return [...tpl.comments, tpl.headers.join(','), tpl.sample.map(esc).join(',')].join('\r\n');
+}
+
+function parseCsvContent(text: string): { headers: string[]; rows: Record<string, string>[] } {
+  const lines = text.split(/\r?\n/).filter((l) => l.trim() && !l.trimStart().startsWith('#'));
+  if (lines.length < 2) return { headers: [], rows: [] };
+  const splitLine = (line: string): string[] => {
+    const result: string[] = [];
+    let cur = '';
+    let inQ = false;
+    for (const ch of line) {
+      if (ch === '"') { inQ = !inQ; }
+      else if (ch === ',' && !inQ) { result.push(cur.trim()); cur = ''; }
+      else { cur += ch; }
+    }
+    result.push(cur.trim());
+    return result;
+  };
+  const headers = splitLine(lines[0]);
+  const rows: Record<string, string>[] = [];
+  for (let i = 1; i < lines.length; i++) {
+    const vals = splitLine(lines[i]);
+    if (vals.every((v) => !v)) continue;
+    const row: Record<string, string> = {};
+    headers.forEach((h, j) => { row[h] = vals[j] ?? ''; });
+    rows.push(row);
+  }
+  return { headers, rows };
+}
+
+function requiredHeaders(entity: string): string[] {
+  return entity === 'student'
+    ? ['first_name', 'last_name', 'date_of_birth', 'gender', 'class_name', 'guardian_first_name', 'guardian_phone']
+    : ['first_name', 'last_name', 'email', 'role'];
+}
+
+function upperLastNamePassword(row: Record<string, string>): string {
+  return (row.last_name || row.lastName || '').replace(/[^a-z0-9]/gi, '').toUpperCase();
+}
+
+function isIsoDate(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(new Date(`${value}T00:00:00Z`).getTime());
+}
+
+function validateCsvRows(entity: string, headers: string[], rows: Record<string, string>[]): string[] {
+  const errors: string[] = [];
+  if (rows.length > 500) errors.push('CSV limit is 500 rows.');
+  for (const header of requiredHeaders(entity)) {
+    if (!headers.includes(header)) errors.push(`Missing required column: ${header}`);
+  }
+  const seenEmails = new Set<string>();
+  const seenRegistrationNumbers = new Set<string>();
+  rows.forEach((row, index) => {
+    const line = index + 2;
+    for (const header of requiredHeaders(entity)) {
+      if (!String(row[header] ?? '').trim()) errors.push(`Row ${line}: ${header} is required.`);
+    }
+    if (!upperLastNamePassword(row)) {
+      errors.push(`Row ${line}: last_name must contain at least one letter or number for the account password.`);
+    }
+    if (entity === 'student') {
+      if (row.date_of_birth && !isIsoDate(row.date_of_birth)) errors.push(`Row ${line}: date_of_birth must be YYYY-MM-DD.`);
+      if (row.admission_date && !isIsoDate(row.admission_date)) errors.push(`Row ${line}: admission_date must be YYYY-MM-DD.`);
+      if (row.gender && !STUDENT_GENDERS.has(row.gender.toUpperCase())) errors.push(`Row ${line}: gender must be MALE or FEMALE.`);
+      if (row.guardian_relationship && !GUARDIAN_RELATIONSHIPS.has(row.guardian_relationship.toUpperCase())) {
+        errors.push(`Row ${line}: guardian_relationship is invalid.`);
+      }
+    } else {
+      const role = String(row.role ?? '').toUpperCase();
+      if (role && !STAFF_ROLES.has(role)) errors.push(`Row ${line}: role is invalid.`);
+      const email = String(row.email ?? '').trim().toLowerCase();
+      if (email) {
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.push(`Row ${line}: email is invalid.`);
+        if (seenEmails.has(email)) errors.push(`Row ${line}: duplicate email in CSV.`);
+        seenEmails.add(email);
+      }
+      const registrationNumber = String(row.registration_number ?? '').trim().toUpperCase();
+      if (registrationNumber) {
+        if (seenRegistrationNumbers.has(registrationNumber)) errors.push(`Row ${line}: duplicate registration_number in CSV.`);
+        seenRegistrationNumbers.add(registrationNumber);
+      }
+    }
+  });
+  return errors;
+}
+
+async function loadImportLookup(): Promise<ImportLookup> {
+  const [classesResponse, yearsResponse] = await Promise.all([
+    api.get('/students/classes'),
+    api.get('/students/academic-years'),
+  ]);
+  const classesPayload = classesResponse.data?.data ?? classesResponse.data;
+  const yearsPayload = yearsResponse.data?.data ?? yearsResponse.data;
+  const classes = Array.isArray(classesPayload) ? classesPayload : classesPayload?.items ?? classesPayload?.classes ?? [];
+  const academicYears = Array.isArray(yearsPayload) ? yearsPayload : yearsPayload?.items ?? yearsPayload?.academicYears ?? yearsPayload?.years ?? [];
+  return { classes, academicYears };
+}
+
+function findByName<T extends { name?: string }>(items: T[], name: string): T | undefined {
+  return items.find((item) => String(item.name ?? '').trim().toLowerCase() === name.trim().toLowerCase());
+}
+
+async function importStaffUsers(rows: Record<string, string>[]) {
+  const created = [];
+  for (const row of rows) {
+    const user = await api.post('/auth/users', {
+      firstName: row.first_name.trim(),
+      lastName: row.last_name.trim(),
+      email: row.email.trim(),
+      phoneNumber: row.phone_number?.trim() || undefined,
+      role: row.role.trim().toUpperCase(),
+      department: row.department?.trim() || undefined,
+      registrationNumber: row.registration_number?.trim() || undefined,
+      password: upperLastNamePassword(row),
+      isActive: true,
+    }).then((r) => r.data?.data ?? r.data);
+    created.push(user);
+  }
+  return created;
+}
+
+async function importStudents(rows: Record<string, string>[]) {
+  const lookup = await loadImportLookup();
+  const currentYear = lookup.academicYears.find((year) => Boolean(year.isCurrent)) ?? lookup.academicYears[0];
+  if (!currentYear) {
+    throw new Error('No academic year exists. Create an academic year before importing students.');
+  }
+
+  const resolvedRows = rows.map((row, index) => {
+    const line = index + 2;
+    const cls = findByName(lookup.classes, row.class_name);
+    if (!cls) throw new Error(`Row ${line}: class_name "${row.class_name}" does not match an existing class.`);
+    const academicYear = row.academic_year?.trim()
+      ? findByName(lookup.academicYears, row.academic_year)
+      : currentYear;
+    if (!academicYear) throw new Error(`Row ${line}: academic_year "${row.academic_year}" does not match an existing year.`);
+    return { row, cls, academicYear };
+  });
+
+  const created = [];
+  for (const { row, cls, academicYear } of resolvedRows) {
+    const authUser = await api.post('/auth/users', {
+      firstName: row.first_name.trim(),
+      lastName: row.last_name.trim(),
+      role: 'STUDENT',
+      password: upperLastNamePassword(row),
+      isActive: true,
+    }).then((r) => r.data?.data ?? r.data);
+
+    const student = await api.post('/students', {
+      authUserId: authUser.id,
+      firstName: row.first_name.trim(),
+      middleName: row.middle_name?.trim() || undefined,
+      lastName: row.last_name.trim(),
+      dateOfBirth: row.date_of_birth,
+      gender: row.gender.trim().toUpperCase(),
+      nationality: row.nationality?.trim() || 'Tanzanian',
+      admissionDate: row.admission_date?.trim() || new Date().toISOString().slice(0, 10),
+      classId: cls.id,
+      academicYearId: academicYear.id,
+      guardians: [{
+        firstName: row.guardian_first_name.trim(),
+        lastName: row.guardian_last_name?.trim() || row.last_name.trim(),
+        relationship: (row.guardian_relationship?.trim() || 'GUARDIAN').toUpperCase(),
+        phoneNumber: row.guardian_phone.trim(),
+        email: row.guardian_email?.trim() || undefined,
+        isPrimary: true,
+      }],
+    }).then((r) => r.data?.data ?? r.data);
+
+    if (student?.registrationNumber) {
+      await api.patch(`/auth/users/${authUser.id}`, { registrationNumber: student.registrationNumber });
+    }
+    created.push({ user: authUser, student });
+  }
+  return created;
+}
+
 export function CsvImportZone({ entity }: { entity: string }) {
+  const qc = useQueryClient();
   const [dragging, setDragging] = useState(false);
+  const [preview, setPreview] = useState<CsvPreviewState | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const tpl = CSV_TEMPLATES[entity] ?? CSV_TEMPLATES['staff user'];
+
+  function handleDownload() {
+    const blob = new Blob([buildCsvContent(tpl)], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${entity.replace(/\s+/g, '_')}_import_template.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  }
+
+  function handleFile(file: File) {
+    setResult(null);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const { headers, rows } = parseCsvContent(e.target?.result as string);
+      if (!headers.length || !rows.length) {
+        setResult({ ok: false, message: 'No data rows found. Check the file format.' });
+        return;
+      }
+      const errors = validateCsvRows(entity, headers, rows);
+      if (errors.length) {
+        setPreview(null);
+        setResult({ ok: false, message: errors.slice(0, 6).join(' ') + (errors.length > 6 ? ` ${errors.length - 6} more error(s).` : '') });
+        return;
+      }
+      setPreview({ headers, previewRows: rows.slice(0, 3), allRows: rows });
+    };
+    reader.readAsText(file);
+  }
+
+  async function handleImport() {
+    if (!preview) return;
+    setImporting(true);
+    setResult(null);
+    try {
+      const errors = validateCsvRows(entity, preview.headers, preview.allRows);
+      if (errors.length) {
+        setResult({ ok: false, message: errors.slice(0, 6).join(' ') + (errors.length > 6 ? ` ${errors.length - 6} more error(s).` : '') });
+        return;
+      }
+      if (entity === 'student') {
+        await importStudents(preview.allRows);
+      } else {
+        await importStaffUsers(preview.allRows);
+      }
+      const count = preview.allRows.length;
+      setResult({ ok: true, message: `Successfully imported ${count} ${entity}${count !== 1 ? 's' : ''}.` });
+      setPreview(null);
+      if (fileRef.current) fileRef.current.value = '';
+      if (entity === 'student') {
+        qc.invalidateQueries({ queryKey: [...adminKeys.all, 'students'] });
+      } else {
+        qc.invalidateQueries({ queryKey: adminKeys.users() });
+      }
+    } catch (err: unknown) {
+      const apiData =
+        err && typeof err === 'object' && 'response' in err
+          ? ((err as Record<string, unknown>).response as Record<string, unknown> | undefined)?.data
+          : null;
+      const message =
+        apiData && typeof apiData === 'object' && 'message' in (apiData as Record<string, unknown>)
+          ? String((apiData as Record<string, unknown>).message)
+          : err instanceof Error
+          ? err.message
+          : 'Import failed. Check the file format and try again.';
+      setResult({ ok: false, message });
+    } finally {
+      setImporting(false);
+    }
+  }
+
   return (
-    <div
-      onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-      onDragLeave={() => setDragging(false)}
-      onDrop={(e) => { e.preventDefault(); setDragging(false); }}
-      className={`cursor-pointer rounded-2xl border-2 border-dashed p-8 text-center transition-all ${
-        dragging ? 'border-[#4338CA] bg-indigo-50' : 'border-slate-200 bg-slate-50/60 hover:border-[#4338CA]/40 hover:bg-indigo-50/20'
-      }`}
-    >
-      <Upload className="mx-auto h-8 w-8 text-slate-400" />
-      <p className="mt-3 text-sm font-black text-slate-700">
-        Drop {entity} CSV here for bulk import
-      </p>
-      <p className="mt-1 text-xs font-semibold text-slate-400">
-        Up to 500 rows · all fields validated before commit
-      </p>
-      <div className="mt-5 flex justify-center gap-3">
-        <Button variant="secondary" className="rounded-xl py-2 text-xs">
-          <Download className="h-3.5 w-3.5" /> Download Template
-        </Button>
-        <Button className="rounded-xl bg-[#4338CA] py-2 text-xs">
-          <Upload className="h-3.5 w-3.5" /> Choose CSV File
-        </Button>
+    <div className="space-y-3">
+      <div
+        onClick={() => fileRef.current?.click()}
+        onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragging(false);
+          const file = e.dataTransfer.files[0];
+          if (file) handleFile(file);
+        }}
+        className={`cursor-pointer rounded-2xl border-2 border-dashed p-8 text-center transition-all ${
+          dragging
+            ? 'border-[#4338CA] bg-indigo-50'
+            : 'border-slate-200 bg-slate-50/60 hover:border-[#4338CA]/40 hover:bg-indigo-50/20'
+        }`}
+      >
+        <Upload className="mx-auto h-8 w-8 text-slate-400" />
+        <p className="mt-3 text-sm font-black text-slate-700">
+          Drop {entity} CSV here for bulk import
+        </p>
+        <p className="mt-1 text-xs font-semibold text-slate-400">
+          Up to 500 rows · all fields validated before commit
+        </p>
+        <div className="mt-5 flex justify-center gap-3">
+          <Button
+            variant="secondary"
+            className="rounded-xl py-2 text-xs"
+            onClick={(e) => { e.stopPropagation(); handleDownload(); }}
+          >
+            <Download className="h-3.5 w-3.5" /> Download Template
+          </Button>
+          <Button
+            className="rounded-xl bg-[#4338CA] py-2 text-xs"
+            onClick={(e) => { e.stopPropagation(); fileRef.current?.click(); }}
+          >
+            <Upload className="h-3.5 w-3.5" /> Choose CSV File
+          </Button>
+        </div>
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".csv,text/csv"
+          className="hidden"
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
+        />
       </div>
+
+      {preview && (
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-5 py-3.5">
+            <div>
+              <p className="font-display font-black text-slate-950">Preview</p>
+              <p className="text-xs font-semibold text-slate-500">
+                {preview.allRows.length} row{preview.allRows.length !== 1 ? 's' : ''} detected
+                {preview.allRows.length > 3 ? ' · showing first 3' : ''}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="secondary"
+                className="rounded-xl py-1.5 text-xs"
+                onClick={() => { setPreview(null); if (fileRef.current) fileRef.current.value = ''; }}
+              >
+                Clear
+              </Button>
+              <Button
+                className="rounded-xl bg-[#4338CA] py-1.5 text-xs"
+                onClick={handleImport}
+                disabled={importing}
+              >
+                {importing ? 'Importing…' : `Import ${preview.allRows.length} Record${preview.allRows.length !== 1 ? 's' : ''}`}
+              </Button>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-[#1E1B4B] text-[10px] font-black uppercase tracking-widest text-white">
+                <tr>
+                  {preview.headers.map((h) => (
+                    <th key={h} className="whitespace-nowrap px-4 py-3">{h.replace(/_/g, ' ')}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {preview.previewRows.map((row, i) => (
+                  <tr key={i} className="hover:bg-slate-50/80">
+                    {preview.headers.map((h) => (
+                      <td key={h} className="whitespace-nowrap px-4 py-2.5 font-semibold text-slate-700">
+                        {row[h] || <span className="text-slate-300">—</span>}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {result && (
+        <div className={`flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-semibold ${
+          result.ok
+            ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+            : 'border-rose-200 bg-rose-50 text-rose-600'
+        }`}>
+          {result.ok
+            ? <CheckCircle2 className="h-4 w-4 shrink-0" />
+            : <XCircle className="h-4 w-4 shrink-0" />
+          }
+          {result.message}
+        </div>
+      )}
     </div>
   );
 }
@@ -281,16 +678,44 @@ export function CsvImportZone({ entity }: { entity: string }) {
 // ─── Assessment type inline editor ───────────────────────────────────────────
 
 export function AssessmentTypeEditor({
-  types,
+  types, onSave, loading = false,
 }: {
-  types: Array<{ id: string; name: string; weight: number; maxScore: number; scope: string }>;
+  types: Array<{ id: string; name: string; code?: string; weight: number; maxScore: number; scope: string; academicYearId?: string; educationStage?: string; classLevel?: string; subjectId?: string }>;
+  onSave?: (payload: { rows: Array<{ id: string; name: string; code: string; weightPercentage: number; academicYearId: string; educationStage?: string; classLevel?: number; subjectId?: string; isActive: boolean }>; deactivateIds: string[] }) => void;
+  loading?: boolean;
 }) {
   const [rows, setRows] = useState(types.map((t) => ({ ...t })));
+  const [removedIds, setRemovedIds] = useState<string[]>([]);
+  React.useEffect(() => {
+    setRows(types.map((t) => ({ ...t })));
+    setRemovedIds([]);
+  }, [types]);
   const total = rows.reduce((s, r) => s + r.weight, 0);
   const valid = Math.abs(total - 100) < 0.001;
 
   const update = (i: number, field: string, val: string | number) =>
     setRows((prev) => prev.map((r, j) => (j === i ? { ...r, [field]: val } : r)));
+  const codeFor = (name: string, index: number) =>
+    name.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 24) || `TYPE_${index + 1}`;
+  const save = () => {
+    if (!valid || !rows.length) return;
+    const missing = rows.find((row) => !row.name.trim() || !row.academicYearId);
+    if (missing) return;
+    onSave?.({
+      deactivateIds: removedIds,
+      rows: rows.map((row, index) => ({
+        id: row.id,
+        name: row.name.trim(),
+        code: String(row.code || codeFor(row.name, index)),
+        weightPercentage: Number(row.weight),
+        academicYearId: String(row.academicYearId),
+        educationStage: row.educationStage || undefined,
+        classLevel: row.classLevel ? Number(row.classLevel) : undefined,
+        subjectId: row.subjectId || undefined,
+        isActive: true,
+      })),
+    });
+  };
 
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -304,6 +729,7 @@ export function AssessmentTypeEditor({
           Total: {total}% {valid ? '— valid' : '— must equal 100%'}
         </span>
       </div>
+      <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead className="bg-[#1E1B4B] text-[11px] font-black uppercase tracking-widest text-white">
           <tr>
@@ -319,7 +745,7 @@ export function AssessmentTypeEditor({
             <tr key={row.id} className="hover:bg-slate-50/80">
               <td className="px-5 py-3">
                 <input
-                  defaultValue={row.name}
+                  value={row.name}
                   onChange={(e) => update(i, 'name', e.target.value)}
                   className="h-9 w-full max-w-[180px] rounded-lg border border-slate-200 px-3 font-semibold outline-none transition focus:border-[#4338CA] focus:bg-white"
                 />
@@ -333,22 +759,28 @@ export function AssessmentTypeEditor({
               </td>
               <td className="px-5 py-3">
                 <input
-                  type="number" min={0} defaultValue={row.maxScore}
+                  type="number" min={0} value={row.maxScore}
+                  onChange={(e) => update(i, 'maxScore', Number(e.target.value))}
                   className="h-9 w-20 rounded-lg border border-slate-200 px-3 text-right font-semibold outline-none transition focus:border-[#4338CA] focus:bg-white"
                 />
               </td>
               <td className="px-5 py-3">
                 <select
-                  defaultValue={row.scope}
+                  value={row.educationStage || row.scope}
+                  onChange={(e) => update(i, 'educationStage', e.target.value)}
                   className="h-9 cursor-pointer rounded-lg border border-slate-200 bg-white px-3 font-semibold outline-none transition focus:border-[#4338CA]"
                 >
-                  <option value="Term">Term</option>
-                  <option value="Year">Year</option>
+                  <option value="PRIMARY">Primary</option>
+                  <option value="O_LEVEL">O-Level</option>
+                  <option value="A_LEVEL">A-Level</option>
                 </select>
               </td>
               <td className="px-5 py-3 text-right">
                 <button
-                  onClick={() => setRows((prev) => prev.filter((_, j) => j !== i))}
+                  onClick={() => {
+                    if (!String(row.id).startsWith('new-')) setRemovedIds((prev) => [...prev, row.id]);
+                    setRows((prev) => prev.filter((_, j) => j !== i));
+                  }}
                   className="rounded-lg p-1.5 text-slate-400 transition hover:bg-rose-50 hover:text-rose-500"
                 >
                   <Trash2 className="h-4 w-4" />
@@ -358,15 +790,27 @@ export function AssessmentTypeEditor({
           ))}
         </tbody>
       </table>
+      </div>
       <div className="flex items-center gap-2 border-t border-slate-200 px-5 py-3">
         <Button
           variant="quiet"
           className="rounded-xl py-2 text-xs"
-          onClick={() => setRows((prev) => [...prev, { id: `new-${Date.now()}`, name: 'New Type', weight: 0, maxScore: 100, scope: 'Term' }])}
+          onClick={() => setRows((prev) => [...prev, {
+            id: `new-${Date.now()}`,
+            name: 'New Type',
+            code: '',
+            weight: 0,
+            maxScore: 100,
+            scope: prev[0]?.scope ?? 'O_LEVEL',
+            academicYearId: prev[0]?.academicYearId ?? '',
+            educationStage: prev[0]?.educationStage ?? 'O_LEVEL',
+            classLevel: prev[0]?.classLevel ?? '',
+            subjectId: prev[0]?.subjectId ?? '',
+          }])}
         >
           <Plus className="h-3.5 w-3.5" /> Add Type
         </Button>
-        <Button disabled={!valid} className="ml-auto rounded-xl bg-[#4338CA]">
+        <Button disabled={!valid || !rows.length} loading={loading} className="ml-auto rounded-xl bg-[#4338CA]" onClick={save}>
           Save Assessment Types
         </Button>
       </div>
@@ -376,31 +820,90 @@ export function AssessmentTypeEditor({
 
 // ─── Grading boundary editor ──────────────────────────────────────────────────
 
-export function GradingBoundaryEditor({
-  scale,
-}: {
-  scale: { id: string; name: string; active: boolean; boundaries: Array<{ label: string; min: number; max: number }> };
-}) {
-  const [rows, setRows] = useState(scale.boundaries.map((b) => ({ ...b })));
+type GradingBoundaryEditorProps = {
+  scale: { id: string; name: string; active: boolean; boundaries?: Array<{ label: string; min: number; max: number; points?: number; remark?: string; isPassing?: boolean }> };
+  onSave?: (payload: { name: string; boundaries: Array<{ label: string; min: number; max: number; points: number; remark: string; isPassing: boolean }> }) => void;
+  onActivate?: () => void;
+  loading?: boolean;
+};
+
+export function GradingBoundaryEditor(props: GradingBoundaryEditorProps) {
+  const { scale, onSave, onActivate, loading = false } = props;
+  const [name, setName] = useState(scale.name);
+  const [rows, setRows] = useState((scale.boundaries ?? []).map((b) => ({ ...b })));
+
+  React.useEffect(() => {
+    setName(scale.name);
+    setRows((scale.boundaries ?? []).map((b) => ({ ...b })));
+  }, [scale.id, scale.name, scale.boundaries]);
 
   const update = (i: number, field: string, val: string | number) =>
     setRows((prev) => prev.map((r, j) => (j === i ? { ...r, [field]: val } : r)));
+
+  const sortedRows = [...rows].sort((a, b) => Number(a.min) - Number(b.min));
+  const validationErrors = (() => {
+    const errors: string[] = [];
+    if (!name.trim()) errors.push('Scale name is required.');
+    if (!rows.length) errors.push('Add at least one boundary.');
+    rows.forEach((row, index) => {
+      if (!String(row.label ?? '').trim()) errors.push(`Row ${index + 1}: grade is required.`);
+      if (!Number.isFinite(Number(row.min)) || !Number.isFinite(Number(row.max))) errors.push(`Row ${index + 1}: min and max must be numbers.`);
+      if (Number(row.min) > Number(row.max)) errors.push(`Row ${index + 1}: min cannot be greater than max.`);
+    });
+    if (sortedRows.length && Number(sortedRows[0].min) !== 0) errors.push('Boundaries must start at 0.');
+    if (sortedRows.length && Number(sortedRows[sortedRows.length - 1].max) !== 100) errors.push('Boundaries must end at 100.');
+    for (let i = 1; i < sortedRows.length; i += 1) {
+      const gap = Number(sortedRows[i].min) - Number(sortedRows[i - 1].max);
+      if (gap < 0 || gap > 1.0001) errors.push('Boundaries must have no gaps or overlaps.');
+    }
+    return Array.from(new Set(errors));
+  })();
+  const boundaryValid = validationErrors.length === 0;
+
+  const save = () => {
+    if (!boundaryValid) return;
+    onSave?.({
+      name: name.trim(),
+      boundaries: rows.map((row) => ({
+        label: String(row.label).trim().toUpperCase(),
+        min: Number(row.min),
+        max: Number(row.max),
+        points: Number(row.points ?? 0),
+        remark: String(row.remark ?? row.label ?? '').trim() || String(row.label).trim().toUpperCase(),
+        isPassing: Boolean(row.isPassing ?? Number(row.points ?? 0) > 0),
+      })),
+    });
+  };
 
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
       <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-5 py-3.5">
         <div>
-          <p className="font-display font-black text-slate-950">{scale.name}</p>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="h-9 rounded-lg border border-transparent bg-transparent px-2 font-display font-black text-slate-950 outline-none transition focus:border-slate-200 focus:bg-white"
+          />
           <p className="text-xs font-semibold text-slate-500">Boundaries must cover 0–100 with no gaps</p>
         </div>
-        {scale.active && <Badge tone="emerald">Active</Badge>}
+        <div className="flex items-center gap-2">
+          {scale.active && <Badge tone="emerald">Active</Badge>}
+          {!scale.active && onActivate && (
+            <Button variant="secondary" className="rounded-xl py-2 text-xs" loading={loading} onClick={onActivate}>
+              Activate
+            </Button>
+          )}
+        </div>
       </div>
+      <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead className="bg-[#1E1B4B] text-[11px] font-black uppercase tracking-widest text-white">
           <tr>
             <th className="px-5 py-3.5 text-left">Grade</th>
             <th className="px-5 py-3.5 text-left">Min %</th>
             <th className="px-5 py-3.5 text-left">Max %</th>
+            <th className="px-5 py-3.5 text-left">Points</th>
+            <th className="px-5 py-3.5 text-left">Remark</th>
             <th className="px-5 py-3.5" />
           </tr>
         </thead>
@@ -409,23 +912,37 @@ export function GradingBoundaryEditor({
             <tr key={i} className="hover:bg-slate-50/80">
               <td className="px-5 py-3">
                 <input
-                  defaultValue={row.label}
+                  value={row.label}
                   onChange={(e) => update(i, 'label', e.target.value)}
                   className="h-9 w-16 rounded-lg border border-slate-200 px-3 text-center font-black outline-none transition focus:border-[#4338CA] focus:bg-white"
                 />
               </td>
               <td className="px-5 py-3">
                 <input
-                  type="number" min={0} max={100} defaultValue={row.min}
+                  type="number" min={0} max={100} value={row.min}
                   onChange={(e) => update(i, 'min', Number(e.target.value))}
                   className="h-9 w-20 rounded-lg border border-slate-200 px-3 text-right font-semibold outline-none transition focus:border-[#4338CA] focus:bg-white"
                 />
               </td>
               <td className="px-5 py-3">
                 <input
-                  type="number" min={0} max={100} defaultValue={row.max}
+                  type="number" min={0} max={100} value={row.max}
                   onChange={(e) => update(i, 'max', Number(e.target.value))}
                   className="h-9 w-20 rounded-lg border border-slate-200 px-3 text-right font-semibold outline-none transition focus:border-[#4338CA] focus:bg-white"
+                />
+              </td>
+              <td className="px-5 py-3">
+                <input
+                  type="number" min={0} value={row.points ?? 0}
+                  onChange={(e) => update(i, 'points', Number(e.target.value))}
+                  className="h-9 w-20 rounded-lg border border-slate-200 px-3 text-right font-semibold outline-none transition focus:border-[#4338CA] focus:bg-white"
+                />
+              </td>
+              <td className="px-5 py-3">
+                <input
+                  value={row.remark ?? ''}
+                  onChange={(e) => update(i, 'remark', e.target.value)}
+                  className="h-9 w-40 rounded-lg border border-slate-200 px-3 font-semibold outline-none transition focus:border-[#4338CA] focus:bg-white"
                 />
               </td>
               <td className="px-5 py-3 text-right">
@@ -440,15 +957,19 @@ export function GradingBoundaryEditor({
           ))}
         </tbody>
       </table>
-      <div className="flex items-center gap-2 border-t border-slate-200 px-5 py-3">
+      </div>
+      <div className="flex flex-wrap items-center gap-2 border-t border-slate-200 px-5 py-3">
+        {validationErrors.length > 0 && (
+          <p className="mr-auto text-xs font-semibold text-rose-600">{validationErrors[0]}</p>
+        )}
         <Button
           variant="quiet"
           className="rounded-xl py-2 text-xs"
-          onClick={() => setRows((prev) => [...prev, { label: '', min: 0, max: 0 }])}
+          onClick={() => setRows((prev) => [...prev, { label: '', min: 0, max: 0, points: 0, remark: '', isPassing: true }])}
         >
           <Plus className="h-3.5 w-3.5" /> Add Boundary
         </Button>
-        <Button className="ml-auto rounded-xl bg-[#4338CA]">Save Scale</Button>
+        <Button disabled={!boundaryValid} loading={loading} className="rounded-xl bg-[#4338CA]" onClick={save}>Save Scale</Button>
       </div>
     </div>
   );
@@ -595,10 +1116,10 @@ export function PendingIntegration({ endpoint }: { endpoint: string }) {
   return (
     <div className="rounded-2xl border border-dashed border-[#F59E0B] bg-[#F59E0B]/10 p-5">
       <div className="flex items-center gap-2 font-black text-[#92400e]">
-        <Lock className="h-5 w-5" /> Pending backend integration
+        <Lock className="h-5 w-5" /> Connection unavailable
       </div>
       <p className="mt-1 text-sm font-semibold text-[#92400e]/80">
-        UI ready · awaiting endpoint: {endpoint}
+        Audit records could not be loaded right now.
       </p>
     </div>
   );

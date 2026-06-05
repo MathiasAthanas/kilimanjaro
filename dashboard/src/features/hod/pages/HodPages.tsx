@@ -1,11 +1,16 @@
 import { ArrowRight, BookOpen, CheckCircle2, Download, Filter, MessageSquarePlus, Save, Send, ShieldCheck, TrendingUp, XCircle } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useMemo, useState } from 'react';
-import { NavLink, useParams } from 'react-router-dom';
+import React, { useMemo, useState } from 'react';
+import { NavLink, useNavigate, useParams } from 'react-router-dom';
+import { toast } from '../../../lib/toast';
 import { Badge } from '../../../components/common/Badge';
 import { Button } from '../../../components/common/Button';
 import { Card } from '../../../components/common/Card';
-import { hodAlerts, hodApprovals, hodInterventions, hodMarks, hodPairings, hodSubjects, hodTeachers } from '../api/hodApi';
+import { hodMarks, hodSubjects } from '../api/hodApi';
+import { DataError } from '../../../components/feedback/DataError';
+import { EmptyState } from '../../../components/feedback/EmptyState';
+import { SkeletonTable } from '../../../components/common/SkeletonTable';
+import { downloadReportWhenReady, useGenerateReportMutation } from '../../operations/api/operations.hooks';
 import {
   useHodAlerts,
   useHodAnnouncements,
@@ -17,6 +22,12 @@ import {
   useHodPendingApprovals,
   useHodTeachersList,
   useMarksApprovalReview,
+  useApproveAssessmentMutation,
+  useRejectAssessmentMutation,
+  useActivateHodPairingMutation,
+  useResolveHodAlertMutation,
+  useCreateHodInterventionMutation,
+  useCreateHodAnnouncementMutation,
 } from '../api/hod.hooks';
 import {
   ApprovalQueueCard,
@@ -36,22 +47,24 @@ import { isOutlier, rejectReasonIsValid, sortOldestApprovalsFirst } from '../uti
 // ─── Home ──────────────────────────────────────────────────────────────────
 
 export function HodHomePage() {
-  const { data: apiApprovals = [] as typeof hodApprovals } = useHodPendingApprovals() as { data: typeof hodApprovals };
-  const { data: apiAlerts = [] as typeof hodAlerts } = useHodAlerts() as { data: typeof hodAlerts };
-  const { data: apiTeachers = [] as typeof hodTeachers } = useHodTeachersList() as { data: typeof hodTeachers };
+  const { data: apiApprovals = [] } = useHodPendingApprovals();
+  const { data: apiAlerts = [] } = useHodAlerts();
+  const { data: apiTeachers = [] } = useHodTeachersList();
   const { data: apiSubjects = [] as typeof hodSubjects } = useHodClassSubjects() as { data: typeof hodSubjects };
-  const sortedApprovals = sortOldestApprovalsFirst(apiApprovals);
-  const firstApproval = sortedApprovals[0] ?? sortOldestApprovalsFirst(hodApprovals)[0];
+  const sortedApprovals = sortOldestApprovalsFirst(apiApprovals as Parameters<typeof sortOldestApprovalsFirst>[0]);
+  const firstApproval = sortedApprovals[0] ?? null;
   return (
     <HodWorkspaceShell
-      title="Sciences Command Center"
+      title="Department Command Center"
       eyebrow="HOD academic control room"
       action={
-        <NavLink to={`/hod/approvals/${firstApproval.id}`}>
-          <Button className="bg-ks-gold text-ks-navy hover:shadow-md hover:shadow-ks-gold/30">
-            Review Oldest Approval
-          </Button>
-        </NavLink>
+        firstApproval ? (
+          <NavLink to={`/hod/approvals/${firstApproval.id}`}>
+            <Button className="bg-ks-gold text-ks-navy hover:shadow-md hover:shadow-ks-gold/30">
+              Review Oldest Approval
+            </Button>
+          </NavLink>
+        ) : undefined
       }
     >
       {/* Priority band: Biology / Chemistry / Physics */}
@@ -160,8 +173,10 @@ export function HodHomePage() {
                 <p className="text-sm font-semibold text-ks-mist/60">Completion trajectory — current term</p>
               </div>
               <div className="text-right">
-                <p className="font-display text-3xl font-black text-ks-gold">+12.4%</p>
-                <p className="text-[10px] font-black uppercase tracking-widest text-ks-mist/40">Aggregated delta</p>
+                <p className="font-display text-3xl font-black text-ks-gold">
+                  {apiSubjects.length ? `${Math.round(apiSubjects.reduce((s, sub) => s + sub.syllabus, 0) / apiSubjects.length)}%` : '—'}
+                </p>
+                <p className="text-[10px] font-black uppercase tracking-widest text-ks-mist/40">Avg syllabus coverage</p>
               </div>
             </div>
             <div className="mt-6 flex items-end gap-1.5" style={{ height: 96 }}>
@@ -182,7 +197,7 @@ export function HodHomePage() {
         {/* Right: Teacher risks + alert digest */}
         <section className="col-span-12 xl:col-span-3 space-y-gutter">
           <SectionTitle title="Teacher Risks" />
-          <TeacherRiskCard teacher={apiTeachers[0] ?? hodTeachers[0]} />
+          {apiTeachers.length > 0 ? <TeacherRiskCard teacher={apiTeachers[0] as Parameters<typeof TeacherRiskCard>[0]['teacher']} /> : <p className="text-sm font-semibold text-ks-muted">No teacher data yet.</p>}
           <Card className="rounded-xl border-2 border-dashed border-ks-line p-5">
             <h4 className="flex items-center gap-2 font-display text-base font-black text-ks-navy">
               <span className="text-ks-amber">⚡</span> Alert Digest
@@ -208,16 +223,17 @@ export function HodHomePage() {
 // ─── Approvals ─────────────────────────────────────────────────────────────
 
 export function PendingApprovalsPage() {
-  const { data: apiApprovals = [] as typeof hodApprovals } = useHodPendingApprovals() as { data: typeof hodApprovals };
+  const { data: apiApprovals = [] as typeof hodApprovals, isLoading, isError, refetch } = useHodPendingApprovals() as { data: typeof hodApprovals; isLoading: boolean; isError: boolean; refetch: () => void };
   const sorted = sortOldestApprovalsFirst(apiApprovals);
-  const oldest = sorted[0] ?? hodApprovals[0];
+  const oldest = sorted[0] ?? null;
+  const avgGrade = apiApprovals.length ? Math.round(apiApprovals.reduce((s, a) => s + a.average, 0) / apiApprovals.length) : 0;
   return (
     <HodWorkspaceShell title="Pending Approvals" eyebrow="Oldest submissions first">
       <HodMetricStrip items={[
-        { label: 'Total pending', value: String(apiApprovals.length).padStart(2, '0'), detail: '-2 from yesterday', tone: 'bg-ks-navy', valueColor: 'text-ks-navy' },
-        { label: 'Oldest submission', value: `${oldest.submittedHoursAgo}h`, detail: `${oldest.subject} ${oldest.className}`, tone: 'bg-ks-amber', valueColor: 'text-ks-amber' },
-        { label: 'Risk alerts', value: String(apiApprovals.filter((a) => a.average < 60).length).padStart(2, '0'), detail: 'Requires manual review', tone: 'bg-ks-rose', valueColor: 'text-ks-rose' },
-        { label: 'Avg. grade', value: `${Math.round(apiApprovals.reduce((s, a) => s + a.average, 0) / Math.max(apiApprovals.length, 1))}%`, detail: '↑ 4% positive trend', inverted: true, icon: ShieldCheck },
+        { label: 'Total pending', value: isLoading ? '—' : String(apiApprovals.length).padStart(2, '0'), detail: 'Awaiting review', tone: 'bg-ks-navy', valueColor: 'text-ks-navy' },
+        { label: 'Oldest submission', value: oldest ? `${oldest.submittedHoursAgo}h` : '—', detail: oldest ? `${oldest.subject} ${oldest.className}` : 'None pending', tone: 'bg-ks-amber', valueColor: 'text-ks-amber' },
+        { label: 'Risk alerts', value: isLoading ? '—' : String(apiApprovals.filter((a) => a.average < 60).length).padStart(2, '0'), detail: 'Below 60% average', tone: 'bg-ks-rose', valueColor: 'text-ks-rose' },
+        { label: 'Avg. grade', value: isLoading ? '—' : `${avgGrade}%`, detail: 'Department mean', inverted: true, icon: ShieldCheck },
       ]} />
       <Card className="overflow-hidden rounded-xl">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-ks-line bg-ks-paper/50 px-5 py-4">
@@ -225,15 +241,16 @@ export function PendingApprovalsPage() {
             <h2 className="font-display text-2xl font-black text-ks-navy">Approval Queue</h2>
             <p className="text-sm font-semibold text-ks-muted">Review and authorise assessments submitted in the last 72 hours.</p>
           </div>
-          <div className="flex gap-2">
-            <Button variant="secondary" className="rounded-xl py-2 text-xs">
+          <Button variant="secondary" className="rounded-xl py-2 text-xs">
               <Filter className="h-3.5 w-3.5" /> Filter
             </Button>
-            <Button className="rounded-xl py-2 text-xs">
-              <CheckCircle2 className="h-3.5 w-3.5" /> Quick Approve All
-            </Button>
-          </div>
         </div>
+        {isLoading && <SkeletonTable cols={7} />}
+        {isError && <DataError onRetry={refetch} />}
+        {!isLoading && !isError && sorted.length === 0 && (
+          <EmptyState title="No pending approvals" description="All assessments have been reviewed. New submissions will appear here." />
+        )}
+        {!isLoading && !isError && sorted.length > 0 && (
         <HodTable columns={['Age', 'Subject & Class', 'Instructor', 'Students', 'Avg %', 'Risk flag', 'Actions']}>
           {sorted.map((approval) => {
             const isRisk = approval.average < 60;
@@ -277,13 +294,12 @@ export function PendingApprovalsPage() {
             );
           })}
         </HodTable>
-        <div className="flex items-center justify-between border-t border-ks-line bg-ks-paper/30 px-5 py-3">
-          <p className="text-xs font-bold italic text-ks-muted">Sorted by submission age · oldest first</p>
-          <div className="flex gap-1">
-            <button className="rounded-lg border border-ks-line px-2 py-1 text-xs font-bold text-ks-muted hover:bg-ks-paper">‹</button>
-            <button className="rounded-lg border border-ks-line px-2 py-1 text-xs font-bold text-ks-muted hover:bg-ks-paper">›</button>
+        )}
+        {!isLoading && !isError && sorted.length > 0 && (
+          <div className="border-t border-ks-line bg-ks-paper/30 px-5 py-3">
+            <p className="text-xs font-bold italic text-ks-muted">Sorted by submission age · oldest first</p>
           </div>
-        </div>
+        )}
       </Card>
     </HodWorkspaceShell>
   );
@@ -292,10 +308,42 @@ export function PendingApprovalsPage() {
 // ─── Approval review ────────────────────────────────────────────────────────
 
 export function MarksApprovalReviewPage() {
-  const approval = useApproval();
-  const { data: apiMarks = [] as typeof hodMarks } = useMarksApprovalReview(approval.id) as { data: typeof hodMarks };
+  const { loading, approval } = useApproval();
+  const navigate = useNavigate();
+  const { data: apiMarks = [] as typeof hodMarks } = useMarksApprovalReview(approval?.id ?? '') as { data: typeof hodMarks };
   const [reason, setReason] = useState('');
+  const approveMutation = useApproveAssessmentMutation();
+  const rejectMutation = useRejectAssessmentMutation();
+
+  if (loading) return <HodWorkspaceShell title="Loading…" eyebrow="Marks review"><SkeletonTable cols={6} /></HodWorkspaceShell>;
+  if (!approval) return (
+    <HodWorkspaceShell title="Not Found" eyebrow="Marks review">
+      <EmptyState title="Assessment not found" description="This assessment may have already been processed or the link is invalid." />
+    </HodWorkspaceShell>
+  );
+
   const teacherInitials = approval.teacher.split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase();
+  const absentCount = apiMarks.filter((r) => r.absent).length;
+  const scoredMarks = apiMarks.filter((r) => !r.absent && r.score !== null);
+  const outlierCount = apiMarks.filter((r) => isOutlier(r, approval.average, 18)).length;
+  const stdDev = scoredMarks.length > 1
+    ? Math.round(Math.sqrt(scoredMarks.reduce((s, r) => s + Math.pow((r.score as number) - approval.average, 2), 0) / scoredMarks.length) * 10) / 10
+    : 0;
+
+  const handleApprove = () => {
+    approveMutation.mutate({ id: approval.id }, {
+      onSuccess: () => { toast('Assessment approved successfully', 'success'); navigate('/hod/approvals'); },
+      onError: () => toast('Failed to approve assessment. Please try again.', 'error'),
+    });
+  };
+
+  const handleReject = () => {
+    if (!rejectReasonIsValid(reason)) return;
+    rejectMutation.mutate({ id: approval.id, body: { reason } }, {
+      onSuccess: () => { toast('Assessment returned to teacher for correction', 'warning'); navigate('/hod/approvals'); },
+      onError: () => toast('Failed to reject assessment. Please try again.', 'error'),
+    });
+  };
   return (
     <HodWorkspaceShell title={approval.assessment} eyebrow="Marks review for approval">
       <div className="grid gap-gutter xl:grid-cols-[420px_minmax(0,1fr)]">
@@ -323,9 +371,9 @@ export function MarksApprovalReviewPage() {
               <StatCell label="Average" value={`${approval.average}%`} tone={approval.average < 60 ? 'text-ks-rose' : 'text-ks-emerald'} />
               <StatCell label="Highest" value={String(approval.highest)} />
               <StatCell label="Lowest" value={String(approval.lowest)} tone="text-ks-rose" />
-              <StatCell label="Outliers" value="2" tone="text-ks-amber" />
-              <StatCell label="Absent" value="1" />
-              <StatCell label="Std dev" value="18.4" />
+              <StatCell label="Outliers" value={String(outlierCount)} tone="text-ks-amber" />
+              <StatCell label="Absent" value={String(absentCount)} />
+              <StatCell label="Std dev" value={String(stdDev)} />
             </div>
           </Card>
 
@@ -401,10 +449,11 @@ export function MarksApprovalReviewPage() {
             />
             <Button
               variant={rejectReasonIsValid(reason) ? 'danger' : 'secondary'}
-              disabled={!rejectReasonIsValid(reason)}
+              disabled={!rejectReasonIsValid(reason) || rejectMutation.isPending}
               className="mt-3 rounded-xl"
+              onClick={handleReject}
             >
-              Confirm Rejection
+              {rejectMutation.isPending ? 'Sending…' : 'Confirm Rejection'}
             </Button>
           </Card>
         </section>
@@ -414,14 +463,14 @@ export function MarksApprovalReviewPage() {
           <MarksReviewTable marks={apiMarks} average={approval.average} />
           <Card className="sticky bottom-4 z-20 flex flex-wrap items-center justify-between gap-3 rounded-xl border-ks-navy bg-white p-4 shadow-layer">
             <p className="text-sm font-semibold text-ks-muted">
-              <b className="text-ks-navy">Decision:</b> Dr. James Kileo will update student academic records after approval.
+              <b className="text-ks-navy">Decision:</b> Approving will update student academic records in the system.
             </p>
             <div className="flex gap-2">
-              <Button variant="danger" className="rounded-xl">
-                <XCircle className="h-4 w-4" /> Reject
+              <Button variant="danger" className="rounded-xl" onClick={handleReject} disabled={!rejectReasonIsValid(reason) || rejectMutation.isPending}>
+                <XCircle className="h-4 w-4" /> {rejectMutation.isPending ? 'Sending…' : 'Reject'}
               </Button>
-              <Button variant="success" className="rounded-xl">
-                <CheckCircle2 className="h-4 w-4" /> Approve & Finalise
+              <Button variant="success" className="rounded-xl" onClick={handleApprove} disabled={approveMutation.isPending}>
+                <CheckCircle2 className="h-4 w-4" /> {approveMutation.isPending ? 'Approving…' : 'Approve & Finalise'}
               </Button>
             </div>
           </Card>
@@ -434,41 +483,53 @@ export function MarksApprovalReviewPage() {
 // ─── Approval history ───────────────────────────────────────────────────────
 
 export function ApprovalHistoryPage() {
-  const { data: apiApprovals = [] as typeof hodApprovals } = useHodApprovalHistory() as { data: typeof hodApprovals };
+  const { data: apiApprovals = [], isLoading, isError, refetch } = useHodApprovalHistory() as { data: Array<Record<string, unknown>>; isLoading: boolean; isError: boolean; refetch: () => void };
   return (
     <HodWorkspaceShell title="Approval History" eyebrow="Academic decision audit">
       <FilterBar items={['Date range', 'Subject', 'Teacher', 'Approved', 'Rejected']} />
-      <HodTable columns={['Decision date', 'Assessment', 'Subject', 'Class', 'Teacher', 'Decision', 'Reason', 'Decided by', 'Average', 'Export']}>
-        {[...apiApprovals].reverse().map((approval, index) => (
-          <tr key={approval.id} className="hover:bg-ks-paper">
-            <Td>May {18 - index}</Td>
-            <Td>{approval.assessment}</Td>
-            <Td>{approval.subject}</Td>
-            <Td>{approval.className}</Td>
-            <Td>
-              <div className="flex items-center gap-2">
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-ks-mist text-[10px] font-black text-ks-blue">
-                  {approval.teacher.split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase()}
-                </div>
-                <span>{approval.teacher}</span>
-              </div>
-            </Td>
-            <Td>
-              <Badge tone={index === 0 ? 'rose' : 'emerald'}>{index === 0 ? 'REJECTED' : 'APPROVED'}</Badge>
-            </Td>
-            <Td>{index === 0 ? 'Outlier correction required' : 'Clean distribution'}</Td>
-            <Td>Dr. Kileo</Td>
-            <Td>
-              <span className={`font-black ${approval.average >= 75 ? 'text-ks-emerald' : approval.average >= 60 ? 'text-ks-amber' : 'text-ks-rose'}`}>
-                {approval.average}%
-              </span>
-            </Td>
-            <Td>
-              <Button variant="secondary" className="rounded-xl py-1.5 text-xs">Export</Button>
-            </Td>
-          </tr>
-        ))}
-      </HodTable>
+      {isLoading && <SkeletonTable cols={8} />}
+      {isError && <DataError onRetry={refetch} />}
+      {!isLoading && !isError && apiApprovals.length === 0 && (
+        <EmptyState title="No approval history" description="Approved and rejected assessments will appear here." />
+      )}
+      {!isLoading && !isError && apiApprovals.length > 0 && (
+        <HodTable columns={['Date', 'Assessment', 'Subject', 'Class', 'Teacher', 'Decision', 'Reason', 'Average']}>
+          {apiApprovals.map((approval) => {
+            const decision = String(approval.decision ?? approval.status ?? '');
+            const isApproved = decision.toUpperCase().includes('APPROV');
+            const date = String(approval.decidedAt ?? approval.date ?? approval.createdAt ?? '—');
+            const displayDate = date !== '—' && !isNaN(Date.parse(date)) ? new Date(date).toLocaleDateString() : date;
+            const reason = String(approval.reason ?? approval.rejectionReason ?? '—');
+            const teacher = String(approval.teacher ?? approval.teacherName ?? '—');
+            const avg = Number(approval.average ?? approval.classAverage ?? 0);
+            return (
+              <tr key={String(approval.id)} className="hover:bg-ks-paper">
+                <Td>{displayDate}</Td>
+                <Td>{String(approval.assessment ?? approval.title ?? '—')}</Td>
+                <Td>{String(approval.subject ?? '—')}</Td>
+                <Td>{String(approval.className ?? '—')}</Td>
+                <Td>
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-ks-mist text-[10px] font-black text-ks-blue">
+                      {teacher.split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase()}
+                    </div>
+                    <span>{teacher}</span>
+                  </div>
+                </Td>
+                <Td>
+                  <Badge tone={isApproved ? 'emerald' : 'rose'}>{isApproved ? 'APPROVED' : 'REJECTED'}</Badge>
+                </Td>
+                <Td>{reason}</Td>
+                <Td>
+                  <span className={`font-black ${avg >= 75 ? 'text-ks-emerald' : avg >= 60 ? 'text-ks-amber' : 'text-ks-rose'}`}>
+                    {avg}%
+                  </span>
+                </Td>
+              </tr>
+            );
+          })}
+        </HodTable>
+      )}
     </HodWorkspaceShell>
   );
 }
@@ -476,16 +537,19 @@ export function ApprovalHistoryPage() {
 // ─── Department overview ────────────────────────────────────────────────────
 
 export function DepartmentOverviewPage() {
-  const { data: apiSubjects = [] as typeof hodSubjects } = useHodClassSubjects() as { data: typeof hodSubjects };
-  const riskSubject = apiSubjects.find((s) => s.tone === 'rose') ?? apiSubjects[0] ?? hodSubjects[0];
+  const { data: apiSubjects = [] as typeof hodSubjects, isLoading } = useHodClassSubjects() as { data: typeof hodSubjects; isLoading: boolean };
+  const riskSubject = apiSubjects.find((s) => s.tone === 'rose') ?? apiSubjects[0] ?? null;
+  const avgSyllabus = apiSubjects.length ? Math.round(apiSubjects.reduce((s, sub) => s + sub.syllabus, 0) / apiSubjects.length) : 0;
+  const totalAtRisk = apiSubjects.reduce((s, sub) => s + sub.atRisk, 0);
+  const bestSubject = [...apiSubjects].sort((a, b) => b.change - a.change)[0] ?? null;
   return (
-    <HodWorkspaceShell title="Department Overview" eyebrow="Biology, Chemistry, Physics">
-      <SubjectTabs active={riskSubject.id} />
+    <HodWorkspaceShell title="Department Overview" eyebrow="Subjects performance overview">
+      {riskSubject && <SubjectTabs active={riskSubject.id} />}
       <HodMetricStrip items={[
-        { label: `${riskSubject.name} risk`, value: `${riskSubject.average}%`, detail: 'Weakest subject', tone: 'bg-ks-rose', valueColor: 'text-ks-rose' },
-        { label: 'At-risk students', value: String(apiSubjects.reduce((s, sub) => s + sub.atRisk, 0)), detail: 'Department total', tone: 'bg-ks-rose', valueColor: 'text-ks-rose' },
-        { label: 'Syllabus coverage', value: `${Math.round(apiSubjects.reduce((s, sub) => s + sub.syllabus, 0) / Math.max(apiSubjects.length, 1))}%`, detail: 'Dept average', tone: 'bg-ks-amber', valueColor: 'text-ks-amber' },
-        { label: 'Physics improvement', value: '+6.5%', detail: 'Strong trend', inverted: true, icon: ShieldCheck },
+        { label: riskSubject ? `${riskSubject.name} avg` : 'Lowest subject', value: riskSubject ? `${riskSubject.average}%` : '—', detail: riskSubject ? 'Weakest subject' : 'No data yet', tone: 'bg-ks-rose', valueColor: 'text-ks-rose' },
+        { label: 'At-risk students', value: isLoading ? '—' : String(totalAtRisk), detail: 'Department total', tone: 'bg-ks-rose', valueColor: 'text-ks-rose' },
+        { label: 'Syllabus coverage', value: isLoading ? '—' : `${avgSyllabus}%`, detail: 'Dept average', tone: 'bg-ks-amber', valueColor: 'text-ks-amber' },
+        { label: 'Best improvement', value: bestSubject ? `${bestSubject.change > 0 ? '+' : ''}${bestSubject.change}%` : '—', detail: bestSubject?.name ?? 'N/A', inverted: true, icon: ShieldCheck },
       ]} />
       <div className="grid gap-gutter xl:grid-cols-3">
         {apiSubjects.map((subject) => <SubjectHealthCard key={subject.id} subject={subject} />)}
@@ -502,9 +566,16 @@ export function DepartmentOverviewPage() {
 // ─── Subject detail ─────────────────────────────────────────────────────────
 
 export function SubjectDetailPage() {
-  const subject = useSubject();
-  const { data: apiAlerts = [] as typeof hodAlerts } = useHodAlerts() as { data: typeof hodAlerts };
-  const { data: apiTeachers = [] as typeof hodTeachers } = useHodTeachersList() as { data: typeof hodTeachers };
+  const { loading, subject } = useSubject();
+  const { data: apiAlerts = [] } = useHodAlerts();
+  const { data: apiTeachers = [] } = useHodTeachersList();
+
+  if (loading) return <HodWorkspaceShell title="Loading…" eyebrow="Subject drilldown"><SkeletonTable cols={6} /></HodWorkspaceShell>;
+  if (!subject) return <HodWorkspaceShell title="Not Found" eyebrow="Subject drilldown"><EmptyState title="Subject not found" description="This subject could not be found in your department." /></HodWorkspaceShell>;
+
+  const subjectAlerts = (apiAlerts as Array<{ id: string; subject: string }>).filter((a) => a.subject === subject.name);
+  const subjectTeacher = (apiTeachers as Array<Parameters<typeof TeacherRiskCard>[0]['teacher']>).find((t) => t.name === subject.teacher) ?? null;
+
   return (
     <HodWorkspaceShell title={`${subject.name} Analytics`} eyebrow="Subject drilldown">
       <SubjectTabs active={subject.id} />
@@ -515,12 +586,13 @@ export function SubjectDetailPage() {
           <TrendBoard subject={subject} />
         </section>
         <section className="space-y-stack-lg">
-          <TeacherRiskCard teacher={apiTeachers.find((teacher) => teacher.name === subject.teacher) ?? apiTeachers[0] ?? hodTeachers[0]} />
+          {subjectTeacher && <TeacherRiskCard teacher={subjectTeacher} />}
           <Card className="rounded-xl p-5">
             <SectionTitle title="At-risk students" />
             <div className="mt-4 space-y-3">
-              {apiAlerts.filter((alert) => alert.subject === subject.name).map((alert) => (
-                <DepartmentAlertCard key={alert.id} alert={alert} />
+              {subjectAlerts.length === 0 && <p className="text-sm font-semibold text-ks-emerald">No at-risk students for this subject.</p>}
+              {(subjectAlerts as typeof apiAlerts extends Array<infer T> ? T[] : never[]).map((alert: { id: string }) => (
+                <DepartmentAlertCard key={alert.id} alert={alert as Parameters<typeof DepartmentAlertCard>[0]['alert']} />
               ))}
             </div>
           </Card>
@@ -534,19 +606,23 @@ export function SubjectDetailPage() {
 
 export function TeacherPerformanceListPage() {
   const { data: apiTeachers = [] as typeof hodTeachers } = useHodTeachersList() as { data: typeof hodTeachers };
+  const riskTeacher = [...apiTeachers].sort((a, b) => a.onTime - b.onTime)[0] ?? null;
+  const topTeacher = [...apiTeachers].sort((a, b) => b.average - a.average)[0] ?? null;
   return (
     <HodWorkspaceShell title="Teacher Performance Matrix" eyebrow="Respectful accountability">
       <HodMetricStrip items={[
-        { label: 'On-time rate', value: `${Math.round(apiTeachers.reduce((s, t) => s + t.onTime, 0) / Math.max(apiTeachers.length, 1))}%`, detail: 'Dept avg submissions', tone: 'bg-ks-blue', valueColor: 'text-ks-blue' },
+        { label: 'On-time rate', value: apiTeachers.length ? `${Math.round(apiTeachers.reduce((s, t) => s + t.onTime, 0) / apiTeachers.length)}%` : '—', detail: 'Dept avg submissions', tone: 'bg-ks-blue', valueColor: 'text-ks-blue' },
         { label: 'Below target', value: String(apiTeachers.filter((t) => t.average < 60).length).padStart(2, '0'), detail: 'Below 60% avg', tone: 'bg-ks-rose', valueColor: 'text-ks-rose' },
-        { label: 'Pending review', value: String(apiTeachers.reduce((sum, t) => sum + t.pending, 0)).padStart(2, '0'), detail: 'Across dept', tone: 'bg-ks-amber', valueColor: 'text-ks-amber' },
-        { label: 'Top performer', value: '+18%', detail: 'Physics improvement', inverted: true, icon: TrendingUp },
+        { label: 'Pending review', value: String(apiTeachers.reduce((sum, t) => sum + (t.pending ?? 0), 0)).padStart(2, '0'), detail: 'Across dept', tone: 'bg-ks-amber', valueColor: 'text-ks-amber' },
+        { label: 'Top performer', value: topTeacher ? `${topTeacher.average}%` : '—', detail: topTeacher?.name ?? 'N/A', inverted: true, icon: TrendingUp },
       ]} />
-      <Card className="overflow-hidden rounded-xl border-l-4 border-l-ks-rose bg-ks-rose/5 p-5">
-        <p className="text-[11px] font-black uppercase tracking-wider text-ks-rose">Attention required</p>
-        <h2 className="mt-2 font-display text-2xl font-black text-ks-navy">Amina Rashidi requires Chemistry support review</h2>
-        <p className="mt-2 text-sm font-semibold text-ks-muted">Chemistry Form 3B is below target and submission punctuality is 42%.</p>
-      </Card>
+      {riskTeacher && riskTeacher.onTime < 70 && (
+        <Card className="overflow-hidden rounded-xl border-l-4 border-l-ks-rose bg-ks-rose/5 p-5">
+          <p className="text-[11px] font-black uppercase tracking-wider text-ks-rose">Attention required</p>
+          <h2 className="mt-2 font-display text-2xl font-black text-ks-navy">{riskTeacher.name} — timeliness below target</h2>
+          <p className="mt-2 text-sm font-semibold text-ks-muted">On-time submission rate is {riskTeacher.onTime}%. Consider a support review.</p>
+        </Card>
+      )}
       <TeachersTable />
     </HodWorkspaceShell>
   );
@@ -555,7 +631,9 @@ export function TeacherPerformanceListPage() {
 // ─── Teacher detail ─────────────────────────────────────────────────────────
 
 export function TeacherDetailPage() {
-  const teacher = useTeacher();
+  const { loading, teacher } = useTeacher();
+  if (loading) return <HodWorkspaceShell title="Loading…" eyebrow="Teacher department profile"><SkeletonTable cols={5} /></HodWorkspaceShell>;
+  if (!teacher) return <HodWorkspaceShell title="Not Found" eyebrow="Teacher department profile"><EmptyState title="Teacher not found" description="This teacher profile could not be loaded." /></HodWorkspaceShell>;
   return (
     <HodWorkspaceShell title={teacher.name} eyebrow="Teacher department profile">
       <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_340px]">
@@ -599,10 +677,20 @@ export function DepartmentAlertsPage() {
 
 export function DepartmentPairingsPage() {
   const { data: apiPairings = [] as typeof hodPairings } = useHodPairings() as { data: typeof hodPairings };
+  const activateMutation = useActivateHodPairingMutation();
+  const suggestedPairings = apiPairings.filter((p) => p.status === 'SUGGESTED');
+
+  const handleActivateAll = () => {
+    if (suggestedPairings.length === 0) { toast('No suggested pairings to activate', 'info'); return; }
+    Promise.all(suggestedPairings.map((p) => activateMutation.mutateAsync({ id: p.id })))
+      .then(() => toast(`${suggestedPairings.length} pairings activated`, 'success'))
+      .catch(() => toast('Some activations failed. Please retry.', 'error'));
+  };
+
   return (
     <HodWorkspaceShell title="Department Peer Pairings" eyebrow="Bulk activation surface">
       <HodMetricStrip items={[
-        { label: 'Suggested', value: String(apiPairings.filter((p) => p.status === 'SUGGESTED').length), detail: 'Awaiting action', tone: 'bg-ks-blue', valueColor: 'text-ks-blue' },
+        { label: 'Suggested', value: String(suggestedPairings.length), detail: 'Awaiting action', tone: 'bg-ks-blue', valueColor: 'text-ks-blue' },
         { label: 'Active', value: String(apiPairings.filter((p) => p.status === 'ACTIVE').length), detail: 'Current support', tone: 'bg-ks-emerald', valueColor: 'text-ks-emerald' },
         { label: 'Completed', value: String(apiPairings.filter((p) => p.status === 'COMPLETED').length), detail: 'This term', tone: 'bg-ks-gold', valueColor: 'text-ks-amber' },
         { label: 'Effectiveness', value: '78%', detail: 'Avg grade lift', inverted: true, icon: ShieldCheck },
@@ -611,7 +699,19 @@ export function DepartmentPairingsPage() {
         <section className="space-y-gutter">
           {apiPairings.map((pairing) => <PairingReviewCard key={pairing.id} pairing={pairing} />)}
         </section>
-        <ActionPanel title="Bulk action" actions={['Activate all Chemistry Form 3B', 'Reject selected pairings', 'Export pairing review']} />
+        <Card className="sticky top-24 h-fit rounded-xl border-l-4 border-l-ks-blue p-5">
+          <p className="text-[11px] font-black uppercase tracking-[0.22em] text-ks-muted">Bulk action</p>
+          <div className="mt-4 space-y-2">
+            <Button className="w-full justify-between rounded-xl" onClick={handleActivateAll} disabled={activateMutation.isPending}>
+              Activate all suggested ({suggestedPairings.length}) <ArrowRight className="h-4 w-4" />
+            </Button>
+            <NavLink to="/hod/exports">
+              <Button variant="secondary" className="w-full justify-between rounded-xl">
+                Go to Export Center <ArrowRight className="h-4 w-4" />
+              </Button>
+            </NavLink>
+          </div>
+        </Card>
       </div>
     </HodWorkspaceShell>
   );
@@ -621,16 +721,20 @@ export function DepartmentPairingsPage() {
 
 export function HodStudentPerformancePage() {
   const { studentId } = useParams();
-  const { data: apiAlerts = [] as typeof hodAlerts } = useHodAlerts() as { data: typeof hodAlerts };
+  const { data: apiAlerts = [], isLoading } = useHodAlerts();
   const { data: apiSubjects = [] as typeof hodSubjects } = useHodClassSubjects() as { data: typeof hodSubjects };
-  const alert = apiAlerts.find((item) => item.studentId === studentId) ?? apiAlerts[0] ?? hodAlerts[0];
+  const alert = (apiAlerts as Array<{ studentId: string; student: string }>).find((item) => item.studentId === studentId) ?? null;
   const trendData = [72, 68, 64, 58, 55, 52];
+
+  if (isLoading) return <HodWorkspaceShell title="Loading…" eyebrow="Department student profile"><SkeletonTable cols={4} /></HodWorkspaceShell>;
+  if (!alert) return <HodWorkspaceShell title="Student Not Found" eyebrow="Department student profile"><EmptyState title="Student not found" description="No alert record for this student." /></HodWorkspaceShell>;
+
   return (
-    <HodWorkspaceShell title={alert.student} eyebrow="Department student profile">
+    <HodWorkspaceShell title={(alert as { student: string }).student} eyebrow="Department student profile">
       <HodMetricStrip items={apiSubjects.map((subject) => ({
         label: subject.name,
         value: `${subject.average}%`,
-        detail: subject.name === alert.subject ? 'Linked alert subject' : 'Department subject',
+        detail: subject.name === (alert as { subject: string }).subject ? 'Linked alert subject' : 'Department subject',
         tone: subject.tone === 'rose' ? 'bg-ks-rose' : 'bg-ks-blue',
         valueColor: subject.tone === 'rose' ? 'text-ks-rose' : subject.average >= 75 ? 'text-ks-emerald' : 'text-ks-amber',
       }))} />
@@ -666,63 +770,144 @@ export function HodInterventionsPage() {
 // ─── Announcements ──────────────────────────────────────────────────────────
 
 export function HodAnnouncementsPage() {
-  const { data: apiAnnouncements = [] } = useHodAnnouncements() as { data: Array<{ id: string; body?: string; title?: string; audience?: string; targetRoles?: string[] }> };
-  const fallbackAnnouncements = [
-    { id: 'f1', body: 'Chemistry record book audit is scheduled for this Friday. All Chemistry teachers must submit their records by Thursday 5 PM.', audience: 'Teachers + Classes', tone: 'blue' as const },
-    { id: 'f2', body: 'Physics syllabus completion review has been moved to Monday. Please ensure all coverage entries are updated before then.', audience: 'Physics Teachers', tone: 'amber' as const },
-    { id: 'f3', body: 'Biology practical moderation starts next week. HOD will conduct observations during lessons.', audience: 'Biology Teachers', tone: 'emerald' as const },
-  ];
-  const displayAnnouncements = apiAnnouncements.length > 0
-    ? apiAnnouncements.map((a) => ({ id: a.id, body: a.body ?? a.title ?? '', audience: a.audience ?? (a.targetRoles ?? []).join(', ') ?? 'All staff', tone: 'blue' as const }))
-    : fallbackAnnouncements;
+  const { data: apiAnnouncements = [], isLoading, isError, refetch } = useHodAnnouncements() as { data: Array<{ id: string; body?: string; title?: string; audience?: string; targetRoles?: string[] }>; isLoading: boolean; isError: boolean; refetch: () => void };
+  const items = apiAnnouncements.map((a) => ({ id: a.id, body: a.body ?? a.title ?? '', audience: (a.audience ?? (a.targetRoles ?? []).join(', ')) || 'All staff' }));
   return (
     <HodWorkspaceShell title="HOD Announcements" eyebrow="Department communication">
       <Card className="rounded-xl p-5">
         <SectionTitle title="Department announcements" action="/hod/announcements/create" />
-        <div className="mt-4 grid gap-gutter md:grid-cols-2 xl:grid-cols-3">
-          {displayAnnouncements.map((item) => (
-            <Card key={item.id} className="flex flex-col gap-3 rounded-xl p-4 transition hover:-translate-y-0.5 hover:shadow-layer">
-              <p className="flex-1 text-sm font-semibold leading-6 text-ks-slate">{item.body}</p>
-              <div className="flex items-center justify-between gap-2">
-                <Badge tone={item.tone}>{item.audience}</Badge>
-                <button className="text-xs font-black text-ks-blue hover:underline">Edit</button>
-              </div>
-            </Card>
-          ))}
-        </div>
+        {isLoading && <div className="mt-4"><SkeletonTable cols={2} /></div>}
+        {isError && <div className="mt-4"><DataError onRetry={refetch} /></div>}
+        {!isLoading && !isError && items.length === 0 && (
+          <div className="mt-4"><EmptyState title="No announcements" description="Create an announcement to communicate with your department." /></div>
+        )}
+        {!isLoading && !isError && items.length > 0 && (
+          <div className="mt-4 grid gap-gutter md:grid-cols-2 xl:grid-cols-3">
+            {items.map((item) => (
+              <Card key={item.id} className="flex flex-col gap-3 rounded-xl p-4 transition hover:-translate-y-0.5 hover:shadow-layer">
+                <p className="flex-1 text-sm font-semibold leading-6 text-ks-slate">{item.body}</p>
+                <Badge tone="blue">{item.audience}</Badge>
+              </Card>
+            ))}
+          </div>
+        )}
       </Card>
     </HodWorkspaceShell>
   );
 }
 
 export function CreateHodAnnouncementPage() {
+  const navigate = useNavigate();
+  const createMutation = useCreateHodAnnouncementMutation();
+  const [form, setForm] = useState({ title: '', body: '', priority: 'NORMAL', audience: 'All Sciences teachers', scheduledAt: '' });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.title.trim() || !form.body.trim()) { toast('Title and body are required', 'error'); return; }
+    createMutation.mutate({ title: form.title, body: form.body, priority: form.priority, audience: form.audience, scheduledAt: form.scheduledAt || undefined }, {
+      onSuccess: () => { toast('Announcement published', 'success'); navigate('/hod/announcements'); },
+      onError: () => toast('Failed to publish announcement', 'error'),
+    });
+  };
+
+  const set = (field: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
+    setForm((prev) => ({ ...prev, [field]: e.target.value }));
+
   return (
-    <HodFormPage
-      title="Create Department Announcement"
-      eyebrow="Teacher and class audience"
-      fields={['Title', 'Body', 'Priority', 'Audience roles', 'Department classes', 'Subject targets', 'Schedule']}
-      preview="Department announcement preview for science teachers and selected classes. Recipients: All Sciences teachers + selected form classes."
-    />
+    <HodWorkspaceShell title="Create Department Announcement" eyebrow="Teacher and class audience">
+      <form onSubmit={handleSubmit}>
+        <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_380px]">
+          <Card className="rounded-xl p-5">
+            <div className="flex items-center gap-3">
+              <MessageSquarePlus className="h-5 w-5 text-ks-blue" />
+              <h2 className="font-display text-2xl font-black text-ks-navy">Create Department Announcement</h2>
+            </div>
+            <div className="mt-5 space-y-4">
+              <label className="block">
+                <span className="text-[11px] font-black uppercase tracking-[0.22em] text-ks-muted">Title *</span>
+                <input required value={form.title} onChange={set('title')} className="mt-2 h-11 w-full rounded-xl border border-ks-line px-3 font-semibold outline-none transition focus:border-ks-blue focus:ring-2 focus:ring-ks-blue/10" placeholder="e.g. Chemistry record book audit Friday" />
+              </label>
+              <label className="block">
+                <span className="text-[11px] font-black uppercase tracking-[0.22em] text-ks-muted">Body *</span>
+                <textarea required value={form.body} onChange={set('body')} rows={5} className="mt-2 w-full resize-none rounded-xl border border-ks-line p-3 font-semibold outline-none transition focus:border-ks-blue focus:ring-2 focus:ring-ks-blue/10" placeholder="Announcement details for your department…" />
+              </label>
+              <div className="grid gap-4 md:grid-cols-2">
+                <label className="block">
+                  <span className="text-[11px] font-black uppercase tracking-[0.22em] text-ks-muted">Priority</span>
+                  <select value={form.priority} onChange={set('priority')} className="mt-2 h-11 w-full rounded-xl border border-ks-line px-3 font-semibold outline-none transition focus:border-ks-blue">
+                    <option value="LOW">Low</option>
+                    <option value="NORMAL">Normal</option>
+                    <option value="HIGH">High</option>
+                    <option value="URGENT">Urgent</option>
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="text-[11px] font-black uppercase tracking-[0.22em] text-ks-muted">Audience</span>
+                  <input value={form.audience} onChange={set('audience')} className="mt-2 h-11 w-full rounded-xl border border-ks-line px-3 font-semibold outline-none transition focus:border-ks-blue focus:ring-2 focus:ring-ks-blue/10" placeholder="All Sciences teachers" />
+                </label>
+                <label className="block">
+                  <span className="text-[11px] font-black uppercase tracking-[0.22em] text-ks-muted">Schedule (optional)</span>
+                  <input type="datetime-local" value={form.scheduledAt} onChange={set('scheduledAt')} className="mt-2 h-11 w-full rounded-xl border border-ks-line px-3 font-semibold outline-none transition focus:border-ks-blue focus:ring-2 focus:ring-ks-blue/10" />
+                </label>
+              </div>
+            </div>
+            <Button type="submit" className="mt-5 rounded-xl" disabled={createMutation.isPending}>
+              <Send className="h-4 w-4" /> {createMutation.isPending ? 'Publishing…' : 'Publish announcement'}
+            </Button>
+          </Card>
+          <Card className="sticky top-24 h-fit rounded-xl p-5">
+            <p className="text-[11px] font-black uppercase tracking-[0.22em] text-ks-muted">Live Preview</p>
+            <div className="mt-3 rounded-xl border border-ks-line bg-ks-paper p-4">
+              <p className="font-black text-ks-navy">{form.title || 'Announcement title…'}</p>
+              <p className="mt-2 text-sm font-semibold leading-relaxed text-ks-slate">{form.body || 'Announcement body will appear here for recipients.'}</p>
+              <div className="mt-3 flex items-center gap-2">
+                <span className="rounded-full bg-ks-blue/10 px-2 py-0.5 text-[10px] font-black text-ks-blue">{form.audience}</span>
+                <span className="rounded-full bg-ks-amber/10 px-2 py-0.5 text-[10px] font-black text-ks-amber">{form.priority}</span>
+              </div>
+            </div>
+          </Card>
+        </div>
+      </form>
+    </HodWorkspaceShell>
   );
 }
 
 // ─── Exports ────────────────────────────────────────────────────────────────
 
-const exportItems = [
-  { title: 'Pending approval queue', description: 'All submissions awaiting HOD review, sorted by age.', format: 'CSV' },
-  { title: 'Approval history', description: 'Complete decision audit with approvals and rejections.', format: 'PDF' },
-  { title: 'Subject analytics', description: 'Per-subject averages, trends, and syllabus coverage.', format: 'PDF' },
-  { title: 'Teacher performance', description: 'On-time submission rates and class averages per teacher.', format: 'PDF' },
-  { title: 'At-risk students', description: 'Students flagged by the AQA engine across all subjects.', format: 'CSV' },
-  { title: 'Intervention log', description: 'All interventions with follow-up status and outcomes.', format: 'CSV' },
-  { title: 'Academic audit report', description: 'Complete departmental audit trail for governance review.', format: 'PDF' },
+const hodExportItems: Array<{ title: string; description: string; format: string; reportType: string }> = [
+  { title: 'Pending approval queue', description: 'All submissions awaiting HOD review, sorted by age.', format: 'CSV', reportType: 'hod-pending-approvals' },
+  { title: 'Approval history', description: 'Complete decision audit with approvals and rejections.', format: 'PDF', reportType: 'hod-approval-history' },
+  { title: 'Subject analytics', description: 'Per-subject averages, trends, and syllabus coverage.', format: 'PDF', reportType: 'hod-subject-analytics' },
+  { title: 'Teacher performance', description: 'On-time submission rates and class averages per teacher.', format: 'PDF', reportType: 'hod-teacher-performance' },
+  { title: 'At-risk students', description: 'Students flagged by the AQA engine across all subjects.', format: 'CSV', reportType: 'hod-at-risk-students' },
+  { title: 'Intervention log', description: 'All interventions with follow-up status and outcomes.', format: 'CSV', reportType: 'hod-interventions' },
+  { title: 'Academic audit report', description: 'Complete departmental audit trail for governance review.', format: 'PDF', reportType: 'hod-audit-report' },
 ];
 
 export function HodExportsPage() {
+  const [generating, setGenerating] = useState<string | null>(null);
+  const generateMutation = useGenerateReportMutation();
+
+  const handleGenerate = async (item: typeof hodExportItems[0]) => {
+    setGenerating(item.title);
+    toast(`Generating "${item.title}"…`, 'info');
+    try {
+      const result = await generateMutation.mutateAsync({ type: item.reportType, format: item.format.toLowerCase() }) as Record<string, unknown> | undefined;
+      const jobId = String(result?.id ?? result?.jobId ?? '');
+      if (!jobId) throw new Error('No job id returned');
+      await downloadReportWhenReady(jobId, `${item.title}.${item.format.toLowerCase()}`);
+      toast(`"${item.title}" downloaded`, 'success');
+    } catch {
+      toast(`Failed to generate "${item.title}". Please try again.`, 'error');
+    } finally {
+      setGenerating(null);
+    }
+  };
+
   return (
     <HodWorkspaceShell title="HOD Export Center" eyebrow="Department reports">
       <div className="grid gap-gutter md:grid-cols-2 xl:grid-cols-3">
-        {exportItems.map((item) => (
+        {hodExportItems.map((item) => (
           <Card key={item.title} className="group flex flex-col rounded-xl p-5 transition hover:-translate-y-0.5 hover:shadow-layer">
             <div className="flex items-start justify-between gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-ks-blue/10">
@@ -734,8 +919,13 @@ export function HodExportsPage() {
             </div>
             <h3 className="mt-4 font-display text-xl font-black text-ks-navy">{item.title}</h3>
             <p className="mt-1 flex-1 text-sm font-semibold text-ks-muted">{item.description}</p>
-            <Button variant="secondary" className="mt-4 w-full rounded-xl">
-              <Save className="h-4 w-4" /> Generate
+            <Button
+              variant="secondary"
+              className="mt-4 w-full rounded-xl"
+              disabled={generating !== null}
+              onClick={() => handleGenerate(item)}
+            >
+              <Download className="h-4 w-4" /> {generating === item.title ? 'Generating…' : 'Generate'}
             </Button>
           </Card>
         ))}
@@ -747,25 +937,23 @@ export function HodExportsPage() {
 // ─── Audit trail ───────────────────────────────────────────────────────────
 
 export function HodAuditPage() {
-  const { data: auditData = [] } = useHodAudit() as { data: Array<{ id: string; date?: string; createdAt?: string; actor?: string; decision?: string; entity?: string; reason?: string; action?: string }> };
+  const { data: auditData = [], isLoading, isError, refetch } = useHodAudit() as { data: Array<{ id: string; date?: string; createdAt?: string; actor?: string; decision?: string; entity?: string; reason?: string; action?: string }>; isLoading: boolean; isError: boolean; refetch: () => void };
   const toneMap = ['bg-ks-sky', 'bg-ks-rose', 'bg-ks-amber', 'bg-ks-gold', 'bg-ks-emerald'];
-  const events = auditData.length > 0
-    ? auditData.map((e, i) => ({
-        text: `${e.decision ?? e.action ?? 'Action'} — ${e.entity ?? ''}${e.reason ? `: ${e.reason}` : ''}`,
-        tone: toneMap[i % toneMap.length],
-        date: e.date ?? e.createdAt ?? '',
-        actor: e.actor ?? 'System',
-        id: e.id,
-      }))
-    : [
-        { id: '1', text: 'Assessment submitted by Amina Rashidi — Chemistry Form 3B Mid-Term', tone: 'bg-ks-sky', date: 'May 20, 2026', actor: 'Dr. James Kileo' },
-        { id: '2', text: 'HOD reviewed Chemistry Mid-Term outliers and flagged 2 students', tone: 'bg-ks-rose', date: 'May 19, 2026', actor: 'Dr. James Kileo' },
-        { id: '3', text: 'Intervention created for Jabir Hassan — Chemistry catch-up plan', tone: 'bg-ks-amber', date: 'May 18, 2026', actor: 'Dr. James Kileo' },
-        { id: '4', text: 'Peer pairing activated for Chemistry Form 3B — Joel mentoring Said', tone: 'bg-ks-gold', date: 'May 17, 2026', actor: 'Dr. James Kileo' },
-        { id: '5', text: 'Department announcement published to Sciences teachers', tone: 'bg-ks-emerald', date: 'May 16, 2026', actor: 'Dr. James Kileo' },
-      ];
+  const events = auditData.map((e, i) => ({
+    text: `${e.decision ?? e.action ?? 'Action'} — ${e.entity ?? ''}${e.reason ? `: ${e.reason}` : ''}`,
+    tone: toneMap[i % toneMap.length],
+    date: e.date ?? e.createdAt ?? '',
+    actor: e.actor ?? 'System',
+    id: e.id,
+  }));
   return (
     <HodWorkspaceShell title="Department Academic Audit Trail" eyebrow="Decision history">
+      {isLoading && <SkeletonTable cols={3} />}
+      {isError && <DataError onRetry={refetch} />}
+      {!isLoading && !isError && events.length === 0 && (
+        <EmptyState title="No audit events" description="HOD decisions and actions will appear here once recorded." />
+      )}
+      {!isLoading && !isError && events.length > 0 && (
       <Card className="overflow-hidden rounded-xl bg-ks-navy p-6 text-white shadow-layer">
         <div className="relative border-l border-ks-mist/20 pl-6">
           {events.map((event, index) => (
@@ -780,6 +968,7 @@ export function HodAuditPage() {
           ))}
         </div>
       </Card>
+      )}
     </HodWorkspaceShell>
   );
 }
@@ -1111,21 +1300,34 @@ function HodFormPage({ title, eyebrow, fields, preview }: { title: string; eyebr
   );
 }
 
+// Action-to-route map for ActionPanel navigation
+const ACTION_ROUTES: Record<string, string> = {
+  'open class analytics':  '/hod/department',
+  'create support record': '/hod/interventions',
+  'export teacher report': '/hod/exports',
+};
+
 function ActionPanel({ title, actions }: { title: string; actions: string[] }) {
+  const navigate = useNavigate();
   return (
     <Card className="sticky top-24 h-fit rounded-xl border-l-4 border-l-ks-blue p-5">
       <p className="text-[11px] font-black uppercase tracking-[0.22em] text-ks-muted">{title}</p>
       <div className="mt-4 space-y-2">
-        {actions.map((action) => (
-          <Button
-            key={action}
-            variant={action.toLowerCase().includes('reject') ? 'danger' : 'secondary'}
-            className="w-full justify-between rounded-xl"
-          >
-            {action}
-            <ArrowRight className="h-4 w-4" />
-          </Button>
-        ))}
+        {actions.map((action) => {
+          const route = ACTION_ROUTES[action.toLowerCase()];
+          if (!route) return null;
+          return (
+            <Button
+              key={action}
+              variant={action.toLowerCase().includes('reject') ? 'danger' : 'secondary'}
+              className="w-full justify-between rounded-xl"
+              onClick={() => navigate(route)}
+            >
+              {action}
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+          );
+        })}
       </div>
     </Card>
   );
@@ -1158,27 +1360,27 @@ function Td({ children }: { children: ReactNode }) {
 
 function useApproval() {
   const { assessmentId } = useParams();
-  const { data: apiApprovals = [] as typeof hodApprovals } = useHodPendingApprovals() as { data: typeof hodApprovals };
+  const { data: apiApprovals = [] as typeof hodApprovals, isLoading } = useHodPendingApprovals() as { data: typeof hodApprovals; isLoading: boolean };
   return useMemo(
-    () => apiApprovals.find((approval) => approval.id === assessmentId) ?? apiApprovals[0] ?? hodApprovals[0],
-    [assessmentId, apiApprovals],
+    () => ({ loading: isLoading, approval: isLoading ? null : (apiApprovals.find((a) => a.id === assessmentId) ?? null) }),
+    [assessmentId, apiApprovals, isLoading],
   );
 }
 
 function useSubject() {
   const { subjectId } = useParams();
-  const { data: apiSubjects = [] as typeof hodSubjects } = useHodClassSubjects() as { data: typeof hodSubjects };
+  const { data: apiSubjects = [] as typeof hodSubjects, isLoading } = useHodClassSubjects() as { data: typeof hodSubjects; isLoading: boolean };
   return useMemo(
-    () => apiSubjects.find((subject) => subject.id === subjectId) ?? apiSubjects[0] ?? hodSubjects[0],
-    [subjectId, apiSubjects],
+    () => ({ loading: isLoading, subject: isLoading ? null : (apiSubjects.find((s) => s.id === subjectId) ?? null) }),
+    [subjectId, apiSubjects, isLoading],
   );
 }
 
 function useTeacher() {
   const { teacherId } = useParams();
-  const { data: apiTeachers = [] as typeof hodTeachers } = useHodTeachersList() as { data: typeof hodTeachers };
+  const { data: apiTeachers = [] as typeof hodTeachers, isLoading } = useHodTeachersList() as { data: typeof hodTeachers; isLoading: boolean };
   return useMemo(
-    () => apiTeachers.find((teacher) => teacher.id === teacherId) ?? apiTeachers[0] ?? hodTeachers[0],
-    [teacherId, apiTeachers],
+    () => ({ loading: isLoading, teacher: isLoading ? null : (apiTeachers.find((t) => t.id === teacherId) ?? null) }),
+    [teacherId, apiTeachers, isLoading],
   );
 }

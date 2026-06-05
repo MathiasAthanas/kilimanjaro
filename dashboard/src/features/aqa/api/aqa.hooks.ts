@@ -37,7 +37,27 @@ export function useAqaAlerts() {
     queryFn: () =>
       api
         .get('/academics/performance/alerts')
-        .then((r) => arrayFromApi(payloadOf(r), ['alerts', 'performanceAlerts'])),
+        .then((r) =>
+          arrayFromApi(payloadOf(r), ['alerts', 'performanceAlerts']).map((raw) => {
+            const a = raw as Record<string, unknown>;
+            const resolve = (v: unknown): string => {
+              if (!v || typeof v !== 'object') return String(v ?? '');
+              const o = v as Record<string, unknown>;
+              return String(o.name ?? o.fullName ?? o.label ?? '');
+            };
+            return {
+              ...a,
+              id: String(a.id ?? crypto.randomUUID()),
+              student: resolve(a.student ?? a.studentName),
+              subject: resolve(a.subject ?? a.subjectName),
+              className: resolve(a.className ?? a.class ?? a.class_name),
+              pairingStatus: String(a.pairingStatus ?? a.pairing_status ?? a.alertStatus ?? ''),
+              severity: String(a.severity ?? a.alertLevel ?? a.level ?? ''),
+              score: Number(a.score ?? a.currentScore ?? a.averageScore ?? 0),
+              type: String(a.type ?? a.alertType ?? ''),
+            };
+          }),
+        ),
   });
 }
 
@@ -58,7 +78,24 @@ export function useAqaHeatmap() {
     queryFn: () =>
       api
         .get('/aqa/analytics/heatmap')
-        .then((r) => arrayFromApi(payloadOf(r), ['heatmap', 'data'])),
+        .then((r) =>
+          arrayFromApi(payloadOf(r), ['heatmap', 'data']).map((raw) => {
+            const c = raw as Record<string, unknown>;
+            const resolve = (v: unknown): string => {
+              if (!v || typeof v !== 'object') return String(v ?? '');
+              const o = v as Record<string, unknown>;
+              return String(o.name ?? o.fullName ?? o.label ?? '');
+            };
+            return {
+              ...c,
+              id: String(c.id ?? crypto.randomUUID()),
+              subject: resolve(c.subject ?? c.subjectName),
+              className: resolve(c.className ?? c.class ?? c.class_name),
+              average: Number(c.average ?? c.score ?? c.averageScore ?? 0),
+              classId: String(c.classId ?? c.class_id ?? c.id ?? ''),
+            };
+          }),
+        ),
   });
 }
 
@@ -68,7 +105,27 @@ export function useAqaPairings() {
     queryFn: () =>
       api
         .get('/academics/performance/pairings')
-        .then((r) => arrayFromApi(payloadOf(r), ['pairings'])),
+        .then((r) =>
+          arrayFromApi(payloadOf(r), ['pairings']).map((raw) => {
+            const p = raw as Record<string, unknown>;
+            const resolve = (v: unknown): string => {
+              if (!v || typeof v !== 'object') return String(v ?? '');
+              const o = v as Record<string, unknown>;
+              return String(o.name ?? o.fullName ?? o.label ?? '');
+            };
+            return {
+              ...p,
+              id: String(p.id ?? crypto.randomUUID()),
+              mentor: resolve(p.mentor ?? p.mentorName),
+              teacher: resolve(p.teacher ?? p.teacherName),
+              student: resolve(p.student ?? p.studentName),
+              subject: resolve(p.subject ?? p.subjectName),
+              className: resolve(p.className ?? p.class ?? p.class_name),
+              reason: String(p.reason ?? p.pairingReason ?? p.description ?? ''),
+              outcome: String(p.outcome ?? p.pairingOutcome ?? p.result ?? p.status ?? ''),
+            };
+          }),
+        ),
   });
 }
 
@@ -78,7 +135,25 @@ export function useAqaInterventions() {
     queryFn: () =>
       api
         .get('/academics/interventions')
-        .then((r) => arrayFromApi(payloadOf(r), ['interventions'])),
+        .then((r) =>
+          arrayFromApi(payloadOf(r), ['interventions']).map((raw) => {
+            const i = raw as Record<string, unknown>;
+            const resolve = (v: unknown): string => {
+              if (!v || typeof v !== 'object') return String(v ?? '');
+              const o = v as Record<string, unknown>;
+              return String(o.name ?? o.fullName ?? o.label ?? '');
+            };
+            return {
+              ...i,
+              id: String(i.id ?? crypto.randomUUID()),
+              student: resolve(i.student ?? i.studentName),
+              note: String(i.note ?? i.notes ?? i.description ?? ''),
+              week: String(i.week ?? i.weekLabel ?? i.createdAt ?? i.created_at ?? ''),
+              roleOwner: resolve(i.roleOwner ?? i.owner ?? i.assignedTo ?? i.teacher),
+              status: String(i.status ?? i.interventionStatus ?? 'OPEN'),
+            };
+          }),
+        ),
   });
 }
 
@@ -88,7 +163,19 @@ export function useAqaReports() {
     queryFn: () =>
       api
         .get('/analytics/reports')
-        .then((r) => arrayFromApi(payloadOf(r), ['reports'])),
+        .then((r) =>
+          arrayFromApi(payloadOf(r), ['reports']).map((raw) => {
+            const rep = raw as Record<string, unknown>;
+            return {
+              ...rep,
+              id: String(rep.id ?? crypto.randomUUID()),
+              title: String(rep.title ?? rep.name ?? rep.reportName ?? ''),
+              status: String(rep.status ?? rep.reportStatus ?? 'PENDING'),
+              type: String(rep.type ?? rep.reportType ?? rep.category ?? ''),
+              generatedAt: String(rep.generatedAt ?? rep.generated_at ?? rep.createdAt ?? rep.created_at ?? ''),
+            };
+          }),
+        ),
   });
 }
 
@@ -214,6 +301,15 @@ export function useCreateAqaInterventionMutation() {
     mutationFn: (body: Record<string, unknown>) =>
       api.post('/academics/interventions', body).then((res) => res.data),
     onSuccess: () => qc.invalidateQueries({ queryKey: aqaKeys.interventions() }),
+  });
+}
+
+export function useCreateAqaAnnouncementMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Record<string, unknown>) =>
+      api.post('/notifications/announcements', body).then((res) => res.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: aqaKeys.announcements() }),
   });
 }
 
