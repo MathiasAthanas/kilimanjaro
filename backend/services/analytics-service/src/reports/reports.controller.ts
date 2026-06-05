@@ -17,7 +17,7 @@ export class ReportsController {
   constructor(private readonly service: ReportsService) {}
 
   @Post('generate')
-  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA, ROLES.MANAGING_DIRECTOR, ROLES.BOARD_DIRECTOR, ROLES.FINANCE)
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA, ROLES.MANAGING_DIRECTOR, ROLES.BOARD_DIRECTOR, ROLES.FINANCE, ROLES.HEAD_OF_DEPARTMENT, ROLES.TEACHER)
   @ApiOperation({ summary: 'Generate report asynchronously' })
   generate(@Body() body: GenerateReportDto, @CurrentUser() user?: RequestUser) {
     return this.service.generateReport(body, user || { id: 'unknown', role: 'SYSTEM_ADMIN' });

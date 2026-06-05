@@ -11,6 +11,7 @@ const ANALYTICS_ALLOWED = new Set([
   'ACADEMIC_QA',
   'FINANCE',
   'HEAD_OF_DEPARTMENT',
+  'TEACHER',
 ]);
 
 const ANNOUNCEMENTS_ALLOWED = new Set([
