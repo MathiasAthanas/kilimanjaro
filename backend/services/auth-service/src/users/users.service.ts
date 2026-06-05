@@ -394,11 +394,12 @@ export class UsersService {
     return `Temp-${random}-Kili`;
   }
 
-  private generateNamePassword(firstName: string, lastName: string): string {
-    const base = lastName.replace(/[^a-z0-9]/gi, '').toUpperCase();
-    if (base) {
-      return base;
-    }
+  private generateNamePassword(_firstName: string, lastName: string): string {
+    // Generate a memorable but secure temp password: Name@Kili + 4-digit random
+    const base = lastName.charAt(0).toUpperCase() + lastName.slice(1).toLowerCase().replace(/[^a-z]/g, '');
+    const digits = Math.floor(1000 + Math.random() * 9000);
+    return `${base}@Kili${digits}`;
+  }
     return firstName.replace(/[^a-z0-9]/gi, '').toUpperCase() || 'KILIMANJARO';
   }
 }

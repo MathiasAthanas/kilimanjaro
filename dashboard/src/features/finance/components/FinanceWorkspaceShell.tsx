@@ -17,12 +17,14 @@ import {
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { ReactNode } from 'react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { Badge } from '../../../components/common/Badge';
 import { Button } from '../../../components/common/Button';
 import type { Asset, AuditEntry, FinanceStatus, Invoice, Payment, PaymentMethod, Receipt } from '../types/finance.types';
 import { duplicateReferenceWarning, formatTZS, isOverpayment, parseTZSInput } from '../utils/money';
+import { useFileUploadMutation, validateFile } from '../../../lib/api/upload';
+import type { UploadedFile } from '../../../lib/api/upload';
 
 // ─── Shell ────────────────────────────────────────────────────────────────────
 
@@ -510,11 +512,27 @@ export function PaymentForm({ method, invoices, references }: { method: 'cash' |
   const [amountText, setAmountText] = useState('400000');
   const [reference, setReference] = useState(method === 'bank' ? 'CRDB-8841' : '');
   const [confirmed, setConfirmed] = useState(false);
+  const [evidenceFile, setEvidenceFile] = useState<UploadedFile | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const uploadMutation = useFileUploadMutation();
   const amount = parseTZSInput(amountText);
   const overpay = isOverpayment(amount, selectedInvoice.outstanding);
   const missingReference = method === 'bank' && !reference.trim();
   const duplicateReference = method === 'bank' && duplicateReferenceWarning(reference, references);
   const blocked = amount <= 0 || missingReference || (overpay && !confirmed);
+
+  const handleEvidenceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const err = validateFile(file);
+    if (err) { setUploadError(err); return; }
+    setUploadError(null);
+    uploadMutation.mutate(file, {
+      onSuccess: (result) => setEvidenceFile(result.file),
+      onError: (err) => setUploadError(err instanceof Error ? err.message : 'Upload failed'),
+    });
+  };
 
   return (
     <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_380px]">
@@ -559,6 +577,38 @@ export function PaymentForm({ method, invoices, references }: { method: 'cash' |
                     placeholder="e.g. CRDB-XXXXXXX"
                   />
                 </label>
+                {/* ── Bank slip / evidence upload ── */}
+                <div className="md:col-span-2">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-[#64748b]">Bank Slip / Evidence</span>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,application/pdf"
+                    className="hidden"
+                    onChange={handleEvidenceChange}
+                  />
+                  {evidenceFile ? (
+                    <div className="mt-2 flex items-center gap-3 rounded border border-[#10b981]/30 bg-[#10b981]/5 px-3 py-2">
+                      <CheckCircle2 className="h-4 w-4 shrink-0 text-[#10b981]" />
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-black text-[#00334f]">{evidenceFile.originalName}</p>
+                        <p className="text-[10px] font-semibold text-[#64748b]">{(evidenceFile.sizeBytes / 1024).toFixed(0)} KB · uploaded</p>
+                      </div>
+                      <button type="button" onClick={() => setEvidenceFile(null)} className="ml-auto shrink-0 text-[10px] font-black text-[#e11d48] hover:underline">Remove</button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploadMutation.isPending}
+                      className="mt-2 flex w-full items-center justify-center gap-2 rounded border-2 border-dashed border-[#d5dde6] bg-[#f7f9fb] py-3 text-xs font-black text-[#64748b] transition hover:border-[#00334f] hover:text-[#00334f] disabled:opacity-50"
+                    >
+                      <TrendingUp className="h-4 w-4" />
+                      {uploadMutation.isPending ? 'Uploading…' : 'Upload bank slip or receipt (JPEG, PNG, PDF)'}
+                    </button>
+                  )}
+                  {uploadError && <p className="mt-1 text-[11px] font-black text-[#e11d48]">{uploadError}</p>}
+                </div>
               </>
             ) : (
               <>

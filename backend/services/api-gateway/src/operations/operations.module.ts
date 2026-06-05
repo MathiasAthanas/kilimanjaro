@@ -1,3 +1,4 @@
+import { UploadController } from './upload.controller';
 import { Module } from '@nestjs/common';
 import { HttpModule } from '@nestjs/axios';
 import { OperationsController } from './operations.controller';
@@ -6,7 +7,7 @@ import { UiApiService } from '../ui/ui-api.service';
 
 @Module({
   imports: [HttpModule],
-  controllers: [OperationsController],
+  controllers: [OperationsController, UploadController],
   providers: [OperationsStoreService, UiApiService],
 })
 export class OperationsModule {}

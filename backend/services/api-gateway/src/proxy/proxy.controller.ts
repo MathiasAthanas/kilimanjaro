@@ -20,7 +20,7 @@ export class ProxyController {
 
   @All(['auth/login', 'api/v1/auth/login'])
   @Public()
-  @Throttle({ default: { limit: 50, ttl: 900000 } })
+  @Throttle({ default: { limit: 20, ttl: 900000 } })
   @ApiOperation({ summary: 'Public login route proxy' })
   async loginProxy(@Req() req: Request, @Res() res: Response) {
     return this.forwardPublic(req, res);
