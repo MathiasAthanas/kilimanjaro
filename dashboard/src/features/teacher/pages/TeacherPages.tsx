@@ -177,7 +177,7 @@ export function TeacherClassesPage() {
 
 export function ClassWorkspacePage() {
   const { loading, klass } = useClassSubject();
-  const { data: apiAlerts = [] as typeof alerts } = usePerformanceAlerts() as { data: typeof alerts };
+  const { data: apiAlerts = [] as typeof alerts } = usePerformanceAlerts() as unknown as { data: typeof alerts };
   const { data: apiAssessments = [] } = useTeacherAssessments();
   const firstAss = apiAssessments[0];
 
@@ -558,7 +558,7 @@ export function AttendanceHistoryPage() {
 
 export function PerformanceAlertsPage() {
   const { data: apiPairings = [] as typeof pairings } = usePerfPairings() as { data: typeof pairings };
-  const { data: apiAlerts = [] as typeof alerts } = usePerformanceAlerts() as { data: typeof alerts };
+  const { data: apiAlerts = [] as typeof alerts } = usePerformanceAlerts() as unknown as { data: typeof alerts };
   const criticalCount = apiAlerts.filter((a) => a.severity === 'CRITICAL').length;
   const atRiskCount = apiAlerts.filter((a) => a.severity === 'AT_RISK').length;
   const suggestedPairings = apiPairings.filter((p) => p.status === 'SUGGESTED').length;
@@ -601,7 +601,7 @@ export function PerformanceAlertsPage() {
 
 export function AlertDetailPage() {
   const { id } = useParams();
-  const { data: apiAlerts = [] as typeof alerts, isLoading } = usePerformanceAlerts() as { data: typeof alerts; isLoading: boolean };
+  const { data: apiAlerts = [] as typeof alerts, isLoading } = usePerformanceAlerts() as unknown as { data: typeof alerts; isLoading: boolean };
   if (isLoading) return <TeacherWorkspaceShell title="Loading…" eyebrow="Performance alert"><SkeletonTable cols={4} /></TeacherWorkspaceShell>;
   const alert = apiAlerts.find((item) => item.id === id) ?? null;
   if (!alert) return (
@@ -1030,7 +1030,7 @@ function ClassSubjectsTable() {
 }
 
 function AlertsOperationalTable() {
-  const { data: apiAlerts = [] as typeof alerts } = usePerformanceAlerts() as { data: typeof alerts };
+  const { data: apiAlerts = [] as typeof alerts } = usePerformanceAlerts() as unknown as { data: typeof alerts };
   return (
     <Card className="overflow-hidden rounded-xl">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-ks-line bg-ks-paper/50 px-gutter py-4">

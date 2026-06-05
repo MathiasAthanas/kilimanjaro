@@ -24,7 +24,7 @@ import { toast } from '../../../lib/toast';
 import { Badge } from '../../../components/common/Badge';
 import { Button } from '../../../components/common/Button';
 import { Card } from '../../../components/common/Card';
-import { heatmap, reports, thresholds } from '../api/aqaApi';
+import { aqaAlerts, heatmap, pairings, reports, thresholds } from '../api/aqaApi';
 import {
   useAqaAlerts,
   useAqaHeatmap,
@@ -68,7 +68,7 @@ import { hasUnsavedThresholdChanges, validateThresholdOrder } from '../utils/aqa
 export function AqaHomePage() {
   const navigate = useNavigate();
   const [exporting, setExporting] = useState(false);
-  const { data: apiHeatmap = [] as typeof heatmap } = useAqaHeatmap() as { data: typeof heatmap };
+  const { data: apiHeatmap = [] as typeof heatmap } = useAqaHeatmap() as unknown as { data: typeof heatmap };
   const { data: apiAlerts = [] } = useAqaAlerts();
   const { data: apiInterventions = [] } = useAqaInterventions();
   const generateMutation = useGenerateReportMutation();
@@ -152,7 +152,7 @@ export function AqaHomePage() {
 // ─── Performance command center ──────────────────────────────────────────────
 
 export function PerformanceCommandCenterPage() {
-  const { data: apiAlerts = [] as typeof aqaAlerts } = useAqaAlerts() as { data: typeof aqaAlerts };
+  const { data: apiAlerts = [] as typeof aqaAlerts } = useAqaAlerts() as unknown as { data: typeof aqaAlerts };
   const critical = apiAlerts.filter((a) => a.severity === 'CRITICAL');
   const high = apiAlerts.filter((a) => a.severity === 'HIGH');
   const medium = apiAlerts.filter((a) => a.severity === 'MEDIUM');
@@ -201,7 +201,7 @@ export function AqaAlertDetailPage() {
 // ─── Pairings overview ────────────────────────────────────────────────────────
 
 export function PairingsOverviewPage() {
-  const { data: apiPairings = [] as typeof pairings } = useAqaPairings() as { data: typeof pairings };
+  const { data: apiPairings = [] as typeof pairings } = useAqaPairings() as unknown as { data: typeof pairings };
   return (
     <AqaWorkspaceShell title="Peer Pairings Overview" eyebrow="Effectiveness and actions">
       <div className="grid gap-gutter xl:grid-cols-[320px_minmax(0,1fr)]">
@@ -356,7 +356,7 @@ export function EngineConfigPage() {
 // ─── Analytics ───────────────────────────────────────────────────────────────
 
 export function AcademicAnalyticsPage() {
-  const { data: apiHeatmap = [] as typeof heatmap } = useAqaHeatmap() as { data: typeof heatmap };
+  const { data: apiHeatmap = [] as typeof heatmap } = useAqaHeatmap() as unknown as { data: typeof heatmap };
   const { data: schoolSummary } = useAqaSchoolSummary() as { data: Record<string, unknown> | undefined };
   const { data: apiAlerts = [] } = useAqaAlerts();
   const { data: apiInterventions = [] } = useAqaInterventions();
@@ -751,7 +751,7 @@ export function AqaAuditPage() {
 // ─── Private components ───────────────────────────────────────────────────────
 
 function CriticalBanner() {
-  const { data: apiAlerts = [] as typeof aqaAlerts } = useAqaAlerts() as { data: typeof aqaAlerts };
+  const { data: apiAlerts = [] as typeof aqaAlerts } = useAqaAlerts() as unknown as { data: typeof aqaAlerts };
   const liveCritical = apiAlerts.filter((a) => a.severity === 'CRITICAL');
   return (
     <Card className="overflow-hidden rounded-xl border border-ks-rose/20 bg-ks-rose/5">
@@ -894,7 +894,7 @@ function InvestigationPanel({ alert }: { alert: (typeof aqaAlerts)[number] }) {
 }
 
 function AtRiskTable({ compact = false }: { compact?: boolean }) {
-  const { data: liveAlerts = [] as typeof aqaAlerts } = useAqaAlerts() as { data: typeof aqaAlerts };
+  const { data: liveAlerts = [] as typeof aqaAlerts } = useAqaAlerts() as unknown as { data: typeof aqaAlerts };
   const alerts = liveAlerts.filter((a) => a.severity !== 'POSITIVE');
   const criticals = alerts.filter((a) => a.severity === 'CRITICAL');
   const highs     = alerts.filter((a) => a.severity === 'HIGH');
@@ -1189,31 +1189,6 @@ function ReportTile({ report }: { report: (typeof reports)[number] }) {
   );
 }
 
-function RankingsCard({
-  title, students, gains, isAbsolute = false,
-}: { title: string; students: string[]; gains: number[]; isAbsolute?: boolean }) {
-  return (
-    <Card className="overflow-hidden rounded-xl">
-      <div className="border-b border-ks-line px-5 py-4">
-        <h2 className="font-display text-base font-black text-ks-navy">{title}</h2>
-      </div>
-      <div className="divide-y divide-ks-line">
-        {students.map((name, i) => (
-          <div key={name} className="flex items-center gap-3 px-5 py-3.5 transition hover:bg-ks-paper">
-            <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-black text-white ${
-              i === 0 ? 'bg-ks-gold' : i === 1 ? 'bg-ks-muted' : 'bg-ks-amber/60'
-            }`}>{i + 1}</span>
-            <span className="flex-1 font-bold text-ks-navy">{name}</span>
-            <span className={`font-black ${isAbsolute ? 'text-ks-blue' : 'text-ks-emerald'}`}>
-              {isAbsolute ? `${gains[i]}%` : `+${gains[i]}%`}
-            </span>
-          </div>
-        ))}
-      </div>
-    </Card>
-  );
-}
-
 function AnnouncementsTable() {
   const { data: apiAnnouncements = [], isLoading, isError, refetch } = useAqaAnnouncements() as { data: Array<Record<string, unknown>>; isLoading: boolean; isError: boolean; refetch: () => void };
   if (isLoading) return <SkeletonTable cols={6} />;
@@ -1229,7 +1204,7 @@ function AnnouncementsTable() {
         const scheduledAt = String(row.scheduledAt ?? row.scheduledFor ?? row.createdAt ?? '—');
         const createdBy = String(row.createdBy ?? row.author ?? row.publishedBy ?? '—');
         return (
-          <tr key={row.id} className="transition hover:bg-ks-paper">
+          <tr key={String(row.id)} className="transition hover:bg-ks-paper">
             <Td><span className="font-bold text-ks-navy">{title}</span></Td>
             <Td><Badge tone="emerald">{status}</Badge></Td>
             <Td>{audience}</Td>
@@ -1277,9 +1252,9 @@ function FilterBar({ items }: { items: string[] }) {
   );
 }
 
-function InsightCard({ text, tone }: { text: string; tone: 'rose' | 'blue' | 'emerald' }) {
-  const border = tone === 'rose' ? 'border-l-ks-rose bg-ks-rose/5' : tone === 'emerald' ? 'border-l-ks-emerald bg-ks-emerald/5' : 'border-l-ks-blue';
-  const badgeTone = tone;
+function InsightCard({ text, tone }: { text: string; tone: 'rose' | 'blue' | 'emerald' | 'amber' }) {
+  const border = tone === 'rose' ? 'border-l-ks-rose bg-ks-rose/5' : tone === 'emerald' ? 'border-l-ks-emerald bg-ks-emerald/5' : tone === 'amber' ? 'border-l-ks-amber bg-ks-amber/5' : 'border-l-ks-blue';
+  const badgeTone: 'rose' | 'blue' | 'emerald' = tone === 'amber' ? 'blue' : tone;
   return (
     <Card className={`rounded-xl border-l-4 p-5 ${border}`}>
       <Badge tone={badgeTone}>{tone === 'rose' ? 'URGENT' : 'ACTIONABLE'}</Badge>
@@ -1315,7 +1290,7 @@ function Td({ children, className }: { children: ReactNode; className?: string }
 
 function useAlert() {
   const { id } = useParams();
-  const { data: apiAlerts = [] as typeof aqaAlerts, isLoading } = useAqaAlerts() as { data: typeof aqaAlerts; isLoading: boolean };
+  const { data: apiAlerts = [] as typeof aqaAlerts, isLoading } = useAqaAlerts() as unknown as { data: typeof aqaAlerts; isLoading: boolean };
   return useMemo(() => ({
     loading: isLoading,
     alert: isLoading ? null : (apiAlerts.find((a) => a.id === id) ?? null),
@@ -1324,7 +1299,7 @@ function useAlert() {
 
 function useStudentAlert() {
   const { studentId } = useParams();
-  const { data: apiAlerts = [] as typeof aqaAlerts, isLoading } = useAqaAlerts() as { data: typeof aqaAlerts; isLoading: boolean };
+  const { data: apiAlerts = [] as typeof aqaAlerts, isLoading } = useAqaAlerts() as unknown as { data: typeof aqaAlerts; isLoading: boolean };
   return useMemo(() => ({
     loading: isLoading,
     alert: isLoading ? null : (apiAlerts.find((a) => a.studentId === studentId) ?? null),

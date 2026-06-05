@@ -99,9 +99,9 @@ const EMPTY_OVERVIEW: typeof financeOverview = { totalInvoiced: 0, totalCollecte
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 
 export function FinanceHomePage() {
-  const { data: apiOverview = EMPTY_OVERVIEW } = useFinanceOverview() as { data: typeof financeOverview };
-  const { data: apiPayments = [] as typeof payments } = usePayments() as { data: typeof payments };
-  const { data: apiInvoices = [] as typeof invoices } = useInvoices() as { data: typeof invoices };
+  const { data: apiOverview = EMPTY_OVERVIEW } = useFinanceOverview() as unknown as { data: typeof financeOverview };
+  const { data: apiPayments = [] as typeof payments } = usePayments() as unknown as { data: typeof payments };
+  const { data: apiInvoices = [] as typeof invoices } = useInvoices() as unknown as { data: typeof invoices };
   const overdue = overdueInvoices(apiInvoices);
   const base = apiOverview.totalInvoiced || 1; // guard against division by zero before data loads
   const collectedPct = Math.round((apiOverview.totalCollected / base) * 100);
@@ -188,7 +188,7 @@ export function FinanceHomePage() {
 // ─── Invoice pages ────────────────────────────────────────────────────────────
 
 export function InvoiceListPage() {
-  const { data: apiInvoices = [] as typeof invoices, isLoading, isError, refetch } = useInvoices() as { data: typeof invoices; isLoading: boolean; isError: boolean; refetch: () => void };
+  const { data: apiInvoices = [] as typeof invoices, isLoading, isError, refetch } = useInvoices() as unknown as { data: typeof invoices; isLoading: boolean; isError: boolean; refetch: () => void };
   const [invoiceSearch, setInvoiceSearch] = useState('');
   const visibleInvoices = invoiceSearch.trim().length > 0
     ? apiInvoices.filter((inv) => {
@@ -288,8 +288,8 @@ export function GenerateInvoicesPage() {
 
 export function InvoiceDetailPage() {
   const { id } = useParams();
-  const { data: apiInvoice, isLoading, isError } = useInvoiceById(id ?? '') as { data: (typeof invoices)[number] | undefined; isLoading: boolean; isError: boolean };
-  const { data: allPayments = [] as typeof payments } = usePayments() as { data: typeof payments };
+  const { data: apiInvoice, isLoading } = useInvoiceById(id ?? '') as unknown as { data: (typeof invoices)[number] | undefined; isLoading: boolean; isError: boolean };
+  const { data: allPayments = [] as typeof payments } = usePayments() as unknown as { data: typeof payments };
   const cancelMutation = useCancelInvoiceMutation();
   const discountMutation = useApplyInvoiceDiscountMutation();
   const waiveMutation = useWaiveInvoiceMutation();
@@ -368,8 +368,8 @@ export function InvoiceDetailPage() {
 // ─── Payment pages ────────────────────────────────────────────────────────────
 
 export function RecordCashPaymentPage() {
-  const { data: apiInvoices = [] as typeof invoices } = useInvoices() as { data: typeof invoices };
-  const { data: apiPayments = [] as typeof payments } = usePayments() as { data: typeof payments };
+  const { data: apiInvoices = [] as typeof invoices } = useInvoices() as unknown as { data: typeof invoices };
+  const { data: apiPayments = [] as typeof payments } = usePayments() as unknown as { data: typeof payments };
   return (
     <FinanceWorkspaceShell title="Record Cash Payment" eyebrow="Cash desk entry">
       <FinanceBreadcrumb crumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Payments', to: '/finance/payments' }, { label: 'Record Cash' }]} />
@@ -379,8 +379,8 @@ export function RecordCashPaymentPage() {
 }
 
 export function RecordBankTransferPage() {
-  const { data: apiInvoices = [] as typeof invoices } = useInvoices() as { data: typeof invoices };
-  const { data: apiPayments = [] as typeof payments } = usePayments() as { data: typeof payments };
+  const { data: apiInvoices = [] as typeof invoices } = useInvoices() as unknown as { data: typeof invoices };
+  const { data: apiPayments = [] as typeof payments } = usePayments() as unknown as { data: typeof payments };
   return (
     <FinanceWorkspaceShell title="Record Bank Transfer" eyebrow="Statement-safe posting">
       <FinanceBreadcrumb crumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Payments', to: '/finance/payments' }, { label: 'Record Bank Transfer' }]} />
@@ -390,7 +390,7 @@ export function RecordBankTransferPage() {
 }
 
 export function PaymentListPage() {
-  const { data: apiPayments = [] as typeof payments, isLoading, isError, refetch } = usePayments() as { data: typeof payments; isLoading: boolean; isError: boolean; refetch: () => void };
+  const { data: apiPayments = [] as typeof payments, isLoading, isError, refetch } = usePayments() as unknown as { data: typeof payments; isLoading: boolean; isError: boolean; refetch: () => void };
   return (
     <FinanceWorkspaceShell title="Payment Ledger" eyebrow="Search and reconcile">
       <FinanceBreadcrumb crumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Payments' }]} />
@@ -409,7 +409,7 @@ export function PaymentListPage() {
 }
 
 export function PendingPaymentApprovalsPage() {
-  const { data: apiPending = [] as typeof payments } = usePendingPaymentApprovals() as { data: typeof payments };
+  const { data: apiPending = [] as typeof payments } = usePendingPaymentApprovals() as unknown as { data: typeof payments };
   return (
     <FinanceWorkspaceShell title="Pending Payment Approvals" eyebrow="Read-only approval queue">
       <FinanceBreadcrumb crumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Payments', to: '/finance/payments' }, { label: 'Pending Approvals' }]} />
@@ -421,7 +421,7 @@ export function PendingPaymentApprovalsPage() {
 
 export function PaymentDetailPage() {
   const { id } = useParams();
-  const { data: apiPayments = [] as typeof payments, isLoading } = usePayments() as { data: typeof payments; isLoading: boolean };
+  const { data: apiPayments = [] as typeof payments, isLoading } = usePayments() as unknown as { data: typeof payments; isLoading: boolean };
   const refundMutation = useRefundPaymentMutation();
   const navigate = useNavigate();
 
@@ -471,7 +471,7 @@ export function PaymentDetailPage() {
 // ─── Receipt pages ────────────────────────────────────────────────────────────
 
 export function ReceiptListPage() {
-  const { data: apiReceipts = [] as typeof receipts, isLoading, isError, refetch } = useReceipts() as { data: typeof receipts; isLoading: boolean; isError: boolean; refetch: () => void };
+  const { data: apiReceipts = [] as typeof receipts, isLoading, isError, refetch } = useReceipts() as unknown as { data: typeof receipts; isLoading: boolean; isError: boolean; refetch: () => void };
   return (
     <FinanceWorkspaceShell title="Receipt Ledger" eyebrow="Receipts and void controls">
       <FinanceBreadcrumb crumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Receipts' }]} />
@@ -490,7 +490,7 @@ export function ReceiptListPage() {
 
 export function ReceiptDetailPage() {
   const { id } = useParams();
-  const { data: apiReceipt, isLoading, isError } = useReceiptById(id ?? '') as { data: (typeof receipts)[number] | undefined; isLoading: boolean; isError: boolean };
+  const { data: apiReceipt, isLoading } = useReceiptById(id ?? '') as unknown as { data: (typeof receipts)[number] | undefined; isLoading: boolean; isError: boolean };
   const voidMutation = useVoidReceiptMutation();
   const navigate = useNavigate();
 
@@ -511,7 +511,7 @@ export function ReceiptDetailPage() {
                 onClick={() => { window.open(`/api/v1/finance/receipts/${receipt.id}/pdf`, '_blank'); }}>
                 <span>Download receipt PDF</span><ArrowRight className="h-4 w-4" />
               </Button>
-              {receipt.status !== 'VOIDED' && (
+              {receipt.status !== 'VOID' && (
                 <Button variant="secondary" className="w-full justify-between rounded"
                   onClick={() => { const reason = window.prompt('Reason for voiding this receipt:'); if (!reason) return; voidMutation.mutate({ id: receipt.id, body: { reason } }, { onSuccess: () => { toast('Receipt voided', 'warning'); navigate('/finance/receipts'); }, onError: () => toast('Failed to void receipt', 'error') }); }}>
                   <span>Void receipt with reason</span><ArrowRight className="h-4 w-4" />
@@ -529,7 +529,7 @@ export function ReceiptDetailPage() {
 // ─── Fee setup pages ──────────────────────────────────────────────────────────
 
 export function FeeCategoriesPage() {
-  const { data: apiCategories = [] as typeof feeCategories, isLoading, isError, refetch } = useFeeCategories() as { data: typeof feeCategories; isLoading: boolean; isError: boolean; refetch: () => void };
+  const { data: apiCategories = [] as typeof feeCategories, isLoading, isError, refetch } = useFeeCategories() as unknown as { data: typeof feeCategories; isLoading: boolean; isError: boolean; refetch: () => void };
   return (
     <FinanceWorkspaceShell title="Fee Categories" eyebrow="Setup and ordering">
       <FinanceBreadcrumb crumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Fee Setup' }, { label: 'Categories' }]} />
@@ -582,7 +582,7 @@ export function EditFeeCategoryPage() {
 function FeeCategoryForm({ title, mode }: { title: string; mode: 'create' | 'edit' }) {
   const navigate = useNavigate();
   const { id } = useParams();
-  const { data: apiCategories = [] as typeof feeCategories } = useFeeCategories() as { data: typeof feeCategories };
+  const { data: apiCategories = [] as typeof feeCategories } = useFeeCategories() as unknown as { data: typeof feeCategories };
   const existing = mode === 'edit' ? (apiCategories.find((c) => c.id === id) ?? null) : null;
   const createMutation = useCreateFeeCategoryMutation();
   const updateMutation = useUpdateFeeCategoryMutation();
@@ -683,8 +683,8 @@ function FeeCategoryForm({ title, mode }: { title: string; mode: 'create' | 'edi
 }
 
 export function FeeStructuresPage() {
-  const { data: apiStructures = [] as typeof feeStructures } = useFeeStructures() as { data: typeof feeStructures };
-  const { data: apiGroups = [] as typeof studentGroups } = useStudentGroups() as { data: typeof studentGroups };
+  const { data: apiStructures = [] as typeof feeStructures } = useFeeStructures() as unknown as { data: typeof feeStructures };
+  const { data: apiGroups = [] as typeof studentGroups } = useStudentGroups() as unknown as { data: typeof studentGroups };
   const deleteMutation = useDeleteFeeCategoryMutation();
   const [deactivating, setDeactivating] = useState<string | null>(null);
 
@@ -777,7 +777,7 @@ export function FeeMatrixPage() {
 export function CreateFeeStructurePage() {
   const navigate = useNavigate();
   const createMutation = useCreateFeeStructureMutation();
-  const { data: apiCategories = [] as typeof feeCategories } = useFeeCategories() as { data: typeof feeCategories };
+  const { data: apiCategories = [] as typeof feeCategories } = useFeeCategories() as unknown as { data: typeof feeCategories };
   const [form, setForm] = useState({ categoryId: '', educationStage: 'O-Level', classLevel: '', studentGroup: '', amount: '', effectiveTerm: '', reason: '' });
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setForm((p) => ({ ...p, [k]: e.target.value }));
 
@@ -856,7 +856,7 @@ export function CreateFeeStructurePage() {
 }
 
 export function FeeAssignmentsPage() {
-  const { data: apiAssignments = [] as typeof feeAssignments, isLoading, isError, refetch } = useFeeAssignments() as { data: typeof feeAssignments; isLoading: boolean; isError: boolean; refetch: () => void };
+  const { data: apiAssignments = [] as typeof feeAssignments, isLoading, isError, refetch } = useFeeAssignments() as unknown as { data: typeof feeAssignments; isLoading: boolean; isError: boolean; refetch: () => void };
   const removeMutation = useDeleteFeeAssignmentMutation();
   const [removing, setRemoving] = useState<string | null>(null);
   return (
@@ -897,7 +897,7 @@ export function FeeAssignmentsPage() {
 // ─── Asset pages ──────────────────────────────────────────────────────────────
 
 export function AssetsListPage() {
-  const { data: apiAssets = [] as typeof assets, isLoading: assetsLoading, isError: assetsError, refetch: refetchAssets } = useAssets() as { data: typeof assets; isLoading: boolean; isError: boolean; refetch: () => void };
+  const { data: apiAssets = [] as typeof assets, isLoading: assetsLoading, isError: assetsError, refetch: refetchAssets } = useAssets() as unknown as { data: typeof assets; isLoading: boolean; isError: boolean; refetch: () => void };
   const { data: apiAssetSummary } = useAssetSummary() as { data: Record<string, unknown> | undefined };
   const totalCost = (apiAssetSummary?.totalPurchaseCost as number | undefined) ?? 0;
   const currentValue = (apiAssetSummary?.totalCurrentValue as number | undefined) ?? 0;
@@ -1047,7 +1047,7 @@ function AssetForm({ title, mode }: { title: string; mode: 'create' | 'edit' }) 
 
 export function AssetDetailPage() {
   const { id } = useParams();
-  const { data: apiAsset, isLoading, isError } = useAssetById(id ?? '') as { data: (typeof assets)[number] | undefined; isLoading: boolean; isError: boolean };
+  const { data: apiAsset, isLoading } = useAssetById(id ?? '') as unknown as { data: (typeof assets)[number] | undefined; isLoading: boolean; isError: boolean };
   const disposeMutation = useDisposeAssetMutation();
   const navigate = useNavigate();
 
@@ -1160,8 +1160,8 @@ export function DailyCollectionsReportPage() {
 }
 
 export function FeeDefaultersReportPage() {
-  const { data: apiInvoices = [] as typeof invoices } = useInvoices() as { data: typeof invoices };
-  const { data: apiOverview = EMPTY_OVERVIEW } = useFinanceOverview() as { data: typeof financeOverview };
+  const { data: apiInvoices = [] as typeof invoices } = useInvoices() as unknown as { data: typeof invoices };
+  const { data: apiOverview = EMPTY_OVERVIEW } = useFinanceOverview() as unknown as { data: typeof financeOverview };
   const overdue = overdueInvoices(apiInvoices);
   return (
     <FinanceWorkspaceShell title="Fee Defaulters Report" eyebrow="Overdue follow-up">
@@ -1201,7 +1201,7 @@ export function FeeDefaultersReportPage() {
 // ─── Audit + export pages ─────────────────────────────────────────────────────
 
 export function FinancialAuditLogPage() {
-  const { data: apiAudit = [] as typeof auditEntries } = useFinanceAuditLogs() as { data: typeof auditEntries };
+  const { data: apiAudit = [] as typeof auditEntries } = useFinanceAuditLogs() as unknown as { data: typeof auditEntries };
   return (
     <FinanceWorkspaceShell title="Financial Audit Log" eyebrow="Immutable ledger events">
       <FinanceBreadcrumb crumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Audit Log' }]} />
@@ -1329,8 +1329,8 @@ function ReportPage({
   trendData: number[];
   overdue?: boolean;
 }) {
-  const { data: apiOverview = EMPTY_OVERVIEW } = useFinanceOverview() as { data: typeof financeOverview };
-  const { data: apiPayments = [] as typeof payments } = usePayments() as { data: typeof payments };
+  const { data: apiOverview = EMPTY_OVERVIEW } = useFinanceOverview() as unknown as { data: typeof financeOverview };
+  const { data: apiPayments = [] as typeof payments } = usePayments() as unknown as { data: typeof payments };
   const generateMutation = useGenerateReportMutation();
   const collected = overdue ? apiOverview.outstanding : apiOverview.totalCollected;
   const collectedPct = apiOverview.totalInvoiced > 0 ? Math.round((collected / apiOverview.totalInvoiced) * 100) : 0;
@@ -1367,59 +1367,6 @@ function ReportPage({
         </div>
       </div>
       <PaymentTable rows={apiPayments} />
-    </FinanceWorkspaceShell>
-  );
-}
-
-function FinanceFormPage({
-  title,
-  eyebrow,
-  fields,
-  sideTitle,
-  sideItems,
-  breadcrumbs,
-  children,
-}: {
-  title: string;
-  eyebrow: string;
-  fields: string[];
-  sideTitle: string;
-  sideItems: Array<[string, string]>;
-  breadcrumbs?: Array<{ label: string; to?: string }>;
-  children?: React.ReactNode;
-}) {
-  return (
-    <FinanceWorkspaceShell title={title} eyebrow={eyebrow}>
-      {breadcrumbs && <FinanceBreadcrumb crumbs={breadcrumbs} />}
-      <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="rounded-lg border border-[#d5dde6] bg-white p-5">
-          <div className="flex items-center gap-3 border-b border-[#d5dde6] pb-4">
-            <FileSpreadsheet className="h-5 w-5 text-[#00334f]" />
-            <div>
-              <h2 className="font-display text-xl font-black text-[#00334f]">{title}</h2>
-              <p className="text-sm font-semibold text-[#64748b]">
-                All changes will require confirmation and audit reason.
-              </p>
-            </div>
-          </div>
-          <div className="mt-5 grid gap-4 md:grid-cols-2">
-            {fields.map((field) => (
-              <label key={field} className="block">
-                <span className="text-[11px] font-black uppercase tracking-widest text-[#64748b]">{field}</span>
-                <input className="mt-2 h-11 w-full rounded border border-[#d5dde6] bg-[#f7f9fb] px-3 font-semibold outline-none focus:border-[#00334f] focus:ring-2 focus:ring-[#00334f]/10" />
-              </label>
-            ))}
-          </div>
-          {children}
-          <div className="mt-5 flex flex-wrap gap-2">
-            <Button className="rounded bg-[#00334f] hover:bg-[#001e30] hover:shadow-none" onClick={() => toast('Previewing changes — confirm to save', 'info')}>
-              <Send className="h-4 w-4" /> Preview and Confirm
-            </Button>
-            <Button variant="secondary" className="rounded" onClick={() => toast('Draft saved', 'success')}>Save Draft</Button>
-          </div>
-        </div>
-        <SideSummary title={sideTitle} items={sideItems} />
-      </div>
     </FinanceWorkspaceShell>
   );
 }
@@ -1471,7 +1418,7 @@ function InvoiceActionPanel({ invoice, onRecordPayment, onDownloadPdf, onRegenPd
   onCancel: () => void;
   isPending: boolean;
 }) {
-  const canCancel = invoice.status !== 'PAID' && invoice.status !== 'CANCELLED';
+  const canCancel = invoice.status !== 'PAID' && invoice.status !== 'VOID';
   return (
     <div className="space-y-gutter sticky top-24 h-fit">
       <div className="rounded-lg border border-[#d5dde6] bg-white p-5">

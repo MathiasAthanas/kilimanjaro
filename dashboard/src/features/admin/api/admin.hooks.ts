@@ -701,23 +701,6 @@ export function useSendManualNotificationMutation() {
   });
 }
 
-export function useBulkImportUsersMutation() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (payload: { records: Record<string, string>[] }) =>
-      api.post('/auth/users/bulk', payload).then((r) => r.data?.data ?? r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: adminKeys.users() }),
-  });
-}
-
-export function useBulkImportStudentsMutation() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (payload: { records: Record<string, string>[] }) =>
-      api.post('/students/bulk', payload).then((r) => r.data?.data ?? r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: [...adminKeys.all, 'students'] }),
-  });
-}
 
 export function useUpdateUserMutation() {
   const qc = useQueryClient();

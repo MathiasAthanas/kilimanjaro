@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, ChevronDown, Download, Play, Plus, Shield, Trash2, UserPlus } from 'lucide-react';
+﻿import { AlertTriangle, CheckCircle2, ChevronDown, Download, Play, Plus, Shield, Trash2, UserPlus } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from 'react';
 import { downloadReportWhenReady } from '../../operations/api/operations.hooks';
 import { NavLink, useNavigate, useParams } from 'react-router-dom';
@@ -43,7 +43,6 @@ import {
   useDeleteCombinationMutation,
   useCreateSubjectMutation,
   useUpdateUserMutation,
-  useChangeUserRoleMutation,
   useRunEngineAdminMutation,
   useSendManualNotificationMutation,
 } from '../api/admin.hooks';
@@ -53,7 +52,7 @@ import {
   AdminDataTable, AdminFormSection, AdminMetricStrip, AdminQuickCard,
   AdminShell, AdminStatusIndicator, AssessmentTypeEditor, CsvImportZone,
   DangerActionDialog, FeatureToggle, Field, GradingBoundaryEditor,
-  JsonInspector, NotificationTemplateEditor,
+  NotificationTemplateEditor,
   SelectField, Td,
 } from '../components/AdminConsole';
 import { assessmentWeightsTotal, roleRisk } from '../utils/adminValidation';
@@ -61,15 +60,15 @@ import { DataError } from '../../../components/feedback/DataError';
 import { EmptyState } from '../../../components/feedback/EmptyState';
 import { SkeletonTable } from '../../../components/common/SkeletonTable';
 
-// ─── Home ─────────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Home â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function AdminHomePage() {
-  const { data: apiServiceHealth = [] as typeof serviceHealth } = useServiceHealth() as { data: typeof serviceHealth };
-  const { data: apiUsers = [] as typeof adminUsers } = useAdminUsers() as { data: typeof adminUsers };
-  const { data: apiStudents = [] as typeof adminStudents } = useAdminStudents() as { data: typeof adminStudents };
-  const { data: apiAudit = [] as typeof adminAuditEvents } = useAdminAuditEvents() as { data: typeof adminAuditEvents };
-  const { data: apiLogs = [] as typeof notificationLogs } = useNotificationLogs() as { data: typeof notificationLogs };
-  const { data: apiClasses = [] as typeof adminClasses } = useAdminClasses() as { data: typeof adminClasses };
+  const { data: apiServiceHealth = [] as typeof serviceHealth } = useServiceHealth() as unknown as { data: typeof serviceHealth };
+  const { data: apiUsers = [] as typeof adminUsers } = useAdminUsers() as unknown as { data: typeof adminUsers };
+  const { data: apiStudents = [] as typeof adminStudents } = useAdminStudents() as unknown as { data: typeof adminStudents };
+  const { data: apiAudit = [] as typeof adminAuditEvents } = useAdminAuditEvents() as unknown as { data: typeof adminAuditEvents };
+  const { data: apiLogs = [] as typeof notificationLogs } = useNotificationLogs() as unknown as { data: typeof notificationLogs };
+  const { data: apiClasses = [] as typeof adminClasses } = useAdminClasses() as unknown as { data: typeof adminClasses };
 
   const lockedCount = apiUsers.filter((u: { status: string }) => u.status === 'LOCKED').length;
   const failedSms = apiLogs.filter((l: { status: string; channel: string }) => l.status === 'FAILED' && l.channel === 'SMS').length;
@@ -116,7 +115,7 @@ export function AdminHomePage() {
   );
 }
 
-// ─── Users ────────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Users â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function AdminUsersPage() {
   return (
@@ -128,7 +127,7 @@ export function AdminUsersPage() {
 }
 
 function UsersTable() {
-  const { data: apiUsers = [] as typeof adminUsers, isLoading, isError, refetch } = useAdminUsers() as { data: typeof adminUsers; isLoading: boolean; isError: boolean; refetch: () => void };
+  const { data: apiUsers = [] as typeof adminUsers, isLoading, isError, refetch } = useAdminUsers() as unknown as { data: typeof adminUsers; isLoading: boolean; isError: boolean; refetch: () => void };
   const deactivateMutation = useDeactivateUserMutation();
   const activateMutation = useActivateUserMutation();
   const resetPwMutation = useResetUserPwMutation();
@@ -193,7 +192,7 @@ function UsersTable() {
                 onClick={() => handleToggle(user.id, user.status)}
                 className="text-xs font-black text-slate-500 transition hover:text-slate-900 disabled:opacity-40"
               >
-                {pending[user.id] ? '…' : user.status === 'LOCKED' ? 'Unlock' : 'Lock'}
+                {pending[user.id] ? 'â€¦' : user.status === 'LOCKED' ? 'Unlock' : 'Lock'}
               </button>
               <button
                 onClick={() => handleResetPw(user.id, user.name)}
@@ -209,7 +208,7 @@ function UsersTable() {
   );
 }
 
-// ─── Create / Edit user ───────────────────────────────────────────────────────
+// â”€â”€â”€ Create / Edit user â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const ROLE_OPTIONS = [
   { value: 'TEACHER',            label: 'Teacher'            },
@@ -221,9 +220,9 @@ const ROLE_OPTIONS = [
 ];
 
 const STATUS_OPTIONS = [
-  { value: 'ACTIVE',   label: 'Active — can log in'             },
-  { value: 'INACTIVE', label: 'Inactive — no access'            },
-  { value: 'PENDING',  label: 'Pending — first login required'  },
+  { value: 'ACTIVE',   label: 'Active â€” can log in'             },
+  { value: 'INACTIVE', label: 'Inactive â€” no access'            },
+  { value: 'PENDING',  label: 'Pending â€” first login required'  },
 ];
 
 const DEPARTMENT_OPTIONS = [
@@ -391,7 +390,7 @@ export function CreateUserPage() {
 
 export function UserDetailPage() {
   const { loading, user } = useUser();
-  if (loading) return <AdminShell title="Loading…" eyebrow="User detail"><SkeletonTable cols={4} /></AdminShell>;
+  if (loading) return <AdminShell title="Loadingâ€¦" eyebrow="User detail"><SkeletonTable cols={4} /></AdminShell>;
   if (!user) return <AdminShell title="Not Found" eyebrow="User detail"><EmptyState title="User not found" description="This user account does not exist." /></AdminShell>;
   return (
     <AdminShell title={user.name} eyebrow="User detail and security">
@@ -423,7 +422,7 @@ export function EditUserPage() {
   const isPrivileged = roleRisk(role) === 'high';
   const handleRoleChange = (nextRole: string) => { setRole(nextRole); setLinked(defaultDepartmentForRole(nextRole)); };
 
-  if (loading) return <AdminShell title="Loading…" eyebrow="Account update"><SkeletonTable cols={3} /></AdminShell>;
+  if (loading) return <AdminShell title="Loadingâ€¦" eyebrow="Account update"><SkeletonTable cols={3} /></AdminShell>;
   if (!user) return <AdminShell title="Not Found" eyebrow="Account update"><EmptyState title="User not found" description="This user account does not exist." /></AdminShell>;
 
   const handleSave = () => {
@@ -457,7 +456,7 @@ export function EditUserPage() {
             )}
           </AdminFormSection>
           <Button className="rounded-xl bg-[#4338CA]" disabled={updateMutation.isPending} onClick={handleSave}>
-            {updateMutation.isPending ? 'Saving…' : 'Save User'}
+            {updateMutation.isPending ? 'Savingâ€¦' : 'Save User'}
           </Button>
         </div>
         <div className="h-fit rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -475,10 +474,10 @@ export function EditUserPage() {
   );
 }
 
-// ─── Academic setup hub ───────────────────────────────────────────────────────
+// â”€â”€â”€ Academic setup hub â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function AcademicSetupHubPage() {
-  const { data: apiPathways = [] as typeof classPathways } = useClassPathways() as { data: typeof classPathways };
+  const { data: apiPathways = [] as typeof classPathways } = useClassPathways() as unknown as { data: typeof classPathways };
   const cards: [string, string][] = [
     ['Academic Years',         '/admin/academic/setup'],
     ['Terms',                  '/admin/academic/setup'],
@@ -500,14 +499,14 @@ export function AcademicSetupHubPage() {
       ]} />
       <div className="grid gap-gutter md:grid-cols-2 xl:grid-cols-4">
         {cards.map(([title, to]) => (
-          <AdminQuickCard key={title} title={title} detail="Setup active · last updated today." to={to} />
+          <AdminQuickCard key={title} title={title} detail="Setup active Â· last updated today." to={to} />
         ))}
       </div>
     </AdminShell>
   );
 }
 
-// ─── Classes ──────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Classes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Normalise a subject-combination's subjects field.
@@ -682,11 +681,11 @@ function isTerminalClass(stage: ClassWizardState['educationStage'], level: strin
 }
 
 export function ClassesPage() {
-  const { data: apiClasses = [] as typeof adminClasses } = useAdminClasses() as { data: typeof adminClasses };
-  const { data: apiPathways = [] as typeof classPathways } = useClassPathways() as { data: typeof classPathways };
-  const { data: apiCombinations = [] as typeof subjectCombinations } = useSubjectCombinations() as { data: typeof subjectCombinations };
-  const { data: apiSubjects = [] as typeof adminSubjects } = useAdminSubjects() as { data: typeof adminSubjects };
-  const { data: apiUsers = [] as typeof adminUsers } = useAdminUsers() as { data: typeof adminUsers };
+  const { data: apiClasses = [] as typeof adminClasses } = useAdminClasses() as unknown as { data: typeof adminClasses };
+  const { data: apiPathways = [] as typeof classPathways } = useClassPathways() as unknown as { data: typeof classPathways };
+  const { data: apiCombinations = [] as typeof subjectCombinations } = useSubjectCombinations() as unknown as { data: typeof subjectCombinations };
+  const { data: apiSubjects = [] as typeof adminSubjects } = useAdminSubjects() as unknown as { data: typeof adminSubjects };
+  const { data: apiUsers = [] as typeof adminUsers } = useAdminUsers() as unknown as { data: typeof adminUsers };
   const { data: academicYears = [] } = useAcademicYears();
   const createClassMutation = useCreateClassMutation();
   const createClassPathwayMutation = useCreateClassPathwayMutation();
@@ -695,7 +694,7 @@ export function ClassesPage() {
   const [editingPathwayId, setEditingPathwayId] = useState<string | null>(null);
   const [pathwayEdits, setPathwayEdits] = useState<Record<string, { toClassId: string; transitionType: string; note: string }>>({});
 
-  // ── Streams (O-Level / Primary): frontend-only custom labels ──────────────
+  // â”€â”€ Streams (O-Level / Primary): frontend-only custom labels â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [customStreams, setCustomStreams] = useState<string[]>([]);
   const [newStreamInput, setNewStreamInput] = useState('');
 
@@ -710,7 +709,7 @@ export function ClassesPage() {
     setNewStreamInput('');
   };
 
-  // ── A-Level combinations form ─────────────────────────────────────────────
+  // â”€â”€ A-Level combinations form â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [comboCode, setComboCode] = useState('');
   const [selectedSubjectIds, setSelectedSubjectIds] = useState<string[]>([]);
   const [principalIds, setPrincipalIds] = useState<string[]>([]);
@@ -835,7 +834,7 @@ export function ClassesPage() {
     ...customStreams.map((s) => ({ value: s, label: `Stream ${s}` })),
   ];
   const streamOptions = classForm.educationStage === 'A_LEVEL'
-    ? (combinationOptions.length ? combinationOptions : [{ value: '', label: 'No combinations yet — add one below' }])
+    ? (combinationOptions.length ? combinationOptions : [{ value: '', label: 'No combinations yet â€” add one below' }])
     : allStreamOptions;
   const classOptions = apiClasses
     .slice()
@@ -1044,7 +1043,7 @@ export function ClassesPage() {
             className="text-sm font-black text-[#4338CA] hover:underline"
             onClick={() => document.getElementById('manage-streams-combinations')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
           >
-            Manage streams &amp; combinations ↓
+            Manage streams &amp; combinations â†“
           </button>
         </div>
       </AdminFormSection>
@@ -1069,7 +1068,7 @@ export function ClassesPage() {
           ))}
         </AdminDataTable>
         <div className="space-y-4" id="manage-streams-combinations">
-          {/* ── Promotion Pathways ─────────────────────────────────── */}
+          {/* â”€â”€ Promotion Pathways â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
           <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
             <p className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-400">Universal Promotion Pathways</p>
             <p className="mt-1 text-xs font-semibold text-slate-500">
@@ -1145,7 +1144,7 @@ export function ClassesPage() {
                   {!isEditing ? (
                     <>
                       <div className="flex items-center justify-between gap-3">
-                        <p className="font-black text-slate-900">{pathway.from} {'→'} {pathway.to}</p>
+                        <p className="font-black text-slate-900">{pathway.from} {'â†’'} {pathway.to}</p>
                         <Badge tone={pathway.type === 'Graduation' ? 'emerald' : 'blue'}>{pathway.type}</Badge>
                       </div>
                       <p className="mt-1 text-xs font-semibold text-slate-500">{pathway.rule}</p>
@@ -1197,10 +1196,10 @@ export function ClassesPage() {
             </div>
           </div>
 
-          {/* ── Streams (O-Level / Primary) ────────────────────────── */}
+          {/* â”€â”€ Streams (O-Level / Primary) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
           <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-400">Streams · O-Level &amp; Primary</p>
-            <p className="mt-1 text-xs font-semibold text-slate-500">Standard streams A–D are always available. Add extras here (e.g. E, STEM).</p>
+            <p className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-400">Streams Â· O-Level &amp; Primary</p>
+            <p className="mt-1 text-xs font-semibold text-slate-500">Standard streams Aâ€“D are always available. Add extras here (e.g. E, STEM).</p>
             <div className="mt-4 flex flex-wrap gap-2">
               {STANDARD_STREAM_OPTIONS.map((o) => (
                 <span key={o.value} className="rounded-lg border border-slate-200 bg-slate-100 px-3 py-1.5 text-xs font-black text-slate-500">
@@ -1236,7 +1235,7 @@ export function ClassesPage() {
             </div>
           </div>
 
-          {/* ── A-Level Combinations ───────────────────────────────── */}
+          {/* â”€â”€ A-Level Combinations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
           <div className="rounded-[28px] border border-amber-100 bg-amber-50 p-5">
             <p className="text-[11px] font-black uppercase tracking-[0.24em] text-amber-700">A-Level Combinations</p>
             <p className="mt-1 text-xs font-semibold text-amber-700/70">Combinations appear in the Stream dropdown when A-Level is selected.</p>
@@ -1259,14 +1258,14 @@ export function ClassesPage() {
                 {aLevelSubjects.length === 0 ? (
                   <div className="mt-2 rounded-xl border border-dashed border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-700">
                     No A-Level subjects found.{' '}
-                    <NavLink to="/admin/subjects" className="font-black underline">Add subjects first →</NavLink>
+                    <NavLink to="/admin/subjects" className="font-black underline">Add subjects first â†’</NavLink>
                   </div>
                 ) : (
                   <>
                     <input
                       value={subjectSearch}
                       onChange={(e) => setSubjectSearch(e.target.value)}
-                      placeholder="Filter subjects…"
+                      placeholder="Filter subjectsâ€¦"
                       className="mt-2 h-9 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-semibold outline-none transition focus:border-[#4338CA] focus:bg-white"
                     />
                     <div className="mt-2 max-h-44 overflow-y-auto space-y-1 rounded-xl border border-slate-100 p-2">
@@ -1311,7 +1310,7 @@ export function ClassesPage() {
               {selectedSubjects.length > 0 && (
                 <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-xs">
                   <p className="font-black text-slate-500 uppercase tracking-widest mb-1">Preview</p>
-                  <p className="font-semibold text-slate-700">{comboCode || '???'} — {autoComboName}</p>
+                  <p className="font-semibold text-slate-700">{comboCode || '???'} â€” {autoComboName}</p>
                   {principalIds.length > 0 && (
                     <p className="mt-0.5 text-amber-700 font-semibold">
                       Principal: {selectedSubjects.filter((s: any) => principalIds.includes(String(s.id))).map((s: any) => s.name).join(', ')}
@@ -1375,8 +1374,8 @@ export function ClassesPage() {
 
 export function ClassDetailPage() {
   const { classId } = useParams();
-  const { data: apiClasses = [] as typeof adminClasses, isLoading } = useAdminClasses() as { data: typeof adminClasses; isLoading: boolean };
-  if (isLoading) return <AdminShell title="Loading…" eyebrow="Class detail"><SkeletonTable cols={4} /></AdminShell>;
+  const { data: apiClasses = [] as typeof adminClasses, isLoading } = useAdminClasses() as unknown as { data: typeof adminClasses; isLoading: boolean };
+  if (isLoading) return <AdminShell title="Loadingâ€¦" eyebrow="Class detail"><SkeletonTable cols={4} /></AdminShell>;
   const klass = apiClasses.find((c) => c.id === classId) ?? null;
   if (!klass) return <AdminShell title="Not Found" eyebrow="Class detail"><EmptyState title="Class not found" description="This class does not exist." /></AdminShell>;
   return (
@@ -1387,7 +1386,7 @@ export function ClassDetailPage() {
   );
 }
 
-// ─── Subjects ─────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Subjects â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function SubjectsPage() {
   const createSubjectMutation = useCreateSubjectMutation();
@@ -1435,7 +1434,7 @@ export function SubjectsPage() {
             <Plus className="h-4 w-4" /> Add Subject
           </Button>
           <NavLink className="text-sm font-black text-[#4338CA] hover:underline" to="/admin/classes">
-            ← Back to Classes &amp; Combinations
+            â† Back to Classes &amp; Combinations
           </NavLink>
         </div>
       </AdminFormSection>
@@ -1445,7 +1444,7 @@ export function SubjectsPage() {
 }
 
 function SubjectsTable() {
-  const { data: apiSubjects = [] as typeof adminSubjects, isLoading, isError, refetch } = useAdminSubjects() as { data: typeof adminSubjects; isLoading: boolean; isError: boolean; refetch: () => void };
+  const { data: apiSubjects = [] as typeof adminSubjects, isLoading, isError, refetch } = useAdminSubjects() as unknown as { data: typeof adminSubjects; isLoading: boolean; isError: boolean; refetch: () => void };
   if (isLoading) return <SkeletonTable cols={8} />;
   if (isError) return <DataError onRetry={refetch} />;
   if (!apiSubjects.length) return <EmptyState title="No subjects configured" description="Add subjects through the academic setup wizard." />;
@@ -1471,8 +1470,8 @@ function SubjectsTable() {
 
 export function SubjectDetailPage() {
   const { subjectId } = useParams();
-  const { data: apiSubjects = [] as typeof adminSubjects, isLoading } = useAdminSubjects() as { data: typeof adminSubjects; isLoading: boolean };
-  if (isLoading) return <AdminShell title="Loading…" eyebrow="Subject detail"><SkeletonTable cols={3} /></AdminShell>;
+  const { data: apiSubjects = [] as typeof adminSubjects, isLoading } = useAdminSubjects() as unknown as { data: typeof adminSubjects; isLoading: boolean };
+  if (isLoading) return <AdminShell title="Loadingâ€¦" eyebrow="Subject detail"><SkeletonTable cols={3} /></AdminShell>;
   const subject = apiSubjects.find((s) => s.id === subjectId) ?? null;
   if (!subject) return <AdminShell title="Not Found" eyebrow="Subject detail"><EmptyState title="Subject not found" description="This subject does not exist." /></AdminShell>;
   return (
@@ -1486,10 +1485,10 @@ export function SubjectDetailPage() {
   );
 }
 
-// ─── Grading scales ───────────────────────────────────────────────────────────
+// â”€â”€â”€ Grading scales â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function GradingPage() {
-  const { data: apiGradingScales = [] as typeof gradingScales } = useGradingScales() as { data: typeof gradingScales };
+  const { data: apiGradingScales = [] as typeof gradingScales } = useGradingScales() as unknown as { data: typeof gradingScales };
   const createGradingScaleMutation = useCreateGradingScaleMutation();
   const activateGradingScaleMutation = useActivateGradingScaleMutation();
   const { data: academicYears = [] } = useAcademicYears();
@@ -1586,10 +1585,10 @@ export function CreateGradingScalePage() {
   );
 }
 
-// ─── Assessment types ─────────────────────────────────────────────────────────
+// â”€â”€â”€ Assessment types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function AssessmentTypesPage() {
-  const { data: apiAssessmentTypes = [] as typeof assessmentTypes } = useAssessmentTypes() as { data: typeof assessmentTypes };
+  const { data: apiAssessmentTypes = [] as typeof assessmentTypes } = useAssessmentTypes() as unknown as { data: typeof assessmentTypes };
   const saveAssessmentTypesMutation = useSaveAssessmentTypesMutation();
   const oLevelTypes = apiAssessmentTypes.filter((type: any) => String(type.educationStage ?? type.scope).replace('-', '_').toUpperCase() === 'O_LEVEL' && type.isActive !== false);
   const total = assessmentWeightsTotal(oLevelTypes.map((t) => Number(t.weight ?? 0)));
@@ -1621,7 +1620,7 @@ export function AssessmentTypesPage() {
   );
 }
 
-// ─── Students ─────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Students â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function StudentsPage() {
   return (
@@ -1633,7 +1632,7 @@ export function StudentsPage() {
 }
 
 function StudentsTable() {
-  const { data: apiStudents = [] as typeof adminStudents, isLoading, isError, refetch } = useAdminStudents() as { data: typeof adminStudents; isLoading: boolean; isError: boolean; refetch: () => void };
+  const { data: apiStudents = [] as typeof adminStudents, isLoading, isError, refetch } = useAdminStudents() as unknown as { data: typeof adminStudents; isLoading: boolean; isError: boolean; refetch: () => void };
   if (isLoading) return <SkeletonTable cols={9} />;
   if (isError) return <DataError onRetry={refetch} />;
   if (!apiStudents.length) return <EmptyState title="No students enrolled" description="Enrol students individually or import a CSV file." />;
@@ -1662,7 +1661,7 @@ function StudentsTable() {
   );
 }
 
-// ─── Enrol student ────────────────────────────────────────────────────────────
+// â”€â”€â”€ Enrol student â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const ENROL_STEPS = ['Identity', 'Admission', 'Class', 'Guardians', 'Portal', 'Review'];
 
@@ -1697,7 +1696,7 @@ function safeDate(value: string, fallback: string) {
 }
 
 export function EnrolStudentPage() {
-  const { data: enrolClasses = [] as typeof adminClasses } = useAdminClasses() as { data: typeof adminClasses };
+  const { data: enrolClasses = [] as typeof adminClasses } = useAdminClasses() as unknown as { data: typeof adminClasses };
   const { data: academicYears = [] } = useAcademicYears();
   const createStudentMutation = useCreateStudentMutation();
   const [step, setStep] = useState(0);
@@ -1795,7 +1794,7 @@ export function EnrolStudentPage() {
                 : i === step ? 'bg-[#4338CA] text-white ring-4 ring-[#4338CA]/20'
                 :              'bg-slate-100 text-slate-500 hover:bg-slate-200'
                 }`}>
-                  {i < step ? '✓' : i + 1}
+                  {i < step ? 'âœ“' : i + 1}
                 </span>
                 <span className={`text-sm font-black transition ${i === step ? 'text-[#4338CA]' : 'text-slate-400'}`}>
                   {label}
@@ -1899,14 +1898,14 @@ export function EnrolStudentPage() {
           <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {([
               ['First Name', form.firstName],
-              ['Middle Name', form.middleName || '—'],
+              ['Middle Name', form.middleName || 'â€”'],
               ['Last Name', form.lastName],
-              ['Date of Birth', form.dateOfBirth || '—'],
-              ['Gender', form.gender || '—'],
-              ['National ID', form.nationalId || '—'],
-              ['Admission Date', form.admissionDate || '—'],
-              ['Class', (enrolClasses.find((c) => c.id === form.classId)?.name ?? form.classId) || '—'],
-              ['Guardian', form.guardianFirstName ? `${form.guardianFirstName} ${form.guardianLastName} · ${form.guardianPhone}` : '—'],
+              ['Date of Birth', form.dateOfBirth || 'â€”'],
+              ['Gender', form.gender || 'â€”'],
+              ['National ID', form.nationalId || 'â€”'],
+              ['Admission Date', form.admissionDate || 'â€”'],
+              ['Class', (enrolClasses.find((c) => c.id === form.classId)?.name ?? form.classId) || 'â€”'],
+              ['Guardian', form.guardianFirstName ? `${form.guardianFirstName} ${form.guardianLastName} Â· ${form.guardianPhone}` : 'â€”'],
             ] as const).map(([label, val]) => (
               <div key={label} className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{label}</p>
@@ -1934,12 +1933,12 @@ export function EnrolStudentPage() {
   );
 }
 
-// ─── Student profile ──────────────────────────────────────────────────────────
+// â”€â”€â”€ Student profile â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function StudentAdminProfilePage() {
   const { id } = useParams();
-  const { data: apiStudents = [] as typeof adminStudents, isLoading } = useAdminStudents() as { data: typeof adminStudents; isLoading: boolean };
-  if (isLoading) return <AdminShell title="Loading…" eyebrow="Admin student profile"><SkeletonTable cols={4} /></AdminShell>;
+  const { data: apiStudents = [] as typeof adminStudents, isLoading } = useAdminStudents() as unknown as { data: typeof adminStudents; isLoading: boolean };
+  if (isLoading) return <AdminShell title="Loadingâ€¦" eyebrow="Admin student profile"><SkeletonTable cols={4} /></AdminShell>;
   const student = apiStudents.find((s) => s.id === id) ?? null;
   if (!student) return <AdminShell title="Not Found" eyebrow="Admin student profile"><EmptyState title="Student not found" description="This student record does not exist." /></AdminShell>;
   return (
@@ -1962,10 +1961,10 @@ export function StudentAdminProfilePage() {
   );
 }
 
-// ─── Fee categories ───────────────────────────────────────────────────────────
+// â”€â”€â”€ Fee categories â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function AdminFeeCategoriesPage() {
-  const { data: rawCategories = [], isLoading, isError, refetch } = useFeeCategories() as { data: Array<{ id?: string; code?: string; name?: string; type?: string; category?: string; amount?: number; defaultAmount?: number; usedByStructures?: number }> | undefined; isLoading: boolean; isError: boolean; refetch: () => void };
+  const { data: rawCategories = [], isLoading, isError, refetch } = useFeeCategories() as unknown as { data: Array<{ id?: string; code?: string; name?: string; type?: string; category?: string; amount?: number; defaultAmount?: number; usedByStructures?: number }> | undefined; isLoading: boolean; isError: boolean; refetch: () => void };
   const categories = (rawCategories ?? []).map((c) => ({
         id: c.id ?? '',
         code: c.code ?? c.id ?? '',
@@ -1979,7 +1978,7 @@ export function AdminFeeCategoriesPage() {
   return (
     <AdminShell title="Fee Categories" eyebrow="Finance setup with dependency safety">
       <AdminDataTable columns={['Code', 'Name', 'Type', 'Amount', 'Used By', 'Actions']}>
-        {categories.length === 0 && <tr><td colSpan={6} className="px-5 py-6 text-center text-sm text-slate-500">No fee categories yet. <NavLink to="/finance/fee-categories/create" className="font-black text-[#4338CA] hover:underline">Create one →</NavLink></td></tr>}
+        {categories.length === 0 && <tr><td colSpan={6} className="px-5 py-6 text-center text-sm text-slate-500">No fee categories yet. <NavLink to="/finance/fee-categories/create" className="font-black text-[#4338CA] hover:underline">Create one â†’</NavLink></td></tr>}
         {categories.map((cat) => (
           <tr key={cat.id || cat.code} className="hover:bg-slate-50">
             <Td className="font-mono text-xs text-slate-500">{cat.code}</Td>
@@ -1997,7 +1996,7 @@ export function AdminFeeCategoriesPage() {
   );
 }
 
-// ─── Performance engine ───────────────────────────────────────────────────────
+// â”€â”€â”€ Performance engine â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function PerformanceEngineAdminPage() {
   const runMutation = useRunEngineAdminMutation();
@@ -2005,12 +2004,12 @@ export function PerformanceEngineAdminPage() {
   const set = (k: keyof typeof thresholds) => (e: React.ChangeEvent<HTMLInputElement>) => setThresholds((p) => ({ ...p, [k]: e.target.value }));
 
   const handleRun = () => {
-    toast('Performance engine started…', 'info');
+    toast('Performance engine startedâ€¦', 'info');
     runMutation.mutate({ scope: 'WHOLE_SCHOOL', thresholds: { failure: Number(thresholds.failure), atRisk: Number(thresholds.atRisk), excellence: Number(thresholds.excellence), maxPairs: Number(thresholds.maxPairs), strategy: thresholds.strategy } }, {
       onSuccess: (result) => {
         const r = result as Record<string, unknown> | undefined;
         const processed = r?.studentsProcessed ?? r?.count ?? 'all';
-        toast(`Engine run complete — ${processed} students processed`, 'success');
+        toast(`Engine run complete â€” ${processed} students processed`, 'success');
       },
       onError: () => toast('Engine run failed. Please check service logs.', 'error'),
     });
@@ -2042,11 +2041,11 @@ export function PerformanceEngineAdminPage() {
               <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
                 <div className="h-full animate-pulse rounded-full bg-[#4338CA]" style={{ width: '60%' }} />
               </div>
-              <span className="text-xs font-bold text-slate-500">Running…</span>
+              <span className="text-xs font-bold text-slate-500">Runningâ€¦</span>
             </div>
           )}
           <Button className="mt-4 w-full rounded-xl bg-[#4338CA]" loading={runMutation.isPending} onClick={handleRun}>
-            <Play className="h-4 w-4" /> {runMutation.isPending ? 'Running…' : 'Run Engine Now'}
+            <Play className="h-4 w-4" /> {runMutation.isPending ? 'Runningâ€¦' : 'Run Engine Now'}
           </Button>
         </div>
       </div>
@@ -2054,10 +2053,10 @@ export function PerformanceEngineAdminPage() {
   );
 }
 
-// ─── Notification templates ───────────────────────────────────────────────────
+// â”€â”€â”€ Notification templates â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function NotificationTemplatesPage() {
-  const { data: apiTemplates = [] as typeof notificationTemplates } = useNotificationTemplates() as { data: typeof notificationTemplates };
+  const { data: apiTemplates = [] as typeof notificationTemplates } = useNotificationTemplates() as unknown as { data: typeof notificationTemplates };
   return (
     <AdminShell title="Notification Templates" eyebrow="SMS, email, push, in-app">
       <AdminDataTable columns={['Name', 'Channel', 'Event Type', 'Status', 'Last Edited', 'Editor', 'Actions']}>
@@ -2081,8 +2080,8 @@ export function NotificationTemplatesPage() {
 
 export function NotificationTemplateDetailPage() {
   const { id } = useParams();
-  const { data: apiTemplates = [] as typeof notificationTemplates, isLoading } = useNotificationTemplates() as { data: typeof notificationTemplates; isLoading: boolean };
-  if (isLoading) return <AdminShell title="Loading…" eyebrow="Template editor"><SkeletonTable cols={3} /></AdminShell>;
+  const { data: apiTemplates = [] as typeof notificationTemplates, isLoading } = useNotificationTemplates() as unknown as { data: typeof notificationTemplates; isLoading: boolean };
+  if (isLoading) return <AdminShell title="Loadingâ€¦" eyebrow="Template editor"><SkeletonTable cols={3} /></AdminShell>;
   const tpl = apiTemplates.find((t) => t.id === id) ?? null;
   if (!tpl) return <AdminShell title="Not Found" eyebrow="Template editor"><EmptyState title="Template not found" description="This notification template does not exist." /></AdminShell>;
   return <AdminShell title={tpl.name} eyebrow="Template editor"><NotificationTemplateEditor template={tpl} /></AdminShell>;
@@ -2111,10 +2110,10 @@ export function SendManualNotificationPage() {
             <SelectField label="Channel" options={[{ value: 'SMS', label: 'SMS' }, { value: 'Email', label: 'Email' }, { value: 'Push', label: 'Push (app)' }, { value: 'All', label: 'All channels' }]} value={form.channel} onChange={setField('channel')} />
             <SelectField label="Priority" options={[{ value: 'normal', label: 'Normal' }, { value: 'high', label: 'High' }, { value: 'urgent', label: 'Urgent' }]} value={form.priority} onChange={setField('priority')} />
           </div>
-          <textarea className="mt-4 h-36 w-full rounded-xl border border-slate-200 bg-slate-50 p-4 font-semibold outline-none transition focus:border-[#4338CA] focus:bg-white" placeholder="Message body…" value={form.body} onChange={(e) => setField('body')(e.target.value)} />
+          <textarea className="mt-4 h-36 w-full rounded-xl border border-slate-200 bg-slate-50 p-4 font-semibold outline-none transition focus:border-[#4338CA] focus:bg-white" placeholder="Message bodyâ€¦" value={form.body} onChange={(e) => setField('body')(e.target.value)} />
           <div className="mt-4 flex gap-3">
             <Button className="rounded-xl bg-[#4338CA]" disabled={sendMutation.isPending} onClick={handleSend}>
-              {sendMutation.isPending ? 'Sending…' : 'Send Notification'}
+              {sendMutation.isPending ? 'Sendingâ€¦' : 'Send Notification'}
             </Button>
             <Button variant="secondary" className="rounded-xl" onClick={() => navigate(-1)}>Cancel</Button>
           </div>
@@ -2132,7 +2131,7 @@ export function SendManualNotificationPage() {
 }
 
 export function NotificationLogsPage() {
-  const { data: apiLogs = [] as typeof notificationLogs } = useNotificationLogs() as { data: typeof notificationLogs };
+  const { data: apiLogs = [] as typeof notificationLogs } = useNotificationLogs() as unknown as { data: typeof notificationLogs };
   return (
     <AdminShell title="Notification Logs" eyebrow="Delivery inspection">
       <AdminDataTable columns={['Time', 'Channel', 'Recipient', 'Event', 'Status', 'Attempts', 'Provider']}>
@@ -2141,14 +2140,14 @@ export function NotificationLogsPage() {
             <Td className="text-xs text-slate-400">
               {log.time && !log.time.startsWith('[object')
                 ? new Date(log.time).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })
-                : '—'}
+                : 'â€”'}
             </Td>
             <Td><Badge tone="blue">{log.channel}</Badge></Td>
             <Td className="font-mono text-xs text-slate-500">{log.recipient}</Td>
             <Td className="text-xs">{log.eventType.split('_').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ')}</Td>
             <Td><Badge tone={log.status === 'FAILED' ? 'rose' : 'emerald'}>{log.status}</Badge></Td>
             <Td>{log.attempts}</Td>
-            <Td className="text-xs text-slate-500">{log.provider || '—'}</Td>
+            <Td className="text-xs text-slate-500">{log.provider || 'â€”'}</Td>
           </tr>
         ))}
       </AdminDataTable>
@@ -2156,7 +2155,7 @@ export function NotificationLogsPage() {
   );
 }
 
-// ─── Analytics & reports ──────────────────────────────────────────────────────
+// â”€â”€â”€ Analytics & reports â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function AdminAnalyticsPage() {
   return (
@@ -2171,7 +2170,7 @@ export function AdminAnalyticsPage() {
 }
 
 export function AdminReportsPage() {
-  const { data: apiReportJobs = [] as typeof reportJobs } = useAdminReportJobs() as { data: typeof reportJobs };
+  const { data: apiReportJobs = [] as typeof reportJobs } = useAdminReportJobs() as unknown as { data: typeof reportJobs };
   return (
     <AdminShell title="Generate Any Report" eyebrow="Report jobs and downloads">
       <AdminDataTable columns={['Report', 'Status', 'Requested By', 'Role', 'Scope', 'Format', 'Created', 'Actions']}>
@@ -2196,10 +2195,10 @@ export function AdminReportsPage() {
 
 export function AdminReportDetailPage() {
   const { id } = useParams();
-  const { data: apiReportJobs = [] as typeof reportJobs, isLoading } = useAdminReportJobs() as { data: typeof reportJobs; isLoading: boolean };
+  const { data: apiReportJobs = [] as typeof reportJobs, isLoading } = useAdminReportJobs() as unknown as { data: typeof reportJobs; isLoading: boolean };
   const [downloading, setDownloading] = useState(false);
 
-  if (isLoading) return <AdminShell title="Loading…" eyebrow="Report detail"><SkeletonTable cols={3} /></AdminShell>;
+  if (isLoading) return <AdminShell title="Loadingâ€¦" eyebrow="Report detail"><SkeletonTable cols={3} /></AdminShell>;
   const job = apiReportJobs.find((r) => r.id === id) ?? null;
   if (!job) return <AdminShell title="Not Found" eyebrow="Report detail"><EmptyState title="Report not found" description="This report job does not exist." /></AdminShell>;
 
@@ -2224,13 +2223,13 @@ export function AdminReportDetailPage() {
         { label: 'Requested', value: job.requestedBy, detail: job.created.slice(0, 10) },
       ]} />
       <Button className="rounded-xl bg-[#4338CA]" disabled={downloading} onClick={handleDownload}>
-        <Download className="h-4 w-4" /> {downloading ? 'Downloading…' : 'Download'}
+        <Download className="h-4 w-4" /> {downloading ? 'Downloadingâ€¦' : 'Download'}
       </Button>
     </AdminShell>
   );
 }
 
-// ─── Audit ────────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Audit â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function FinanceAuditAdminPage() {
   return <AdminShell title="Financial Audit Log" eyebrow="Immutable finance events"><AuditPanel /></AdminShell>;
@@ -2304,8 +2303,8 @@ function AuditEventCard({ event }: { event: AuditEvent }) {
               {event.action}
             </span>
             {actorLabel && <span>{actorLabel}</span>}
-            {entityLabel && <><span className="text-slate-300">·</span><span>{entityLabel}</span></>}
-            {entityId && <span className="font-mono text-xs text-slate-400">{entityId.slice(0, 8)}…</span>}
+            {entityLabel && <><span className="text-slate-300">Â·</span><span>{entityLabel}</span></>}
+            {entityId && <span className="font-mono text-xs text-slate-400">{entityId.slice(0, 8)}â€¦</span>}
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2 pt-1">
@@ -2353,7 +2352,7 @@ function AuditEventCard({ event }: { event: AuditEvent }) {
               {performedById && (
                 <div>
                   <span className="font-black uppercase tracking-widest text-slate-400">Actor ID: </span>
-                  <span className="font-mono font-semibold text-slate-500">{performedById.slice(0, 8)}…</span>
+                  <span className="font-mono font-semibold text-slate-500">{performedById.slice(0, 8)}â€¦</span>
                 </div>
               )}
               {ipAddress && (
@@ -2371,7 +2370,7 @@ function AuditEventCard({ event }: { event: AuditEvent }) {
 }
 
 function AuditPanel() {
-  const { data: apiAudit = [] as typeof adminAuditEvents } = useAdminAuditEvents() as { data: typeof adminAuditEvents };
+  const { data: apiAudit = [] as typeof adminAuditEvents } = useAdminAuditEvents() as unknown as { data: typeof adminAuditEvents };
   if (!apiAudit.length) {
     return <p className="text-sm font-semibold text-slate-400">No audit events found.</p>;
   }
@@ -2384,10 +2383,10 @@ function AuditPanel() {
   );
 }
 
-// ─── System settings ──────────────────────────────────────────────────────────
+// â”€â”€â”€ System settings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function SystemSettingsPage() {
-  const { data: apiSettings } = useSystemSettings() as { data: Record<string, unknown> | undefined };
+  const { data: apiSettings } = useSystemSettings() as unknown as { data: Record<string, unknown> | undefined };
   const saveMutation = useUpdateSystemSettingsMutation();
   const s = apiSettings ?? {};
 
@@ -2451,7 +2450,7 @@ export function SystemSettingsPage() {
         <div className="space-y-4">
           <DangerActionDialog title="Reset All Sessions" entity="All active users" confirmation="RESET" />
           <Button className="w-full rounded-xl bg-[#4338CA]" disabled={saveMutation.isPending} onClick={handleSave}>
-            {saveMutation.isPending ? 'Saving…' : 'Save Settings'}
+            {saveMutation.isPending ? 'Savingâ€¦' : 'Save Settings'}
           </Button>
         </div>
       </div>
@@ -2459,10 +2458,10 @@ export function SystemSettingsPage() {
   );
 }
 
-// ─── Announcements ────────────────────────────────────────────────────────────
+// â”€â”€â”€ Announcements â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function AdminAnnouncementsPage() {
-  const { data: rawAnnouncements = [], isLoading, isError, refetch } = useAnnouncements() as { data: Array<{ id?: string; title?: string; author?: string; createdBy?: string; audience?: string; targetRoles?: string[]; status?: string; priority?: string }> | undefined; isLoading: boolean; isError: boolean; refetch: () => void };
+  const { data: rawAnnouncements = [], isLoading, isError, refetch } = useAnnouncements() as unknown as { data: Array<{ id?: string; title?: string; author?: string; createdBy?: string; audience?: string; targetRoles?: string[]; status?: string; priority?: string }> | undefined; isLoading: boolean; isError: boolean; refetch: () => void };
   const items = (rawAnnouncements ?? []).map((a) => ({
         id: a.id ?? a.title ?? String(Math.random()),
         title: a.title ?? '',
@@ -2474,7 +2473,7 @@ export function AdminAnnouncementsPage() {
   return (
     <AdminShell title="Announcements Admin" eyebrow="Create, edit, cancel with reason">
       <AdminDataTable columns={['Title', 'Author', 'Audience', 'Status', 'Priority', 'Actions']}>
-        {isLoading && <tr><td colSpan={6} className="px-5 py-6 text-center text-sm text-slate-500">Loading…</td></tr>}
+        {isLoading && <tr><td colSpan={6} className="px-5 py-6 text-center text-sm text-slate-500">Loadingâ€¦</td></tr>}
         {isError && <tr><td colSpan={6} className="px-5 py-6 text-center text-sm text-rose-500">Failed to load. <button onClick={refetch} className="font-black underline">Retry</button></td></tr>}
         {!isLoading && !isError && items.length === 0 && <tr><td colSpan={6} className="px-5 py-6 text-center text-sm text-slate-500">No announcements yet.</td></tr>}
         {items.map((item) => (
@@ -2494,7 +2493,7 @@ export function AdminAnnouncementsPage() {
   );
 }
 
-// ─── Stage Configuration (Gap 10) ────────────────────────────────────────────
+// â”€â”€â”€ Stage Configuration (Gap 10) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const STAGE_DESCRIPTIONS: Record<string, { label: string; note: string; tone: 'emerald' | 'blue' | 'amber' }> = {
   PRIMARY: { label: 'Primary School', note: 'Class 1 up to terminal year (Class 6 or 7). Pass mark: 50 %. PSLE national exam at terminal year.', tone: 'emerald' },
@@ -2596,11 +2595,11 @@ export function StageConfigPage() {
   };
 
   return (
-    <AdminShell title="Stage Range Configuration" eyebrow="Primary · O-Level · A-Level school structure">
+    <AdminShell title="Stage Range Configuration" eyebrow="Primary Â· O-Level Â· A-Level school structure">
       <AdminMetricStrip items={[
         { label: 'Primary',  value: `Class 1-${config.terminalPrimary}`, detail: 'Configurable terminal year', tone: 'green'  },
-        { label: 'O-Level',  value: 'Form 1–4',                   detail: 'CSEE at Form 4',              tone: 'blue'  },
-        { label: 'A-Level',  value: 'Form 5–6',                   detail: 'ACSEE at Form 6',             tone: 'amber' },
+        { label: 'O-Level',  value: 'Form 1â€“4',                   detail: 'CSEE at Form 4',              tone: 'blue'  },
+        { label: 'A-Level',  value: 'Form 5â€“6',                   detail: 'ACSEE at Form 6',             tone: 'amber' },
         { label: 'Reg. Prefix', value: `${config.primaryPrefix} / ${config.oLevelPrefix} / ${config.aLevelPrefix}`,     detail: 'Stage-prefixed numbers',      tone: 'blue'  },
       ]} />
 
@@ -2630,7 +2629,7 @@ export function StageConfigPage() {
             value={config.terminalPrimary}
             options={[
               { value: '6', label: 'Class 6 (6-year primary)' },
-              { value: '7', label: 'Class 7 (7-year primary — Tanzania standard)' },
+              { value: '7', label: 'Class 7 (7-year primary â€” Tanzania standard)' },
             ]}
             onChange={(value) => setConfigValue('terminalPrimary', value)}
           />
@@ -2644,7 +2643,7 @@ export function StageConfigPage() {
       </AdminFormSection>
 
       {/* O-Level */}
-      <AdminFormSection title="O-Level Stage" subtitle="Form 1–4 configuration. CSEE readiness template activates at Form 4.">
+      <AdminFormSection title="O-Level Stage" subtitle="Form 1â€“4 configuration. CSEE readiness template activates at Form 4.">
         <div className="grid gap-4 md:grid-cols-3">
           <Field label="Entry Form Level" value="Form 1" readOnly />
           <Field label="Terminal Form Level" value="Form 4" readOnly />
@@ -2653,7 +2652,7 @@ export function StageConfigPage() {
         <div className="mt-4 grid gap-3 md:grid-cols-3">
           <Field label="Failure Threshold (%)" type="number" value={config.oLevelFailure} onChange={(event) => setConfigValue('oLevelFailure', event.target.value)} />
           <Field label="At-Risk Threshold (%)" type="number" value={config.oLevelRisk} onChange={(event) => setConfigValue('oLevelRisk', event.target.value)} />
-          <Field label="CSEE Division bands" value="I (7-17 pts)  II (18-21)  III (22-25)  IV (26-33)  0 (≥34)" readOnly />
+          <Field label="CSEE Division bands" value="I (7-17 pts)  II (18-21)  III (22-25)  IV (26-33)  0 (â‰¥34)" readOnly />
         </div>
         <div className="mt-4">
           <StageToggle label="NECTA candidate number field" description="Show CSEE candidate number field when CSEE registration opens" checked={config.oLevelCandidateNumber} onChange={(value) => setConfigValue('oLevelCandidateNumber', value)} />
@@ -2661,7 +2660,7 @@ export function StageConfigPage() {
       </AdminFormSection>
 
       {/* A-Level */}
-      <AdminFormSection title="A-Level Stage" subtitle="Form 5–6. Combination-based subjects. ACSEE readiness template at Form 6.">
+      <AdminFormSection title="A-Level Stage" subtitle="Form 5â€“6. Combination-based subjects. ACSEE readiness template at Form 6.">
         <div className="grid gap-4 md:grid-cols-3">
           <Field label="Entry Form Level" value="Form 5" readOnly />
           <Field label="Terminal Form Level" value="Form 6" readOnly />
@@ -2670,7 +2669,7 @@ export function StageConfigPage() {
         <div className="mt-4 grid gap-3 md:grid-cols-3">
           <Field label="Failure Threshold (%)" type="number" value={config.aLevelFailure} onChange={(event) => setConfigValue('aLevelFailure', event.target.value)} />
           <Field label="At-Risk Threshold (%)" type="number" value={config.aLevelRisk} onChange={(event) => setConfigValue('aLevelRisk', event.target.value)} />
-          <Field label="ACSEE Division bands" value="I (13-15 pts)  II (10-12)  III (7-9)  IV (4-6)  0 (≤3)" readOnly />
+          <Field label="ACSEE Division bands" value="I (13-15 pts)  II (10-12)  III (7-9)  IV (4-6)  0 (â‰¤3)" readOnly />
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           <StageToggle label="Require min. 2 principal subjects per combination" description="Block combination creation unless at least 2 principal subjects are present" checked={config.requirePrincipalSubjects} onChange={(value) => setConfigValue('requirePrincipalSubjects', value)} />
@@ -2690,7 +2689,7 @@ export function StageConfigPage() {
   );
 }
 
-// ─── Cross-Stage Promotion (Gap 11) ───────────────────────────────────────────
+// â”€â”€â”€ Cross-Stage Promotion (Gap 11) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const CROSS_STAGE_FLOWS = [
   {
@@ -2699,7 +2698,7 @@ const CROSS_STAGE_FLOWS = [
     to: 'Form 1 (O-Level)',
     type: 'CROSS_STAGE',
     rule: 'Student must pass PSLE. New registration number issued: KS-S-YYYY-NNNNN.',
-    badge: 'Primary → O-Level',
+    badge: 'Primary â†’ O-Level',
     tone: 'emerald' as const,
   },
   {
@@ -2708,7 +2707,7 @@ const CROSS_STAGE_FLOWS = [
     to: 'Form 5 (A-Level)',
     type: 'CROSS_STAGE',
     rule: 'Student must select an A-Level combination. New registration number: KS-A-YYYY-NNNNN.',
-    badge: 'O-Level → A-Level',
+    badge: 'O-Level â†’ A-Level',
     tone: 'amber' as const,
   },
   {
@@ -2717,13 +2716,13 @@ const CROSS_STAGE_FLOWS = [
     to: 'Graduation',
     type: 'GRADUATION',
     rule: 'Student graduates. ACSEE results recorded. Status set to GRADUATED.',
-    badge: 'A-Level → Graduate',
+    badge: 'A-Level â†’ Graduate',
     tone: 'blue' as const,
   },
 ];
 
 export function CrossStagePromotionPage() {
-  const { data: apiClasses = [] as typeof adminClasses } = useAdminClasses() as { data: typeof adminClasses };
+  const { data: apiClasses = [] as typeof adminClasses } = useAdminClasses() as unknown as { data: typeof adminClasses };
   const { data: academicYears = [] } = useAcademicYears();
   const createClassPathwayMutation = useCreateClassPathwayMutation();
   const bulkPromoteMutation = useBulkPromoteMutation();
@@ -2790,7 +2789,7 @@ export function CrossStagePromotionPage() {
   };
 
   return (
-    <AdminShell title="Cross-Stage Promotion Workflow" eyebrow="Primary → O-Level · O-Level → A-Level · Graduation">
+    <AdminShell title="Cross-Stage Promotion Workflow" eyebrow="Primary â†’ O-Level Â· O-Level â†’ A-Level Â· Graduation">
       <div className="grid gap-3 lg:grid-cols-3">
         {CROSS_STAGE_FLOWS.map((f) => (
           <button
@@ -2862,13 +2861,14 @@ export function CrossStagePromotionPage() {
   );
 }
 
-// ─── Util ─────────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Util â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function useUser() {
   const { id } = useParams();
-  const { data: apiUsers = [] as typeof adminUsers, isLoading } = useAdminUsers() as { data: typeof adminUsers; isLoading: boolean };
+  const { data: apiUsers = [] as typeof adminUsers, isLoading } = useAdminUsers() as unknown as { data: typeof adminUsers; isLoading: boolean };
   return useMemo(() => ({
     loading: isLoading,
     user: isLoading ? null : (apiUsers.find((u) => u.id === id) ?? null),
   }), [id, apiUsers, isLoading]);
 }
+

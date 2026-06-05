@@ -43,7 +43,6 @@ import {
   usePrincipalSchoolSettings,
   usePrincipalFinanceOverview,
   useCreatePrincipalAnnouncementMutation,
-  useResolveDisciplineMutation,
   useSignReportCardMutation,
   usePatchSchoolSettingsMutation,
 } from '../api/principal.hooks';

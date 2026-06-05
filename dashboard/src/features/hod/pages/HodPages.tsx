@@ -1,4 +1,4 @@
-import { ArrowRight, BookOpen, CheckCircle2, Download, Filter, MessageSquarePlus, Save, Send, ShieldCheck, TrendingUp, XCircle } from 'lucide-react';
+import { ArrowRight, BookOpen, CheckCircle2, Download, Filter, MessageSquarePlus, Send, ShieldCheck, TrendingUp, XCircle } from 'lucide-react';
 import type { ReactNode } from 'react';
 import React, { useMemo, useState } from 'react';
 import { NavLink, useNavigate, useParams } from 'react-router-dom';
@@ -6,7 +6,7 @@ import { toast } from '../../../lib/toast';
 import { Badge } from '../../../components/common/Badge';
 import { Button } from '../../../components/common/Button';
 import { Card } from '../../../components/common/Card';
-import { hodMarks, hodSubjects } from '../api/hodApi';
+import { hodAlerts, hodApprovals, hodInterventions, hodMarks, hodPairings, hodSubjects, hodTeachers } from '../api/hodApi';
 import { DataError } from '../../../components/feedback/DataError';
 import { EmptyState } from '../../../components/feedback/EmptyState';
 import { SkeletonTable } from '../../../components/common/SkeletonTable';
@@ -25,8 +25,6 @@ import {
   useApproveAssessmentMutation,
   useRejectAssessmentMutation,
   useActivateHodPairingMutation,
-  useResolveHodAlertMutation,
-  useCreateHodInterventionMutation,
   useCreateHodAnnouncementMutation,
 } from '../api/hod.hooks';
 import {
@@ -50,8 +48,8 @@ export function HodHomePage() {
   const { data: apiApprovals = [] } = useHodPendingApprovals();
   const { data: apiAlerts = [] } = useHodAlerts();
   const { data: apiTeachers = [] } = useHodTeachersList();
-  const { data: apiSubjects = [] as typeof hodSubjects } = useHodClassSubjects() as { data: typeof hodSubjects };
-  const sortedApprovals = sortOldestApprovalsFirst(apiApprovals as Parameters<typeof sortOldestApprovalsFirst>[0]);
+  const { data: apiSubjects = [] as typeof hodSubjects } = useHodClassSubjects() as unknown as { data: typeof hodSubjects };
+  const sortedApprovals = sortOldestApprovalsFirst(apiApprovals as unknown as Parameters<typeof sortOldestApprovalsFirst>[0]);
   const firstApproval = sortedApprovals[0] ?? null;
   return (
     <HodWorkspaceShell
@@ -197,7 +195,7 @@ export function HodHomePage() {
         {/* Right: Teacher risks + alert digest */}
         <section className="col-span-12 xl:col-span-3 space-y-gutter">
           <SectionTitle title="Teacher Risks" />
-          {apiTeachers.length > 0 ? <TeacherRiskCard teacher={apiTeachers[0] as Parameters<typeof TeacherRiskCard>[0]['teacher']} /> : <p className="text-sm font-semibold text-ks-muted">No teacher data yet.</p>}
+          {apiTeachers.length > 0 ? <TeacherRiskCard teacher={apiTeachers[0] as unknown as Parameters<typeof TeacherRiskCard>[0]['teacher']} /> : <p className="text-sm font-semibold text-ks-muted">No teacher data yet.</p>}
           <Card className="rounded-xl border-2 border-dashed border-ks-line p-5">
             <h4 className="flex items-center gap-2 font-display text-base font-black text-ks-navy">
               <span className="text-ks-amber">⚡</span> Alert Digest
@@ -223,7 +221,7 @@ export function HodHomePage() {
 // ─── Approvals ─────────────────────────────────────────────────────────────
 
 export function PendingApprovalsPage() {
-  const { data: apiApprovals = [] as typeof hodApprovals, isLoading, isError, refetch } = useHodPendingApprovals() as { data: typeof hodApprovals; isLoading: boolean; isError: boolean; refetch: () => void };
+  const { data: apiApprovals = [] as typeof hodApprovals, isLoading, isError, refetch } = useHodPendingApprovals() as unknown as { data: typeof hodApprovals; isLoading: boolean; isError: boolean; refetch: () => void };
   const sorted = sortOldestApprovalsFirst(apiApprovals);
   const oldest = sorted[0] ?? null;
   const avgGrade = apiApprovals.length ? Math.round(apiApprovals.reduce((s, a) => s + a.average, 0) / apiApprovals.length) : 0;
@@ -310,7 +308,7 @@ export function PendingApprovalsPage() {
 export function MarksApprovalReviewPage() {
   const { loading, approval } = useApproval();
   const navigate = useNavigate();
-  const { data: apiMarks = [] as typeof hodMarks } = useMarksApprovalReview(approval?.id ?? '') as { data: typeof hodMarks };
+  const { data: apiMarks = [] as typeof hodMarks } = useMarksApprovalReview(approval?.id ?? '') as unknown as { data: typeof hodMarks };
   const [reason, setReason] = useState('');
   const approveMutation = useApproveAssessmentMutation();
   const rejectMutation = useRejectAssessmentMutation();
@@ -537,7 +535,7 @@ export function ApprovalHistoryPage() {
 // ─── Department overview ────────────────────────────────────────────────────
 
 export function DepartmentOverviewPage() {
-  const { data: apiSubjects = [] as typeof hodSubjects, isLoading } = useHodClassSubjects() as { data: typeof hodSubjects; isLoading: boolean };
+  const { data: apiSubjects = [] as typeof hodSubjects, isLoading } = useHodClassSubjects() as unknown as { data: typeof hodSubjects; isLoading: boolean };
   const riskSubject = apiSubjects.find((s) => s.tone === 'rose') ?? apiSubjects[0] ?? null;
   const avgSyllabus = apiSubjects.length ? Math.round(apiSubjects.reduce((s, sub) => s + sub.syllabus, 0) / apiSubjects.length) : 0;
   const totalAtRisk = apiSubjects.reduce((s, sub) => s + sub.atRisk, 0);
@@ -574,7 +572,7 @@ export function SubjectDetailPage() {
   if (!subject) return <HodWorkspaceShell title="Not Found" eyebrow="Subject drilldown"><EmptyState title="Subject not found" description="This subject could not be found in your department." /></HodWorkspaceShell>;
 
   const subjectAlerts = (apiAlerts as Array<{ id: string; subject: string }>).filter((a) => a.subject === subject.name);
-  const subjectTeacher = (apiTeachers as Array<Parameters<typeof TeacherRiskCard>[0]['teacher']>).find((t) => t.name === subject.teacher) ?? null;
+  const subjectTeacher = (apiTeachers as unknown as Array<Parameters<typeof TeacherRiskCard>[0]['teacher']>).find((t) => t.name === subject.teacher) ?? null;
 
   return (
     <HodWorkspaceShell title={`${subject.name} Analytics`} eyebrow="Subject drilldown">
@@ -605,7 +603,7 @@ export function SubjectDetailPage() {
 // ─── Teacher performance list ───────────────────────────────────────────────
 
 export function TeacherPerformanceListPage() {
-  const { data: apiTeachers = [] as typeof hodTeachers } = useHodTeachersList() as { data: typeof hodTeachers };
+  const { data: apiTeachers = [] as typeof hodTeachers } = useHodTeachersList() as unknown as { data: typeof hodTeachers };
   const riskTeacher = [...apiTeachers].sort((a, b) => a.onTime - b.onTime)[0] ?? null;
   const topTeacher = [...apiTeachers].sort((a, b) => b.average - a.average)[0] ?? null;
   return (
@@ -654,7 +652,7 @@ export function TeacherDetailPage() {
 // ─── Department alerts ──────────────────────────────────────────────────────
 
 export function DepartmentAlertsPage() {
-  const { data: apiAlerts = [] as typeof hodAlerts } = useHodAlerts() as { data: typeof hodAlerts };
+  const { data: apiAlerts = [] as typeof hodAlerts } = useHodAlerts() as unknown as { data: typeof hodAlerts };
   const critical = apiAlerts.filter((a) => a.severity === 'CRITICAL');
   const watch = apiAlerts.filter((a) => a.severity === 'WATCH');
   const improving = apiAlerts.filter((a) => a.severity === 'IMPROVING');
@@ -676,7 +674,7 @@ export function DepartmentAlertsPage() {
 // ─── Peer pairings ──────────────────────────────────────────────────────────
 
 export function DepartmentPairingsPage() {
-  const { data: apiPairings = [] as typeof hodPairings } = useHodPairings() as { data: typeof hodPairings };
+  const { data: apiPairings = [] as typeof hodPairings } = useHodPairings() as unknown as { data: typeof hodPairings };
   const activateMutation = useActivateHodPairingMutation();
   const suggestedPairings = apiPairings.filter((p) => p.status === 'SUGGESTED');
 
@@ -722,7 +720,7 @@ export function DepartmentPairingsPage() {
 export function HodStudentPerformancePage() {
   const { studentId } = useParams();
   const { data: apiAlerts = [], isLoading } = useHodAlerts();
-  const { data: apiSubjects = [] as typeof hodSubjects } = useHodClassSubjects() as { data: typeof hodSubjects };
+  const { data: apiSubjects = [] as typeof hodSubjects } = useHodClassSubjects() as unknown as { data: typeof hodSubjects };
   const alert = (apiAlerts as Array<{ studentId: string; student: string }>).find((item) => item.studentId === studentId) ?? null;
   const trendData = [72, 68, 64, 58, 55, 52];
 
@@ -734,13 +732,13 @@ export function HodStudentPerformancePage() {
       <HodMetricStrip items={apiSubjects.map((subject) => ({
         label: subject.name,
         value: `${subject.average}%`,
-        detail: subject.name === (alert as { subject: string }).subject ? 'Linked alert subject' : 'Department subject',
+        detail: subject.name === (alert as unknown as { subject: string }).subject ? 'Linked alert subject' : 'Department subject',
         tone: subject.tone === 'rose' ? 'bg-ks-rose' : 'bg-ks-blue',
         valueColor: subject.tone === 'rose' ? 'text-ks-rose' : subject.average >= 75 ? 'text-ks-emerald' : 'text-ks-amber',
       }))} />
       <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_340px]">
         <TrendBoardFull trendData={trendData} />
-        <DepartmentAlertCard alert={alert} />
+        <DepartmentAlertCard alert={alert as unknown as Parameters<typeof DepartmentAlertCard>[0]['alert']} />
       </div>
     </HodWorkspaceShell>
   );
@@ -749,7 +747,7 @@ export function HodStudentPerformancePage() {
 // ─── Interventions ──────────────────────────────────────────────────────────
 
 export function HodInterventionsPage() {
-  const { data: apiInterventions = [] as typeof hodInterventions } = useHodInterventions() as { data: typeof hodInterventions };
+  const { data: apiInterventions = [] as typeof hodInterventions } = useHodInterventions() as unknown as { data: typeof hodInterventions };
   const uniqueSubjects = [...new Set(apiInterventions.map((i) => i.subject))].length;
   return (
     <HodWorkspaceShell title="Department Interventions" eyebrow="Follow-up tracking">
@@ -976,7 +974,7 @@ export function HodAuditPage() {
 // ─── Internal sub-components ──────────────────────────────────────────────
 
 function DepartmentMatrixTable({ subjectId }: { subjectId?: string } = {}) {
-  const { data: apiSubjects = [] as typeof hodSubjects } = useHodClassSubjects() as { data: typeof hodSubjects };
+  const { data: apiSubjects = [] as typeof hodSubjects } = useHodClassSubjects() as unknown as { data: typeof hodSubjects };
   const rows = subjectId ? apiSubjects.filter((subject) => subject.id === subjectId) : apiSubjects;
   return (
     <HodTable columns={['Subject', 'Teacher', 'Average', 'Change', 'At-risk', 'Syllabus', 'Alerts', 'Actions']}>
@@ -1018,7 +1016,7 @@ function DepartmentMatrixTable({ subjectId }: { subjectId?: string } = {}) {
 }
 
 function TeachersTable() {
-  const { data: apiTeachers = [] as typeof hodTeachers } = useHodTeachersList() as { data: typeof hodTeachers };
+  const { data: apiTeachers = [] as typeof hodTeachers } = useHodTeachersList() as unknown as { data: typeof hodTeachers };
   return (
     <HodTable columns={['Teacher', 'Subjects / Classes', 'Average', 'On-time', 'Syllabus', 'At-risk', 'Pending', 'Rejections', 'Actions']}>
       {apiTeachers.map((teacher) => {
@@ -1097,7 +1095,7 @@ function MarksReviewTable({ marks = hodMarks, average }: { marks?: typeof hodMar
 }
 
 function TeacherSubmissionMatrix() {
-  const { data: apiTeachers = [] as typeof hodTeachers } = useHodTeachersList() as { data: typeof hodTeachers };
+  const { data: apiTeachers = [] as typeof hodTeachers } = useHodTeachersList() as unknown as { data: typeof hodTeachers };
   return (
     <Card className="rounded-xl p-5">
       <SectionTitle title="Teacher Submission Matrix" />
@@ -1140,7 +1138,7 @@ function NavyInsightPanel() {
   );
 }
 
-function TrendBoard({ subject }: { subject: ReturnType<typeof useSubject> }) {
+function TrendBoard({ subject }: { subject: typeof hodSubjects[number] }) {
   const tones = { rose: '#F43F5E', emerald: '#10B981', amber: '#F59E0B', blue: '#0284C7' };
   const color = tones[subject.tone] ?? tones.blue;
   const data = [82, 78, 72, 65, 60, subject.average];
@@ -1234,7 +1232,7 @@ function SubmissionTimeline() {
 }
 
 function SubjectTabs({ active }: { active: string }) {
-  const { data: apiSubjects = [] as typeof hodSubjects } = useHodClassSubjects() as { data: typeof hodSubjects };
+  const { data: apiSubjects = [] as typeof hodSubjects } = useHodClassSubjects() as unknown as { data: typeof hodSubjects };
   return (
     <Card className="flex w-fit flex-wrap gap-1 rounded-xl bg-ks-line/30 p-1">
       {apiSubjects.map((subject) => (
@@ -1267,36 +1265,6 @@ function FilterBar({ items }: { items: string[] }) {
         </button>
       ))}
     </Card>
-  );
-}
-
-function HodFormPage({ title, eyebrow, fields, preview }: { title: string; eyebrow: string; fields: string[]; preview: string }) {
-  return (
-    <HodWorkspaceShell title={title} eyebrow={eyebrow}>
-      <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_380px]">
-        <Card className="rounded-xl p-5">
-          <div className="flex items-center gap-3">
-            <MessageSquarePlus className="h-5 w-5 text-ks-blue" />
-            <SectionTitle title={title} />
-          </div>
-          <div className="mt-5 grid gap-4 md:grid-cols-2">
-            {fields.map((field) => (
-              <label key={field} className="block">
-                <span className="text-[11px] font-black uppercase tracking-[0.22em] text-ks-muted">{field}</span>
-                <input className="mt-2 h-11 w-full rounded-xl border border-ks-line px-3 font-semibold outline-none transition focus:border-ks-blue focus:ring-2 focus:ring-ks-blue/10" />
-              </label>
-            ))}
-          </div>
-          <Button className="mt-5 rounded-xl">
-            <Send className="h-4 w-4" /> Publish announcement
-          </Button>
-        </Card>
-        <Card className="sticky top-24 h-fit rounded-xl p-5">
-          <p className="text-[11px] font-black uppercase tracking-[0.22em] text-ks-muted">Preview</p>
-          <p className="mt-3 rounded-xl bg-ks-paper p-4 text-sm font-semibold leading-7 text-ks-slate">{preview}</p>
-        </Card>
-      </div>
-    </HodWorkspaceShell>
   );
 }
 
@@ -1360,7 +1328,7 @@ function Td({ children }: { children: ReactNode }) {
 
 function useApproval() {
   const { assessmentId } = useParams();
-  const { data: apiApprovals = [] as typeof hodApprovals, isLoading } = useHodPendingApprovals() as { data: typeof hodApprovals; isLoading: boolean };
+  const { data: apiApprovals = [] as typeof hodApprovals, isLoading } = useHodPendingApprovals() as unknown as { data: typeof hodApprovals; isLoading: boolean };
   return useMemo(
     () => ({ loading: isLoading, approval: isLoading ? null : (apiApprovals.find((a) => a.id === assessmentId) ?? null) }),
     [assessmentId, apiApprovals, isLoading],
@@ -1369,7 +1337,7 @@ function useApproval() {
 
 function useSubject() {
   const { subjectId } = useParams();
-  const { data: apiSubjects = [] as typeof hodSubjects, isLoading } = useHodClassSubjects() as { data: typeof hodSubjects; isLoading: boolean };
+  const { data: apiSubjects = [] as typeof hodSubjects, isLoading } = useHodClassSubjects() as unknown as { data: typeof hodSubjects; isLoading: boolean };
   return useMemo(
     () => ({ loading: isLoading, subject: isLoading ? null : (apiSubjects.find((s) => s.id === subjectId) ?? null) }),
     [subjectId, apiSubjects, isLoading],
@@ -1378,7 +1346,7 @@ function useSubject() {
 
 function useTeacher() {
   const { teacherId } = useParams();
-  const { data: apiTeachers = [] as typeof hodTeachers, isLoading } = useHodTeachersList() as { data: typeof hodTeachers; isLoading: boolean };
+  const { data: apiTeachers = [] as typeof hodTeachers, isLoading } = useHodTeachersList() as unknown as { data: typeof hodTeachers; isLoading: boolean };
   return useMemo(
     () => ({ loading: isLoading, teacher: isLoading ? null : (apiTeachers.find((t) => t.id === teacherId) ?? null) }),
     [teacherId, apiTeachers, isLoading],

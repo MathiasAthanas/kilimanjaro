@@ -1112,7 +1112,7 @@ export function AdminQuickCard({ title, detail, to, icon = 'settings' }: { title
 
 // ─── Pending integration banner ───────────────────────────────────────────────
 
-export function PendingIntegration({ endpoint }: { endpoint: string }) {
+export function PendingIntegration({ endpoint: _endpoint }: { endpoint: string }) {
   return (
     <div className="rounded-2xl border border-dashed border-[#F59E0B] bg-[#F59E0B]/10 p-5">
       <div className="flex items-center gap-2 font-black text-[#92400e]">

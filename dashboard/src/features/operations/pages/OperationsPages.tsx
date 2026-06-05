@@ -6,7 +6,6 @@ import { Button } from '../../../components/common/Button';
 import { DataError } from '../../../components/feedback/DataError';
 import { EmptyState } from '../../../components/feedback/EmptyState';
 import { SkeletonTable } from '../../../components/common/SkeletonTable';
-import { analyticsMetrics } from '../api/operationsApi';
 import {
   useAllAssessments,
   useAllTimetables,
@@ -15,6 +14,11 @@ import {
   useReportCatalog,
   useReportJobs,
   useCreateTimetableMutation,
+  useAnalyticsOverview,
+  useAcademicOverview,
+  useOperationsFinanceOverview,
+  useAttendanceOverview,
+  useEnrolmentAnalytics,
 } from '../api/operations.hooks';
 import { AnalyticsInsightPanel, BulkMarksGrid, ChartCard, ExportCenterDrawer, MarksReviewPanel, OperationsShell, OperationsTable, ReportBuilderCanvas, ReportPreviewFrame, ReportTile, Td, TimetableMatrix } from '../components/OperationsWorkspace';
 
@@ -245,10 +249,29 @@ export function AnalyticsWorkspacePage() {
 }
 
 function AnalyticsGrid() {
+  const { data: overview }  = useAnalyticsOverview()   as { data: Record<string, unknown> | undefined };
+  const { data: academic }  = useAcademicOverview()    as { data: Record<string, unknown> | undefined };
+  const { data: finance }   = useOperationsFinanceOverview() as { data: Record<string, unknown> | undefined };
+  const { data: attendance }= useAttendanceOverview()  as { data: Record<string, unknown> | undefined };
+  const { data: enrolment } = useEnrolmentAnalytics()  as { data: Record<string, unknown> | undefined };
+
+  const academicMean  = academic?.schoolAverage  ?? academic?.mean  ?? academic?.average  ?? overview?.academicMean  ?? '—';
+  const financeRate   = (finance as Record<string,unknown>)?.billing
+    ? `${Math.round(Number(((finance as Record<string,unknown>).billing as Record<string,unknown>)?.collectionRate ?? 0))}%`
+    : finance?.collectionRate != null ? `${Math.round(Number(finance.collectionRate))}%` : '—';
+  const attendanceRate= attendance?.overallRate   ?? attendance?.average  ?? '—';
+  const totalStudents = enrolment?.totalStudents  ?? enrolment?.total     ?? '—';
+
+  const metrics = [
+    { label: 'Academic Mean',         value: academicMean  != null ? String(academicMean)   : '—', insight: 'School-wide academic average for current term.' },
+    { label: 'Finance Collection',    value: financeRate,                                           insight: 'Fee collection rate against total invoiced.'  },
+    { label: 'Attendance Rate',       value: attendanceRate != null ? String(attendanceRate) : '—', insight: 'Overall student attendance rate this term.'    },
+    { label: 'Enrolled Students',     value: totalStudents  != null ? String(totalStudents)  : '—', insight: 'Total active student enrolment.'               },
+  ];
   return (
     <div className="grid gap-gutter md:grid-cols-2 xl:grid-cols-4">
-      {analyticsMetrics.map((metric) => (
-        <AnalyticsInsightPanel key={metric.label} title={`${metric.label}: ${metric.value}`} insight={`${metric.insight} Source: ${metric.source}`} />
+      {metrics.map((metric) => (
+        <AnalyticsInsightPanel key={metric.label} title={`${metric.label}: ${metric.value}`} insight={metric.insight} />
       ))}
     </div>
   );
