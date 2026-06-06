@@ -8,8 +8,11 @@ import { Badge } from '../../../components/common/Badge';
 import { Button } from '../../../components/common/Button';
 import { Card } from '../../../components/common/Card';
 import type { HodAlert, HodApproval, HodIntervention, HodPairing, HodSubject, HodTeacher } from '../types/hod.types';
+import { useAuthStore } from '../../../lib/auth/authStore';
 
 export function HodWorkspaceShell({ title, eyebrow, children, action }: { title: string; eyebrow: string; children: ReactNode; action?: ReactNode }) {
+  const session = useAuthStore((state) => state.session);
+  const userName = session?.user?.name ?? 'Head of Department';
   return (
     <div className="space-y-gutter">
       <section className="overflow-hidden rounded-xl border border-ks-navy/15 bg-[linear-gradient(135deg,#061f33,#0c4a6e_56%,#00334f)] p-8 text-white shadow-layer">
@@ -17,7 +20,7 @@ export function HodWorkspaceShell({ title, eyebrow, children, action }: { title:
           <div>
             <p className="text-[11px] font-black uppercase tracking-[0.28em] text-ks-gold">{eyebrow}</p>
             <h1 className="mt-2 font-display text-[44px] font-bold leading-[52px] tracking-[-0.02em]">{title}</h1>
-            <p className="mt-1 text-sm font-semibold text-ks-mist/75">Dr. James Kileo · Sciences Department · Biology, Chemistry, Physics</p>
+            <p className="mt-1 text-sm font-semibold text-ks-mist/75">{userName} · Head of Department</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone="gold">Term II · 2026</Badge>

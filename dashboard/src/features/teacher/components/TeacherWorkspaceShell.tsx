@@ -9,8 +9,11 @@ import { Button } from '../../../components/common/Button';
 import { Card } from '../../../components/common/Card';
 import type { Alert, Assessment, ClassSubject, MarkRow, Pairing, Student, TimetableEntry } from '../types/teacher.types';
 import { validateScore } from '../utils/marks';
+import { useAuthStore } from '../../../lib/auth/authStore';
 
 export function TeacherWorkspaceShell({ title, eyebrow, children, action }: { title: string; eyebrow: string; children: ReactNode; action?: ReactNode }) {
+  const session = useAuthStore((state) => state.session);
+  const teacherName = session?.user?.name ?? 'Teacher';
   return (
     <div className="space-y-gutter">
       <section className="overflow-hidden rounded-xl border border-ks-navy/15 bg-[linear-gradient(135deg,#00334f,#0c4a6e_58%,#083855)] p-8 text-white shadow-layer">
@@ -18,7 +21,7 @@ export function TeacherWorkspaceShell({ title, eyebrow, children, action }: { ti
           <div>
             <p className="text-[11px] font-black uppercase tracking-[0.22em] text-ks-gold">{eyebrow}</p>
             <h1 className="mt-2 font-display text-[44px] font-bold leading-[52px] tracking-[-0.02em]">{title}</h1>
-            <p className="mt-1 max-w-3xl text-sm font-semibold text-ks-mist/70">Mwalimu Rose Mhina · Mathematics & Physics · Form 2A, 3A, 3B</p>
+            <p className="mt-1 max-w-3xl text-sm font-semibold text-ks-mist/70">{teacherName} · Teacher Portal</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone="gold">Term II · 2026</Badge>

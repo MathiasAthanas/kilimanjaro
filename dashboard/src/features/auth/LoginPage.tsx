@@ -59,9 +59,10 @@ export function LoginPage() {
         <p className="relative z-10 border-t border-ks-mist/10 pt-4 text-xs font-bold text-ks-mist/40">© 2026 Kilimanjaro Schools Group. Version 1.0.0</p>
       </section>
 
-      <section className="flex flex-1 flex-col items-center justify-center overflow-y-auto p-6">
-        <div className="mb-10 flex items-center gap-3 md:hidden"><KilimanjaroMark /><span className="font-display text-2xl font-bold text-ks-navy">Kilimanjaro Schools</span></div>
-        <div className="w-full max-w-[440px] rounded-xl border border-ks-line bg-white p-8 shadow-sm">
+      <section className="flex flex-1 flex-col items-center overflow-y-auto bg-ks-paper p-6 [color-scheme:light]">
+        <div className="my-auto w-full max-w-[440px] py-8">
+        <div className="mb-8 flex items-center gap-3 md:hidden"><KilimanjaroMark /><span className="font-display text-2xl font-bold text-ks-navy">Kilimanjaro Schools</span></div>
+        <div className="w-full rounded-xl border border-ks-line bg-white p-8 shadow-sm">
           <div className="mb-8">
             <div className="mb-2 flex items-center gap-2 text-ks-gold"><LockOpen className="h-5 w-5" /><span className="text-xs font-black uppercase tracking-wider">Secure Access</span></div>
             <h3 className="font-display text-2xl font-bold text-ks-navy">Staff Portal Login</h3>
@@ -83,13 +84,14 @@ export function LoginPage() {
           </div>
         </div>
         {import.meta.env.DEV ? (
-          <div className="mt-8 w-full max-w-[440px] rounded-lg border border-ks-line bg-ks-mist/30 p-5">
+          <div className="mt-6 w-full rounded-lg border border-ks-line bg-ks-mist/30 p-5">
             <div className="mb-4 flex items-center gap-2 text-ks-navy"><School className="h-5 w-5" /><span className="text-sm font-black">Quick Login (Dev Only)</span></div>
             <div className="grid gap-2">
               {demo.map(([role, email, password]) => <button key={email} className="flex justify-between rounded-lg border border-ks-line bg-white p-3 text-left hover:border-ks-blue" onClick={() => fill(email, password)}><span className="font-bold text-ks-navy">{role}</span><span className="text-xs text-ks-muted">{email}</span></button>)}
             </div>
           </div>
         ) : null}
+        </div>
       </section>
     </main>
   );

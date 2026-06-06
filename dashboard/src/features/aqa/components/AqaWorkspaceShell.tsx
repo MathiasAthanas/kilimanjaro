@@ -20,6 +20,7 @@ import { Button } from '../../../components/common/Button';
 import { Card } from '../../../components/common/Card';
 import type { AqaAlert, AqaIntervention, AqaPairing, HeatmapCell, Threshold } from '../types/aqa.types';
 import { heatTone } from '../utils/aqaEngine';
+import { useAuthStore } from '../../../lib/auth/authStore';
 
 // ─── Shell ───────────────────────────────────────────────────────────────────
 
@@ -28,6 +29,8 @@ export function AqaWorkspaceShell({
 }: {
   title: string; eyebrow: string; children: ReactNode; action?: ReactNode;
 }) {
+  const session = useAuthStore((state) => state.session);
+  const userName = session?.user?.name ?? 'AQA Officer';
   return (
     <div className="space-y-gutter">
       {/* Header banner */}
@@ -37,7 +40,7 @@ export function AqaWorkspaceShell({
           <div>
             <p className="text-[11px] font-black uppercase tracking-[0.28em] text-ks-gold">{eyebrow}</p>
             <h1 className="mt-2 font-display text-[44px] font-bold leading-[52px] tracking-[-0.02em]">{title}</h1>
-            <p className="mt-1.5 text-sm font-semibold text-white/70">Ms. Fatuma Ally · Academic QA · Whole-school academic quality</p>
+            <p className="mt-1.5 text-sm font-semibold text-white/70">{userName} · Academic Quality Assurance</p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <Badge tone="gold">Term II</Badge>

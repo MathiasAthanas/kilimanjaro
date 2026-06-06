@@ -25,6 +25,7 @@ import { Button } from '../../../components/common/Button';
 import { toast } from '../../../lib/toast';
 import type { DisciplineIncident, PrincipalAssessment, PrincipalMetric, PrincipalPaymentApproval, SchoolHealth, Urgency } from '../types/principal.types';
 import { canApprovePayment, canLockMarks, canPublishResults, selectedClassLabel } from '../utils/principalDecision';
+import { useAuthStore } from '../../../lib/auth/authStore';
 import {
   useApprovePaymentMutation,
   useLockMarksMutation,
@@ -47,6 +48,8 @@ export function PrincipalWorkspaceShell({
   children: ReactNode;
   action?: ReactNode;
 }) {
+  const session = useAuthStore((state) => state.session);
+  const userName = session?.user?.name ?? 'Principal';
   return (
     <div className="space-y-gutter">
       <section className="relative overflow-hidden rounded-2xl border border-[#d9b75e]/30 bg-[radial-gradient(circle_at_15%_20%,rgba(213,154,27,0.28),transparent_24%),radial-gradient(circle_at_90%_10%,rgba(14,165,233,0.20),transparent_28%),linear-gradient(135deg,#020617_0%,#08243a_44%,#00334f_100%)] shadow-layer">
@@ -60,7 +63,7 @@ export function PrincipalWorkspaceShell({
           <div>
             <p className="text-[11px] font-black uppercase tracking-[0.32em] text-[#f4c96b]">{eyebrow}</p>
             <h1 className="mt-2 font-display text-[44px] font-black leading-tight tracking-[-0.04em] text-white">{title}</h1>
-            <p className="mt-1.5 text-sm font-semibold text-white/60">Mr. David Mwasimba · Principal · Executive decision authority</p>
+            <p className="mt-1.5 text-sm font-semibold text-white/60">{userName} · Principal · Executive decision authority</p>
           </div>
           <div className="flex shrink-0 items-start gap-3 xl:pt-2">
             <HeaderPill label="Health"   value="78 / 100"     tone="green" />

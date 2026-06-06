@@ -25,6 +25,7 @@ import type { Asset, AuditEntry, FinanceStatus, Invoice, Payment, PaymentMethod,
 import { duplicateReferenceWarning, formatTZS, isOverpayment, parseTZSInput } from '../utils/money';
 import { useFileUploadMutation, validateFile } from '../../../lib/api/upload';
 import type { UploadedFile } from '../../../lib/api/upload';
+import { useAuthStore } from '../../../lib/auth/authStore';
 
 // ─── Shell ────────────────────────────────────────────────────────────────────
 
@@ -39,6 +40,8 @@ export function FinanceWorkspaceShell({
   children: ReactNode;
   action?: ReactNode;
 }) {
+  const session = useAuthStore((state) => state.session);
+  const userName = session?.user?.name ?? 'Finance Officer';
   return (
     <div className="min-h-[calc(100vh-80px)] space-y-gutter bg-[#f7f9fb]">
       {/* ── Page header card ── */}
@@ -57,7 +60,7 @@ export function FinanceWorkspaceShell({
                   {title}
                 </h1>
                 <p className="mt-1 text-sm font-semibold text-[#64748b]">
-                  Ms. Grace Temba · Finance Office · Term II 2026
+                  {userName} · Finance Office
                 </p>
               </div>
             </div>
@@ -508,6 +511,7 @@ export function ReceiptList({ rows }: { rows: Receipt[] }) {
 // ─── Payment form ─────────────────────────────────────────────────────────────
 
 export function PaymentForm({ method, invoices, references }: { method: 'cash' | 'bank'; invoices: Invoice[]; references: string[] }) {
+  const sessionUser = useAuthStore((state) => state.session?.user?.name ?? 'Finance Officer');
   const selectedInvoice = invoices.find((i) => i.outstanding > 0) ?? invoices[0];
   const [amountText, setAmountText] = useState('400000');
   const [reference, setReference] = useState(method === 'bank' ? 'CRDB-8841' : '');
@@ -612,7 +616,7 @@ export function PaymentForm({ method, invoices, references }: { method: 'cash' |
               </>
             ) : (
               <>
-                <Field label="Received By" value="Grace Temba" />
+                <Field label="Received By" value={sessionUser} />
                 <Field label="Cash Drawer" value="FD-02 / Morning Session" />
               </>
             )}

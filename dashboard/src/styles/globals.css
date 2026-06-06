@@ -10,6 +10,7 @@
 
 html {
   scroll-behavior: smooth;
+  color-scheme: light;
 }
 
 body {
@@ -19,6 +20,7 @@ body {
   background: var(--ks-paper);
   color: #131b2e;
   font-family: 'Plus Jakarta Sans', sans-serif;
+  color-scheme: light;
 }
 
 a {

@@ -57,31 +57,23 @@ const teacherSections: SidebarSection[] = [
   {
     title: 'Academic Work',
     items: [
-      { to: '/teacher/assessments/assess-midterm-math-3a/marks',  icon: FileSpreadsheet, label: 'Marks Entry'      },
-      { to: '/teacher/assessments/assess-midterm-math-3a/submit', icon: ClipboardCheck,  label: 'Submit Review'    },
-      { to: '/teacher/classes/cs-form3a-math/analytics',          icon: BarChart3,       label: 'Class Analytics'  },
-      { to: '/teacher/syllabus',                                   icon: Target,          label: 'Syllabus Tracker' },
-      { to: '/teacher/timetable',                                  icon: CalendarCheck,   label: 'Timetable'        },
+      { to: '/teacher/assessments', icon: FileSpreadsheet, label: 'Marks Entry',      end: true },
+      { to: '/teacher/syllabus',    icon: Target,          label: 'Syllabus Tracker', end: true },
+      { to: '/teacher/timetable',   icon: CalendarCheck,   label: 'Timetable',        end: true },
     ],
   },
   {
     title: 'E-Learning',
     items: [
-      { to: '/teacher/elearning',                                                                    icon: GraduationCap,   label: 'Command Center', end: true },
-      { to: '/teacher/elearning/courses/course-form3a-math/lessons',                                icon: BookOpen,        label: 'Lesson Planner'           },
-      { to: '/teacher/elearning/courses/course-form3a-math/assignments',                            icon: ClipboardCheck,  label: 'Assignments'              },
-      { to: '/teacher/elearning/courses/course-form3a-math/quizzes/quiz-linear/builder',            icon: PenLine,         label: 'Quiz Builder'             },
-      { to: '/teacher/elearning/courses/course-form3a-math/engagement',                             icon: BarChart3,       label: 'Engagement'               },
-      { to: '/teacher/elearning/courses/course-form3a-math/communication',                          icon: MessageSquarePlus, label: 'Communication'           },
+      { to: '/teacher/elearning', icon: GraduationCap, label: 'E-Learning Center', end: true },
     ],
   },
   {
     title: 'Student Support',
     items: [
-      { to: '/teacher/performance/alerts',          icon: AlertTriangle,    label: 'Performance Alerts', end: true },
-      { to: '/teacher/performance/pairings',        icon: Users,            label: 'Peer Pairings',      end: true },
-      { to: '/teacher/interventions/create',        icon: MessageSquarePlus,label: 'Create Intervention'          },
-      { to: '/teacher/classes/cs-form3a-math/students', icon: User,         label: 'Student Directory'            },
+      { to: '/teacher/performance/alerts',   icon: AlertTriangle,    label: 'Performance Alerts', end: true },
+      { to: '/teacher/performance/pairings', icon: Users,            label: 'Peer Pairings',      end: true },
+      { to: '/teacher/interventions/create', icon: MessageSquarePlus,label: 'Create Intervention'           },
     ],
   },
   {
