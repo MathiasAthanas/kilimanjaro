@@ -171,18 +171,14 @@ export function SubjectHealthCard({ subject }: { subject: HodSubject }) {
           </div>
           <p className={`mt-4 font-display text-4xl font-black ${avgColor}`}>{subject.average}%</p>
           <div className="mt-1 flex items-center gap-2 text-sm font-semibold text-ks-muted">
-            {subject.change > 0 ? (
-              <span className="text-ks-emerald">↑ +{subject.change}%</span>
-            ) : (
-              <span className="text-ks-rose">↓ {subject.change}%</span>
-            )}
-            <span>vs last term</span>
+            <span>{subject.studentsAssessed} students assessed · {subject.assessments} assessment{subject.assessments === 1 ? '' : 's'}</span>
           </div>
-          <ProgressBar value={subject.syllabus} tone={barTone} className="mt-3" />
-          <p className="mt-1 text-xs font-bold text-ks-muted">Syllabus: {subject.syllabus}%</p>
-          <div className="mt-3 grid grid-cols-2 gap-2">
+          <ProgressBar value={subject.average} tone={barTone} className="mt-3" />
+          <p className="mt-1 text-xs font-bold text-ks-muted">{subject.teacher}</p>
+          <div className="mt-3 grid grid-cols-3 gap-2">
             <MiniStat label="At risk" value={String(subject.atRisk)} tone={isRisk ? 'text-ks-rose' : 'text-ks-slate'} />
             <MiniStat label="Alerts" value={String(subject.alerts)} tone={subject.alerts > 0 ? 'text-ks-amber' : 'text-ks-slate'} />
+            <MiniStat label="Pending" value={String(subject.pending)} tone={subject.pending > 0 ? 'text-ks-amber' : 'text-ks-slate'} />
           </div>
         </div>
       </Card>
@@ -236,8 +232,10 @@ export function TeacherRiskCard({ teacher }: { teacher: HodTeacher }) {
 // ─── DepartmentAlertCard ─────────────────────────────────────────────────────
 
 export function DepartmentAlertCard({ alert }: { alert: HodAlert }) {
-  const tone = alert.severity === 'CRITICAL' ? 'rose' : alert.severity === 'WATCH' ? 'amber' : 'emerald';
-  const SeverityIcon = alert.severity === 'CRITICAL' ? TrendingDown : alert.severity === 'WATCH' ? CalendarX : Zap;
+  const high = alert.severity === 'CRITICAL' || alert.severity === 'HIGH';
+  const medium = alert.severity === 'MEDIUM';
+  const tone = high ? 'rose' : medium ? 'amber' : 'emerald';
+  const SeverityIcon = high ? TrendingDown : medium ? CalendarX : Zap;
   const borderColor = tone === 'rose' ? 'border-l-ks-rose' : tone === 'amber' ? 'border-l-ks-amber' : 'border-l-ks-emerald';
   const bgColor = tone === 'rose' ? 'bg-ks-rose/5' : tone === 'amber' ? 'bg-ks-amber/5' : 'bg-ks-emerald/5';
   const initials = alert.student.split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase();
@@ -295,6 +293,16 @@ export function PairingReviewCard({ pairing }: { pairing: HodPairing }) {
             <p className="font-display text-lg font-black text-ks-navy">{pairing.mentor} → {pairing.support}</p>
           </div>
         </div>
+        {(pairing.mentorScore != null || pairing.supportScore != null) && (
+          <div className="mt-3 flex items-center gap-4 text-xs font-bold">
+            <span className="text-ks-emerald">Mentor: {pairing.mentorScore ?? '—'}%</span>
+            <span className="text-ks-muted">·</span>
+            <span className="text-ks-rose">Support: {pairing.supportScore ?? '—'}%</span>
+            {pairing.mentorScore != null && pairing.supportScore != null && (
+              <span className="ml-auto rounded bg-ks-mist px-2 py-0.5 font-black text-ks-navy">Gap {pairing.mentorScore - pairing.supportScore}%</span>
+            )}
+          </div>
+        )}
         <p className="mt-4 rounded-xl border border-ks-sky/15 bg-ks-mist/50 p-3 text-sm font-semibold italic text-ks-navy">{pairing.benefit}</p>
         <div className="mt-4 flex items-center justify-between gap-3">
           <Badge tone={pairing.status === 'ACTIVE' ? 'emerald' : pairing.status === 'COMPLETED' ? 'slate' : 'blue'}>
@@ -313,7 +321,7 @@ export function PairingReviewCard({ pairing }: { pairing: HodPairing }) {
 // ─── InterventionCard ─────────────────────────────────────────────────────────
 
 export function InterventionCard({ item }: { item: HodIntervention }) {
-  const open = item.status === 'FOLLOW_UP_REQUIRED';
+  const open = item.status !== 'COMPLETED';
   const borderColor = open ? 'border-l-ks-amber' : 'border-l-ks-emerald';
   const bg = open ? 'bg-ks-amber/5' : 'bg-ks-emerald/5';
   const initials = item.student.split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase();

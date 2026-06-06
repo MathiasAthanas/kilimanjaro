@@ -1,6 +1,6 @@
 export type HodApproval = {
   id: string;
-  subject: 'Biology' | 'Chemistry' | 'Physics';
+  subject: string;
   className: string;
   assessment: string;
   type: string;
@@ -12,19 +12,23 @@ export type HodApproval = {
   average: number;
   highest: number;
   lowest: number;
-  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUBMITTED';
   riskFlags: string[];
 };
 
 export type HodSubject = {
   id: string;
-  name: 'Biology' | 'Chemistry' | 'Physics';
+  name: string;
   average: number;
   change: number;
   atRisk: number;
   syllabus: number;
   alerts: number;
   teacher: string;
+  assessments: number;
+  studentsAssessed: number;
+  pending: number;
+  gradeDistribution: Record<string, number>;
   tone: 'emerald' | 'rose' | 'amber' | 'blue';
 };
 
@@ -46,7 +50,9 @@ export type HodAlert = {
   student: string;
   subject: string;
   className: string;
-  severity: 'CRITICAL' | 'WATCH' | 'IMPROVING';
+  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'POSITIVE';
+  alertType: string;
+  currentScore: number | null;
   reason: string;
   action: string;
 };
@@ -59,6 +65,8 @@ export type HodPairing = {
   className: string;
   status: 'SUGGESTED' | 'ACTIVE' | 'COMPLETED';
   benefit: string;
+  mentorScore: number | null;
+  supportScore: number | null;
 };
 
 export type HodIntervention = {
@@ -69,7 +77,7 @@ export type HodIntervention = {
   student: string;
   type: string;
   note: string;
-  status: 'FOLLOW_UP_REQUIRED' | 'COMPLETED';
+  status: 'FOLLOW_UP_REQUIRED' | 'COMPLETED' | 'OPEN' | 'IN_PROGRESS';
   age: string;
 };
 

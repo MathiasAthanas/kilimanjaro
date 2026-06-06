@@ -7,9 +7,9 @@ export const hodApprovals: HodApproval[] = [
 ];
 
 export const hodSubjects: HodSubject[] = [
-  { id: 'biology', name: 'Biology', average: 82.4, change: 4.2, atRisk: 8, syllabus: 90, alerts: 2, teacher: 'Neema John', tone: 'emerald' },
-  { id: 'chemistry', name: 'Chemistry', average: 54.1, change: -15.0, atRisk: 24, syllabus: 45, alerts: 12, teacher: 'Amina Rashidi', tone: 'rose' },
-  { id: 'physics', name: 'Physics', average: 78.2, change: 6.5, atRisk: 10, syllabus: 84, alerts: 4, teacher: 'Joseph Mrema', tone: 'blue' },
+  { id: 'biology', name: 'Biology', average: 82, change: 0, atRisk: 8, syllabus: 0, alerts: 2, teacher: 'Neema John', tone: 'emerald', assessments: 2, studentsAssessed: 38, pending: 1, gradeDistribution: { A: 10, B: 14, C: 9, D: 3, E: 2 } },
+  { id: 'chemistry', name: 'Chemistry', average: 54, change: 0, atRisk: 24, syllabus: 0, alerts: 12, teacher: 'Amina Rashidi', tone: 'rose', assessments: 3, studentsAssessed: 42, pending: 1, gradeDistribution: { A: 2, B: 6, C: 12, D: 14, E: 8 } },
+  { id: 'physics', name: 'Physics', average: 78, change: 0, atRisk: 10, syllabus: 0, alerts: 4, teacher: 'Joseph Mrema', tone: 'blue', assessments: 2, studentsAssessed: 39, pending: 1, gradeDistribution: { A: 8, B: 15, C: 11, D: 4, E: 1 } },
 ];
 
 export const hodTeachers: HodTeacher[] = [
@@ -20,15 +20,15 @@ export const hodTeachers: HodTeacher[] = [
 ];
 
 export const hodAlerts: HodAlert[] = [
-  { id: 'alert-jabir-chem', studentId: 'stu-jabir', student: 'Jabir Hassan', subject: 'Chemistry', className: 'Form 3B', severity: 'CRITICAL', reason: 'Sudden decline from 71% to 39% across two submissions.', action: 'Escalate to Principal' },
-  { id: 'alert-amina-bio', studentId: 'stu-amina', student: 'Amina Baraka Juma', subject: 'Biology', className: 'Form 2A', severity: 'WATCH', reason: 'Biology practical skills below department median.', action: 'Create Intervention' },
-  { id: 'alert-physics-good', studentId: 'stu-zahara', student: 'Zahara Mushi', subject: 'Physics', className: 'Form 4A', severity: 'IMPROVING', reason: 'Improved by 18% after peer support pairing.', action: 'Record Good News' },
+  { id: 'alert-jabir-chem', studentId: 'stu-jabir', student: 'Jabir Hassan', subject: 'Chemistry', className: 'Form 3B', severity: 'CRITICAL', alertType: 'FAILURE_RISK', currentScore: 39, reason: 'Sudden decline from 71% to 39% across two submissions.', action: 'Escalate to Principal' },
+  { id: 'alert-amina-bio', studentId: 'stu-amina', student: 'Amina Baraka Juma', subject: 'Biology', className: 'Form 2A', severity: 'MEDIUM', alertType: 'AT_RISK', currentScore: 48, reason: 'Biology practical skills below department median.', action: 'Create Intervention' },
+  { id: 'alert-physics-good', studentId: 'stu-zahara', student: 'Zahara Mushi', subject: 'Physics', className: 'Form 4A', severity: 'POSITIVE', alertType: 'CONSISTENT_EXCELLENCE', currentScore: 84, reason: 'Improved by 18% after peer support pairing.', action: 'Record Good News' },
 ];
 
 export const hodPairings: HodPairing[] = [
-  { id: 'pair-chem-1', mentor: 'Joel Komba', support: 'Jabir Hassan', subject: 'Chemistry', className: 'Form 3B', status: 'SUGGESTED', benefit: 'Expected 11% improvement in organic chemistry tasks.' },
-  { id: 'pair-chem-2', mentor: 'Zahara Mushi', support: 'Amina Baraka Juma', subject: 'Biology', className: 'Form 2A', status: 'SUGGESTED', benefit: 'Practical lab support and weekly check-ins.' },
-  { id: 'pair-phys-1', mentor: 'Emmanuel John', support: 'Kassim Majaliwa', subject: 'Physics', className: 'Form 4A', status: 'ACTIVE', benefit: 'Current pairing has improved quiz scores.' },
+  { id: 'pair-chem-1', mentor: 'Joel Komba', support: 'Jabir Hassan', subject: 'Chemistry', className: 'Form 3B', status: 'SUGGESTED', benefit: 'Expected 11% improvement in organic chemistry tasks.', mentorScore: 88, supportScore: 39 },
+  { id: 'pair-chem-2', mentor: 'Zahara Mushi', support: 'Amina Baraka Juma', subject: 'Biology', className: 'Form 2A', status: 'SUGGESTED', benefit: 'Practical lab support and weekly check-ins.', mentorScore: 84, supportScore: 48 },
+  { id: 'pair-phys-1', mentor: 'Emmanuel John', support: 'Kassim Majaliwa', subject: 'Physics', className: 'Form 4A', status: 'ACTIVE', benefit: 'Current pairing has improved quiz scores.', mentorScore: 91, supportScore: 55 },
 ];
 
 export const hodInterventions: HodIntervention[] = [

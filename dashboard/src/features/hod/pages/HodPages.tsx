@@ -75,18 +75,18 @@ export function HodHomePage() {
               <Card className={`group flex items-center justify-between rounded-xl p-5 transition hover:-translate-y-0.5 hover:shadow-layer ${isRisk ? 'border-2 border-ks-rose bg-ks-rose/5 ring-1 ring-ks-rose/20 shadow-ks-rose/5' : ''}`}>
                 <div>
                   <p className={`text-xs font-black uppercase tracking-wider ${isRisk ? 'text-ks-rose' : 'text-ks-muted'}`}>
-                    {isRisk ? 'Low performing alert' : `${subject.name} Department`}
+                    {subject.name}
                   </p>
                   <p className="mt-1 font-display text-2xl font-black text-ks-navy">
-                    {subject.average}% {isRisk ? subject.name : 'Average'}
+                    {subject.average}% <span className="text-base font-bold text-ks-muted">avg</span>
                   </p>
                   <div className="mt-2 flex items-center gap-1 text-xs font-bold">
-                    {subject.change >= 0 ? (
-                      <span className="text-ks-emerald">↑ +{subject.change}% this term</span>
-                    ) : isRisk ? (
-                      <span className="text-ks-rose">⚠ Action required</span>
+                    {isRisk ? (
+                      <span className="text-ks-rose">⚠ {subject.atRisk} at-risk · action required</span>
+                    ) : subject.pending > 0 ? (
+                      <span className="text-ks-amber">{subject.pending} pending approval{subject.pending > 1 ? 's' : ''}</span>
                     ) : (
-                      <span className="text-ks-amber">≈ Steady performance</span>
+                      <span className="text-ks-emerald">✓ {subject.studentsAssessed} students assessed</span>
                     )}
                   </div>
                 </div>
@@ -123,7 +123,7 @@ export function HodHomePage() {
                   <tr>
                     <th className="border-b border-ks-line px-5 py-3.5">Subject block</th>
                     <th className="border-b border-ks-line px-5 py-3.5">Class avg</th>
-                    <th className="border-b border-ks-line px-5 py-3.5">Syllabus</th>
+                    <th className="border-b border-ks-line px-5 py-3.5">Assessed</th>
                     <th className="border-b border-ks-line px-5 py-3.5">Alert level</th>
                   </tr>
                 </thead>
@@ -137,14 +137,8 @@ export function HodHomePage() {
                         </span>
                       </Td>
                       <Td>
-                        <div className="flex items-center gap-2">
-                          <ProgressBar
-                            value={subject.syllabus}
-                            tone={subject.tone === 'rose' ? 'bg-ks-rose' : subject.tone === 'emerald' ? 'bg-ks-emerald' : 'bg-ks-amber'}
-                            className="w-24"
-                          />
-                          <span className="text-[10px] font-bold text-ks-muted">{subject.syllabus}%</span>
-                        </div>
+                        <span className="text-sm font-bold text-ks-slate">{subject.studentsAssessed}</span>
+                        <span className="ml-1 text-[10px] font-bold text-ks-muted">students</span>
                       </Td>
                       <Td>
                         {subject.tone === 'rose' ? (
@@ -162,34 +156,8 @@ export function HodHomePage() {
             </div>
           </Card>
 
-          {/* Syllabus Momentum navy chart */}
-          <div className="relative overflow-hidden rounded-xl bg-ks-navy p-6 text-white shadow-layer">
-            <div className="absolute -right-12 -top-12 h-40 w-40 rounded-full bg-white/5" />
-            <div className="relative flex items-start justify-between">
-              <div>
-                <h4 className="font-display text-xl font-black">Syllabus Momentum</h4>
-                <p className="text-sm font-semibold text-ks-mist/60">Completion trajectory — current term</p>
-              </div>
-              <div className="text-right">
-                <p className="font-display text-3xl font-black text-ks-gold">
-                  {apiSubjects.length ? `${Math.round(apiSubjects.reduce((s, sub) => s + sub.syllabus, 0) / apiSubjects.length)}%` : '—'}
-                </p>
-                <p className="text-[10px] font-black uppercase tracking-widest text-ks-mist/40">Avg syllabus coverage</p>
-              </div>
-            </div>
-            <div className="mt-6 flex items-end gap-1.5" style={{ height: 96 }}>
-              {[25, 33, 40, 75, 50, 66, 100].map((height, i) => (
-                <div
-                  key={i}
-                  className={`flex-1 rounded-t transition-all duration-700 ${i === 3 ? 'bg-ks-gold shadow-lg shadow-ks-gold/20' : 'bg-white/20'}`}
-                  style={{ height: `${height}%` }}
-                />
-              ))}
-            </div>
-            <div className="mt-2 flex justify-between text-[10px] font-bold text-ks-mist/40">
-              {['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr'].map((m) => <span key={m}>{m}</span>)}
-            </div>
-          </div>
+          {/* Department grade distribution (real, summed across assessed subjects) */}
+          <DepartmentGradeChart subjects={apiSubjects} />
         </section>
 
         {/* Right: Teacher risks + alert digest */}
@@ -200,16 +168,21 @@ export function HodHomePage() {
             <h4 className="flex items-center gap-2 font-display text-base font-black text-ks-navy">
               <span className="text-ks-amber">⚡</span> Alert Digest
             </h4>
+            {apiAlerts.length === 0 && <p className="mt-4 text-sm font-semibold text-ks-emerald">No active performance alerts.</p>}
             <ul className="mt-4 space-y-4">
-              {apiAlerts.map((alert) => (
-                <li key={alert.id} className="flex gap-3">
-                  <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${alert.severity === 'CRITICAL' ? 'bg-ks-rose' : alert.severity === 'WATCH' ? 'bg-ks-amber' : 'bg-ks-emerald'}`} />
-                  <div>
-                    <p className="text-sm font-bold text-ks-navy">{alert.student}</p>
-                    <p className="text-xs font-semibold text-ks-muted">{alert.reason}</p>
-                  </div>
-                </li>
-              ))}
+              {apiAlerts.slice(0, 6).map((alert) => {
+                const sev = alert.severity;
+                const dot = sev === 'CRITICAL' || sev === 'HIGH' ? 'bg-ks-rose' : sev === 'MEDIUM' ? 'bg-ks-amber' : 'bg-ks-emerald';
+                return (
+                  <li key={alert.id} className="flex gap-3">
+                    <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${dot}`} />
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-ks-navy">{alert.student} <span className="font-semibold text-ks-muted">· {alert.subject}</span></p>
+                      <p className="text-xs font-semibold text-ks-muted">{alert.reason}</p>
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           </Card>
         </section>
@@ -375,37 +348,8 @@ export function MarksApprovalReviewPage() {
             </div>
           </Card>
 
-          {/* Grade distribution visual */}
-          <Card className="rounded-xl p-5">
-            <div className="flex items-center justify-between">
-              <h3 className="font-display text-xl font-black text-ks-navy">Grade Distribution</h3>
-              <span className="text-xs font-semibold text-ks-muted">Bell curve mapping</span>
-            </div>
-            <div className="mt-4 flex items-end gap-1" style={{ height: 80 }}>
-              {[
-                { grade: 'F', height: 80, color: 'bg-ks-rose/40 hover:bg-ks-rose/60' },
-                { grade: 'D', height: 40, color: 'bg-ks-amber/40 hover:bg-ks-amber/60' },
-                { grade: 'C', height: 25, color: 'bg-ks-sky/40 hover:bg-ks-sky/60' },
-                { grade: 'B', height: 15, color: 'bg-ks-blue/40 hover:bg-ks-blue/60' },
-                { grade: 'A', height: 10, color: 'bg-ks-emerald/40 hover:bg-ks-emerald/60' },
-              ].map((bar) => (
-                <div key={bar.grade} className={`flex-1 cursor-help rounded-t transition-all ${bar.color}`} style={{ height: `${bar.height}%` }} />
-              ))}
-            </div>
-            <div className="mt-1 flex justify-between text-[10px] font-black text-ks-muted">
-              {['F', 'D', 'C', 'B', 'A'].map((g) => <span key={g}>{g}</span>)}
-            </div>
-            <div className="mt-4 space-y-2">
-              {[['A', 28, 'bg-ks-emerald'], ['B', 42, 'bg-ks-blue'], ['C', 19, 'bg-ks-amber'], ['D/F', 10, 'bg-ks-rose']].map(([grade, value, tone]) => (
-                <div key={grade as string}>
-                  <div className="mb-1 flex justify-between text-xs font-black text-ks-muted">
-                    <span>{grade}</span><span>{value}%</span>
-                  </div>
-                  <ProgressBar value={value as number} tone={tone as string} />
-                </div>
-              ))}
-            </div>
-          </Card>
+          {/* Grade distribution visual — computed from real marks */}
+          <MarksGradeDistribution marks={apiMarks} />
 
           {/* Statistical outliers */}
           <Card className="rounded-xl p-5">
@@ -537,17 +481,18 @@ export function ApprovalHistoryPage() {
 export function DepartmentOverviewPage() {
   const { data: apiSubjects = [] as typeof hodSubjects, isLoading } = useHodClassSubjects() as unknown as { data: typeof hodSubjects; isLoading: boolean };
   const riskSubject = apiSubjects.find((s) => s.tone === 'rose') ?? apiSubjects[0] ?? null;
-  const avgSyllabus = apiSubjects.length ? Math.round(apiSubjects.reduce((s, sub) => s + sub.syllabus, 0) / apiSubjects.length) : 0;
   const totalAtRisk = apiSubjects.reduce((s, sub) => s + sub.atRisk, 0);
-  const bestSubject = [...apiSubjects].sort((a, b) => b.change - a.change)[0] ?? null;
+  const totalAssessed = apiSubjects.reduce((s, sub) => s + sub.studentsAssessed, 0);
+  const totalPending = apiSubjects.reduce((s, sub) => s + sub.pending, 0);
+  const topSubject = [...apiSubjects].filter((s) => s.studentsAssessed > 0).sort((a, b) => b.average - a.average)[0] ?? null;
   return (
     <HodWorkspaceShell title="Department Overview" eyebrow="Subjects performance overview">
       {riskSubject && <SubjectTabs active={riskSubject.id} />}
       <HodMetricStrip items={[
         { label: riskSubject ? `${riskSubject.name} avg` : 'Lowest subject', value: riskSubject ? `${riskSubject.average}%` : '—', detail: riskSubject ? 'Weakest subject' : 'No data yet', tone: 'bg-ks-rose', valueColor: 'text-ks-rose' },
-        { label: 'At-risk students', value: isLoading ? '—' : String(totalAtRisk), detail: 'Department total', tone: 'bg-ks-rose', valueColor: 'text-ks-rose' },
-        { label: 'Syllabus coverage', value: isLoading ? '—' : `${avgSyllabus}%`, detail: 'Dept average', tone: 'bg-ks-amber', valueColor: 'text-ks-amber' },
-        { label: 'Best improvement', value: bestSubject ? `${bestSubject.change > 0 ? '+' : ''}${bestSubject.change}%` : '—', detail: bestSubject?.name ?? 'N/A', inverted: true, icon: ShieldCheck },
+        { label: 'At-risk students', value: isLoading ? '—' : String(totalAtRisk), detail: 'Critical / high alerts', tone: 'bg-ks-rose', valueColor: 'text-ks-rose' },
+        { label: 'Students assessed', value: isLoading ? '—' : String(totalAssessed), detail: `${totalPending} pending approval${totalPending === 1 ? '' : 's'}`, tone: 'bg-ks-blue', valueColor: 'text-ks-blue' },
+        { label: 'Top subject', value: topSubject ? `${topSubject.average}%` : '—', detail: topSubject?.name ?? 'N/A', inverted: true, icon: ShieldCheck },
       ]} />
       <div className="grid gap-gutter xl:grid-cols-3">
         {apiSubjects.map((subject) => <SubjectHealthCard key={subject.id} subject={subject} />)}
@@ -652,18 +597,23 @@ export function TeacherDetailPage() {
 // ─── Department alerts ──────────────────────────────────────────────────────
 
 export function DepartmentAlertsPage() {
-  const { data: apiAlerts = [] as typeof hodAlerts } = useHodAlerts() as unknown as { data: typeof hodAlerts };
-  const critical = apiAlerts.filter((a) => a.severity === 'CRITICAL');
-  const watch = apiAlerts.filter((a) => a.severity === 'WATCH');
-  const improving = apiAlerts.filter((a) => a.severity === 'IMPROVING');
+  const { data: apiAlerts = [] as typeof hodAlerts, isLoading, isError, refetch } = useHodAlerts() as unknown as { data: typeof hodAlerts; isLoading: boolean; isError: boolean; refetch: () => void };
+  const critical = apiAlerts.filter((a) => a.severity === 'CRITICAL' || a.severity === 'HIGH');
+  const watch = apiAlerts.filter((a) => a.severity === 'MEDIUM');
+  const improving = apiAlerts.filter((a) => a.severity === 'LOW' || a.severity === 'POSITIVE');
   return (
     <HodWorkspaceShell title="Department Performance Alerts" eyebrow="Escalation and resolution">
       <HodMetricStrip items={[
-        { label: 'Critical', value: String(critical.length).padStart(2, '0'), detail: critical[0] ? `${critical[0].student} ${critical[0].subject}` : '—', tone: 'bg-ks-rose', valueColor: 'text-ks-rose' },
-        { label: 'Watch', value: String(watch.length).padStart(2, '0'), detail: watch[0] ? `${watch[0].student} practical` : '—', tone: 'bg-ks-amber', valueColor: 'text-ks-amber' },
-        { label: 'Improving', value: String(improving.length).padStart(2, '0'), detail: 'Peer support results', tone: 'bg-ks-emerald', valueColor: 'text-ks-emerald' },
-        { label: 'Escalations', value: '00', detail: 'No principal escalations', inverted: true, icon: ShieldCheck },
+        { label: 'Critical / High', value: String(critical.length).padStart(2, '0'), detail: critical[0] ? `${critical[0].student} · ${critical[0].subject}` : 'None flagged', tone: 'bg-ks-rose', valueColor: 'text-ks-rose' },
+        { label: 'Medium', value: String(watch.length).padStart(2, '0'), detail: watch[0] ? `${watch[0].student} · ${watch[0].subject}` : 'None flagged', tone: 'bg-ks-amber', valueColor: 'text-ks-amber' },
+        { label: 'Low / Positive', value: String(improving.length).padStart(2, '0'), detail: 'Monitoring or improving', tone: 'bg-ks-emerald', valueColor: 'text-ks-emerald' },
+        { label: 'Total alerts', value: String(apiAlerts.length).padStart(2, '0'), detail: 'Across department subjects', inverted: true, icon: ShieldCheck },
       ]} />
+      {isLoading && <SkeletonTable cols={3} />}
+      {isError && <DataError onRetry={refetch} />}
+      {!isLoading && !isError && apiAlerts.length === 0 && (
+        <EmptyState title="No active alerts" description="Performance alerts for your department subjects will appear here." />
+      )}
       <div className="grid gap-gutter xl:grid-cols-3">
         {apiAlerts.map((alert) => <DepartmentAlertCard key={alert.id} alert={alert} />)}
       </div>
@@ -691,7 +641,7 @@ export function DepartmentPairingsPage() {
         { label: 'Suggested', value: String(suggestedPairings.length), detail: 'Awaiting action', tone: 'bg-ks-blue', valueColor: 'text-ks-blue' },
         { label: 'Active', value: String(apiPairings.filter((p) => p.status === 'ACTIVE').length), detail: 'Current support', tone: 'bg-ks-emerald', valueColor: 'text-ks-emerald' },
         { label: 'Completed', value: String(apiPairings.filter((p) => p.status === 'COMPLETED').length), detail: 'This term', tone: 'bg-ks-gold', valueColor: 'text-ks-amber' },
-        { label: 'Effectiveness', value: '78%', detail: 'Avg grade lift', inverted: true, icon: ShieldCheck },
+        { label: 'Total pairings', value: String(apiPairings.length), detail: 'Across department', inverted: true, icon: ShieldCheck },
       ]} />
       <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_340px]">
         <section className="space-y-gutter">
@@ -721,26 +671,62 @@ export function HodStudentPerformancePage() {
   const { studentId } = useParams();
   const { data: apiAlerts = [], isLoading } = useHodAlerts();
   const { data: apiSubjects = [] as typeof hodSubjects } = useHodClassSubjects() as unknown as { data: typeof hodSubjects };
-  const alert = (apiAlerts as Array<{ studentId: string; student: string }>).find((item) => item.studentId === studentId) ?? null;
-  const trendData = [72, 68, 64, 58, 55, 52];
+  const studentAlerts = (apiAlerts as Array<{ studentId: string; student: string; subject: string; currentScore: number | null }>).filter((item) => item.studentId === studentId);
+  const alert = studentAlerts[0] ?? null;
 
   if (isLoading) return <HodWorkspaceShell title="Loading…" eyebrow="Department student profile"><SkeletonTable cols={4} /></HodWorkspaceShell>;
   if (!alert) return <HodWorkspaceShell title="Student Not Found" eyebrow="Department student profile"><EmptyState title="Student not found" description="No alert record for this student." /></HodWorkspaceShell>;
 
+  // Build a per-subject score series from this student's real alert scores.
+  const scoreBySubject = new Map<string, number>();
+  studentAlerts.forEach((a) => { if (a.currentScore != null) scoreBySubject.set(a.subject, a.currentScore); });
+
   return (
     <HodWorkspaceShell title={(alert as { student: string }).student} eyebrow="Department student profile">
-      <HodMetricStrip items={apiSubjects.map((subject) => ({
-        label: subject.name,
-        value: `${subject.average}%`,
-        detail: subject.name === (alert as unknown as { subject: string }).subject ? 'Linked alert subject' : 'Department subject',
-        tone: subject.tone === 'rose' ? 'bg-ks-rose' : 'bg-ks-blue',
-        valueColor: subject.tone === 'rose' ? 'text-ks-rose' : subject.average >= 75 ? 'text-ks-emerald' : 'text-ks-amber',
-      }))} />
+      <HodMetricStrip items={apiSubjects.slice(0, 4).map((subject) => {
+        const studentScore = scoreBySubject.get(subject.name);
+        return {
+          label: subject.name,
+          value: studentScore != null ? `${Math.round(studentScore)}%` : `${subject.average}%`,
+          detail: studentScore != null ? 'Student score (flagged)' : 'Subject average',
+          tone: (studentScore ?? subject.average) < 50 ? 'bg-ks-rose' : 'bg-ks-blue',
+          valueColor: (studentScore ?? subject.average) < 50 ? 'text-ks-rose' : (studentScore ?? subject.average) >= 75 ? 'text-ks-emerald' : 'text-ks-amber',
+        };
+      })} />
       <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_340px]">
-        <TrendBoardFull trendData={trendData} />
-        <DepartmentAlertCard alert={alert as unknown as Parameters<typeof DepartmentAlertCard>[0]['alert']} />
+        <StudentSubjectScores scores={studentAlerts} />
+        <div className="space-y-gutter">
+          {studentAlerts.map((a) => <DepartmentAlertCard key={(a as { id?: string }).id ?? a.subject} alert={a as unknown as Parameters<typeof DepartmentAlertCard>[0]['alert']} />)}
+        </div>
       </div>
     </HodWorkspaceShell>
+  );
+}
+
+// Real per-subject score bars for a flagged student.
+function StudentSubjectScores({ scores }: { scores: Array<{ subject: string; currentScore: number | null }> }) {
+  const rows = scores.filter((s) => s.currentScore != null);
+  return (
+    <Card className="overflow-hidden rounded-xl p-5">
+      <SectionTitle title="Subject scores" />
+      {rows.length === 0 ? (
+        <p className="mt-4 text-sm font-semibold text-ks-muted">No recorded subject scores for this student.</p>
+      ) : (
+        <div className="mt-5 space-y-4">
+          {rows.map((s) => {
+            const score = Math.round(s.currentScore as number);
+            const tone = score < 50 ? 'bg-ks-rose' : score < 65 ? 'bg-ks-amber' : 'bg-ks-emerald';
+            return (
+              <div key={s.subject} className="flex items-center gap-4">
+                <span className="w-28 shrink-0 truncate text-sm font-bold text-ks-navy">{s.subject}</span>
+                <div className="flex-1"><ProgressBar value={score} tone={tone} /></div>
+                <span className="w-10 shrink-0 text-right text-xs font-black text-ks-muted">{score}%</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Card>
   );
 }
 
@@ -752,10 +738,10 @@ export function HodInterventionsPage() {
   return (
     <HodWorkspaceShell title="Department Interventions" eyebrow="Follow-up tracking">
       <HodMetricStrip items={[
-        { label: 'Open follow-ups', value: String(apiInterventions.filter((i) => i.status === 'FOLLOW_UP_REQUIRED').length), detail: 'Need action', tone: 'bg-ks-amber', valueColor: 'text-ks-amber' },
+        { label: 'Open follow-ups', value: String(apiInterventions.filter((i) => i.status === 'FOLLOW_UP_REQUIRED' || i.status === 'OPEN' || i.status === 'IN_PROGRESS').length), detail: 'Need action', tone: 'bg-ks-amber', valueColor: 'text-ks-amber' },
         { label: 'Completed', value: String(apiInterventions.filter((i) => i.status === 'COMPLETED').length), detail: 'This term', tone: 'bg-ks-emerald', valueColor: 'text-ks-emerald' },
         { label: 'Subjects affected', value: String(uniqueSubjects), detail: 'Dept-wide', tone: 'bg-ks-blue', valueColor: 'text-ks-blue' },
-        { label: 'Success rate', value: '68%', detail: 'Grade improvement', inverted: true, icon: ShieldCheck },
+        { label: 'Total interventions', value: String(apiInterventions.length), detail: 'All statuses', inverted: true, icon: ShieldCheck },
       ]} />
       <FilterBar items={['All', 'Pending Follow-Up', 'Completed', 'Subject', 'Teacher']} />
       <div className="grid gap-gutter xl:grid-cols-3">
@@ -872,14 +858,14 @@ export function CreateHodAnnouncementPage() {
 
 // ─── Exports ────────────────────────────────────────────────────────────────
 
+// reportType values map to the backend ReportType enum.
 const hodExportItems: Array<{ title: string; description: string; format: string; reportType: string }> = [
-  { title: 'Pending approval queue', description: 'All submissions awaiting HOD review, sorted by age.', format: 'CSV', reportType: 'hod-pending-approvals' },
-  { title: 'Approval history', description: 'Complete decision audit with approvals and rejections.', format: 'PDF', reportType: 'hod-approval-history' },
-  { title: 'Subject analytics', description: 'Per-subject averages, trends, and syllabus coverage.', format: 'PDF', reportType: 'hod-subject-analytics' },
-  { title: 'Teacher performance', description: 'On-time submission rates and class averages per teacher.', format: 'PDF', reportType: 'hod-teacher-performance' },
-  { title: 'At-risk students', description: 'Students flagged by the AQA engine across all subjects.', format: 'CSV', reportType: 'hod-at-risk-students' },
-  { title: 'Intervention log', description: 'All interventions with follow-up status and outcomes.', format: 'CSV', reportType: 'hod-interventions' },
-  { title: 'Academic audit report', description: 'Complete departmental audit trail for governance review.', format: 'PDF', reportType: 'hod-audit-report' },
+  { title: 'Class academic report', description: 'Per-class academic performance across the department.', format: 'PDF', reportType: 'CLASS_ACADEMIC' },
+  { title: 'Teacher performance', description: 'Class averages and submission timeliness per teacher.', format: 'PDF', reportType: 'TEACHER_PERFORMANCE' },
+  { title: 'Student profiles', description: 'At-risk and flagged students across all subjects.', format: 'CSV', reportType: 'STUDENT_PROFILE' },
+  { title: 'Attendance summary', description: 'Department attendance trends for the current term.', format: 'PDF', reportType: 'ATTENDANCE_SUMMARY' },
+  { title: 'Performance engine', description: 'Alerts and intervention outcomes from the engine.', format: 'PDF', reportType: 'PERFORMANCE_ENGINE' },
+  { title: 'Term summary', description: 'Complete departmental term summary for governance.', format: 'PDF', reportType: 'TERM_SUMMARY' },
 ];
 
 export function HodExportsPage() {
@@ -890,8 +876,8 @@ export function HodExportsPage() {
     setGenerating(item.title);
     toast(`Generating "${item.title}"…`, 'info');
     try {
-      const result = await generateMutation.mutateAsync({ type: item.reportType, format: item.format.toLowerCase() }) as Record<string, unknown> | undefined;
-      const jobId = String(result?.id ?? result?.jobId ?? '');
+      const result = await generateMutation.mutateAsync({ reportType: item.reportType, scope: 'school' }) as Record<string, unknown> | undefined;
+      const jobId = String(result?.id ?? result?.reportId ?? result?.jobId ?? '');
       if (!jobId) throw new Error('No job id returned');
       await downloadReportWhenReady(jobId, `${item.title}.${item.format.toLowerCase()}`);
       toast(`"${item.title}" downloaded`, 'success');
@@ -973,11 +959,59 @@ export function HodAuditPage() {
 
 // ─── Internal sub-components ──────────────────────────────────────────────
 
+// Real department grade distribution, summed from every assessed subject.
+function DepartmentGradeChart({ subjects }: { subjects: typeof hodSubjects }) {
+  const grades = ['A', 'B', 'C', 'D', 'E', 'F'];
+  const totals: Record<string, number> = {};
+  let total = 0;
+  for (const s of subjects as unknown as Array<{ gradeDistribution?: Record<string, number> }>) {
+    for (const [g, n] of Object.entries(s.gradeDistribution ?? {})) {
+      const key = g.toUpperCase();
+      totals[key] = (totals[key] ?? 0) + Number(n);
+      total += Number(n);
+    }
+  }
+  const max = Math.max(1, ...grades.map((g) => totals[g] ?? 0));
+  const toneFor = (g: string) => g === 'A' ? 'bg-ks-emerald' : g === 'B' ? 'bg-ks-blue' : g === 'C' ? 'bg-ks-sky' : g === 'D' ? 'bg-ks-amber' : 'bg-ks-rose';
+  return (
+    <div className="relative overflow-hidden rounded-xl bg-ks-navy p-6 text-white shadow-layer">
+      <div className="absolute -right-12 -top-12 h-40 w-40 rounded-full bg-white/5" />
+      <div className="relative flex items-start justify-between">
+        <div>
+          <h4 className="font-display text-xl font-black">Department Grade Distribution</h4>
+          <p className="text-sm font-semibold text-ks-mist/60">Across all assessed subjects this term</p>
+        </div>
+        <div className="text-right">
+          <p className="font-display text-3xl font-black text-ks-gold">{total}</p>
+          <p className="text-[10px] font-black uppercase tracking-widest text-ks-mist/40">Graded marks</p>
+        </div>
+      </div>
+      {total === 0 ? (
+        <p className="relative mt-6 text-sm font-semibold text-ks-mist/50">No grades recorded yet for submitted assessments.</p>
+      ) : (
+        <>
+          <div className="mt-6 flex items-end gap-3" style={{ height: 96 }}>
+            {grades.map((g) => (
+              <div key={g} className="flex flex-1 flex-col items-center justify-end gap-1" style={{ height: '100%' }}>
+                <span className="text-[10px] font-black text-ks-mist/70">{totals[g] ?? 0}</span>
+                <div className={`w-full rounded-t ${toneFor(g)} transition-all duration-700`} style={{ height: `${((totals[g] ?? 0) / max) * 100}%`, minHeight: 2 }} />
+              </div>
+            ))}
+          </div>
+          <div className="mt-2 flex gap-3 text-center text-[10px] font-bold text-ks-mist/50">
+            {grades.map((g) => <span key={g} className="flex-1">{g}</span>)}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function DepartmentMatrixTable({ subjectId }: { subjectId?: string } = {}) {
   const { data: apiSubjects = [] as typeof hodSubjects } = useHodClassSubjects() as unknown as { data: typeof hodSubjects };
   const rows = subjectId ? apiSubjects.filter((subject) => subject.id === subjectId) : apiSubjects;
   return (
-    <HodTable columns={['Subject', 'Teacher', 'Average', 'Change', 'At-risk', 'Syllabus', 'Alerts', 'Actions']}>
+    <HodTable columns={['Subject', 'Teacher', 'Average', 'Students', 'At-risk', 'Pending', 'Alerts', 'Actions']}>
       {rows.map((subject) => (
         <tr key={subject.id} className={`transition ${subject.tone === 'rose' ? 'bg-ks-rose/5 hover:bg-ks-rose/10' : 'hover:bg-ks-paper'}`}>
           <Td><span className="font-bold text-ks-navy">{subject.name}</span></Td>
@@ -988,18 +1022,13 @@ function DepartmentMatrixTable({ subjectId }: { subjectId?: string } = {}) {
             </span>
           </Td>
           <Td>
-            <span className={`font-bold ${subject.change > 0 ? 'text-ks-emerald' : 'text-ks-rose'}`}>
-              {subject.change > 0 ? '+' : ''}{subject.change}%
-            </span>
+            <span className="font-bold text-ks-slate">{subject.studentsAssessed}</span>
           </Td>
           <Td>
             <span className={`font-bold ${subject.atRisk > 3 ? 'text-ks-rose' : 'text-ks-slate'}`}>{subject.atRisk}</span>
           </Td>
           <Td>
-            <div className="flex items-center gap-2">
-              <ProgressBar value={subject.syllabus} tone={subject.tone === 'rose' ? 'bg-ks-rose' : 'bg-ks-emerald'} className="w-20" />
-              <span className="text-xs font-bold text-ks-muted">{subject.syllabus}%</span>
-            </div>
+            <span className={`font-bold ${subject.pending > 0 ? 'text-ks-amber' : 'text-ks-slate'}`}>{subject.pending}</span>
           </Td>
           <Td>
             <span className={`font-bold ${subject.alerts > 0 ? 'text-ks-amber' : 'text-ks-slate'}`}>{subject.alerts}</span>
@@ -1016,11 +1045,14 @@ function DepartmentMatrixTable({ subjectId }: { subjectId?: string } = {}) {
 }
 
 function TeachersTable() {
-  const { data: apiTeachers = [] as typeof hodTeachers } = useHodTeachersList() as unknown as { data: typeof hodTeachers };
+  const { data: apiTeachers = [] as typeof hodTeachers, isLoading, isError, refetch } = useHodTeachersList() as unknown as { data: typeof hodTeachers; isLoading: boolean; isError: boolean; refetch: () => void };
+  if (isLoading) return <SkeletonTable cols={5} />;
+  if (isError) return <DataError onRetry={refetch} />;
+  if (apiTeachers.length === 0) return <EmptyState title="No teacher data" description="Teacher performance appears here once assessments are submitted for the department." />;
   return (
-    <HodTable columns={['Teacher', 'Subjects / Classes', 'Average', 'On-time', 'Syllabus', 'At-risk', 'Pending', 'Rejections', 'Actions']}>
+    <HodTable columns={['Teacher', 'Subjects', 'Class average', 'On-time', 'Pending', 'Actions']}>
       {apiTeachers.map((teacher) => {
-        const risk = teacher.onTime < 60;
+        const risk = teacher.average > 0 && teacher.average < 60;
         return (
           <tr key={teacher.id} className={`transition ${risk ? 'bg-ks-rose/5 hover:bg-ks-rose/10' : 'hover:bg-ks-paper'}`}>
             <Td>
@@ -1031,18 +1063,10 @@ function TeachersTable() {
                 <span className="font-bold text-ks-navy">{teacher.name}</span>
               </div>
             </Td>
-            <Td>{teacher.subjects}</Td>
+            <Td>{teacher.subjects || '—'}</Td>
             <Td><span className={`font-black ${teacher.average >= 75 ? 'text-ks-emerald' : teacher.average >= 60 ? 'text-ks-amber' : 'text-ks-rose'}`}>{teacher.average}%</span></Td>
-            <Td><span className={`font-black ${risk ? 'text-ks-rose' : 'text-ks-emerald'}`}>{teacher.onTime}%</span></Td>
-            <Td>
-              <div className="flex items-center gap-2">
-                <ProgressBar value={teacher.syllabus} tone={teacher.syllabus < 60 ? 'bg-ks-rose' : 'bg-ks-blue'} className="w-16" />
-                <span className="text-xs text-ks-muted">{teacher.syllabus}%</span>
-              </div>
-            </Td>
-            <Td><span className={teacher.atRisk > 3 ? 'font-bold text-ks-rose' : 'text-ks-slate'}>{teacher.atRisk}</span></Td>
+            <Td><span className={`font-black ${teacher.onTime < 60 ? 'text-ks-rose' : 'text-ks-emerald'}`}>{teacher.onTime}%</span></Td>
             <Td><span className={teacher.pending > 0 ? 'font-bold text-ks-amber' : 'text-ks-slate'}>{teacher.pending}</span></Td>
-            <Td>{teacher.rejections}</Td>
             <Td>
               <NavLink to={`/hod/teachers/${teacher.id}`} className="font-black text-ks-blue hover:underline">Detail →</NavLink>
             </Td>
@@ -1098,17 +1122,18 @@ function TeacherSubmissionMatrix() {
   const { data: apiTeachers = [] as typeof hodTeachers } = useHodTeachersList() as unknown as { data: typeof hodTeachers };
   return (
     <Card className="rounded-xl p-5">
-      <SectionTitle title="Teacher Submission Matrix" />
+      <SectionTitle title="Class Averages by Teacher" />
+      {apiTeachers.length === 0 && <p className="mt-4 text-sm font-semibold text-ks-muted">No teacher data yet.</p>}
       <div className="mt-4 space-y-4">
         {apiTeachers.map((teacher) => (
           <div key={teacher.id} className="flex items-center gap-4">
-            <span className={`w-36 shrink-0 text-sm font-bold ${teacher.onTime < 60 ? 'text-ks-rose' : 'text-ks-navy'}`}>
-              {teacher.name.split(' ')[1] ?? teacher.name}
+            <span className="w-36 shrink-0 truncate text-sm font-bold text-ks-navy">
+              {teacher.name}
             </span>
             <div className="flex-1">
-              <ProgressBar value={teacher.onTime} tone={teacher.onTime < 60 ? 'bg-ks-rose' : 'bg-ks-emerald'} />
+              <ProgressBar value={teacher.average} tone={teacher.average < 60 ? 'bg-ks-rose' : teacher.average < 75 ? 'bg-ks-amber' : 'bg-ks-emerald'} />
             </div>
-            <span className="w-10 shrink-0 text-right text-xs font-black text-ks-muted">{teacher.onTime}%</span>
+            <span className="w-10 shrink-0 text-right text-xs font-black text-ks-muted">{teacher.average}%</span>
           </div>
         ))}
       </div>
@@ -1116,20 +1141,28 @@ function TeacherSubmissionMatrix() {
   );
 }
 
+// Real data-driven insight panel computed from department subject health.
 function NavyInsightPanel() {
-  const insights = [
-    { tone: 'bg-ks-gold', date: 'May 2026', text: 'Physics Form 4 completed syllabus two weeks early — strong teacher-led execution.' },
-    { tone: 'bg-ks-sky', date: 'May 2026', text: 'Biology practical moderation remains stable across all form groups.' },
-    { tone: 'bg-ks-rose', date: 'April 2026', text: 'Chemistry Form 3B mid-terms showed 15% decrease in mean scores.' },
-  ];
+  const { data: apiSubjects = [] as typeof hodSubjects } = useHodClassSubjects() as unknown as { data: typeof hodSubjects };
+  const sorted = [...apiSubjects].filter((s) => s.studentsAssessed > 0).sort((a, b) => b.average - a.average);
+  const top = sorted[0];
+  const weakest = sorted[sorted.length - 1];
+  const totalPending = apiSubjects.reduce((s, sub) => s + sub.pending, 0);
+  const totalAtRisk = apiSubjects.reduce((s, sub) => s + sub.atRisk, 0);
+  const insights: Array<{ tone: string; label: string; text: string }> = [];
+  if (top) insights.push({ tone: 'bg-ks-emerald', label: 'Strongest subject', text: `${top.name} leads the department at ${top.average}% across ${top.studentsAssessed} assessed students.` });
+  if (weakest && weakest.id !== top?.id) insights.push({ tone: 'bg-ks-rose', label: 'Needs attention', text: `${weakest.name} is the weakest at ${weakest.average}%${weakest.atRisk > 0 ? ` with ${weakest.atRisk} at-risk students` : ''}.` });
+  if (totalPending > 0) insights.push({ tone: 'bg-ks-amber', label: 'Approvals', text: `${totalPending} assessment${totalPending > 1 ? 's' : ''} awaiting your review.` });
+  if (totalAtRisk > 0) insights.push({ tone: 'bg-ks-gold', label: 'Risk', text: `${totalAtRisk} critical/high performance alert${totalAtRisk > 1 ? 's' : ''} flagged across the department.` });
+  if (insights.length === 0) insights.push({ tone: 'bg-ks-sky', label: 'All clear', text: 'No submitted assessments or alerts to summarise yet.' });
   return (
     <Card className="overflow-hidden rounded-xl bg-ks-navy p-6 text-white">
-      <h3 className="font-display text-xl font-black">Academic Insight Timeline</h3>
+      <h3 className="font-display text-xl font-black">Department Insights</h3>
       <div className="mt-5 space-y-5 border-l border-ks-mist/20 pl-5">
         {insights.map((insight) => (
-          <div key={insight.text} className="relative">
+          <div key={insight.label} className="relative">
             <span className={`absolute -left-[27px] top-0 h-4 w-4 rounded-full border-4 border-ks-navy ${insight.tone}`} />
-            <p className="text-[10px] font-black uppercase tracking-wider text-ks-gold">{insight.date}</p>
+            <p className="text-[10px] font-black uppercase tracking-wider text-ks-gold">{insight.label}</p>
             <p className="mt-1 text-sm font-semibold text-ks-mist/75">{insight.text}</p>
           </div>
         ))}
@@ -1138,92 +1171,81 @@ function NavyInsightPanel() {
   );
 }
 
+// Real grade-distribution bars for one subject (replaces fabricated trend line).
 function TrendBoard({ subject }: { subject: typeof hodSubjects[number] }) {
-  const tones = { rose: '#F43F5E', emerald: '#10B981', amber: '#F59E0B', blue: '#0284C7' };
-  const color = tones[subject.tone] ?? tones.blue;
-  const data = [82, 78, 72, 65, 60, subject.average];
-  const max = 100; const min = 40; const range = max - min;
-  const w = 300; const h = 80;
-  const pts = data.map((v, i) => `${(i / (data.length - 1)) * w},${h - ((v - min) / range) * (h - 8) - 4}`);
-  const area = `${pts.join(' ')} ${w},${h} 0,${h}`;
+  const grades = ['A', 'B', 'C', 'D', 'E', 'F'];
+  const gd = (subject as unknown as { gradeDistribution?: Record<string, number> }).gradeDistribution ?? {};
+  const counts = grades.map((g) => Number(gd[g] ?? gd[g.toLowerCase()] ?? 0));
+  const total = counts.reduce((s, n) => s + n, 0);
+  const max = Math.max(1, ...counts);
+  const toneFor = (g: string) => g === 'A' ? 'bg-ks-emerald' : g === 'B' ? 'bg-ks-blue' : g === 'C' ? 'bg-ks-sky' : g === 'D' ? 'bg-ks-amber' : 'bg-ks-rose';
   return (
     <Card className="overflow-hidden rounded-xl p-5">
-      <SectionTitle title="Performance trend" />
-      <div className="mt-5 rounded-xl bg-ks-paper p-4">
-        <svg viewBox={`0 0 ${w} ${h}`} className="w-full overflow-visible">
-          <defs>
-            <linearGradient id="hodTrendFill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={color} stopOpacity="0.2" />
-              <stop offset="100%" stopColor={color} stopOpacity="0" />
-            </linearGradient>
-          </defs>
-          {[0, h / 3, (2 * h) / 3].map((y) => (
-            <line key={y} x1="0" y1={y} x2={w} y2={y} stroke="#E2E8F0" strokeWidth="1" strokeDasharray="4 4" />
-          ))}
-          <polygon points={area} fill="url(#hodTrendFill)" />
-          <polyline points={pts.join(' ')} fill="none" stroke={color} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
-          {data.map((v, i) => {
-            const x = (i / (data.length - 1)) * w;
-            const y = h - ((v - min) / range) * (h - 8) - 4;
-            return <circle key={i} cx={x} cy={y} r="3.5" fill={color} stroke="white" strokeWidth="1.5" />;
-          })}
-        </svg>
-        <div className="mt-1 flex justify-between text-[10px] font-bold text-ks-muted">
-          {['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar'].map((m) => <span key={m}>{m}</span>)}
+      <SectionTitle title="Grade distribution" />
+      {total === 0 ? (
+        <p className="mt-4 text-sm font-semibold text-ks-muted">No graded marks recorded for this subject yet.</p>
+      ) : (
+        <div className="mt-5 rounded-xl bg-ks-paper p-4">
+          <div className="flex items-end gap-3" style={{ height: 96 }}>
+            {grades.map((g, i) => (
+              <div key={g} className="flex flex-1 flex-col items-center justify-end gap-1" style={{ height: '100%' }}>
+                <span className="text-[10px] font-black text-ks-muted">{counts[i]}</span>
+                <div className={`w-full rounded-t ${toneFor(g)}`} style={{ height: `${(counts[i] / max) * 100}%`, minHeight: counts[i] > 0 ? 4 : 0 }} />
+              </div>
+            ))}
+          </div>
+          <div className="mt-2 flex gap-3 text-center text-[10px] font-black text-ks-muted">
+            {grades.map((g) => <span key={g} className="flex-1">{g}</span>)}
+          </div>
         </div>
-      </div>
+      )}
     </Card>
   );
 }
 
-function TrendBoardFull({ trendData }: { trendData: number[] }) {
-  const color = '#F43F5E';
-  const max = 100; const min = 40; const range = max - min;
-  const w = 400; const h = 100;
-  const pts = trendData.map((v, i) => `${(i / (trendData.length - 1)) * w},${h - ((v - min) / range) * (h - 8) - 4}`);
-  const area = `${pts.join(' ')} ${w},${h} 0,${h}`;
-  return (
-    <Card className="overflow-hidden rounded-xl p-5">
-      <SectionTitle title="Student score trend" />
-      <div className="mt-5 rounded-xl bg-[linear-gradient(180deg,#fff5f7,#fff)] p-4">
-        <svg viewBox={`0 0 ${w} ${h}`} className="w-full overflow-visible">
-          <defs>
-            <linearGradient id="studentTrendFill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={color} stopOpacity="0.25" />
-              <stop offset="100%" stopColor={color} stopOpacity="0" />
-            </linearGradient>
-          </defs>
-          <polygon points={area} fill="url(#studentTrendFill)" />
-          <polyline points={pts.join(' ')} fill="none" stroke={color} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
-          {trendData.map((v, i) => {
-            const x = (i / (trendData.length - 1)) * w;
-            const y = h - ((v - min) / range) * (h - 8) - 4;
-            return <circle key={i} cx={x} cy={y} r="3.5" fill={color} stroke="white" strokeWidth="1.5" />;
-          })}
-        </svg>
-        <div className="mt-2 flex justify-between text-[10px] font-bold text-ks-muted">
-          {['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar'].map((m) => <span key={m}>{m}</span>)}
-        </div>
-      </div>
-      <div className="mt-4 rounded-lg border border-ks-rose/20 bg-ks-rose/5 p-3 text-center text-xs font-bold text-ks-rose">
-        ↓ Declining trend detected — 20-point drop over 6 assessments
-      </div>
-    </Card>
-  );
-}
-
-function SubmissionTimeline() {
-  const nodes = ['On time', 'Late', 'Pending', 'Rejected', 'On time', 'Pending'] as const;
-  const nodeColor = (node: string) =>
-    node === 'Rejected' ? 'bg-ks-rose' : node === 'Pending' ? 'bg-ks-amber' : node === 'Late' ? 'bg-ks-gold' : 'bg-ks-emerald';
+// Grade distribution bars computed from real per-student marks.
+function MarksGradeDistribution({ marks }: { marks: typeof hodMarks }) {
+  const buckets = [
+    { grade: 'A', min: 75, tone: 'bg-ks-emerald' },
+    { grade: 'B', min: 65, tone: 'bg-ks-blue' },
+    { grade: 'C', min: 50, tone: 'bg-ks-sky' },
+    { grade: 'D', min: 40, tone: 'bg-ks-amber' },
+    { grade: 'F', min: 0, tone: 'bg-ks-rose' },
+  ];
+  const scored = marks.filter((m) => !m.absent && m.score !== null);
+  const counts = buckets.map((b, i) => {
+    const upper = i === 0 ? Infinity : buckets[i - 1].min;
+    return scored.filter((m) => {
+      const pct = (m.score as number) / m.maxScore * 100;
+      return pct >= b.min && pct < upper;
+    }).length;
+  });
+  const total = scored.length || 1;
+  const max = Math.max(1, ...counts);
   return (
     <Card className="rounded-xl p-5">
-      <SectionTitle title="Submission timeline" />
-      <div className="mt-6 flex items-center gap-3 overflow-x-auto pb-2">
-        {nodes.map((node, index) => (
-          <div key={`${node}-${index}`} className="flex min-w-24 flex-col items-center">
-            <div className={`h-5 w-5 rounded-full border-4 border-white shadow ${nodeColor(node)}`} />
-            <p className="mt-2 text-center text-xs font-black uppercase text-ks-muted">{node}</p>
+      <div className="flex items-center justify-between">
+        <h3 className="font-display text-xl font-black text-ks-navy">Grade Distribution</h3>
+        <span className="text-xs font-semibold text-ks-muted">{scored.length} marked</span>
+      </div>
+      <div className="mt-5 flex items-end gap-2" style={{ height: 90 }}>
+        {buckets.map((b, i) => (
+          <div key={b.grade} className="flex flex-1 flex-col items-center justify-end gap-1" style={{ height: '100%' }}>
+            <span className="text-[10px] font-black text-ks-muted">{counts[i]}</span>
+            <div className={`w-full rounded-t ${b.tone}`} style={{ height: `${(counts[i] / max) * 100}%`, minHeight: counts[i] > 0 ? 4 : 0 }} />
+          </div>
+        ))}
+      </div>
+      <div className="mt-1 flex gap-2 text-center text-[10px] font-black text-ks-muted">
+        {buckets.map((b) => <span key={b.grade} className="flex-1">{b.grade}</span>)}
+      </div>
+      <div className="mt-4 space-y-2">
+        {buckets.map((b, i) => (
+          <div key={b.grade}>
+            <div className="mb-1 flex justify-between text-xs font-black text-ks-muted">
+              <span>{b.grade}</span><span>{Math.round((counts[i] / total) * 100)}%</span>
+            </div>
+            <ProgressBar value={Math.round((counts[i] / total) * 100)} tone={b.tone} />
           </div>
         ))}
       </div>
@@ -1231,25 +1253,54 @@ function SubmissionTimeline() {
   );
 }
 
+function SubmissionTimeline() {
+  const { data: apiApprovals = [] } = useHodPendingApprovals();
+  const nodes = (apiApprovals as Array<{ id: string; assessment: string; submittedHoursAgo: number }>).slice(0, 6);
+  return (
+    <Card className="rounded-xl p-5">
+      <SectionTitle title="Recent submissions" />
+      {nodes.length === 0 ? (
+        <p className="mt-4 text-sm font-semibold text-ks-muted">No recent submissions.</p>
+      ) : (
+        <div className="mt-6 flex items-center gap-3 overflow-x-auto pb-2">
+          {nodes.map((node) => {
+            const overdue = node.submittedHoursAgo >= 48;
+            return (
+              <div key={node.id} className="flex min-w-28 flex-col items-center">
+                <div className={`h-5 w-5 rounded-full border-4 border-white shadow ${overdue ? 'bg-ks-rose' : 'bg-ks-emerald'}`} />
+                <p className="mt-2 line-clamp-2 text-center text-xs font-bold text-ks-navy">{node.assessment}</p>
+                <p className="text-[10px] font-black uppercase text-ks-muted">{node.submittedHoursAgo}h ago</p>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 function SubjectTabs({ active }: { active: string }) {
   const { data: apiSubjects = [] as typeof hodSubjects } = useHodClassSubjects() as unknown as { data: typeof hodSubjects };
+  if (apiSubjects.length === 0) return null;
   return (
     <Card className="flex w-fit flex-wrap gap-1 rounded-xl bg-ks-line/30 p-1">
-      {apiSubjects.map((subject) => (
-        <NavLink
-          key={subject.id}
-          to={`/hod/department/subjects/${subject.id}`}
-          className={`rounded-lg px-5 py-2 text-sm font-black transition ${
-            active === subject.id
-              ? subject.id === 'chemistry'
-                ? 'bg-ks-rose text-white shadow-md'
-                : 'bg-white text-ks-navy shadow-sm'
-              : 'text-ks-muted hover:bg-white'
-          }`}
-        >
-          {subject.name}{subject.id === 'chemistry' ? ' (Risk)' : ''}
-        </NavLink>
-      ))}
+      {apiSubjects.map((subject) => {
+        const isActive = active === subject.id;
+        const isRisk = subject.tone === 'rose';
+        return (
+          <NavLink
+            key={subject.id}
+            to={`/hod/department/subjects/${subject.id}`}
+            className={`rounded-lg px-5 py-2 text-sm font-black transition ${
+              isActive
+                ? isRisk ? 'bg-ks-rose text-white shadow-md' : 'bg-white text-ks-navy shadow-sm'
+                : 'text-ks-muted hover:bg-white'
+            }`}
+          >
+            {subject.name}{isRisk ? ' (Risk)' : ''}
+          </NavLink>
+        );
+      })}
     </Card>
   );
 }
