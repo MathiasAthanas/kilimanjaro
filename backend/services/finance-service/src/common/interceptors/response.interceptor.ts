@@ -5,13 +5,33 @@ import { map } from 'rxjs/operators';
 
 @Injectable()
 export class ResponseInterceptor<T> implements NestInterceptor<T, { success: boolean; data: T }> {
+  /** Robust Decimal check — `instanceof` is unreliable across multiple
+   *  @prisma/client runtime copies, so fall back to duck-typing the
+   *  decimal.js internal shape ({ s, e, d[] } + toFixed()). */
+  private isDecimalLike(v: unknown): boolean {
+    if (v instanceof Decimal) return true;
+    if (!v || typeof v !== 'object') return false;
+    const o = v as Record<string, unknown>;
+    return (
+      typeof o.s === 'number' &&
+      typeof o.e === 'number' &&
+      Array.isArray(o.d) &&
+      typeof (o as { toFixed?: unknown }).toFixed === 'function'
+    );
+  }
+
   private serialize(value: unknown): unknown {
     if (value === null || value === undefined) {
       return value;
     }
 
-    if (value instanceof Decimal) {
-      return value.toString();
+    // Dates must be turned into ISO strings; recursing into them yields {}
+    if (value instanceof Date) {
+      return value.toISOString();
+    }
+
+    if (this.isDecimalLike(value)) {
+      return (value as { toString(): string }).toString();
     }
 
     if (Array.isArray(value)) {

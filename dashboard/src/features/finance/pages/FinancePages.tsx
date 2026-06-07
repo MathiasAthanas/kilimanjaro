@@ -12,7 +12,7 @@ import {
   WalletCards,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { NavLink, useNavigate, useParams } from 'react-router-dom';
 import { downloadReportWhenReady, useGenerateReportMutation } from '../../operations/api/operations.hooks';
 import { toast } from '../../../lib/toast';
@@ -46,6 +46,8 @@ import {
   useReceipts,
   useReceipt as useReceiptById,
   useStudentGroups,
+  useCollectionSummary,
+  useOutstandingBalances,
   useDeleteFeeCategoryMutation,
   useDeleteFeeAssignmentMutation,
   useCreateFeeStructureMutation,
@@ -1110,53 +1112,53 @@ export function FinancialReportsPage() {
   );
 }
 
+const BAR_TONES = ['bg-[#00334f]', 'bg-[#d59a1b]', 'bg-[#10b981]', 'bg-[#64748b]', 'bg-[#e11d48]', 'bg-[#0ea5e9]'];
+
 export function CollectionSummaryReportPage() {
-  return (
-    <ReportPage
-      title="Collection Summary Report"
-      reportBreadcrumb="Collection Summary"
-      trendData={[180_000, 620_000, 400_000, 880_000, 540_000, 760_000, 920_000, 450_000, 1_100_000, 780_000, 660_000, 840_000, 590_000, 1_200_000]}
-      chartValues={[
-        { label: 'Tuition',  value: 58_200_000, tone: 'bg-[#00334f]' },
-        { label: 'Boarding', value: 14_900_000, tone: 'bg-[#d59a1b]' },
-        { label: 'Meals',    value: 9_400_000,  tone: 'bg-[#10b981]' },
-        { label: 'ICT',      value: 7_121_000,  tone: 'bg-[#64748b]' },
-      ]}
-    />
-  );
+  const { data: summary } = useCollectionSummary() as unknown as {
+    data?: { byPaymentMethod?: Array<{ method: string; totalAmount: unknown }>; byFeeCategory?: Array<{ category?: string; name?: string; totalAmount: unknown }> };
+  };
+  // Prefer fee-category breakdown; fall back to payment-method mix (both real)
+  const cats = summary?.byFeeCategory ?? [];
+  const methods = summary?.byPaymentMethod ?? [];
+  const source = cats.length
+    ? cats.map((c) => ({ label: String(c.category ?? c.name ?? '—'), value: Number(c.totalAmount ?? 0) }))
+    : methods.map((m) => ({ label: prettyMethod(m.method), value: Number(m.totalAmount ?? 0) }));
+  const chartValues = source.map((s, i) => ({ ...s, tone: BAR_TONES[i % BAR_TONES.length] }));
+  return <ReportPage title="Collection Summary Report" reportBreadcrumb="Collection Summary" chartValues={chartValues} />;
 }
 
 export function OutstandingBalancesReportPage() {
-  return (
-    <ReportPage
-      title="Outstanding Balances Report"
-      reportBreadcrumb="Outstanding Balances"
-      trendData={[1_200_000, 980_000, 1_450_000, 820_000, 1_100_000, 760_000, 1_380_000, 900_000, 1_050_000, 1_200_000, 880_000, 1_100_000, 970_000, 1_400_000]}
-      chartValues={[
-        { label: 'Form 3', value: 11_800_000, tone: 'bg-[#e11d48]' },
-        { label: 'Form 2', value: 8_600_000,  tone: 'bg-[#d59a1b]' },
-        { label: 'Form 4', value: 6_200_000,  tone: 'bg-[#00334f]' },
-        { label: 'Form 1', value: 5_459_000,  tone: 'bg-[#64748b]' },
-      ]}
-      overdue
-    />
-  );
+  const { data: balances = [] } = useOutstandingBalances() as unknown as {
+    data: Array<{ className?: string; outstanding?: number }>;
+  };
+  // Aggregate real outstanding amounts by class, top 6
+  const byClass = new Map<string, number>();
+  balances.forEach((b) => {
+    const key = b.className?.trim() || 'Unassigned';
+    byClass.set(key, (byClass.get(key) ?? 0) + (b.outstanding ?? 0));
+  });
+  const chartValues = [...byClass.entries()]
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 6)
+    .map(([label, value], i) => ({ label, value, tone: BAR_TONES[i % BAR_TONES.length] }));
+  return <ReportPage title="Outstanding Balances Report" reportBreadcrumb="Outstanding Balances" chartValues={chartValues} overdue />;
 }
 
 export function DailyCollectionsReportPage() {
-  return (
-    <ReportPage
-      title="Daily Collections Report"
-      reportBreadcrumb="Daily Collections"
-      trendData={[240_000, 560_000, 320_000, 720_000, 480_000, 640_000, 880_000, 410_000, 760_000, 920_000, 380_000, 690_000, 540_000, 1_040_000]}
-      chartValues={[
-        { label: '08:00', value: 240_000, tone: 'bg-[#10b981]' },
-        { label: '10:00', value: 560_000, tone: 'bg-[#00334f]' },
-        { label: '12:00', value: 320_000, tone: 'bg-[#d59a1b]' },
-        { label: '14:00', value: 720_000, tone: 'bg-[#10b981]' },
-      ]}
-    />
-  );
+  const { data: summary } = useCollectionSummary() as unknown as {
+    data?: { byPaymentMethod?: Array<{ method: string; totalAmount: unknown; transactionCount?: number }> };
+  };
+  const chartValues = (summary?.byPaymentMethod ?? []).map((m, i) => ({
+    label: prettyMethod(m.method),
+    value: Number(m.totalAmount ?? 0),
+    tone: BAR_TONES[i % BAR_TONES.length],
+  }));
+  return <ReportPage title="Daily Collections Report" reportBreadcrumb="Daily Collections" chartValues={chartValues} />;
+}
+
+function prettyMethod(m: string): string {
+  return String(m ?? '').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 export function FeeDefaultersReportPage() {
@@ -1320,13 +1322,11 @@ function ReportPage({
   title,
   reportBreadcrumb,
   chartValues,
-  trendData,
   overdue = false,
 }: {
   title: string;
   reportBreadcrumb: string;
   chartValues: Array<{ label: string; value: number; tone?: string }>;
-  trendData: number[];
   overdue?: boolean;
 }) {
   const { data: apiOverview = EMPTY_OVERVIEW } = useFinanceOverview() as unknown as { data: typeof financeOverview };
@@ -1336,6 +1336,16 @@ function ReportPage({
   const collectedPct = apiOverview.totalInvoiced > 0 ? Math.round((collected / apiOverview.totalInvoiced) * 100) : 0;
   const invoiceCount = apiPayments.length;
   const today = new Date().toLocaleDateString();
+  // Real collection trend: bucket confirmed payments by day
+  const trendData = useMemo(() => {
+    const byDay = new Map<string, number>();
+    apiPayments.forEach((p) => {
+      const day = String(p.date ?? '').slice(0, 10);
+      if (!day) return;
+      byDay.set(day, (byDay.get(day) ?? 0) + (p.amount ?? 0));
+    });
+    return [...byDay.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([, v]) => v);
+  }, [apiPayments]);
   return (
     <FinanceWorkspaceShell title={title} eyebrow="Generated report workspace">
       <FinanceBreadcrumb crumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Reports', to: '/finance/reports' }, { label: reportBreadcrumb }]} />
@@ -1347,8 +1357,8 @@ function ReportPage({
       ]} />
       <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="space-y-gutter">
-          <MiniColumnChart title="Collection Trend" subtitle={`${trendData.length}-period view`} data={trendData} startLabel="Period 1" endLabel={`Period ${trendData.length}`} />
-          <DenseBarChart values={chartValues} />
+          <MiniColumnChart title="Collection Trend" subtitle={trendData.length ? `${trendData.length}-day view` : 'No dated payments yet'} data={trendData.length ? trendData : [collected]} startLabel="Earliest" endLabel="Latest" />
+          {chartValues.length ? <DenseBarChart values={chartValues} /> : null}
         </div>
         <div className="space-y-gutter sticky top-24 h-fit">
           <div className="rounded-lg border border-[#d5dde6] bg-white p-5">
