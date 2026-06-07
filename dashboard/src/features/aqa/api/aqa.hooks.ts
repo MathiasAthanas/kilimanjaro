@@ -2,6 +2,16 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../lib/api/client';
 import { arrayFromApi, payloadOf } from '../../../lib/api/response';
 
+// ─── Shared resolver ──────────────────────────────────────────────────────────
+function resolveName(v: unknown): string {
+  if (v == null) return '';
+  if (typeof v === 'string') return v;
+  if (typeof v !== 'object') return String(v);
+  const o = v as Record<string, unknown>;
+  const joined = [o.firstName, o.middleName, o.lastName].filter(Boolean).join(' ').trim();
+  return String(o.name ?? o.fullName ?? o.label ?? (joined || o.title || ''));
+}
+
 // ─── Query key factory ────────────────────────────────────────────────────────
 
 export const aqaKeys = {
@@ -38,23 +48,21 @@ export function useAqaAlerts() {
       api
         .get('/academics/performance/alerts')
         .then((r) =>
-          arrayFromApi(payloadOf(r), ['alerts', 'performanceAlerts']).map((raw) => {
+          arrayFromApi(payloadOf(r), ['items', 'alerts', 'performanceAlerts']).map((raw) => {
             const a = raw as Record<string, unknown>;
-            const resolve = (v: unknown): string => {
-              if (!v || typeof v !== 'object') return String(v ?? '');
-              const o = v as Record<string, unknown>;
-              return String(o.name ?? o.fullName ?? o.label ?? '');
-            };
+            const snapshot = (a.triggeredBySnapshot ?? {}) as Record<string, unknown>;
             return {
               ...a,
               id: String(a.id ?? crypto.randomUUID()),
-              student: resolve(a.student ?? a.studentName),
-              subject: resolve(a.subject ?? a.subjectName),
-              className: resolve(a.className ?? a.class ?? a.class_name),
+              student: resolveName(a.student ?? a.studentName) || 'Student',
+              studentId: String(a.studentId ?? ''),
+              subject: String(a.subjectName ?? resolveName(a.subject) ?? ''),
+              className: resolveName(a.class ?? snapshot.class) || '—',
               pairingStatus: String(a.pairingStatus ?? a.pairing_status ?? a.alertStatus ?? ''),
-              severity: String(a.severity ?? a.alertLevel ?? a.level ?? ''),
-              score: Number(a.score ?? a.currentScore ?? a.averageScore ?? 0),
-              type: String(a.type ?? a.alertType ?? ''),
+              severity: String(a.severity ?? a.alertLevel ?? a.level ?? 'MEDIUM').toUpperCase(),
+              score: Number(a.currentScore ?? a.score ?? snapshot.score ?? 0),
+              message: String(a.message ?? a.reason ?? ''),
+              type: String(a.alertType ?? a.type ?? ''),
             };
           }),
         ),
@@ -72,30 +80,35 @@ export function useAqaAlertsByClass(classId: string) {
   });
 }
 
+// The heatmap endpoint returns { heatmap: { academic: { subjectRankings: [...] } } }.
+// Map each subject ranking into a heat cell the UI can render.
 export function useAqaHeatmap() {
   return useQuery({
     queryKey: aqaKeys.heatmap(),
     queryFn: () =>
       api
         .get('/aqa/analytics/heatmap')
-        .then((r) =>
-          arrayFromApi(payloadOf(r), ['heatmap', 'data']).map((raw) => {
+        .then((r) => {
+          const payload = payloadOf(r) as Record<string, unknown>;
+          const heatmap = (payload.heatmap ?? payload) as Record<string, unknown>;
+          const academic = (heatmap.academic ?? {}) as Record<string, unknown>;
+          const rankings = arrayFromApi(academic.subjectRankings ?? heatmap.subjectRankings, ['subjectRankings']);
+          return rankings.map((raw) => {
             const c = raw as Record<string, unknown>;
-            const resolve = (v: unknown): string => {
-              if (!v || typeof v !== 'object') return String(v ?? '');
-              const o = v as Record<string, unknown>;
-              return String(o.name ?? o.fullName ?? o.label ?? '');
-            };
+            const average = Math.round(Number(c.average ?? c.score ?? 0));
             return {
-              ...c,
-              id: String(c.id ?? crypto.randomUUID()),
-              subject: resolve(c.subject ?? c.subjectName),
-              className: resolve(c.className ?? c.class ?? c.class_name),
-              average: Number(c.average ?? c.score ?? c.averageScore ?? 0),
-              classId: String(c.classId ?? c.class_id ?? c.id ?? ''),
+              id: String(c.subjectId ?? c.id ?? crypto.randomUUID()),
+              subject: String(c.subjectName ?? resolveName(c.subject) ?? ''),
+              className: `Rank #${c.rank ?? '—'}`,
+              average,
+              passRate: Math.round(Number(c.passRate ?? 0)),
+              highestScore: Number(c.highestScore ?? 0),
+              lowestScore: Number(c.lowestScore ?? 0),
+              alerts: average < 50 ? 3 : average < 65 ? 1 : 0,
+              classId: String(c.subjectId ?? ''),
             };
-          }),
-        ),
+          });
+        }),
   });
 }
 
@@ -106,22 +119,21 @@ export function useAqaPairings() {
       api
         .get('/academics/performance/pairings')
         .then((r) =>
-          arrayFromApi(payloadOf(r), ['pairings']).map((raw) => {
+          arrayFromApi(payloadOf(r), ['items', 'pairings']).map((raw) => {
             const p = raw as Record<string, unknown>;
-            const resolve = (v: unknown): string => {
-              if (!v || typeof v !== 'object') return String(v ?? '');
-              const o = v as Record<string, unknown>;
-              return String(o.name ?? o.fullName ?? o.label ?? '');
-            };
             return {
               ...p,
               id: String(p.id ?? crypto.randomUUID()),
-              mentor: resolve(p.mentor ?? p.mentorName),
-              teacher: resolve(p.teacher ?? p.teacherName),
-              student: resolve(p.student ?? p.studentName),
-              subject: resolve(p.subject ?? p.subjectName),
-              className: resolve(p.className ?? p.class ?? p.class_name),
+              mentor: resolveName(p.peer ?? p.mentor ?? p.mentorName) || 'Mentor',
+              teacher: resolveName(p.teacher ?? p.teacherName) || '',
+              student: resolveName(p.student ?? p.studentName) || 'Student',
+              support: resolveName(p.student ?? p.studentName) || 'Student',
+              subject: String(p.subjectName ?? resolveName(p.subject) ?? ''),
+              className: resolveName(p.class) || '—',
               reason: String(p.reason ?? p.pairingReason ?? p.description ?? ''),
+              status: String(p.status ?? p.pairingStatus ?? 'SUGGESTED').toUpperCase(),
+              mentorScore: p.peerScoreAtPairing == null ? null : Number(p.peerScoreAtPairing),
+              supportScore: p.studentScoreAtPairing == null ? null : Number(p.studentScoreAtPairing),
               outcome: String(p.outcome ?? p.pairingOutcome ?? p.result ?? p.status ?? ''),
             };
           }),
@@ -136,21 +148,17 @@ export function useAqaInterventions() {
       api
         .get('/academics/interventions')
         .then((r) =>
-          arrayFromApi(payloadOf(r), ['interventions']).map((raw) => {
+          arrayFromApi(payloadOf(r), ['items', 'interventions']).map((raw) => {
             const i = raw as Record<string, unknown>;
-            const resolve = (v: unknown): string => {
-              if (!v || typeof v !== 'object') return String(v ?? '');
-              const o = v as Record<string, unknown>;
-              return String(o.name ?? o.fullName ?? o.label ?? '');
-            };
             return {
               ...i,
               id: String(i.id ?? crypto.randomUUID()),
-              student: resolve(i.student ?? i.studentName),
-              note: String(i.note ?? i.notes ?? i.description ?? ''),
+              student: resolveName(i.student ?? i.studentName) || 'Student',
+              subject: String(i.subjectName ?? resolveName(i.subject) ?? ''),
+              note: String(i.note ?? i.notes ?? i.description ?? i.details ?? ''),
               week: String(i.week ?? i.weekLabel ?? i.createdAt ?? i.created_at ?? ''),
-              roleOwner: resolve(i.roleOwner ?? i.owner ?? i.assignedTo ?? i.teacher),
-              status: String(i.status ?? i.interventionStatus ?? 'OPEN'),
+              roleOwner: resolveName(i.roleOwner ?? i.owner ?? i.assignedTo ?? i.teacher) || 'Staff',
+              status: String(i.status ?? i.interventionStatus ?? 'OPEN').toUpperCase(),
             };
           }),
         ),
@@ -210,7 +218,18 @@ export function useAtRiskStudents() {
     queryFn: () =>
       api
         .get('/analytics/students/at-risk')
-        .then((r) => arrayFromApi(payloadOf(r), ['students', 'atRiskStudents'])),
+        .then((r) => arrayFromApi(payloadOf(r), ['items', 'students', 'atRiskStudents']).map((raw) => {
+          const s = raw as Record<string, unknown>;
+          return {
+            ...s,
+            id: String(s.id ?? s.studentId ?? crypto.randomUUID()),
+            student: resolveName(s.student ?? s) || resolveName({ firstName: s.firstName, lastName: s.lastName }) || 'Student',
+            registration: String(s.registrationNumber ?? s.registration ?? ''),
+            subject: String(s.subjectName ?? resolveName(s.subject) ?? ''),
+            average: Number(s.average ?? s.currentScore ?? s.score ?? 0),
+            riskLevel: String(s.riskLevel ?? s.severity ?? s.risk ?? ''),
+          };
+        })),
   });
 }
 

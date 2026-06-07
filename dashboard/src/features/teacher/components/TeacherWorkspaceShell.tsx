@@ -91,14 +91,12 @@ export function ClassSubjectCard({ item }: { item: ClassSubject }) {
           <Badge tone={badgeTone}>{`${item.risk} RISK`}</Badge>
         </div>
         <div className="mt-stack-md grid grid-cols-2 gap-2.5 text-sm">
-          <MiniStat label="Students" value={String(item.students)} />
-          <MiniStat label="Average" value={`${item.average}%`} color={item.average >= 75 ? 'text-ks-emerald' : item.average >= 60 ? 'text-ks-amber' : 'text-ks-rose'} />
-          <MiniStat label="Attendance" value={`${item.attendance}%`} color={item.attendance >= 90 ? 'text-ks-emerald' : 'text-ks-amber'} />
-          <MiniStat label="Syllabus" value={`${item.syllabus}%`} color={item.syllabus >= 70 ? 'text-ks-emerald' : 'text-ks-amber'} />
+          <MiniStat label="Assessments" value={String(item.assessmentCount)} />
+          <MiniStat label="Open marks" value={String(item.openAssessments)} color={item.openAssessments > 0 ? 'text-ks-amber' : 'text-ks-emerald'} />
         </div>
         <div className="mt-3">
           <div className="mb-1 flex items-center justify-between text-xs font-semibold text-ks-muted">
-            <span>Syllabus</span><span>{item.syllabus}%</span>
+            <span>Syllabus coverage</span><span>{item.syllabus}%</span>
           </div>
           <ProgressBar value={item.syllabus} tone={item.syllabus >= 70 ? 'bg-ks-emerald' : item.syllabus >= 50 ? 'bg-ks-amber' : 'bg-ks-rose'} />
         </div>

@@ -21,6 +21,7 @@ import { Card } from '../../../components/common/Card';
 import type { AqaAlert, AqaIntervention, AqaPairing, HeatmapCell, Threshold } from '../types/aqa.types';
 import { heatTone } from '../utils/aqaEngine';
 import { useAuthStore } from '../../../lib/auth/authStore';
+import { useAqaSchoolSummary, useEngineConfig } from '../api/aqa.hooks';
 
 // ─── Shell ───────────────────────────────────────────────────────────────────
 
@@ -178,51 +179,57 @@ export function AqaTable({ columns, children }: { columns: string[]; children: R
 // ─── Engine status ───────────────────────────────────────────────────────────
 
 export function EngineStatusCard() {
+  const { data: summary } = useAqaSchoolSummary() as { data: Record<string, unknown> | undefined };
+  const { data: config } = useEngineConfig() as { data: Record<string, unknown> | undefined };
+  const perf = (summary?.performanceSummary ?? {}) as Record<string, number>;
+  const rankings = Array.isArray(summary?.subjectPerformanceRankings) ? (summary!.subjectPerformanceRankings as unknown[]) : [];
+  const atRisk = Number(perf.atRiskCount ?? 0);
+  const critical = Number(perf.criticalCount ?? 0);
+  const improving = Number(perf.improvingCount ?? 0);
+  const pairingRate = Number(perf.pairingEffectivenessRate ?? 0);
+  const engineActive = config?.isActive !== false;
   return (
     <Card className="relative overflow-hidden rounded-xl p-6">
-      {/* Watermark icon */}
       <div className="pointer-events-none absolute right-4 top-4 opacity-[0.04]">
         <Gauge className="h-20 w-20" />
       </div>
       <p className="text-[11px] font-black uppercase tracking-wider text-ks-muted">AQA Engine Status</p>
       <div className="mt-3 flex items-baseline gap-2">
-        <span className="font-display text-[36px] font-bold leading-[44px] text-ks-navy">98.2%</span>
-        <span className="flex items-center gap-1 text-xs font-bold text-ks-emerald">
-          <TrendingUp className="h-3 w-3" /> +0.4
+        <span className="font-display text-[36px] font-bold leading-[44px] text-ks-navy">{critical + atRisk}</span>
+        <span className="flex items-center gap-1 text-xs font-bold text-ks-rose">
+          <AlertTriangle className="h-3 w-3" /> flagged
         </span>
       </div>
-      <p className="mt-1 text-sm font-semibold text-ks-muted">Process integrity healthy</p>
+      <p className="mt-1 text-sm font-semibold text-ks-muted">{engineActive ? 'Performance engine active' : 'Engine inactive'}</p>
 
       <div className="mt-5 space-y-3 border-t border-ks-line pt-4">
         <div className="flex items-center justify-between text-xs">
-          <span className="font-semibold text-ks-muted">Last run</span>
-          <span className="font-black text-ks-navy">Today 02:03 AM</span>
+          <span className="font-semibold text-ks-muted">Critical alerts</span>
+          <span className="font-black text-ks-rose">{critical}</span>
         </div>
         <div className="flex items-center justify-between text-xs">
-          <span className="font-semibold text-ks-muted">Students processed</span>
-          <span className="font-black text-ks-navy">312</span>
+          <span className="font-semibold text-ks-muted">At-risk students</span>
+          <span className="font-black text-ks-amber">{atRisk}</span>
         </div>
         <div className="flex items-center justify-between text-xs">
-          <span className="font-semibold text-ks-muted">Alerts created</span>
-          <span className="font-black text-ks-rose">17</span>
+          <span className="font-semibold text-ks-muted">Improving</span>
+          <span className="font-black text-ks-emerald">{improving}</span>
         </div>
         <div className="flex items-center justify-between text-xs">
-          <span className="font-semibold text-ks-muted">Resolved</span>
-          <span className="font-black text-ks-emerald">9</span>
+          <span className="font-semibold text-ks-muted">Subjects monitored</span>
+          <span className="font-black text-ks-navy">{rankings.length}</span>
         </div>
         <div className="flex items-center justify-between text-xs">
-          <span className="font-semibold text-ks-muted">Duration</span>
-          <span className="font-black text-ks-navy">4m 18s</span>
+          <span className="font-semibold text-ks-muted">Pairing effectiveness</span>
+          <span className="font-black text-ks-navy">{Math.round(pairingRate)}%</span>
         </div>
       </div>
 
-      {/* Progress bar */}
-      <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-ks-mist">
-        <div className="h-full w-full bg-ks-blue" />
-      </div>
-      <Button className="mt-5 w-full rounded-xl">
-        <Zap className="h-4 w-4" /> Run Engine
-      </Button>
+      <NavLink to="/aqa/performance/engine">
+        <Button className="mt-5 w-full rounded-xl">
+          <Zap className="h-4 w-4" /> Open Engine Control
+        </Button>
+      </NavLink>
     </Card>
   );
 }

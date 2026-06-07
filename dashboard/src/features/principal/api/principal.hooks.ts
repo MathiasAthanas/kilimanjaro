@@ -30,6 +30,30 @@ function toScore(v: unknown): number {
   return n > 0 && n <= 1 ? Math.round(n * 100) : Math.round(n);
 }
 
+function resolveName(v: unknown): string {
+  if (v == null) return '';
+  if (typeof v === 'string') return v;
+  if (typeof v !== 'object') return String(v);
+  const o = v as Record<string, unknown>;
+  const joined = [o.firstName, o.middleName, o.lastName].filter(Boolean).join(' ').trim();
+  return String(o.name ?? o.fullName ?? o.label ?? (joined || o.title || ''));
+}
+
+function classLabelFrom(classObj: unknown, stage?: unknown, level?: unknown): string {
+  const fromObj = resolveName(classObj);
+  if (fromObj) return fromObj;
+  const s = String(stage ?? '').replace('_', '-');
+  if (s && level != null) return `${s} L${level}`;
+  return s;
+}
+
+type ReviewStats = { count: number; mean: number; highest: number; lowest: number; stdDeviation: number };
+const EMPTY_STATS: ReviewStats = { count: 0, mean: 0, highest: 0, lowest: 0, stdDeviation: 0 };
+async function fetchReview(id: string): Promise<Record<string, unknown> | null> {
+  try { return await api.get(`/academics/assessments/${id}/marks/review`).then(payloadOf) as Record<string, unknown>; }
+  catch { return null; }
+}
+
 // ─── Queries ──────────────────────────────────────────────────────────────────
 
 export function usePrincipalDashboard() {
@@ -131,48 +155,62 @@ export function usePrincipalAudit() {
   });
 }
 
+// Pending approvals enriched with real marks-review statistics + nested relations.
 export function usePendingMarkApprovals() {
   return useQuery({
     queryKey: principalKeys.pendingApprovals(),
-    queryFn: () =>
-      api.get('/academics/assessments/pending-approval').then((r) =>
-        arrayFromApi(payloadOf(r), ['assessments', 'approvals']).map((raw) => {
-          const a = raw as Record<string, unknown>;
-          const subjectRaw = a.subject;
-          const subjectObj = subjectRaw && typeof subjectRaw === 'object' ? (subjectRaw as Record<string, unknown>) : undefined;
-          const classRaw = a.class;
-          const classObj = classRaw && typeof classRaw === 'object' ? (classRaw as Record<string, unknown>) : undefined;
-          return {
-            ...a,
-            id: String(a.id ?? crypto.randomUUID()),
-            assessment: String(a.assessment ?? a.title ?? a.name ?? a.assessmentTitle ?? ''),
-            subject: String(subjectObj ? (subjectObj.name ?? '') : (subjectRaw ?? a.subjectName ?? '')),
-            className: String(classObj ? (classObj.name ?? '') : (classRaw ?? a.className ?? a.class_name ?? '')),
-            teacher: String(a.teacher ?? a.teacherName ?? a.submittedBy ?? ''),
-            hodStatus: String(a.hodStatus ?? a.hod_status ?? a.approvalStatus ?? 'READY'),
-            average: Number(a.average ?? a.classAverage ?? a.mean ?? 0),
-            criticalAlerts: Number(a.criticalAlerts ?? a.critical_alerts ?? a.alertCount ?? 0),
-            age: String(a.age ?? a.submittedAt ?? a.timeAgo ?? ''),
-            principalStatus: String(a.principalStatus ?? a.principal_status ?? 'PENDING'),
-          };
-        }),
-      ),
+    staleTime: 30_000,
+    queryFn: async () => {
+      const list = arrayFromApi(
+        await api.get('/academics/assessments/pending-approval').then(payloadOf),
+        ['assessments', 'approvals'],
+      ) as Record<string, unknown>[];
+      // The principal can have a large school-wide queue; only enrich the first
+      // page with marks-review stats to avoid hammering the API.
+      const ENRICH_LIMIT = 20;
+      const reviews = await Promise.all(list.map((a, i) => (i < ENRICH_LIMIT ? fetchReview(String(a.id)) : Promise.resolve(null))));
+      return list.map((a, i) => {
+        const cs = (a.classSubject ?? {}) as Record<string, unknown>;
+        const subjectObj = (a.subject ?? cs.subject) as Record<string, unknown> | undefined;
+        const subject = resolveName(subjectObj ?? a.subjectName) || 'Subject';
+        const stats = (reviews[i]?.statistics as ReviewStats | undefined) ?? EMPTY_STATS;
+        const alertItems = arrayFromApi(reviews[i]?.performanceAlerts, ['items']);
+        const criticalAlerts = alertItems.filter((al) => {
+          const sev = String((al as Record<string, unknown>).severity ?? '').toUpperCase();
+          return sev === 'CRITICAL' || sev === 'HIGH';
+        }).length;
+        return {
+          ...a,
+          id: String(a.id ?? crypto.randomUUID()),
+          assessment: String(a.assessment ?? a.title ?? a.name ?? 'Assessment'),
+          subject,
+          className: classLabelFrom(a.class ?? cs.class, a.educationStage ?? cs.educationStage, a.classLevel ?? cs.classLevel) || '—',
+          teacher: resolveName(a.teacher ?? a.teacherName ?? a.submittedBy) || `${subject} Teacher`,
+          hodStatus: a.approvedAt ? 'HOD APPROVED' : String(a.hodStatus ?? a.approvalStatus ?? 'READY'),
+          average: Math.round(stats.mean),
+          criticalAlerts,
+          age: String(a.submittedAt ?? a.age ?? ''),
+          principalStatus: String(a.principalStatus ?? a.principal_status ?? 'PENDING'),
+        };
+      });
+    },
   });
 }
 
+// Per-student mark rows from the marks-sheet endpoint (review has no rows).
 export function useMarksForApproval(assessmentId: string | undefined) {
   return useQuery({
     queryKey: principalKeys.marksReview(assessmentId ?? ''),
     queryFn: () =>
-      api.get(`/academics/assessments/${assessmentId}/marks/review`).then((r) =>
-        arrayFromApi(payloadOf(r), ['marks', 'students']).map((raw) => {
+      api.get(`/academics/assessments/${assessmentId}/marks/sheet`).then((r) =>
+        arrayFromApi(payloadOf(r), ['rows', 'marks', 'students']).map((raw) => {
           const m = raw as Record<string, unknown>;
           return {
             ...m,
-            registration: String(m.registration ?? m.registrationNumber ?? m.admissionNumber ?? m.studentId ?? ''),
-            student: String(m.student ?? m.studentName ?? m.name ?? m.fullName ?? ''),
-            score: Number(m.score ?? m.marks ?? m.totalScore ?? m.obtainedMarks ?? 0),
-            previous: Number(m.previous ?? m.previousScore ?? m.lastScore ?? m.lastMarks ?? 0),
+            registration: String(m.registrationNumber ?? m.registration ?? ''),
+            student: resolveName(m.student ?? m) || resolveName({ firstName: m.firstName, lastName: m.lastName }) || 'Student',
+            score: Number(m.score ?? m.marks ?? m.totalScore ?? 0),
+            previous: Number(m.previous ?? m.previousScore ?? 0),
             alert: String(m.alert ?? m.alertStatus ?? m.flag ?? m.remark ?? ''),
           };
         }),
@@ -221,15 +259,13 @@ export function usePrincipalPendingPayments() {
     queryKey: principalKeys.pendingPayments(),
     queryFn: () =>
       api.get('/finance/payments/pending-approval').then((r) =>
-        arrayFromApi(payloadOf(r), ['payments', 'approvals']).map((raw) => {
+        arrayFromApi(payloadOf(r), ['items', 'payments', 'approvals']).map((raw) => {
           const p = raw as Record<string, unknown>;
-          const studentRaw = p.student;
-          const studentObj = studentRaw && typeof studentRaw === 'object' ? (studentRaw as Record<string, unknown>) : undefined;
           return {
             ...p,
             id: String(p.id ?? crypto.randomUUID()),
             paymentId: String(p.paymentId ?? p.payment_id ?? p.transactionId ?? p.id ?? ''),
-            student: String(studentObj ? (studentObj.name ?? studentObj.fullName ?? '') : (studentRaw ?? p.studentName ?? p.payer ?? '')),
+            student: resolveName(p.student ?? p.studentName ?? p.payer) || 'Student',
             invoice: String(p.invoice ?? p.invoiceId ?? p.invoiceNumber ?? p.invoice_number ?? ''),
             method: String(p.method ?? p.paymentMethod ?? p.payment_method ?? p.type ?? ''),
             amount: Number(p.amount ?? p.total ?? p.paymentAmount ?? 0),
@@ -248,15 +284,13 @@ export function usePrincipalDiscipline() {
     queryKey: principalKeys.discipline(),
     queryFn: () =>
       api.get('/students/discipline').then((r) =>
-        arrayFromApi(payloadOf(r), ['discipline', 'records']).map((raw) => {
+        arrayFromApi(payloadOf(r), ['items', 'discipline', 'records']).map((raw) => {
           const d = raw as Record<string, unknown>;
-          const studentRaw = d.student;
-          const studentObj = studentRaw && typeof studentRaw === 'object' ? (studentRaw as Record<string, unknown>) : undefined;
           return {
             ...d,
             id: String(d.id ?? crypto.randomUUID()),
-            student: String(studentObj ? (studentObj.name ?? studentObj.fullName ?? '') : (studentRaw ?? d.studentName ?? '')),
-            className: String(d.className ?? d.class ?? d.class_name ?? ''),
+            student: resolveName(d.student ?? d.studentName) || 'Student',
+            className: classLabelFrom(d.class) || String(d.className ?? '—'),
             category: String(d.category ?? d.type ?? d.incidentType ?? d.incidentCategory ?? ''),
             severity: String(d.severity ?? d.severityLevel ?? 'medium'),
             date: String(d.date ?? d.incidentDate ?? d.createdAt ?? d.created_at ?? ''),
@@ -307,21 +341,45 @@ export function usePrincipalFinanceOverview() {
   });
 }
 
+// School health from real aggregates. The /principal/dashboard sometimes returns
+// finance:{} (gateway fallback), so finance is pulled from analytics, and the
+// authoritative at-risk/critical counts come from the performance school summary.
 export function usePrincipalSchoolHealth() {
   return useQuery({
     queryKey: principalKeys.schoolHealth(),
-    queryFn: () =>
-      api.get('/analytics/overview').then((r) => {
-        const raw = payloadOf(r) as Record<string, unknown>;
-        return {
-          score: toScore(raw.score ?? raw.overallPassRate ?? raw.schoolAverage ?? raw.average ?? 0),
-          academic: toScore(raw.academic ?? raw.academicScore ?? raw.schoolAverage ?? raw.averageScore ?? raw.overallPassRate ?? 0),
-          finance: toScore(raw.finance ?? raw.financeScore ?? raw.collectionRate ?? raw.feeCollectionRate ?? 0),
-          operations: toScore(raw.operations ?? raw.operationsScore ?? raw.attendanceRate ?? 0),
-          trend: Number(raw.trend ?? raw.trendValue ?? raw.weeklyTrend ?? 0),
-        };
-      }),
     staleTime: 30_000,
+    queryFn: async () => {
+      const [dashRes, finRes, sumRes] = await Promise.all([
+        api.get('/principal/dashboard').then(payloadOf),
+        api.get('/analytics/finance/overview').then(payloadOf).catch(() => null),
+        api.get('/academics/performance/school/summary').then(payloadOf).catch(() => null),
+      ]);
+      const data = dashRes as Record<string, unknown>;
+      const academic = (data.academic ?? {}) as Record<string, unknown>;
+      const attendance = (data.attendance ?? {}) as Record<string, unknown>;
+      const overview = (data.overview ?? {}) as Record<string, unknown>;
+      const enrolment = (overview.enrolment ?? {}) as Record<string, unknown>;
+      const finBilling = ((finRes as Record<string, unknown> | null)?.billing ?? finRes ?? {}) as Record<string, unknown>;
+      const perfSummary = ((sumRes as Record<string, unknown> | null)?.performanceSummary ?? {}) as Record<string, number>;
+
+      const academicScore = toScore(academic.schoolAverage ?? academic.overallPassRate ?? 0);
+      const financeScore = toScore(finBilling.collectionRate ?? 0);
+      const opsScore = toScore(attendance.schoolAttendanceRate ?? 0);
+      // average only the dimensions we actually have data for
+      const dims = [academicScore, financeScore, opsScore].filter((v) => v > 0);
+      const score = dims.length ? Math.round(dims.reduce((s, v) => s + v, 0) / dims.length) : 0;
+      return {
+        score,
+        academic: academicScore,
+        finance: financeScore,
+        operations: opsScore,
+        trend: Number(perfSummary.improvingCount ?? 0) > 0 ? 1 : 0,
+        atRisk: Number(perfSummary.atRiskCount ?? academic.atRiskStudents ?? academic.atRiskStudentCount ?? 0),
+        critical: Number(perfSummary.criticalCount ?? academic.criticalAlertCount ?? 0),
+        passRate: toScore(academic.overallPassRate ?? academic.passRate ?? 0),
+        totalStudents: Number(enrolment.totalStudents ?? 0),
+      };
+    },
   });
 }
 

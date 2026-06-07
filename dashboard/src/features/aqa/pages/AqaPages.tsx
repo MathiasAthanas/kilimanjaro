@@ -153,17 +153,20 @@ export function AqaHomePage() {
 
 export function PerformanceCommandCenterPage() {
   const { data: apiAlerts = [] as typeof aqaAlerts } = useAqaAlerts() as unknown as { data: typeof aqaAlerts };
-  const critical = apiAlerts.filter((a) => a.severity === 'CRITICAL');
-  const high = apiAlerts.filter((a) => a.severity === 'HIGH');
+  const { data: schoolSummary } = useAqaSchoolSummary() as { data: Record<string, unknown> | undefined };
+  const summary = (schoolSummary?.performanceSummary ?? {}) as Record<string, number>;
+  // school summary holds the TRUE totals; the alerts feed is paginated
+  const criticalTotal = Number(summary.criticalCount ?? apiAlerts.filter((a) => a.severity === 'CRITICAL').length);
+  const atRiskTotal = Number(summary.atRiskCount ?? apiAlerts.filter((a) => a.severity === 'HIGH').length);
+  const improvingTotal = Number(summary.improvingCount ?? apiAlerts.filter((a) => a.severity === 'POSITIVE').length);
   const medium = apiAlerts.filter((a) => a.severity === 'MEDIUM');
-  const recovery = apiAlerts.filter((a) => a.severity === 'POSITIVE');
   return (
     <AqaWorkspaceShell title="Performance Command Center" eyebrow="Alert triage and investigation">
       <AqaMetricStrip items={[
-        { label: 'Critical',  value: String(critical.length).padStart(2, '0'), detail: '↑ 1 since yesterday',    tone: 'bg-ks-rose',    trend: 'up'      },
-        { label: 'High',      value: String(high.length).padStart(2, '0'), detail: 'Needs intervention',      tone: 'bg-ks-amber',   trend: 'neutral' },
-        { label: 'Medium',    value: String(medium.length).padStart(2, '0'), detail: 'Monitor closely',         tone: 'bg-ks-blue',    trend: 'neutral' },
-        { label: 'Recovery',  value: String(recovery.length).padStart(2, '0'), detail: '↓ resolved today',        tone: 'bg-ks-emerald', trend: 'down', inverted: true },
+        { label: 'Critical',   value: String(criticalTotal).padStart(2, '0'),  detail: 'Failure risk',      tone: 'bg-ks-rose',    trend: 'up'      },
+        { label: 'At risk',    value: String(atRiskTotal).padStart(2, '0'),    detail: 'High severity',     tone: 'bg-ks-amber',   trend: 'neutral' },
+        { label: 'Monitoring', value: String(medium.length).padStart(2, '0'),  detail: 'Medium severity',   tone: 'bg-ks-blue',    trend: 'neutral' },
+        { label: 'Improving',  value: String(improvingTotal).padStart(2, '0'), detail: 'Positive trend',    tone: 'bg-ks-emerald', trend: 'down', inverted: true },
       ]} />
 
       <FilterBar items={['Severity', 'Alert type', 'Subject', 'Class', 'Teacher / HOD', 'Escalated', 'Has pairing']} />

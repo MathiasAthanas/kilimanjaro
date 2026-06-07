@@ -2,9 +2,9 @@ import { BookOpen, CalendarCheck, Edit3 } from 'lucide-react';
 import type { Alert, Assessment, ClassSubject, MarkRow, Pairing, Student, TeacherQuickAction, TimetableEntry } from '../types/teacher.types';
 
 export const teacherClasses: ClassSubject[] = [
-  { id: 'cs-form3a-math', classId: 'class-form3a', className: 'Form 3A', subject: 'Mathematics', students: 42, average: 76, attendance: 94, syllabus: 71, openAssessments: 2, nextLesson: 'Today 10:20', risk: 'MEDIUM' },
-  { id: 'cs-form2a-physics', classId: 'class-form2a', className: 'Form 2A', subject: 'Physics', students: 38, average: 81, attendance: 96, syllabus: 84, openAssessments: 1, nextLesson: 'Today 12:10', risk: 'LOW' },
-  { id: 'cs-form3b-math', classId: 'class-form3b', className: 'Form 3B', subject: 'Mathematics', students: 40, average: 69, attendance: 89, syllabus: 62, openAssessments: 3, nextLesson: 'Tomorrow 08:00', risk: 'HIGH' },
+  { id: 'cs-form3a-math', classId: 'class-form3a', className: 'Form 3A', subject: 'Mathematics', students: 42, average: 76, attendance: 94, syllabus: 71, assessmentCount: 4, openAssessments: 2, nextLesson: 'Today 10:20', risk: 'MEDIUM' },
+  { id: 'cs-form2a-physics', classId: 'class-form2a', className: 'Form 2A', subject: 'Physics', students: 38, average: 81, attendance: 96, syllabus: 84, assessmentCount: 3, openAssessments: 1, nextLesson: 'Today 12:10', risk: 'LOW' },
+  { id: 'cs-form3b-math', classId: 'class-form3b', className: 'Form 3B', subject: 'Mathematics', students: 40, average: 69, attendance: 89, syllabus: 62, assessmentCount: 5, openAssessments: 3, nextLesson: 'Tomorrow 08:00', risk: 'HIGH' },
 ];
 
 export const assessments: Assessment[] = [

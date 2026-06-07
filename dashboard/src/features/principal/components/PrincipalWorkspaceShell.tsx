@@ -33,6 +33,8 @@ import {
   useRejectPaymentMutation,
   useResolveDisciplineMutation,
   useReturnMarksMutation,
+  usePrincipalSchoolHealth,
+  usePendingMarkApprovals,
 } from '../api/principal.hooks';
 
 // ─── Shell ────────────────────────────────────────────────────────────────────
@@ -50,6 +52,8 @@ export function PrincipalWorkspaceShell({
 }) {
   const session = useAuthStore((state) => state.session);
   const userName = session?.user?.name ?? 'Principal';
+  const { data: health } = usePrincipalSchoolHealth() as { data: Record<string, number> | undefined };
+  const { data: approvals = [] } = usePendingMarkApprovals() as unknown as { data: unknown[] };
   return (
     <div className="space-y-gutter">
       <section className="relative overflow-hidden rounded-2xl border border-[#d9b75e]/30 bg-[radial-gradient(circle_at_15%_20%,rgba(213,154,27,0.28),transparent_24%),radial-gradient(circle_at_90%_10%,rgba(14,165,233,0.20),transparent_28%),linear-gradient(135deg,#020617_0%,#08243a_44%,#00334f_100%)] shadow-layer">
@@ -66,9 +70,9 @@ export function PrincipalWorkspaceShell({
             <p className="mt-1.5 text-sm font-semibold text-white/60">{userName} · Principal · Executive decision authority</p>
           </div>
           <div className="flex shrink-0 items-start gap-3 xl:pt-2">
-            <HeaderPill label="Health"   value="78 / 100"     tone="green" />
-            <HeaderPill label="Critical" value="40 alerts"    tone="red"   />
-            <HeaderPill label="Pending"  value="86 decisions" tone="gold"  />
+            <HeaderPill label="Health"   value={`${health?.score ?? '—'} / 100`}        tone="green" />
+            <HeaderPill label="Critical" value={`${health?.critical ?? 0} alerts`}       tone="red"   />
+            <HeaderPill label="Pending"  value={`${approvals.length} approvals`}          tone="gold"  />
           </div>
         </div>
 
@@ -332,6 +336,12 @@ export function ExecutiveMetricGrid({ items }: { items: PrincipalMetric[] }) {
 // ─── Intelligence panel ───────────────────────────────────────────────────────
 
 export function IntelligencePanel({ context }: { context: string }) {
+  const { data: health } = usePrincipalSchoolHealth() as { data: Record<string, number> | undefined };
+  const stats: Array<[string, string]> = [
+    [String(health?.critical ?? 0), 'critical alerts need intervention'],
+    [String(health?.atRisk ?? 0), 'at-risk students flagged'],
+    [`${health?.passRate ?? 0}%`, 'school-wide pass rate'],
+  ];
   return (
     <div className="relative overflow-hidden rounded-2xl border border-[#d9b75e]/40 bg-[linear-gradient(135deg,#071c2e,#0f3b5f)] p-8 text-white shadow-layer">
       <Sparkles className="pointer-events-none absolute right-10 top-10 h-28 w-28 text-[#f4c96b]/10" />
@@ -339,11 +349,7 @@ export function IntelligencePanel({ context }: { context: string }) {
       <h2 className="mt-2 font-display text-3xl font-black">Decision Consequence View</h2>
       <p className="mt-3 max-w-3xl text-sm font-semibold leading-relaxed text-white/70">{context}</p>
       <div className="mt-6 grid gap-4 md:grid-cols-3">
-        {[
-          ['3',  'critical students need intervention'],
-          ['12', 'at-risk students newly flagged'],
-          ['5',  'pairing suggestions ready'],
-        ].map(([value, label]) => (
+        {stats.map(([value, label]) => (
           <div key={label} className="rounded-xl border border-white/10 bg-white/10 p-5">
             <p className="font-display text-4xl font-black text-[#f4c96b]">{value}</p>
             <p className="mt-1 text-sm font-bold text-white/70">{label}</p>

@@ -9,6 +9,7 @@ export type ClassSubject = {
   average: number;
   attendance: number;
   syllabus: number;
+  assessmentCount: number;
   openAssessments: number;
   nextLesson: string;
   risk: 'LOW' | 'MEDIUM' | 'HIGH';

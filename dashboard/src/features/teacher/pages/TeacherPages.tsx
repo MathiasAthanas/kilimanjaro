@@ -15,6 +15,7 @@ import {
   usePerfPairings,
   useClassStudents,
   useMarksSheet,
+  useMarksReview,
   useAttendanceList,
   useStudentPerformance,
   useClassAnalytics,
@@ -36,7 +37,6 @@ import {
   MarksGrid,
   PairingCard,
   ProgressBar,
-  SparkLine,
   TeacherMetricStrip,
   TeacherTable,
   TeacherWorkspaceShell,
@@ -54,21 +54,23 @@ export function TeacherHomePage() {
   const { data: apiAssessments = [] } = useTeacherAssessments();
   const { data: apiTimetable = [] } = useTeacherTimetable();
 
-  const openMarks = apiAssessments.filter((a) => !['APPROVED', 'LOCKED'].includes(a.status)).length;
-  const avgScore = apiClasses.length
-    ? Math.round(apiClasses.reduce((s, c) => s + c.average, 0) / apiClasses.length)
+  const gradedClasses = apiClasses.filter((c) => c.syllabus > 0);
+  const avgSyllabus = gradedClasses.length
+    ? Math.round(gradedClasses.reduce((s, c) => s + c.syllabus, 0) / gradedClasses.length)
     : 0;
   const liveEntry = apiTimetable.find((e) => e.current);
-  const pendingAssessments = apiAssessments.filter((a) => !['APPROVED', 'LOCKED'].includes(a.status));
+  const pendingAssessments = apiAssessments.filter((a) => ['DRAFT', 'OPEN', 'IN_PROGRESS', 'REJECTED'].includes(a.status));
+  const openMarks = pendingAssessments.length;
+  const submittedCount = apiAssessments.filter((a) => a.status === 'SUBMITTED').length;
 
   return (
     <TeacherWorkspaceShell title="Teacher Dashboard" eyebrow="Teacher operations desk" action={<NavLink to="/teacher/attendance"><Button className="bg-ks-gold text-ks-slate hover:shadow-md hover:shadow-ks-gold/30">Mark Attendance</Button></NavLink>}>
       <TeacherMetricStrip
         items={[
           { label: 'Assigned classes', value: String(apiClasses.length), detail: 'Active this term', tone: 'bg-ks-blue', valueColor: 'text-ks-blue' },
-          { label: 'Open marks', value: String(openMarks), detail: openMarks > 0 ? 'Awaiting entry' : 'All up to date', tone: 'bg-ks-amber', valueColor: openMarks > 0 ? 'text-ks-amber' : 'text-ks-emerald' },
+          { label: 'Open marks', value: String(openMarks), detail: openMarks > 0 ? 'Awaiting entry' : `${submittedCount} submitted`, tone: 'bg-ks-amber', valueColor: openMarks > 0 ? 'text-ks-amber' : 'text-ks-emerald' },
           { label: 'Timetable slots', value: String(apiTimetable.length), detail: 'This week', tone: 'bg-ks-rose', valueColor: 'text-ks-rose' },
-          { label: 'Class average', value: apiClasses.length ? `${avgScore}%` : '—', detail: 'Across all classes', inverted: true, icon: ShieldCheck },
+          { label: 'Syllabus coverage', value: gradedClasses.length ? `${avgSyllabus}%` : '—', detail: 'Average across classes', inverted: true, icon: ShieldCheck },
         ]}
       />
       <div className="grid gap-gutter xl:grid-cols-[1.35fr_0.65fr]">
@@ -128,10 +130,7 @@ export function TeacherHomePage() {
                       <p className="text-sm font-bold text-ks-slate">{item.title}</p>
                       <AssessmentStatusBadge status={item.status} />
                     </div>
-                    <div className="mt-2 flex items-center gap-2">
-                      <ProgressBar value={item.total > 0 ? (item.entered / item.total) * 100 : 0} tone="bg-ks-amber" className="flex-1" />
-                      <span className="shrink-0 text-[11px] font-bold text-ks-muted">{item.entered}/{item.total}</span>
-                    </div>
+                    <p className="mt-1.5 text-xs font-semibold text-ks-muted">{item.subject} · {item.className}</p>
                   </NavLink>
                 ))}
               </div>
@@ -194,10 +193,10 @@ export function ClassWorkspacePage() {
       <div className="grid gap-gutter xl:grid-cols-[1fr_360px]">
         <div className="space-y-gutter">
           <TeacherMetricStrip items={[
-            { label: 'Class average', value: `${klass.average}%`, detail: 'Current term', tone: 'bg-ks-blue', valueColor: klass.average >= 75 ? 'text-ks-emerald' : klass.average >= 60 ? 'text-ks-amber' : 'text-ks-rose' },
-            { label: 'Attendance', value: `${klass.attendance}%`, detail: 'Attendance rate', tone: 'bg-ks-emerald', valueColor: 'text-ks-emerald' },
-            { label: 'Syllabus', value: `${klass.syllabus}%`, detail: `${100 - klass.syllabus}% remaining`, tone: 'bg-ks-gold', valueColor: 'text-ks-amber' },
-            { label: 'Open marks', value: String(klass.openAssessments), detail: 'Need completion', inverted: true, icon: ShieldCheck },
+            { label: 'Syllabus', value: `${klass.syllabus}%`, detail: `${100 - klass.syllabus}% remaining`, tone: 'bg-ks-gold', valueColor: klass.syllabus >= 70 ? 'text-ks-emerald' : 'text-ks-amber' },
+            { label: 'Assessments', value: String(klass.assessmentCount), detail: 'This term', tone: 'bg-ks-blue', valueColor: 'text-ks-blue' },
+            { label: 'Open marks', value: String(klass.openAssessments), detail: 'Need completion', tone: 'bg-ks-amber', valueColor: klass.openAssessments > 0 ? 'text-ks-amber' : 'text-ks-emerald' },
+            { label: 'Risk level', value: klass.risk, detail: 'Based on syllabus pace', inverted: true, icon: ShieldCheck },
           ]} />
           <Card className="rounded-xl p-5">
             <SectionTitle title="Students needing attention" action="/teacher/performance/alerts" />
@@ -1208,102 +1207,85 @@ function StudentsTable({ classId = '', query = '' }: { classId?: string; query?:
   );
 }
 
-// Average score trend data (6 assessments)
-const trendData = [58, 63, 61, 68, 71, 74];
-// Grade band distribution
-const gradeBands = [
-  { label: 'A (80–100)', count: 8, pct: 19, color: 'bg-ks-emerald' },
-  { label: 'B (65–79)', count: 14, pct: 33, color: 'bg-ks-blue' },
-  { label: 'C (50–64)', count: 12, pct: 29, color: 'bg-ks-amber' },
-  { label: 'D (<50)', count: 8, pct: 19, color: 'bg-ks-rose' },
-];
+// Real class analytics computed from the class's latest assessment marks-review
+// and the live performance-alerts feed.
+function AnalyticsGrid({ classId }: { classId: string; analytics?: Record<string, unknown> | undefined }) {
+  const { data: apiAssessments = [] } = useTeacherAssessments();
+  const { data: apiAlerts = [] as typeof alerts } = usePerformanceAlerts() as unknown as { data: typeof alerts };
+  const classAssessments = apiAssessments.filter((a) => a.classSubjectId === classId);
+  const latest = classAssessments[0];
+  const subjectName = latest?.subject ?? apiAssessments[0]?.subject ?? '';
+  const { data: review } = useMarksReview(latest?.id ?? '') as { data: Record<string, unknown> | undefined };
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function AnalyticsGrid({ classId: _classId, analytics: _analytics }: { classId: string; analytics: Record<string, unknown> | undefined }) {
+  const stats = (review?.statistics as { count?: number; mean?: number; highest?: number; lowest?: number } | undefined) ?? {};
+  const gd = (review?.gradeDistributionPreview as Record<string, number> | undefined) ?? {};
+  const grades = ['A', 'B', 'C', 'D', 'E'];
+  const gradeTotal = grades.reduce((s, g) => s + Number(gd[g] ?? 0), 0);
+  const toneFor = (g: string) => g === 'A' ? 'bg-ks-emerald' : g === 'B' ? 'bg-ks-blue' : g === 'C' ? 'bg-ks-amber' : 'bg-ks-rose';
+  const subjectAlerts = (apiAlerts as Array<{ id: string; student: string; subject: string; severity: string; reason: string }>)
+    .filter((a) => !subjectName || a.subject === subjectName);
+
   return (
     <div className="grid gap-gutter xl:grid-cols-3">
-      {/* Chart 1: Average score trend line chart */}
+      {/* Class average from real marks */}
       <Card className="overflow-hidden rounded-xl p-5">
-        <p className="text-[11px] font-black uppercase tracking-wider text-ks-muted">Average trend</p>
-        <p className="mt-1 font-display text-2xl font-black text-ks-slate">+16 pts</p>
-        <p className="text-xs font-semibold text-ks-emerald">↑ Steady recovery over 6 assessments</p>
-        <div className="mt-4 rounded-xl bg-[linear-gradient(180deg,#f0f9ff,#e0f2fe)] p-4">
-          <svg viewBox="0 0 200 80" className="w-full overflow-visible">
-            <defs>
-              <linearGradient id="trendFill" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#0284C7" stopOpacity="0.25" />
-                <stop offset="100%" stopColor="#0284C7" stopOpacity="0" />
-              </linearGradient>
-            </defs>
-            {[0, 25, 50, 75].map((y) => (
-              <line key={y} x1="0" y1={y} x2="200" y2={y} stroke="#E2E8F0" strokeWidth="1" strokeDasharray="4 4" />
-            ))}
-            {(() => {
-              const max = 100; const min = 40; const range = max - min;
-              const pts = trendData.map((v, i) => `${(i / (trendData.length - 1)) * 200},${75 - ((v - min) / range) * 70}`);
-              const area = `${pts.join(' ')} 200,75 0,75`;
-              return (
-                <>
-                  <polygon points={area} fill="url(#trendFill)" />
-                  <polyline points={pts.join(' ')} fill="none" stroke="#0284C7" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
-                  {trendData.map((v, i) => {
-                    const x = (i / (trendData.length - 1)) * 200;
-                    const y = 75 - ((v - min) / range) * 70;
-                    return <circle key={i} cx={x} cy={y} r="3.5" fill="#0284C7" stroke="white" strokeWidth="1.5" />;
-                  })}
-                  <text x="196" y={75 - ((trendData[trendData.length - 1] - min) / range) * 70 - 7} textAnchor="end" fontSize="9" fontWeight="700" fill="#0284C7">{trendData[trendData.length - 1]}%</text>
-                </>
-              );
-            })()}
-          </svg>
-          <div className="mt-1 flex justify-between text-[10px] font-bold text-ks-muted">
-            {['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar'].map((m) => <span key={m}>{m}</span>)}
-          </div>
+        <p className="text-[11px] font-black uppercase tracking-wider text-ks-muted">Class average</p>
+        <p className="mt-1 font-display text-4xl font-black text-ks-slate">{stats.mean != null ? `${Math.round(stats.mean)}%` : '—'}</p>
+        <p className="text-xs font-semibold text-ks-muted">{latest ? latest.title : 'No assessment data'}</p>
+        <div className="mt-4 grid grid-cols-3 gap-2">
+          <div className="rounded-lg bg-ks-paper p-3 text-center"><p className="text-[10px] font-black uppercase text-ks-muted">Highest</p><p className="mt-1 font-display text-lg font-black text-ks-emerald">{stats.highest ?? '—'}</p></div>
+          <div className="rounded-lg bg-ks-paper p-3 text-center"><p className="text-[10px] font-black uppercase text-ks-muted">Lowest</p><p className="mt-1 font-display text-lg font-black text-ks-rose">{stats.lowest ?? '—'}</p></div>
+          <div className="rounded-lg bg-ks-paper p-3 text-center"><p className="text-[10px] font-black uppercase text-ks-muted">Students</p><p className="mt-1 font-display text-lg font-black text-ks-slate">{stats.count ?? 0}</p></div>
         </div>
       </Card>
 
-      {/* Chart 2: Grade distribution horizontal bars */}
+      {/* Real grade distribution */}
       <Card className="overflow-hidden rounded-xl p-5">
         <p className="text-[11px] font-black uppercase tracking-wider text-ks-muted">Grade distribution</p>
-        <p className="mt-1 font-display text-2xl font-black text-ks-slate">42 students</p>
-        <p className="text-xs font-semibold text-ks-muted">Most sit between B and C</p>
-        <div className="mt-4 space-y-3">
-          {gradeBands.map((band) => (
-            <div key={band.label}>
-              <div className="mb-1 flex items-center justify-between text-xs">
-                <span className="font-bold text-ks-slate">{band.label}</span>
-                <span className="font-black text-ks-muted">{band.count} students</span>
-              </div>
-              <div className="h-6 overflow-hidden rounded-md bg-ks-line">
-                <div className={`h-full rounded-md transition-all duration-500 ${band.color}`} style={{ width: `${band.pct}%` }} />
-              </div>
-            </div>
-          ))}
-        </div>
-        <div className="mt-4 rounded-lg border border-ks-rose/20 bg-ks-rose/5 p-2.5 text-center text-xs font-bold text-ks-rose">
-          8 students in D band need intervention
-        </div>
+        <p className="mt-1 font-display text-2xl font-black text-ks-slate">{gradeTotal} graded</p>
+        <p className="text-xs font-semibold text-ks-muted">{latest ? latest.title : 'Latest assessment'}</p>
+        {gradeTotal === 0 ? (
+          <p className="mt-4 text-sm font-semibold text-ks-muted">No graded marks yet.</p>
+        ) : (
+          <div className="mt-4 space-y-3">
+            {grades.map((g) => {
+              const count = Number(gd[g] ?? 0);
+              const pct = Math.round((count / gradeTotal) * 100);
+              return (
+                <div key={g}>
+                  <div className="mb-1 flex items-center justify-between text-xs">
+                    <span className="font-bold text-ks-slate">{g}</span>
+                    <span className="font-black text-ks-muted">{count} students</span>
+                  </div>
+                  <div className="h-6 overflow-hidden rounded-md bg-ks-line">
+                    <div className={`h-full rounded-md transition-all duration-500 ${toneFor(g)}`} style={{ width: `${pct}%` }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </Card>
 
-      {/* Chart 3: Next action insight with sparklines */}
+      {/* Real at-risk students from alerts */}
       <Card className="overflow-hidden rounded-xl p-5">
-        <p className="text-[11px] font-black uppercase tracking-wider text-ks-muted">Next action insight</p>
-        <p className="mt-1 font-display text-2xl font-black text-ks-slate">3 actions</p>
-        <p className="text-xs font-semibold text-ks-muted">AI-recommended interventions</p>
+        <p className="text-[11px] font-black uppercase tracking-wider text-ks-muted">Students needing attention</p>
+        <p className="mt-1 font-display text-2xl font-black text-ks-slate">{subjectAlerts.length} flagged</p>
+        <p className="text-xs font-semibold text-ks-muted">From the performance engine</p>
         <div className="mt-4 space-y-3">
-          {[
-            { name: 'Kassim Majaliwa', action: 'Schedule review session', trend: [72, 68, 58, 52, 44, 38], color: '#F43F5E' },
-            { name: 'Sarah Peter', action: 'Pair with Joel Komba', trend: [60, 58, 61, 57, 59, 57], color: '#F59E0B' },
-            { name: 'Emmanuel John', action: 'Lab report coaching', trend: [60, 58, 55, 54, 52, 51], color: '#F59E0B' },
-          ].map((item) => (
-            <div key={item.name} className="flex items-center justify-between gap-3 rounded-xl border border-ks-line bg-ks-paper p-3">
-              <div className="min-w-0">
-                <p className="truncate text-sm font-black text-ks-slate">{item.name}</p>
-                <p className="truncate text-xs font-semibold text-ks-muted">{item.action}</p>
+          {subjectAlerts.length === 0 && <p className="text-sm font-semibold text-ks-emerald">No flagged students.</p>}
+          {subjectAlerts.slice(0, 4).map((item) => {
+            const high = item.severity === 'CRITICAL' || item.severity === 'HIGH';
+            return (
+              <div key={item.id} className="flex items-center justify-between gap-3 rounded-xl border border-ks-line bg-ks-paper p-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-black text-ks-slate">{item.student}</p>
+                  <p className="truncate text-xs font-semibold text-ks-muted">{item.reason}</p>
+                </div>
+                <span className={`shrink-0 rounded px-2 py-0.5 text-[10px] font-black ${high ? 'bg-ks-rose/10 text-ks-rose' : 'bg-ks-amber/10 text-ks-amber'}`}>{item.severity}</span>
               </div>
-              <SparkLine data={item.trend} color={item.color} />
-            </div>
-          ))}
+            );
+          })}
         </div>
       </Card>
     </div>
