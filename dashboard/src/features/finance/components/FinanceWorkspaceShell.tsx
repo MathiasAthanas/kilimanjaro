@@ -22,7 +22,8 @@ import { NavLink } from 'react-router-dom';
 import { Badge } from '../../../components/common/Badge';
 import { Button } from '../../../components/common/Button';
 import type { Asset, AuditEntry, FinanceStatus, Invoice, Payment, PaymentMethod, Receipt } from '../types/finance.types';
-import { duplicateReferenceWarning, formatTZS, isOverpayment, parseTZSInput } from '../utils/money';
+import { duplicateReferenceWarning, formatDate, formatTZS, isOverpayment, parseTZSInput } from '../utils/money';
+import { useFinanceOverview, usePendingPaymentApprovals } from '../api/finance.hooks';
 import { useFileUploadMutation, validateFile } from '../../../lib/api/upload';
 import type { UploadedFile } from '../../../lib/api/upload';
 import { useAuthStore } from '../../../lib/auth/authStore';
@@ -42,6 +43,9 @@ export function FinanceWorkspaceShell({
 }) {
   const session = useAuthStore((state) => state.session);
   const userName = session?.user?.name ?? 'Finance Officer';
+  const { data: overview } = useFinanceOverview() as unknown as { data?: { today: number; outstanding: number } };
+  const { data: pendingApprovals } = usePendingPaymentApprovals() as unknown as { data?: unknown[] };
+  const pendingCount = Array.isArray(pendingApprovals) ? pendingApprovals.length : 0;
   return (
     <div className="min-h-[calc(100vh-80px)] space-y-gutter bg-[#f7f9fb]">
       {/* ── Page header card ── */}
@@ -66,9 +70,9 @@ export function FinanceWorkspaceShell({
             </div>
             {/* Live stats */}
             <div className="flex shrink-0 items-start gap-2 xl:pt-1">
-              <HeaderStat label="Today" value={formatTZS(1_840_000)} />
-              <HeaderStat label="Outstanding" value={formatTZS(32_059_000)} danger />
-              <HeaderStat label="Pending" value="2 approvals" />
+              <HeaderStat label="Today" value={formatTZS(overview?.today ?? 0)} />
+              <HeaderStat label="Outstanding" value={formatTZS(overview?.outstanding ?? 0)} danger />
+              <HeaderStat label="Pending" value={`${pendingCount} approval${pendingCount === 1 ? '' : 's'}`} />
             </div>
           </div>
         </div>
@@ -400,7 +404,7 @@ export function InvoiceTable({ rows }: { rows: Invoice[] }) {
               <AmountDisplay amount={invoice.outstanding} tone={invoice.status === 'OVERDUE' ? 'overdue' : 'outstanding'} />
             </Td>
             <Td><FinanceStatusBadge status={invoice.status} /></Td>
-            <Td>{invoice.dueDate}</Td>
+            <Td>{formatDate(invoice.dueDate)}</Td>
             <Td>
               <NavLink
                 className="text-xs font-black text-[#00334f] opacity-0 transition group-hover:opacity-100 hover:underline"
@@ -434,18 +438,26 @@ export function PaymentTable({ rows }: { rows: Payment[] }) {
           >
             <Td>
               <NavLink className="font-black text-[#00334f] hover:underline" to={`/finance/payments/${payment.id}`}>
-                {payment.id}
+                {payment.number || payment.id}
               </NavLink>
             </Td>
             <Td>{payment.student}</Td>
-            <Td>{payment.invoiceNumber}</Td>
+            <Td>
+              {payment.invoiceId ? (
+                <NavLink className="font-semibold text-[#00334f] hover:underline" to={`/finance/invoices/${payment.invoiceId}`}>
+                  {payment.invoiceNumber}
+                </NavLink>
+              ) : (
+                payment.invoiceNumber
+              )}
+            </Td>
             <Td><FinanceStatusBadge status={payment.method} /></Td>
             <Td amount>
               <AmountDisplay amount={payment.amount} tone={payment.status === 'REJECTED' ? 'void' : 'paid'} />
             </Td>
             <Td><FinanceStatusBadge status={payment.status} /></Td>
             <Td>{payment.enteredBy}</Td>
-            <Td>{payment.date}</Td>
+            <Td>{formatDate(payment.date)}</Td>
             <Td>
               {payment.receiptId ? (
                 <NavLink className="font-black text-[#00334f] hover:underline" to={`/finance/receipts/${payment.receiptId}`}>
@@ -494,7 +506,7 @@ export function ReceiptList({ rows }: { rows: Receipt[] }) {
               <AmountDisplay amount={receipt.amount} tone={receipt.status === 'VOID' ? 'void' : 'paid'} />
             </Td>
             <Td><FinanceStatusBadge status={receipt.method} /></Td>
-            <Td>{receipt.issuedAt}</Td>
+            <Td>{formatDate(receipt.issuedAt)}</Td>
             <Td><FinanceStatusBadge status={receipt.status} /></Td>
             <Td>
               <Button variant="secondary" className="rounded py-1.5 text-xs opacity-0 transition group-hover:opacity-100">
@@ -800,7 +812,7 @@ export function ReceiptPreview({ receipt }: { receipt: Receipt }) {
           <div className="bg-white p-4">
             <p className="text-[10px] font-black uppercase tracking-widest text-[#64748b]">Transaction</p>
             <p className="mt-1.5 text-sm font-bold text-[#334155]">Method: {receipt.method.replaceAll('_', ' ')}</p>
-            <p className="text-sm font-bold text-[#334155]">Issued: {receipt.issuedAt}</p>
+            <p className="text-sm font-bold text-[#334155]">Issued: {formatDate(receipt.issuedAt)}</p>
           </div>
         </div>
 
@@ -996,14 +1008,14 @@ export function ReportCard({ title, description, to }: { title: string; descript
 
 // ─── Dense bar chart ──────────────────────────────────────────────────────────
 
-export function DenseBarChart({ values }: { values: Array<{ label: string; value: number; tone?: string }> }) {
-  const max = Math.max(...values.map((v) => v.value));
+export function DenseBarChart({ values, title = 'Collection by Method', subtitle = "Today's transactions" }: { values: Array<{ label: string; value: number; tone?: string }>; title?: string; subtitle?: string }) {
+  const max = Math.max(...values.map((v) => v.value), 1);
   const [hov, setHov] = useState<number | null>(null);
   return (
     <div className="rounded-lg border border-[#d5dde6] bg-white">
       <div className="border-b border-[#d5dde6] bg-[#f7f9fb] px-5 py-3">
-        <h2 className="font-display text-base font-black text-[#00334f]">Collection by Method</h2>
-        <p className="text-xs font-semibold text-[#64748b]">Today's transactions</p>
+        <h2 className="font-display text-base font-black text-[#00334f]">{title}</h2>
+        <p className="text-xs font-semibold text-[#64748b]">{subtitle}</p>
       </div>
       <div className="space-y-4 p-5">
         {values.map((item, i) => {

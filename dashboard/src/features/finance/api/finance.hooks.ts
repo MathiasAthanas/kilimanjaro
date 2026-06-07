@@ -124,7 +124,8 @@ function normaliseInvoice(raw: unknown) {
     id: strOf(inv.id) || crypto.randomUUID(),
     number: strOf(inv.number, inv.invoiceNumber, inv.id),
     student: strOf(inv.student, inv.studentName),
-    registration: strOf(inv.registration, inv.registrationNumber, inv.studentId),
+    // never fall back to the studentId UUID — registration is filled from the student map
+    registration: strOf(inv.registration, inv.registrationNumber),
     guardian: strOf(inv.guardian, inv.guardianName),
     className: strOf(inv.className, inv.class, inv.class_name),
     term: strOf(inv.term, inv.termName),
@@ -211,16 +212,21 @@ export function usePayments() {
       api.get('/finance/payments').then((r) =>
         arrayFromApi(payloadOf(r), ['items', 'payments']).map((raw) => {
           const p = raw as Record<string, unknown>;
+          const invoiceId = strOf(p.invoiceId, p.invoice_id);
           return {
             ...p,
             id: strOf(p.id) || crypto.randomUUID(),
-            invoiceId: strOf(p.invoiceId, p.invoice_id),
-            invoiceNumber: strOf(p.paymentNumber, p.invoiceNumber, p.invoiceId),
+            invoiceId,
+            paymentNumber: strOf(p.paymentNumber, p.number),
+            // Payment column shows the payment reference; Invoice column links the invoice
+            number: strOf(p.paymentNumber, p.number, p.id),
+            invoiceNumber: strOf(p.invoiceNumber) || (invoiceId ? `INV #${invoiceId.slice(0, 8)}` : '—'),
             student: strOf(p.payerName, p.student, p.studentName) || 'Payer',
             method: strOf(p.method, p.paymentMethod, p.payment_method),
             amount: decimalToNumber(p.amount ?? p.total),
             status: strOf(p.status, p.approvalStatus, p.paymentStatus) || 'PENDING',
-            enteredBy: strOf(p.payerName, p.enteredBy, p.recordedBy) || '—',
+            // no human recorder name on the payment record; show channel marker instead of duplicating payer
+            enteredBy: strOf(p.enteredBy, p.recordedBy) || (p.requiresApproval ? 'Awaiting approval' : 'Finance desk'),
             date: strOf(p.paidAt, p.date, p.createdAt, p.created_at),
             reference: strOf(p.referenceNumber, p.reference, p.bankReference),
             notes: strOf(p.notes, p.comment, p.description),
@@ -465,7 +471,24 @@ export function useFinanceAuditLogs() {
     queryFn: () =>
       api
         .get('/finance/audit-logs')
-        .then((r) => arrayFromApi(payloadOf(r), ['logs', 'auditLogs'])),
+        .then((r) =>
+          arrayFromApi(payloadOf(r), ['items', 'logs', 'auditLogs']).map((raw) => {
+            const l = raw as Record<string, unknown>;
+            const before = (l.previousValue ?? {}) as Record<string, unknown>;
+            const after = (l.newValue ?? {}) as Record<string, unknown>;
+            return {
+              ...l,
+              id: strOf(l.id) || crypto.randomUUID(),
+              date: strOf(l.createdAt, l.created_at, l.timestamp, l.performedAt),
+              actor: strOf(l.performedByRole, l.performedBy, l.actor, l.userRole) || 'System',
+              action: strOf(l.action, l.eventType) || 'Event',
+              entity: [strOf(l.entityType), strOf(l.entityId).slice(0, 8)].filter(Boolean).join(' #'),
+              correlationId: strOf(l.correlationId, l.requestId, l.ipAddress),
+              before: before as Record<string, string | number | boolean>,
+              after: after as Record<string, string | number | boolean>,
+            };
+          }),
+        ),
     staleTime: 60_000,
   });
 }

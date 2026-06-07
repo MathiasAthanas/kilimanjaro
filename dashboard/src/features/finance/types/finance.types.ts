@@ -32,6 +32,8 @@ export type Invoice = {
 
 export type Payment = {
   id: string;
+  number?: string;
+  paymentNumber?: string;
   invoiceId: string;
   invoiceNumber: string;
   student: string;

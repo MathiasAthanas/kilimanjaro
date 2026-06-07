@@ -4,6 +4,14 @@ export function formatTZS(amount: number) {
   return `${sign}TZS ${new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(value)}`;
 }
 
+/** Format an ISO date string as e.g. "13 May 2026". Falls back to '—'. */
+export function formatDate(value: unknown): string {
+  if (!value || typeof value !== 'string') return '—';
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return '—';
+  return new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).format(d);
+}
+
 export function parseTZSInput(value: string) {
   return Number(value.replace(/[^\d]/g, '')) || 0;
 }

@@ -89,7 +89,7 @@ import {
   ReportCard,
   Td,
 } from '../components/FinanceWorkspaceShell';
-import { formatTZS, overdueInvoices } from '../utils/money';
+import { formatDate, formatTZS, overdueInvoices } from '../utils/money';
 import { DataError } from '../../../components/feedback/DataError';
 import { EmptyState } from '../../../components/feedback/EmptyState';
 import { SkeletonTable } from '../../../components/common/SkeletonTable';
@@ -146,7 +146,7 @@ export function FinanceHomePage() {
         {/* ── Left: ring + bar chart ── */}
         <div className="space-y-gutter">
           <CollectionRing rate={apiOverview.collectionRate} />
-          <DenseBarChart values={[
+          <DenseBarChart title="Term Collection" subtitle="Invoiced vs collected vs outstanding" values={[
             { label: 'Invoiced',     value: apiOverview.totalInvoiced,  tone: 'bg-[#00334f]' },
             { label: 'Collected',    value: apiOverview.totalCollected, tone: 'bg-[#10b981]' },
             { label: 'Outstanding',  value: apiOverview.outstanding,    tone: 'bg-[#d59a1b]' },
@@ -318,7 +318,7 @@ export function InvoiceDetailPage() {
             {
               label: 'Paid',
               value: formatTZS(invoice.paid),
-              detail: invoice.lastPayment !== 'None' ? `Last: ${invoice.lastPayment}` : 'No payments yet',
+              detail: invoice.lastPayment && invoice.lastPayment !== 'None' ? `Last: ${formatDate(invoice.lastPayment)}` : 'No payments yet',
               tone: 'green',
               trend: invoice.paid > 0 ? 'up' : undefined,
               progress: invoice.total > 0 ? Math.round((invoice.paid / invoice.total) * 100) : 0,
@@ -326,7 +326,7 @@ export function InvoiceDetailPage() {
             {
               label: 'Outstanding',
               value: formatTZS(invoice.outstanding),
-              detail: `Due ${invoice.dueDate}`,
+              detail: `Due ${formatDate(invoice.dueDate)}`,
               tone: invoice.status === 'OVERDUE' ? 'red' : 'gold',
               trend: invoice.status === 'OVERDUE' ? 'down' : undefined,
             },
@@ -438,7 +438,7 @@ export function PaymentDetailPage() {
         <div className="space-y-gutter">
           <FinanceMetricStrip items={[
             { label: 'Amount', value: formatTZS(payment.amount), detail: payment.method.replaceAll('_', ' '), tone: payment.status === 'REJECTED' ? 'red' : 'green', trend: payment.status === 'REJECTED' ? 'down' : 'up' },
-            { label: 'Status', value: payment.status, detail: payment.date, tone: payment.status === 'APPROVED' ? 'green' : payment.status === 'REJECTED' ? 'red' : 'gold' },
+            { label: 'Status', value: payment.status, detail: formatDate(payment.date), tone: payment.status === 'APPROVED' ? 'green' : payment.status === 'REJECTED' ? 'red' : 'gold' },
             { label: 'Invoice', value: payment.invoiceNumber, detail: payment.student, tone: 'navy' },
             { label: 'Reference', value: payment.reference ?? '—', detail: payment.enteredBy, tone: 'slate' },
           ]} />
@@ -1063,7 +1063,7 @@ export function AssetDetailPage() {
       <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="space-y-gutter">
           <FinanceMetricStrip items={[
-            { label: 'Purchase Cost', value: formatTZS(asset.purchaseCost), detail: `Purchased ${asset.purchaseDate}`, tone: 'navy' },
+            { label: 'Purchase Cost', value: formatTZS(asset.purchaseCost), detail: `Purchased ${formatDate(asset.purchaseDate)}`, tone: 'navy' },
             { label: 'Current Value', value: formatTZS(asset.currentValue), detail: `Condition: ${asset.condition}`, tone: 'green', trend: 'down', progress: asset.purchaseCost > 0 ? Math.round((asset.currentValue / asset.purchaseCost) * 100) : 0 },
             { label: 'Location', value: asset.location, detail: `Assigned to: ${asset.assignedTo}`, tone: 'slate' },
             { label: 'Warranty', value: asset.warrantyExpiry, detail: asset.brand, tone: asset.warrantyExpiry === 'Expired' ? 'red' : 'gold', trend: asset.warrantyExpiry === 'Expired' ? 'down' : undefined },
