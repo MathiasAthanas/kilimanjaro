@@ -236,6 +236,7 @@ const financeSections: SidebarSection[] = [
     title: 'Control Room',
     items: [
       { to: '/finance/assets',                icon: Landmark,     label: 'Assets Ledger',   end: true },
+      { to: '/finance/reports/statement',     icon: FileText,     label: 'Financial Statement', end: true },
       { to: '/finance/reports',               icon: BarChart3,    label: 'Reports Hub',     end: true },
       { to: '/finance/reports/fee-defaulters',icon: AlertTriangle,label: 'Fee Defaulters'             },
       { to: '/finance/audit',                 icon: Shield,       label: 'Audit Log'                  },
@@ -278,6 +279,7 @@ const principalSections: SidebarSection[] = [
       { to: '/principal/finance',           icon: WalletCards,label: 'Finance Oversight', end: true },
       { to: '/principal/finance/approvals', icon: Banknote,   label: 'Payment Approval',  end: true },
       { to: '/principal/finance/fund-approvals', icon: HandCoins, label: 'Fund Approvals', end: true },
+      { to: '/principal/finance/statement', icon: FileText,   label: 'Financial Statement', end: true },
       { to: '/principal/finance/invoices',  icon: FileText,   label: 'Invoice View'                },
     ],
   },

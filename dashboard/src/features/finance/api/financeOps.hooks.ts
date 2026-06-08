@@ -281,3 +281,40 @@ export function useFinanceTerms() {
     staleTime: 300_000,
   });
 }
+
+// ─── Financial statement report ──────────────────────────────────────────────────
+export interface StatementParams { period?: string; start?: string; end?: string }
+export function useFinancialStatement(params: StatementParams) {
+  return useQuery({
+    queryKey: [...opsKeys.all, 'statement', params],
+    queryFn: () => api.get('/finance/reports/financial-statement', { params }).then((r) => {
+      const p = payloadOf(r) as Record<string, unknown>;
+      return p as unknown as FinancialStatement;
+    }),
+  });
+}
+
+export interface FinancialStatement {
+  period: { type: string; start: string; end: string; label: string };
+  generatedAt: string;
+  collections: { totalInvoiced: number; totalCollected: number; outstanding: number; collectionRate: number; byMethod: Array<{ method: string; amount: number; count: number }> };
+  expenses: { total: number; count: number; byCategory: Array<{ category: string; amount: number; count: number }>; byDepartment: Array<{ department: string; amount: number }> };
+  disbursements: { total: number; count: number };
+  store: { stockValue: number; received: number; issued: number };
+  assets: { purchaseCost: number; currentValue: number; count: number };
+  net: { operatingResult: number; collectedLessExpenses: number };
+  series: Array<{ label: string; collected: number; expenses: number }>;
+}
+
+/** Fetch a base64 export payload and trigger a browser download. */
+export async function downloadStatement(format: 'pdf' | 'csv', params: StatementParams): Promise<void> {
+  const r = await api.get(`/finance/reports/financial-statement/${format}`, { params });
+  const p = (r.data?.data ?? r.data) as { filename: string; mimeType: string; base64: string };
+  const bytes = Uint8Array.from(atob(p.base64), (c) => c.charCodeAt(0));
+  const blob = new Blob([bytes], { type: p.mimeType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = p.filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}

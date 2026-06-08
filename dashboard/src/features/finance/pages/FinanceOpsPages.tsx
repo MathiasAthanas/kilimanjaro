@@ -13,6 +13,7 @@ import {
   FinanceMetricStrip,
 } from '../components/FinanceWorkspaceShell';
 import { FundRequestBoard } from '../components/FundRequestBoard';
+import { FinancialStatementReport } from '../components/FinancialStatementReport';
 import { EXPENSE_CATEGORY_OPTIONS, STORE_CATEGORY_OPTIONS, PAYMENT_METHOD_OPTIONS } from '../components/financeOpsConstants';
 import {
   useExpenses,
@@ -43,6 +44,16 @@ export function BursarFundRequestsPage() {
     <FinanceWorkspaceShell title="Fund Requests" eyebrow="Departmental funding workflow">
       <FinanceBreadcrumb crumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Fund Requests' }]} />
       <FundRequestBoard role="bursar" userName={userName} />
+    </FinanceWorkspaceShell>
+  );
+}
+
+// ════════════════════════════════ FINANCIAL STATEMENT ═══════════════════════════
+export function FinancialStatementPage() {
+  return (
+    <FinanceWorkspaceShell title="Financial Statement" eyebrow="Period reports · PDF & Excel">
+      <FinanceBreadcrumb crumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Reports', to: '/finance/reports' }, { label: 'Financial Statement' }]} />
+      <FinancialStatementReport />
     </FinanceWorkspaceShell>
   );
 }

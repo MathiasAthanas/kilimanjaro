@@ -52,9 +52,11 @@ import {
   BursarFundRequestsPage,
   ExpensesPage,
   StorePage,
+  FinancialStatementPage,
 } from '../features/finance/pages/FinanceOpsPages';
 import { HodFundRequestsPage } from '../features/hod/pages/HodFundRequestsPage';
 import { PrincipalFundApprovalsPage } from '../features/principal/pages/PrincipalFundApprovalsPage';
+import { PrincipalFinancialStatementPage } from '../features/principal/pages/PrincipalFinancialStatementPage';
 import { LandingPage } from '../features/public/LandingPage';
 import { StatusPage } from '../features/public/StatusPage';
 import {
@@ -382,6 +384,7 @@ export const router = createBrowserRouter([
       { path: '/finance/expenses', element: <ExpensesPage /> },
       { path: '/finance/store', element: <StorePage /> },
       { path: '/finance/reports', element: <FinancialReportsPage /> },
+      { path: '/finance/reports/statement', element: <FinancialStatementPage /> },
       { path: '/finance/reports/collection', element: <CollectionSummaryReportPage /> },
       { path: '/finance/reports/outstanding', element: <OutstandingBalancesReportPage /> },
       { path: '/finance/reports/daily-collections', element: <DailyCollectionsReportPage /> },
@@ -399,6 +402,7 @@ export const router = createBrowserRouter([
       { path: '/principal/finance/approvals/:id', element: <PaymentApprovalDetailPage /> },
       { path: '/principal/finance/invoices', element: <PrincipalInvoiceManagementPage /> },
       { path: '/principal/finance/fund-approvals', element: <PrincipalFundApprovalsPage /> },
+      { path: '/principal/finance/statement', element: <PrincipalFinancialStatementPage /> },
       { path: '/principal/performance', element: <PrincipalPerformanceOverviewPage /> },
       { path: '/principal/students', element: <PrincipalStudentsPage /> },
       { path: '/principal/students/:studentId', element: <PrincipalStudentProfilePage /> },

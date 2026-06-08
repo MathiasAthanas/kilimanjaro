@@ -66,7 +66,8 @@ export function toCsv(s: FinancialStatement): ExportFile {
   s.series.forEach((p) => push(p.label, p.collected, p.expenses));
 
   const csv = rows.map((r) => r.map((c) => (/[",\n]/.test(c) ? `"${c.replace(/"/g, '""')}"` : c)).join(',')).join('\n');
-  return { filename: safeName(s, 'csv'), mimeType: 'text/csv', base64: Buffer.from(csv, 'utf8').toString('base64') };
+  // Prepend a UTF-8 BOM so Excel renders accented/dash characters correctly.
+  return { filename: safeName(s, 'csv'), mimeType: 'text/csv', base64: Buffer.from('﻿' + csv, 'utf8').toString('base64') };
 }
 
 // ── PDF ───────────────────────────────────────────────────────────────────────
