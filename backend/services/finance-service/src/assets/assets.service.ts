@@ -21,7 +21,20 @@ export class AssetsService {
     const row = await this.prisma.asset.create({
       data: {
         assetNumber: await this.numberService.assetNumber(),
-        ...dto,
+        name: dto.name,
+        category: dto.category,
+        type: dto.type,
+        condition: dto.condition ?? 'GOOD',
+        status: dto.status ?? 'ACTIVE',
+        description: dto.description,
+        location: dto.location,
+        brand: dto.brand,
+        model: dto.model,
+        serialNumber: dto.serialNumber,
+        assignedTo: dto.assignedTo,
+        currency: dto.currency || 'TZS',
+        purchaseDate: dto.purchaseDate ? new Date(dto.purchaseDate) : undefined,
+        warrantyExpiryDate: dto.warrantyExpiry ? new Date(dto.warrantyExpiry) : undefined,
         purchaseCost: this.decimal(dto.purchaseCost),
         currentValue: this.decimal(dto.currentValue),
         createdById: user.id,
@@ -67,12 +80,15 @@ export class AssetsService {
 
   async update(id: string, dto: any, user: RequestUser) {
     const existing = await this.byId(id);
+    const { warrantyExpiry, purchaseDate, purchaseCost, currentValue, ...rest } = dto;
     const row = await this.prisma.asset.update({
       where: { id },
       data: {
-        ...dto,
-        purchaseCost: dto.purchaseCost ? this.decimal(dto.purchaseCost) : undefined,
-        currentValue: dto.currentValue ? this.decimal(dto.currentValue) : undefined,
+        ...rest,
+        purchaseDate: purchaseDate ? new Date(purchaseDate) : undefined,
+        warrantyExpiryDate: warrantyExpiry ? new Date(warrantyExpiry) : undefined,
+        purchaseCost: purchaseCost ? this.decimal(purchaseCost) : undefined,
+        currentValue: currentValue ? this.decimal(currentValue) : undefined,
         updatedById: user.id,
       },
     });
