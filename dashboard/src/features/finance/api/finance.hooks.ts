@@ -320,35 +320,58 @@ export function useFeeCategories() {
   });
 }
 
+// Cache classId → class name so fee structures targeted at a specific class
+// display the class name (the list endpoint carries only classId).
+let classNameMapCache: Map<string, string> | null = null;
+async function getClassNameMap(): Promise<Map<string, string>> {
+  if (classNameMapCache) return classNameMapCache;
+  const map = new Map<string, string>();
+  try {
+    const rows = await api.get('/students/classes').then((r) => arrayFromApi(payloadOf(r), ['items', 'classes']));
+    rows.forEach((c) => {
+      const o = c as Record<string, unknown>;
+      const name = [strOf(o.name), strOf(o.stream)].filter(Boolean).join(' ').trim();
+      map.set(strOf(o.id), name);
+    });
+  } catch { /* best-effort */ }
+  classNameMapCache = map;
+  return map;
+}
+
 export function useFeeStructures() {
   return useQuery({
     queryKey: financeKeys.feeStructures(),
-    queryFn: () =>
-      api
-        .get('/finance/fee-structures')
-        .then((r) =>
-          arrayFromApi(payloadOf(r), ['items', 'feeStructures', 'structures']).map((raw) => {
-            const s = raw as Record<string, unknown>;
-            const stage = strOf(s.educationStage, s.stage, s.education_stage);
-            const level = Number(s.classLevel ?? s.level ?? 0);
-            return {
-              ...s,
-              id: strOf(s.id) || crypto.randomUUID(),
-              // feeCategory is a nested relation; strOf resolves its .name
-              category: strOf(s.category, s.feeCategory, s.feeCategoryName),
-              className:
-                strOf(s.className, s.class, s.class_name) ||
-                [stage.replace(/_/g, ' '), level ? `Form ${level}` : ''].filter(Boolean).join(' · '),
-              educationStage: stage,
-              studentGroup: strOf(s.studentGroup, s.group, s.groupName),
-              effectiveTerm: strOf(s.effectiveTerm, s.term, s.termName),
-              amount: decimalToNumber(s.amount ?? s.feeAmount),
-              currency: strOf(s.currency) || 'TZS',
-              active: Boolean(s.isActive ?? s.active ?? true),
-              classLevel: level,
-            };
-          }),
-        ),
+    queryFn: async () => {
+      const [rows, classMap] = await Promise.all([
+        api.get('/finance/fee-structures').then((r) => arrayFromApi(payloadOf(r), ['items', 'feeStructures', 'structures'])),
+        getClassNameMap(),
+      ]);
+      return rows.map((raw) => {
+        const s = raw as Record<string, unknown>;
+        const stage = strOf(s.educationStage, s.stage, s.education_stage);
+        const level = Number(s.classLevel ?? s.level ?? 0);
+        const classId = strOf(s.classId, s.class_id);
+        const className =
+          strOf(s.className, s.class, s.class_name) ||
+          (classId ? classMap.get(classId) ?? '' : '') ||
+          [stage.replace(/_/g, ' '), level ? `Form ${level}` : ''].filter(Boolean).join(' · ') ||
+          strOf(s.studentGroup, s.group);
+        return {
+          ...s,
+          id: strOf(s.id) || crypto.randomUUID(),
+          // feeCategory is a nested relation; strOf resolves its .name
+          category: strOf(s.category, s.feeCategory, s.feeCategoryName),
+          className,
+          educationStage: stage,
+          studentGroup: strOf(s.studentGroup, s.group, s.groupName),
+          effectiveTerm: strOf(s.effectiveTerm, s.term, s.termName),
+          amount: decimalToNumber(s.amount ?? s.feeAmount),
+          currency: strOf(s.currency) || 'TZS',
+          active: Boolean(s.isActive ?? s.active ?? true),
+          classLevel: level,
+        };
+      });
+    },
   });
 }
 
@@ -431,10 +454,14 @@ export function useAssets() {
             location: strOf(a.location),
             condition: strOf(a.condition) || 'GOOD',
             status: strOf(a.status) || 'ACTIVE',
+            brand: strOf(a.brand),
+            model: strOf(a.model),
+            assignedTo: strOf(a.assignedTo),
             purchaseCost: decimalToNumber(a.purchaseCost ?? a.cost ?? a.purchasePrice),
             currentValue: decimalToNumber(a.currentValue ?? a.value),
             currency: strOf(a.currency) || 'TZS',
             purchaseDate: strOf(a.purchaseDate, a.purchasedAt, a.createdAt),
+            warrantyExpiry: strOf(a.warrantyExpiryDate, a.warrantyExpiry),
           };
         }),
       ),
@@ -721,6 +748,15 @@ export function useUpdateFeeStructureMutation() {
   return useMutation({
     mutationFn: ({ id, body }: { id: string; body: Record<string, unknown> }) =>
       api.patch(`/finance/fee-structures/${id}`, body).then((r) => r.data?.data ?? r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: financeKeys.feeStructures() }),
+  });
+}
+
+export function useDeactivateFeeStructureMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api.patch(`/finance/fee-structures/${id}/deactivate`, {}).then((r) => r.data?.data ?? r.data),
     onSuccess: () => qc.invalidateQueries({ queryKey: financeKeys.feeStructures() }),
   });
 }

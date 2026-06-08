@@ -48,9 +48,9 @@ import {
   useStudentGroups,
   useCollectionSummary,
   useOutstandingBalances,
-  useDeleteFeeCategoryMutation,
   useDeleteFeeAssignmentMutation,
   useCreateFeeStructureMutation,
+  useDeactivateFeeStructureMutation,
   useCreateAssetMutation,
   useUpdateAssetMutation,
   useCreateFeeCategoryMutation,
@@ -90,6 +90,7 @@ import {
   Td,
 } from '../components/FinanceWorkspaceShell';
 import { formatDate, formatTZS, overdueInvoices } from '../utils/money';
+import { useFinanceClasses, useFinanceAcademicYears, useFinanceTerms } from '../api/financeOps.hooks';
 import { DataError } from '../../../components/feedback/DataError';
 import { EmptyState } from '../../../components/feedback/EmptyState';
 import { SkeletonTable } from '../../../components/common/SkeletonTable';
@@ -687,12 +688,12 @@ function FeeCategoryForm({ title, mode }: { title: string; mode: 'create' | 'edi
 export function FeeStructuresPage() {
   const { data: apiStructures = [] as typeof feeStructures } = useFeeStructures() as unknown as { data: typeof feeStructures };
   const { data: apiGroups = [] as typeof studentGroups } = useStudentGroups() as unknown as { data: typeof studentGroups };
-  const deleteMutation = useDeleteFeeCategoryMutation();
+  const deactivateMutation = useDeactivateFeeStructureMutation();
   const [deactivating, setDeactivating] = useState<string | null>(null);
 
   const handleDeactivate = (id: string) => {
     setDeactivating(id);
-    deleteMutation.mutate(id, {
+    deactivateMutation.mutate(id, {
       onSuccess: () => { toast('Fee structure deactivated', 'warning'); setDeactivating(null); },
       onError: () => { toast('Failed to deactivate structure', 'error'); setDeactivating(null); },
     });
@@ -739,13 +740,13 @@ export function FeeStructuresPage() {
       <FinanceTable columns={['Structure', 'Category', 'Target', 'Stage', 'Group', 'Amount', 'Effective Term', 'Status', 'Actions']} minWidth={1060}>
         {apiStructures.map((structure) => (
           <tr key={structure.id} className="even:bg-[#f7f9fb]">
-            <Td>{structure.id}</Td>
+            <Td>#{structure.id.slice(0, 8)}</Td>
             <Td>{structure.category}</Td>
-            <Td>{structure.className}</Td>
-            <Td>{structure.educationStage}</Td>
-            <Td>{structure.studentGroup ?? `Level ${structure.classLevel ?? '-'}`}</Td>
+            <Td>{structure.className || '—'}</Td>
+            <Td>{structure.educationStage ? structure.educationStage.replaceAll('_', ' ') : '—'}</Td>
+            <Td>{structure.studentGroup || (structure.classLevel ? `Level ${structure.classLevel}` : '—')}</Td>
             <Td amount><AmountDisplay amount={structure.amount} /></Td>
-            <Td>{structure.effectiveTerm}</Td>
+            <Td>{structure.effectiveTerm || 'Annual'}</Td>
             <Td><FinanceStatusBadge status={structure.active ? 'ACTIVE' : 'INACTIVE'} /></Td>
             <Td>
               <Button
@@ -780,20 +781,64 @@ export function CreateFeeStructurePage() {
   const navigate = useNavigate();
   const createMutation = useCreateFeeStructureMutation();
   const { data: apiCategories = [] as typeof feeCategories } = useFeeCategories() as unknown as { data: typeof feeCategories };
-  const [form, setForm] = useState({ categoryId: '', educationStage: 'O-Level', classLevel: '', studentGroup: '', amount: '', effectiveTerm: '', reason: '' });
-  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setForm((p) => ({ ...p, [k]: e.target.value }));
+  const { data: classes = [] } = useFinanceClasses();
+  const { data: years = [] } = useFinanceAcademicYears();
+  const { data: terms = [] } = useFinanceTerms();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [mode, setMode] = useState<'class' | 'stage' | 'group'>('class');
+  const [categoryId, setCategoryId] = useState('');
+  const [academicYearId, setAcademicYearId] = useState('');
+  const [termId, setTermId] = useState('');
+  const [amount, setAmount] = useState('');
+  const [selectedClasses, setSelectedClasses] = useState<string[]>([]);
+  const [educationStage, setEducationStage] = useState('O_LEVEL');
+  const [classLevel, setClassLevel] = useState('');
+  const [studentGroup, setStudentGroup] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  // Default to current academic year once loaded
+  const currentYear = years.find((y) => y.isCurrent) ?? years[0];
+  const effectiveYearId = academicYearId || currentYear?.id || '';
+  const yearTerms = terms.filter((t) => !effectiveYearId || t.academicYearId === effectiveYearId);
+
+  const sel = 'mt-2 h-11 w-full rounded border border-[#d5dde6] bg-[#f7f9fb] px-3 font-semibold outline-none focus:border-[#00334f]';
+  const cap = 'text-[11px] font-black uppercase tracking-widest text-[#64748b]';
+
+  const toggleClass = (id: string) => setSelectedClasses((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+  const classesByStage = classes.reduce<Record<string, typeof classes>>((acc, c) => { (acc[c.educationStage] ??= []).push(c); return acc; }, {});
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.categoryId || !form.amount || !form.effectiveTerm) { toast('Category, amount, and effective term are required', 'error'); return; }
-    createMutation.mutate({ categoryId: form.categoryId, educationStage: form.educationStage, classLevel: form.classLevel || undefined, studentGroup: form.studentGroup || undefined, amount: Number(form.amount), effectiveTerm: form.effectiveTerm, reason: form.reason || undefined }, {
-      onSuccess: () => { toast('Fee structure created', 'success'); navigate('/finance/fee-structures'); },
-      onError: () => toast('Failed to create fee structure', 'error'),
-    });
+    if (!categoryId || !amount) { toast('Fee category and amount are required', 'error'); return; }
+    if (!effectiveYearId) { toast('Academic year is required', 'error'); return; }
+    const base = { feeCategoryId: categoryId, academicYearId: effectiveYearId, termId: termId || undefined, amount: String(amount), currency: 'TZS' };
+
+    let payloads: Record<string, unknown>[] = [];
+    if (mode === 'class') {
+      if (!selectedClasses.length) { toast('Select at least one class', 'error'); return; }
+      payloads = selectedClasses.map((classId) => ({ ...base, classId }));
+    } else if (mode === 'stage') {
+      payloads = [{ ...base, educationStage, classLevel: classLevel ? Number(classLevel) : undefined }];
+    } else {
+      if (!studentGroup) { toast('Select a student group', 'error'); return; }
+      payloads = [{ ...base, studentGroup }];
+    }
+
+    setSubmitting(true);
+    try {
+      let ok = 0;
+      for (const body of payloads) { await createMutation.mutateAsync(body); ok++; }
+      toast(`${ok} fee structure${ok === 1 ? '' : 's'} created`, 'success');
+      navigate('/finance/fee-structures');
+    } catch {
+      toast('Failed to create one or more fee structures', 'error');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
-    <FinanceWorkspaceShell title="Create Fee Structure" eyebrow="Effective term rule">
+    <FinanceWorkspaceShell title="Create Fee Structure" eyebrow="Class-wise fee definition">
       <FinanceBreadcrumb crumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Fee Setup' }, { label: 'Create Structure' }]} />
       <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_360px]">
         <form onSubmit={handleSubmit} className="rounded-lg border border-[#d5dde6] bg-white p-5">
@@ -801,56 +846,111 @@ export function CreateFeeStructurePage() {
             <FileSpreadsheet className="h-5 w-5 text-[#00334f]" />
             <div>
               <h2 className="font-display text-xl font-black text-[#00334f]">Create Fee Structure</h2>
-              <p className="text-sm font-semibold text-[#64748b]">Define a fee amount for a specific student category and term.</p>
+              <p className="text-sm font-semibold text-[#64748b]">Define a fee amount and apply it to specific classes, a stage/level, or a student group.</p>
             </div>
           </div>
+
           <div className="mt-5 grid gap-4 md:grid-cols-2">
             <label className="block">
-              <span className="text-[11px] font-black uppercase tracking-widest text-[#64748b]">Fee Category *</span>
-              <select required value={form.categoryId} onChange={set('categoryId')} className="mt-2 h-11 w-full rounded border border-[#d5dde6] bg-[#f7f9fb] px-3 font-semibold outline-none focus:border-[#00334f]">
+              <span className={cap}>Fee Category *</span>
+              <select required value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className={sel}>
                 <option value="">Select category…</option>
                 {apiCategories.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.code})</option>)}
               </select>
             </label>
             <label className="block">
-              <span className="text-[11px] font-black uppercase tracking-widest text-[#64748b]">Education Stage</span>
-              <select value={form.educationStage} onChange={set('educationStage')} className="mt-2 h-11 w-full rounded border border-[#d5dde6] bg-[#f7f9fb] px-3 font-semibold outline-none focus:border-[#00334f]">
-                <option value="Primary">Primary</option><option value="O-Level">O-Level</option><option value="A-Level">A-Level</option>
+              <span className={cap}>Amount per class (TZS) *</span>
+              <input required type="number" value={amount} onChange={(e) => setAmount(e.target.value)} className={sel} placeholder="e.g. 450000" />
+            </label>
+            <label className="block">
+              <span className={cap}>Academic Year *</span>
+              <select value={effectiveYearId} onChange={(e) => setAcademicYearId(e.target.value)} className={sel}>
+                {years.map((y) => <option key={y.id} value={y.id}>{y.name}{y.isCurrent ? ' (current)' : ''}</option>)}
               </select>
             </label>
             <label className="block">
-              <span className="text-[11px] font-black uppercase tracking-widest text-[#64748b]">Class Level / Form</span>
-              <input value={form.classLevel} onChange={set('classLevel')} className="mt-2 h-11 w-full rounded border border-[#d5dde6] bg-[#f7f9fb] px-3 font-semibold outline-none focus:border-[#00334f]" placeholder="e.g. Form 3, Class 5" />
-            </label>
-            <label className="block">
-              <span className="text-[11px] font-black uppercase tracking-widest text-[#64748b]">Student Group</span>
-              <input value={form.studentGroup} onChange={set('studentGroup')} className="mt-2 h-11 w-full rounded border border-[#d5dde6] bg-[#f7f9fb] px-3 font-semibold outline-none focus:border-[#00334f]" placeholder="e.g. BOARDER, DAY_SCHOLAR" />
-            </label>
-            <label className="block">
-              <span className="text-[11px] font-black uppercase tracking-widest text-[#64748b]">Amount (TZS) *</span>
-              <input required type="number" value={form.amount} onChange={set('amount')} className="mt-2 h-11 w-full rounded border border-[#d5dde6] bg-[#f7f9fb] px-3 font-semibold outline-none focus:border-[#00334f]" placeholder="e.g. 450000" />
-            </label>
-            <label className="block">
-              <span className="text-[11px] font-black uppercase tracking-widest text-[#64748b]">Effective Term *</span>
-              <input required value={form.effectiveTerm} onChange={set('effectiveTerm')} className="mt-2 h-11 w-full rounded border border-[#d5dde6] bg-[#f7f9fb] px-3 font-semibold outline-none focus:border-[#00334f]" placeholder="e.g. Term II 2026" />
-            </label>
-            <label className="block md:col-span-2">
-              <span className="text-[11px] font-black uppercase tracking-widest text-[#64748b]">Reason (for audit)</span>
-              <input value={form.reason} onChange={set('reason')} className="mt-2 h-11 w-full rounded border border-[#d5dde6] bg-[#f7f9fb] px-3 font-semibold outline-none focus:border-[#00334f]" placeholder="e.g. Annual fee review 2026" />
+              <span className={cap}>Term</span>
+              <select value={termId} onChange={(e) => setTermId(e.target.value)} className={sel}>
+                <option value="">All terms / annual</option>
+                {yearTerms.map((t) => <option key={t.id} value={t.id}>{t.name}{t.isCurrent ? ' (current)' : ''}</option>)}
+              </select>
             </label>
           </div>
-          <div className="mt-5 flex gap-2">
-            <Button type="submit" className="rounded bg-[#00334f] hover:bg-[#001e30] hover:shadow-none" disabled={createMutation.isPending}>
-              <Send className="h-4 w-4" /> {createMutation.isPending ? 'Creating…' : 'Create Structure'}
+
+          {/* Targeting mode */}
+          <div className="mt-6">
+            <span className={cap}>Apply to</span>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {([['class', 'Specific classes'], ['stage', 'Stage / level'], ['group', 'Student group']] as const).map(([m, lbl]) => (
+                <button type="button" key={m} onClick={() => setMode(m)}
+                  className={`rounded px-3 py-1.5 text-[11px] font-black uppercase tracking-wider transition ${mode === m ? 'bg-[#00334f] text-white' : 'border border-[#d5dde6] bg-white text-[#64748b] hover:bg-[#eef5f8]'}`}>
+                  {lbl}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {mode === 'class' && (
+            <div className="mt-4 space-y-4">
+              {Object.entries(classesByStage).map(([stage, list]) => (
+                <div key={stage}>
+                  <div className="mb-2 flex items-center justify-between">
+                    <p className="text-[11px] font-black uppercase tracking-widest text-[#00334f]">{stage.replaceAll('_', ' ')}</p>
+                    <button type="button" className="text-[11px] font-black uppercase text-[#0284c7] hover:underline"
+                      onClick={() => { const ids = list.map((c) => c.id); const allSel = ids.every((id) => selectedClasses.includes(id)); setSelectedClasses((p) => allSel ? p.filter((x) => !ids.includes(x)) : [...new Set([...p, ...ids])]); }}>
+                      Toggle all
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
+                    {list.map((c) => (
+                      <label key={c.id} className={`flex cursor-pointer items-center gap-2 rounded border px-3 py-2 text-sm font-bold transition ${selectedClasses.includes(c.id) ? 'border-[#00334f] bg-[#eef5f8] text-[#00334f]' : 'border-[#d5dde6] bg-white text-[#475569]'}`}>
+                        <input type="checkbox" checked={selectedClasses.includes(c.id)} onChange={() => toggleClass(c.id)} className="accent-[#00334f]" />
+                        {c.name}{c.stream ? ` ${c.stream}` : ''}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              {!classes.length && <p className="text-sm font-semibold text-[#64748b]">Loading classes…</p>}
+            </div>
+          )}
+
+          {mode === 'stage' && (
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <label className="block">
+                <span className={cap}>Education Stage</span>
+                <select value={educationStage} onChange={(e) => setEducationStage(e.target.value)} className={sel}>
+                  <option value="PRIMARY">Primary</option><option value="O_LEVEL">O-Level</option><option value="A_LEVEL">A-Level</option>
+                </select>
+              </label>
+              <label className="block">
+                <span className={cap}>Class Level (number, optional)</span>
+                <input type="number" value={classLevel} onChange={(e) => setClassLevel(e.target.value)} className={sel} placeholder="e.g. 3 for Form 3" />
+              </label>
+            </div>
+          )}
+
+          {mode === 'group' && (
+            <div className="mt-4">
+              <label className="block max-w-sm">
+                <span className={cap}>Student Group Code</span>
+                <input value={studentGroup} onChange={(e) => setStudentGroup(e.target.value)} className={sel} placeholder="e.g. BOARDING" />
+              </label>
+            </div>
+          )}
+
+          <div className="mt-6 flex gap-2">
+            <Button type="submit" className="rounded bg-[#00334f] hover:bg-[#001e30] hover:shadow-none" disabled={submitting}>
+              <Send className="h-4 w-4" /> {submitting ? 'Creating…' : mode === 'class' && selectedClasses.length > 1 ? `Create ${selectedClasses.length} Structures` : 'Create Structure'}
             </Button>
             <Button type="button" variant="secondary" className="rounded" onClick={() => navigate('/finance/fee-structures')}>Cancel</Button>
           </div>
         </form>
         <SideSummary title="Impact Preview" items={[
-          ['Category', form.categoryId ? (apiCategories.find((c) => c.id === form.categoryId)?.name ?? '—') : '—'],
-          ['Stage', form.educationStage],
-          ['Amount', form.amount ? formatTZS(Number(form.amount)) : '—'],
-          ['Term', form.effectiveTerm || '—'],
+          ['Category', categoryId ? (apiCategories.find((c) => c.id === categoryId)?.name ?? '—') : '—'],
+          ['Amount', amount ? formatTZS(Number(amount)) : '—'],
+          ['Applies to', mode === 'class' ? `${selectedClasses.length} class(es)` : mode === 'stage' ? `${educationStage.replaceAll('_', ' ')}${classLevel ? ` · L${classLevel}` : ''}` : (studentGroup || 'group')],
+          ['Term', termId ? (yearTerms.find((t) => t.id === termId)?.name ?? '—') : 'Annual'],
         ]} />
       </div>
     </FinanceWorkspaceShell>
@@ -966,21 +1066,30 @@ function AssetForm({ title, mode }: { title: string; mode: 'create' | 'edit' }) 
   const updateMutation = useUpdateAssetMutation();
   const isPending = createMutation.isPending || updateMutation.isPending;
 
-  const [form, setForm] = useState({ name: '', category: '', type: '', brand: '', model: '', serialNumber: '', purchaseDate: '', purchaseCost: '', currentValue: '', location: '', assignedTo: '', warrantyExpiry: '' });
+  const [form, setForm] = useState({ name: '', category: 'ELECTRONICS', type: 'MOVABLE', condition: 'GOOD', status: 'ACTIVE', brand: '', model: '', serialNumber: '', purchaseDate: '', purchaseCost: '', currentValue: '', location: '', assignedTo: '', warrantyExpiry: '' });
 
   useEffect(() => {
     if (apiAsset) {
       const a = apiAsset as Record<string, unknown>;
-      setForm({ name: String(a.name ?? ''), category: String(a.category ?? ''), type: String(a.type ?? ''), brand: String(a.brand ?? ''), model: String(a.model ?? ''), serialNumber: String(a.serialNumber ?? ''), purchaseDate: String(a.purchaseDate ?? ''), purchaseCost: String(a.purchaseCost ?? ''), currentValue: String(a.currentValue ?? ''), location: String(a.location ?? ''), assignedTo: String(a.assignedTo ?? ''), warrantyExpiry: String(a.warrantyExpiry ?? '') });
+      const dateOnly = (v: unknown) => (typeof v === 'string' && v.length >= 10 ? v.slice(0, 10) : '');
+      setForm({ name: String(a.name ?? ''), category: String(a.category ?? 'ELECTRONICS'), type: String(a.type ?? 'MOVABLE'), condition: String(a.condition ?? 'GOOD'), status: String(a.status ?? 'ACTIVE'), brand: String(a.brand ?? ''), model: String(a.model ?? ''), serialNumber: String(a.serialNumber ?? ''), purchaseDate: dateOnly(a.purchaseDate), purchaseCost: String(a.purchaseCost ?? ''), currentValue: String(a.currentValue ?? ''), location: String(a.location ?? ''), assignedTo: String(a.assignedTo ?? ''), warrantyExpiry: dateOnly(a.warrantyExpiryDate ?? a.warrantyExpiry) });
     }
   }, [apiAsset?.id]);
 
-  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => setForm((p) => ({ ...p, [k]: e.target.value }));
+  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setForm((p) => ({ ...p, [k]: e.target.value }));
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name.trim()) { toast('Asset name is required', 'error'); return; }
-    const body: Record<string, unknown> = { name: form.name, category: form.category || undefined, type: form.type || undefined, brand: form.brand || undefined, model: form.model || undefined, serialNumber: form.serialNumber || undefined, purchaseDate: form.purchaseDate || undefined, purchaseCost: form.purchaseCost ? Number(form.purchaseCost) : undefined, currentValue: form.currentValue ? Number(form.currentValue) : undefined, location: form.location || undefined, assignedTo: form.assignedTo || undefined, warrantyExpiry: form.warrantyExpiry || undefined };
+    const body: Record<string, unknown> = {
+      name: form.name, category: form.category, type: form.type, condition: form.condition, status: form.status,
+      brand: form.brand || undefined, model: form.model || undefined, serialNumber: form.serialNumber || undefined,
+      purchaseDate: form.purchaseDate || undefined,
+      purchaseCost: form.purchaseCost ? String(form.purchaseCost) : undefined,
+      currentValue: form.currentValue ? String(form.currentValue) : undefined,
+      location: form.location || undefined, assignedTo: form.assignedTo || undefined,
+      warrantyExpiry: form.warrantyExpiry || undefined,
+    };
     if (mode === 'create') {
       createMutation.mutate(body, {
         onSuccess: () => { toast('Asset registered', 'success'); navigate('/finance/assets'); },
@@ -994,10 +1103,13 @@ function AssetForm({ title, mode }: { title: string; mode: 'create' | 'edit' }) 
     }
   };
 
+  const selectDefs: [string, keyof typeof form, readonly string[]][] = [
+    ['Category', 'category', ['FURNITURE', 'ELECTRONICS', 'VEHICLE', 'BUILDING', 'EQUIPMENT', 'LABORATORY', 'LIBRARY', 'SPORTS', 'OTHER']],
+    ['Type', 'type', ['FIXED', 'MOVABLE']],
+    ['Condition', 'condition', ['EXCELLENT', 'GOOD', 'FAIR', 'POOR', 'CONDEMNED']],
+    ['Status', 'status', ['ACTIVE', 'UNDER_MAINTENANCE', 'DISPOSED', 'LOST', 'STOLEN']],
+  ];
   const fieldDefs: [string, keyof typeof form, string, string][] = [
-    ['Name *', 'name', 'e.g. Dell Laptop XPS 15', 'text'],
-    ['Category', 'category', 'e.g. Electronics', 'text'],
-    ['Type', 'type', 'e.g. Laptop', 'text'],
     ['Brand', 'brand', 'e.g. Dell', 'text'],
     ['Model', 'model', 'e.g. XPS 15', 'text'],
     ['Serial Number', 'serialNumber', 'e.g. SN-12345', 'text'],
@@ -1022,10 +1134,22 @@ function AssetForm({ title, mode }: { title: string; mode: 'create' | 'edit' }) 
             </div>
           </div>
           <div className="mt-5 grid gap-4 md:grid-cols-2">
+            <label className="block md:col-span-2">
+              <span className="text-[11px] font-black uppercase tracking-widest text-[#64748b]">Name *</span>
+              <input required value={form.name} onChange={set('name')} placeholder="e.g. Dell Laptop XPS 15" className="mt-2 h-11 w-full rounded border border-[#d5dde6] bg-[#f7f9fb] px-3 font-semibold outline-none focus:border-[#00334f] focus:ring-2 focus:ring-[#00334f]/10" />
+            </label>
+            {selectDefs.map(([label, key, opts]) => (
+              <label key={key} className="block">
+                <span className="text-[11px] font-black uppercase tracking-widest text-[#64748b]">{label}</span>
+                <select value={form[key]} onChange={set(key)} className="mt-2 h-11 w-full rounded border border-[#d5dde6] bg-[#f7f9fb] px-3 font-semibold outline-none focus:border-[#00334f] focus:ring-2 focus:ring-[#00334f]/10">
+                  {opts.map((o) => <option key={o} value={o}>{o.replaceAll('_', ' ')}</option>)}
+                </select>
+              </label>
+            ))}
             {fieldDefs.map(([label, key, placeholder, type]) => (
               <label key={key} className="block">
                 <span className="text-[11px] font-black uppercase tracking-widest text-[#64748b]">{label}</span>
-                <input type={type} required={key === 'name'} value={form[key]} onChange={set(key)} placeholder={placeholder} className="mt-2 h-11 w-full rounded border border-[#d5dde6] bg-[#f7f9fb] px-3 font-semibold outline-none focus:border-[#00334f] focus:ring-2 focus:ring-[#00334f]/10" />
+                <input type={type} value={form[key]} onChange={set(key)} placeholder={placeholder} className="mt-2 h-11 w-full rounded border border-[#d5dde6] bg-[#f7f9fb] px-3 font-semibold outline-none focus:border-[#00334f] focus:ring-2 focus:ring-[#00334f]/10" />
               </label>
             ))}
           </div>
