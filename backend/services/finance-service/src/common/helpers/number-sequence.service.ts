@@ -39,4 +39,28 @@ export class NumberSequenceService {
     const value = await this.next('AST', year);
     return `AST-${year}-${String(value).padStart(5, '0')}`;
   }
+
+  async expenseNumber(): Promise<string> {
+    const year = new Date().getUTCFullYear();
+    const value = await this.next('EXP', year);
+    return `EXP-${year}-${String(value).padStart(5, '0')}`;
+  }
+
+  async fundRequestNumber(): Promise<string> {
+    const year = new Date().getUTCFullYear();
+    const value = await this.next('FRQ', year);
+    return `FRQ-${year}-${String(value).padStart(5, '0')}`;
+  }
+
+  async storeItemCode(): Promise<string> {
+    const year = new Date().getUTCFullYear();
+    const value = await this.next('STK', year);
+    return `STK-${year}-${String(value).padStart(5, '0')}`;
+  }
+
+  async storeMovementNumber(): Promise<string> {
+    const year = new Date().getUTCFullYear();
+    const value = await this.next('SMV', year);
+    return `SMV-${year}-${String(value).padStart(6, '0')}`;
+  }
 }

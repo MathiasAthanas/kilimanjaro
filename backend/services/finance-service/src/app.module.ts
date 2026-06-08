@@ -20,6 +20,9 @@ import { PaymentsModule } from './payments/payments.module';
 import { ReceiptsModule } from './receipts/receipts.module';
 import { ReportsModule } from './reports/reports.module';
 import { AssetsModule } from './assets/assets.module';
+import { ExpensesModule } from './expenses/expenses.module';
+import { FundRequestsModule } from './fund-requests/fund-requests.module';
+import { StoreModule } from './store/store.module';
 import { InternalModule } from './internal/internal.module';
 import { JobsModule } from './jobs/jobs.module';
 import { AuditModule } from './audit/audit.module';
@@ -53,6 +56,9 @@ import { validateEnv } from './config/env.validation';
     ReceiptsModule,
     ReportsModule,
     AssetsModule,
+    ExpensesModule,
+    FundRequestsModule,
+    StoreModule,
     InternalModule,
     JobsModule,
   ],
