@@ -48,6 +48,13 @@ import {
   RecordBankTransferPage,
   RecordCashPaymentPage,
 } from '../features/finance/pages/FinancePages';
+import {
+  BursarFundRequestsPage,
+  ExpensesPage,
+  StorePage,
+} from '../features/finance/pages/FinanceOpsPages';
+import { HodFundRequestsPage } from '../features/hod/pages/HodFundRequestsPage';
+import { PrincipalFundApprovalsPage } from '../features/principal/pages/PrincipalFundApprovalsPage';
 import { LandingPage } from '../features/public/LandingPage';
 import { StatusPage } from '../features/public/StatusPage';
 import {
@@ -325,6 +332,7 @@ export const router = createBrowserRouter([
       { path: '/hod/performance/pairings', element: <DepartmentPairingsPage /> },
       { path: '/hod/students/:studentId', element: <HodStudentPerformancePage /> },
       { path: '/hod/interventions', element: <HodInterventionsPage /> },
+      { path: '/hod/fund-requests', element: <HodFundRequestsPage /> },
       { path: '/hod/announcements', element: <HodAnnouncementsPage /> },
       { path: '/hod/announcements/create', element: <CreateHodAnnouncementPage /> },
       { path: '/hod/exports', element: <HodExportsPage /> },
@@ -370,6 +378,9 @@ export const router = createBrowserRouter([
       { path: '/finance/assets/create', element: <CreateAssetPage /> },
       { path: '/finance/assets/:id/edit', element: <EditAssetPage /> },
       { path: '/finance/assets/:id', element: <AssetDetailPage /> },
+      { path: '/finance/fund-requests', element: <BursarFundRequestsPage /> },
+      { path: '/finance/expenses', element: <ExpensesPage /> },
+      { path: '/finance/store', element: <StorePage /> },
       { path: '/finance/reports', element: <FinancialReportsPage /> },
       { path: '/finance/reports/collection', element: <CollectionSummaryReportPage /> },
       { path: '/finance/reports/outstanding', element: <OutstandingBalancesReportPage /> },
@@ -387,6 +398,7 @@ export const router = createBrowserRouter([
       { path: '/principal/finance/approvals', element: <PaymentApprovalsPage /> },
       { path: '/principal/finance/approvals/:id', element: <PaymentApprovalDetailPage /> },
       { path: '/principal/finance/invoices', element: <PrincipalInvoiceManagementPage /> },
+      { path: '/principal/finance/fund-approvals', element: <PrincipalFundApprovalsPage /> },
       { path: '/principal/performance', element: <PrincipalPerformanceOverviewPage /> },
       { path: '/principal/students', element: <PrincipalStudentsPage /> },
       { path: '/principal/students/:studentId', element: <PrincipalStudentProfilePage /> },

@@ -6,9 +6,12 @@ import {
   BookOpen,
   CalendarCheck,
   Banknote,
+  Boxes,
   CircleHelp,
   ClipboardCheck,
   Download,
+  HandCoins,
+  ReceiptText,
   FileText,
   FileSpreadsheet,
   GraduationCap,
@@ -126,6 +129,12 @@ const hodSections: SidebarSection[] = [
     ],
   },
   {
+    title: 'Finance',
+    items: [
+      { to: '/hod/fund-requests', icon: HandCoins, label: 'Fund Requests', end: true },
+    ],
+  },
+  {
     title: 'Records',
     items: [
       { to: '/hod/announcements',        icon: Megaphone,        label: 'Announcements',      end: true },
@@ -216,6 +225,14 @@ const financeSections: SidebarSection[] = [
     ],
   },
   {
+    title: 'Spending & Stores',
+    items: [
+      { to: '/finance/fund-requests', icon: HandCoins,   label: 'Fund Requests', end: true },
+      { to: '/finance/expenses',      icon: ReceiptText, label: 'Expenditure',   end: true },
+      { to: '/finance/store',         icon: Boxes,       label: 'Store & Inventory', end: true },
+    ],
+  },
+  {
     title: 'Control Room',
     items: [
       { to: '/finance/assets',                icon: Landmark,     label: 'Assets Ledger',   end: true },
@@ -260,6 +277,7 @@ const principalSections: SidebarSection[] = [
     items: [
       { to: '/principal/finance',           icon: WalletCards,label: 'Finance Oversight', end: true },
       { to: '/principal/finance/approvals', icon: Banknote,   label: 'Payment Approval',  end: true },
+      { to: '/principal/finance/fund-approvals', icon: HandCoins, label: 'Fund Approvals', end: true },
       { to: '/principal/finance/invoices',  icon: FileText,   label: 'Invoice View'                },
     ],
   },
