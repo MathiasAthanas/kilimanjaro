@@ -53,7 +53,7 @@ class ParentLearningHomeScreen extends ConsumerWidget {
                       .map((c) => Padding(
                             padding: const EdgeInsets.only(bottom: 12),
                             child: _ParentCard(
-                              '${c.subjectName} · ${c.className}',
+                              '${c.subjectName} · ${c.className} · ${c.stageLabel}',
                               '${c.lessons.length} lessons · ${c.enrolledCount} students',
                               () => context
                                   .push('/parent/learning/courses/${c.id}'),
@@ -84,7 +84,7 @@ class ParentCourseViewScreen extends ConsumerWidget {
       error: (e, _) =>
           _ParentElScaffold(title: 'Error', children: [_ParentCard('Error', e.toString(), null)]),
       data: (course) => _ParentElScaffold(
-        title: '${course.subjectName} · ${course.className}',
+        title: '${course.subjectName} · ${course.className} · ${course.stageLabel}',
         children: [
           progressAsync.when(
             data: (p) => _ParentProgressCard(progress: p.completionPercent),
@@ -111,20 +111,75 @@ class ParentCourseViewScreen extends ConsumerWidget {
   }
 }
 
-class ParentAssignmentViewScreen extends StatelessWidget {
+class ParentAssignmentViewScreen extends ConsumerWidget {
   const ParentAssignmentViewScreen({super.key, required this.assignmentId});
   final String assignmentId;
+
   @override
-  Widget build(BuildContext context) => const _ParentElScaffold(
-    title: 'Assignment',
-    children: [
-      _ParentCard('Status', 'Ask your child for their submission status', null),
-      _ParentCard(
-          'How to help',
-          'Encourage your child to re-read the instructions and ask the teacher on the discussion board.',
-          null),
-    ],
-  );
+  Widget build(BuildContext context, WidgetRef ref) {
+    final submissionAsync = ref.watch(mySubmissionProvider(assignmentId));
+
+    return submissionAsync.when(
+      loading: () => const _ParentElScaffold(
+        title: 'Assignment',
+        children: [_ParentLoadingCard()],
+      ),
+      error: (_, __) => const _ParentElScaffold(
+        title: 'Assignment',
+        children: [
+          _ParentCard('Status', 'Could not load submission details — check your connection.', null),
+          _ParentCard('How to help', 'Encourage your child to re-read the instructions and ask the teacher on the discussion board.', null),
+        ],
+      ),
+      data: (submission) {
+        if (submission == null) {
+          return const _ParentElScaffold(
+            title: 'Assignment',
+            children: [
+              _ParentCard('Not yet submitted', 'Your child has not submitted this assignment yet.', null),
+              _ParentCard('How to help', 'Remind your child to read the instructions and submit before the due date.', null),
+            ],
+          );
+        }
+
+        final statusLabel = switch (submission.status) {
+          'DRAFT' => 'Draft — not submitted yet',
+          'SUBMITTED' => 'Submitted — awaiting grade',
+          'GRADED' => 'Graded',
+          'RETURNED' => 'Returned for revision',
+          _ => submission.status,
+        };
+
+        final scoreText = submission.score != null && submission.maxScore != null
+            ? '${submission.score!.toStringAsFixed(1)} / ${submission.maxScore!.toStringAsFixed(0)}'
+            : '—';
+
+        final lateText = submission.isLate ? 'Yes (late submission)' : 'No';
+
+        return _ParentElScaffold(
+          title: 'Assignment',
+          children: [
+            _ParentCard('Status', statusLabel, null),
+            _ParentCard('Score', scoreText, null),
+            _ParentCard('Late submission', lateText, null),
+            if (submission.feedback != null && submission.feedback!.isNotEmpty)
+              _ParentCard('Teacher feedback', submission.feedback!, null),
+            if (submission.status == 'RETURNED')
+              const _ParentCard(
+                'Action needed',
+                'Your child needs to revise and resubmit this assignment.',
+                null,
+              ),
+            const _ParentCard(
+              'How to help',
+              'Ask your child to show you the assignment instructions and their submission.',
+              null,
+            ),
+          ],
+        );
+      },
+    );
+  }
 }
 
 class ParentQuizScoreScreen extends ConsumerWidget {

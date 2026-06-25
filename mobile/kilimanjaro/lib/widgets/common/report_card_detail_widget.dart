@@ -24,6 +24,10 @@ class ReportCardDetailWidget extends StatelessWidget {
     required this.principalAuthor,
     required this.principalMessage,
     this.headerNote,
+    this.stageLabel,
+    this.combinationCode,
+    this.reportTemplateCode,
+    this.divisionSummary,
     this.showInternalAlerts = false,
   });
 
@@ -44,6 +48,10 @@ class ReportCardDetailWidget extends StatelessWidget {
   final String principalAuthor;
   final String principalMessage;
   final String? headerNote;
+  final String? stageLabel;
+  final String? combinationCode;
+  final String? reportTemplateCode;
+  final String? divisionSummary;
   final bool showInternalAlerts;
 
   @override
@@ -106,6 +114,9 @@ class ReportCardDetailWidget extends StatelessWidget {
               runSpacing: 12,
               children: [
                 _InfoChip(label: 'Class', value: '$classLabel $stream', backgroundColor: paperInner),
+                if (stageLabel != null) _InfoChip(label: 'Stage', value: stageLabel!, backgroundColor: paperInner),
+                if (combinationCode != null) _InfoChip(label: 'Combination', value: combinationCode!, backgroundColor: paperInner),
+                if (reportTemplateCode != null) _InfoChip(label: 'Template', value: reportTemplateCode!, backgroundColor: paperInner),
                 _InfoChip(label: 'Score', value: '${overallScore.toStringAsFixed(1)}%', backgroundColor: paperInner),
                 _InfoChip(label: 'Rank', value: '$rank/$totalStudents', backgroundColor: paperInner),
                 _InfoChip(label: 'Generated', value: generatedAt, backgroundColor: paperInner),
@@ -113,6 +124,10 @@ class ReportCardDetailWidget extends StatelessWidget {
             ),
             const SizedBox(height: 20),
             KSRankBadge(rank: rank, total: totalStudents),
+            if (divisionSummary != null) ...[
+              const SizedBox(height: 12),
+              _StageSummaryCard(summary: divisionSummary!, backgroundColor: paperInner),
+            ],
             const SizedBox(height: 20),
             Text('Subject Results', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 12),
@@ -233,6 +248,46 @@ class _InfoChip extends StatelessWidget {
           Text(label, style: Theme.of(context).textTheme.bodySmall),
           const SizedBox(height: 6),
           Text(value, style: Theme.of(context).textTheme.titleMedium),
+        ],
+      ),
+    );
+  }
+}
+
+class _StageSummaryCard extends StatelessWidget {
+  const _StageSummaryCard({
+    required this.summary,
+    required this.backgroundColor,
+  });
+
+  final String summary;
+  final Color backgroundColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.accentIndigo.withValues(alpha: 0.18)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.auto_graph_rounded, color: AppColors.accentIndigo),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Stage summary', style: Theme.of(context).textTheme.titleSmall),
+                const SizedBox(height: 4),
+                Text(summary, style: Theme.of(context).textTheme.bodySmall),
+              ],
+            ),
+          ),
         ],
       ),
     );

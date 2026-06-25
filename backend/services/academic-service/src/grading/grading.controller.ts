@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { ROLES } from '../common/constants/roles';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -43,6 +43,13 @@ export class GradingController {
   @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL)
   activateGradingScale(@Param('id') id: string) {
     return this.gradingService.activateGradingScale(id);
+  }
+
+  @Delete('grading-scales/:id')
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  deleteGradingScale(@Param('id') id: string) {
+    return this.gradingService.deleteGradingScale(id);
   }
 
   @Post('assessment-types')

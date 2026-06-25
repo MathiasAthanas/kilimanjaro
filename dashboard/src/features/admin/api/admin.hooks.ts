@@ -105,6 +105,115 @@ function toAuditEvents(value: unknown) {
 
 // ─── Query key factory ────────────────────────────────────────────────────────
 
+export const departmentKeys = {
+  all: ['departments'] as const,
+  list: () => [...departmentKeys.all, 'list'] as const,
+  hods: (id: string) => [...departmentKeys.all, 'hods', id] as const,
+  byUser: (userId: string) => [...departmentKeys.all, 'by-user', userId] as const,
+};
+
+export function useDepartments() {
+  return useQuery({
+    queryKey: departmentKeys.list(),
+    queryFn: () =>
+      api.get('/students/departments').then((r) =>
+        arrayFromApi(payloadOf(r), ['departments']).map((raw) => {
+          const d = raw as Record<string, unknown>;
+          const hods = Array.isArray(d.hodAssignments) ? d.hodAssignments as Record<string, unknown>[] : [];
+          const activeHod = hods[0];
+          return {
+            ...d,
+            id: String(d.id ?? ''),
+            name: String(d.name ?? ''),
+            code: String(d.code ?? ''),
+            description: String(d.description ?? ''),
+            isSystemDefault: Boolean(d.isSystemDefault),
+            isActive: Boolean(d.isActive ?? true),
+            activeHodName: activeHod
+              ? `${activeHod.firstName ?? ''} ${activeHod.lastName ?? ''}`.trim()
+              : '',
+            activeHodUserId: String(activeHod?.userId ?? ''),
+          };
+        }),
+      ),
+    staleTime: 30_000,
+  });
+}
+
+export function useDepartmentHods(departmentId: string | undefined) {
+  return useQuery({
+    queryKey: departmentKeys.hods(departmentId ?? ''),
+    queryFn: () =>
+      api
+        .get(`/students/departments/${departmentId}/hods`)
+        .then((r) => arrayFromApi(payloadOf(r), ['hods'])),
+    enabled: !!departmentId,
+    staleTime: 30_000,
+  });
+}
+
+export function useDepartmentByUser(userId: string | undefined) {
+  return useQuery({
+    queryKey: departmentKeys.byUser(userId ?? ''),
+    queryFn: () => api.get(`/students/departments/by-user/${userId}`).then(payloadOf),
+    enabled: !!userId,
+    staleTime: 60_000,
+  });
+}
+
+export function useCreateDepartmentMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: unknown) =>
+      api.post('/students/departments', payload).then((r) => r.data?.data ?? r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: departmentKeys.all }),
+  });
+}
+
+export function useUpdateDepartmentMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: unknown }) =>
+      api.patch(`/students/departments/${id}`, payload).then((r) => r.data?.data ?? r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: departmentKeys.all }),
+  });
+}
+
+export function useDeleteDepartmentMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api.delete(`/students/departments/${id}`).then((r) => r.data?.data ?? r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: departmentKeys.all }),
+  });
+}
+
+export function useAssignHodMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ departmentId, payload }: { departmentId: string; payload: unknown }) =>
+      api.post(`/students/departments/${departmentId}/hods`, payload).then((r) => r.data?.data ?? r.data),
+    onSuccess: (_d, v) => {
+      qc.invalidateQueries({ queryKey: departmentKeys.list() });
+      qc.invalidateQueries({ queryKey: departmentKeys.hods(v.departmentId) });
+    },
+  });
+}
+
+export function useRemoveHodMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ departmentId, userId, academicYearId }: { departmentId: string; userId: string; academicYearId: string }) =>
+      api
+        .delete(`/students/departments/${departmentId}/hods/${userId}`, { params: { academicYearId } })
+        .then((r) => r.data?.data ?? r.data),
+    onSuccess: (_d, v) => {
+      qc.invalidateQueries({ queryKey: departmentKeys.list() });
+      qc.invalidateQueries({ queryKey: departmentKeys.hods(v.departmentId) });
+    },
+  });
+}
+
 export const adminKeys = {
   all: ['admin'] as const,
   dashboard: () => [...adminKeys.all, 'dashboard'] as const,
@@ -678,6 +787,49 @@ export function useCreateTermMutation() {
   });
 }
 
+export function useDeleteAcademicYearMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.delete(`/students/academic-years/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: adminKeys.academicYears() }),
+  });
+}
+
+export function useDeleteTermMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.delete(`/students/terms/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: adminKeys.terms() });
+      qc.invalidateQueries({ queryKey: adminKeys.academicYears() });
+    },
+  });
+}
+
+export function useDeleteClassMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.delete(`/students/classes/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: adminKeys.classes() }),
+  });
+}
+
+export function useDeleteSubjectMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.delete(`/academics/subjects/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: adminKeys.subjects() }),
+  });
+}
+
+export function useDeleteGradingScaleMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.delete(`/academics/grading-scales/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: adminKeys.gradingScales() }),
+  });
+}
+
 export function useBulkPromoteMutation() {
   return useMutation({
     mutationFn: (payload: unknown) =>
@@ -711,9 +863,377 @@ export function useUpdateUserMutation() {
   });
 }
 
+// ─── Timetable System ─────────────────────────────────────────────────────────
+
+export const timetableKeys = {
+  venues: () => ['timetable', 'venues'] as const,
+  activities: () => ['timetable', 'activities'] as const,
+  sheets: (params?: Record<string, unknown>) => ['timetable', 'sheets', params ?? {}] as const,
+  sheet: (id: string) => ['timetable', 'sheet', id] as const,
+};
+
+export function useVenues(filters?: Record<string, string>) {
+  return useQuery({
+    queryKey: timetableKeys.venues(),
+    queryFn: () => api.get('/academics/venues', { params: filters }).then((r) => {
+      const data = r.data?.data ?? r.data;
+      return Array.isArray(data) ? data : [];
+    }),
+    staleTime: 60_000,
+  });
+}
+
+export function useTimetableActivities(filters?: Record<string, string>) {
+  return useQuery({
+    queryKey: timetableKeys.activities(),
+    queryFn: () => api.get('/academics/timetable-activities', { params: filters }).then((r) => {
+      const data = r.data?.data ?? r.data;
+      return Array.isArray(data) ? data : [];
+    }),
+    staleTime: 60_000,
+  });
+}
+
+export function useTimetableSheets(params?: Record<string, string>) {
+  return useQuery({
+    queryKey: timetableKeys.sheets(params),
+    queryFn: () => api.get('/academics/timetable-sheets', { params }).then((r) => {
+      const data = r.data?.data ?? r.data;
+      return Array.isArray(data) ? data : [];
+    }),
+    staleTime: 30_000,
+  });
+}
+
+export function useTimetableSheet(id: string | undefined) {
+  return useQuery({
+    queryKey: timetableKeys.sheet(id ?? ''),
+    queryFn: () => api.get(`/academics/timetable-sheets/${id}`).then((r) => r.data?.data ?? r.data),
+    enabled: !!id,
+    staleTime: 15_000,
+  });
+}
+
+export function useCreateVenueMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: unknown) => api.post('/academics/venues', payload).then((r) => r.data?.data ?? r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: timetableKeys.venues() }),
+  });
+}
+
+export function useUpdateVenueMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: unknown }) => api.patch(`/academics/venues/${id}`, payload).then((r) => r.data?.data ?? r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: timetableKeys.venues() }),
+  });
+}
+
+export function useDeleteVenueMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.delete(`/academics/venues/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: timetableKeys.venues() }),
+  });
+}
+
+export function useCreateTimetableActivityMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: unknown) => api.post('/academics/timetable-activities', payload).then((r) => r.data?.data ?? r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: timetableKeys.activities() }),
+  });
+}
+
+export function useUpdateTimetableActivityMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: unknown }) => api.patch(`/academics/timetable-activities/${id}`, payload).then((r) => r.data?.data ?? r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: timetableKeys.activities() }),
+  });
+}
+
+export function useDeleteTimetableActivityMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.delete(`/academics/timetable-activities/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: timetableKeys.activities() }),
+  });
+}
+
+export function useCreateTimetableSheetMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: unknown) => api.post('/academics/timetable-sheets', payload).then((r) => r.data?.data ?? r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['timetable', 'sheets'] }),
+  });
+}
+
+export function useUpdateTimetableSheetMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: unknown }) => api.patch(`/academics/timetable-sheets/${id}`, payload).then((r) => r.data?.data ?? r.data),
+    onSuccess: (_, { id }) => {
+      qc.invalidateQueries({ queryKey: ['timetable', 'sheets'] });
+      qc.invalidateQueries({ queryKey: timetableKeys.sheet(id) });
+    },
+  });
+}
+
+export function useDeleteTimetableSheetMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.delete(`/academics/timetable-sheets/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['timetable', 'sheets'] }),
+  });
+}
+
+export function useCreateTimetableSlotMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: unknown) => api.post('/academics/timetable-slots', payload).then((r) => r.data?.data ?? r.data),
+    onSuccess: (data: any) => {
+      if (data?.sheetId) qc.invalidateQueries({ queryKey: timetableKeys.sheet(data.sheetId) });
+    },
+  });
+}
+
+export function useUpdateTimetableSlotMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: unknown }) => api.patch(`/academics/timetable-slots/${id}`, payload).then((r) => r.data?.data ?? r.data),
+    onSuccess: (data: any) => {
+      if (data?.sheetId) qc.invalidateQueries({ queryKey: timetableKeys.sheet(data.sheetId) });
+    },
+  });
+}
+
+export function useDeleteTimetableSlotMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, sheetId }: { id: string; sheetId: string }) => api.delete(`/academics/timetable-slots/${id}`).then(() => ({ sheetId })),
+    onSuccess: ({ sheetId }) => qc.invalidateQueries({ queryKey: timetableKeys.sheet(sheetId) }),
+  });
+}
+
+export function useAutoGenerateTimetableMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ sheetId, payload }: { sheetId: string; payload: unknown }) =>
+      api.post(`/academics/timetable-sheets/${sheetId}/auto-generate`, payload).then((r) => r.data?.data ?? r.data),
+    onSuccess: (data: any) => {
+      if (data?.id) qc.invalidateQueries({ queryKey: timetableKeys.sheet(data.id) });
+      qc.invalidateQueries({ queryKey: ['timetable', 'sheets'] });
+    },
+  });
+}
+
 export function useRunEngineAdminMutation() {
   return useMutation({
     mutationFn: (body: Record<string, unknown>) =>
-      api.post('/analytics/engine/run', body).then((r) => r.data?.data ?? r.data),
+      api.post('/analytics/reports/generate', {
+        reportType: 'PERFORMANCE_ENGINE',
+        scope: body.scope ?? 'WHOLE_SCHOOL',
+        parameters: body.thresholds,
+      }).then((r) => r.data?.data ?? r.data),
+  });
+}
+
+// ─── Student sub-resource queries ─────────────────────────────────────────────
+
+export function useStudentGuardians(id: string | undefined) {
+  return useQuery({
+    queryKey: ['admin', 'student', id, 'guardians'],
+    queryFn: () => id
+      ? api.get(`/students/${id}/guardians`).then((r) => {
+          const d = r.data?.data ?? r.data;
+          return Array.isArray(d) ? d : [];
+        }).catch(() => [] as unknown[])
+      : Promise.resolve([] as unknown[]),
+    enabled: !!id,
+  });
+}
+
+export function useStudentAttendance(id: string | undefined) {
+  return useQuery({
+    queryKey: ['admin', 'student', id, 'attendance'],
+    queryFn: () => id
+      ? api.get(`/students/${id}/attendance`).then((r) => r.data?.data ?? r.data ?? null).catch(() => null)
+      : Promise.resolve(null),
+    enabled: !!id,
+  });
+}
+
+export function useStudentPerformance(id: string | undefined) {
+  return useQuery({
+    queryKey: ['admin', 'student', id, 'performance'],
+    queryFn: () => id
+      ? api.get(`/students/${id}/performance`).then((r) => {
+          const d = r.data?.data ?? r.data;
+          return Array.isArray(d) ? d : [];
+        }).catch(() => [] as unknown[])
+      : Promise.resolve([] as unknown[]),
+    enabled: !!id,
+  });
+}
+
+export function useStudentFinance(id: string | undefined) {
+  return useQuery({
+    queryKey: ['admin', 'student', id, 'finance'],
+    queryFn: () => id
+      ? api.get(`/students/${id}/finance`).then((r) => {
+          const d = r.data?.data ?? r.data;
+          return Array.isArray(d) ? d : [];
+        }).catch(() => [] as unknown[])
+      : Promise.resolve([] as unknown[]),
+    enabled: !!id,
+  });
+}
+
+export function useStudentDiscipline(id: string | undefined) {
+  return useQuery({
+    queryKey: ['admin', 'student', id, 'discipline'],
+    queryFn: () => id
+      ? api.get(`/students/${id}/discipline`).then((r) => {
+          const d = r.data?.data ?? r.data;
+          return Array.isArray(d) ? d : [];
+        }).catch(() => [] as unknown[])
+      : Promise.resolve([] as unknown[]),
+    enabled: !!id,
+  });
+}
+
+export function useUpdateStudentMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: Record<string, unknown> }) =>
+      api.patch(`/students/${id}`, body).then((r) => r.data?.data ?? r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: adminKeys.students() }),
+  });
+}
+
+export function useAddGuardianMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ studentId, body }: { studentId: string; body: Record<string, unknown> }) =>
+      api.post(`/students/${studentId}/guardians`, body).then((r) => r.data?.data ?? r.data),
+    onSuccess: (_d, v) => qc.invalidateQueries({ queryKey: ['admin', 'student', v.studentId, 'guardians'] }),
+  });
+}
+
+export function useAllDisciplineRecords(filters?: Record<string, unknown>) {
+  return useQuery({
+    queryKey: ['discipline', 'all', filters ?? {}],
+    queryFn: () =>
+      api.get('/students/discipline', { params: filters }).then((r) => {
+        const d = r.data?.data ?? r.data;
+        return Array.isArray(d) ? d : Array.isArray(d?.items) ? d.items : [];
+      }).catch(() => [] as unknown[]),
+    staleTime: 15_000,
+  });
+}
+
+export function useResolveDisciplineMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ recordId, note }: { recordId: string; note: string }) =>
+      api.patch(`/students/discipline/${recordId}/resolve`, { resolutionNote: note }).then((r) => r.data?.data ?? r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['discipline'] }),
+  });
+}
+
+export function useStudentPortalInviteMutation() {
+  return useMutation({
+    mutationFn: (studentId: string) =>
+      api.post(`/students/${studentId}/portal-invite`).then((r) => r.data?.data ?? r.data),
+  });
+}
+
+export function useStudentPortalPasswordResetMutation() {
+  return useMutation({
+    mutationFn: (studentId: string) =>
+      api.post(`/students/${studentId}/reset-portal-password`).then((r) => r.data?.data ?? r.data),
+  });
+}
+
+// ─── System / cache mutations ─────────────────────────────────────────────────
+
+export function useClearCacheMutation() {
+  return useMutation({
+    mutationFn: (domain: string) =>
+      api.post('/admin/system/cache/clear', { domain }).then((r) => r.data?.data ?? r.data),
+  });
+}
+
+// ─── Announcements ────────────────────────────────────────────────────────────
+
+export function useCancelAnnouncementMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      api.patch(`/admin/announcements/${id}/cancel`, { reason }).then((r) => r.data?.data ?? r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['announcements'] });
+      qc.invalidateQueries({ queryKey: ['admin', 'announcements'] });
+    },
+  });
+}
+
+export function useCreateAnnouncementAdminMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Record<string, unknown>) =>
+      api.post('/admin/announcements', body).then((r) => r.data?.data ?? r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['announcements'] });
+      qc.invalidateQueries({ queryKey: ['admin', 'announcements'] });
+    },
+  });
+}
+
+// ─── Fee categories ───────────────────────────────────────────────────────────
+
+export function useDeleteFeeCategoryMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api.delete(`/finance/fee-categories/${id}`).then((r) => r.data?.data ?? r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['finance', 'fee-categories'] }),
+  });
+}
+
+export function useCreateFeeCategoryMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { code: string; name: string; type: string; amount: number }) =>
+      api.post('/finance/fee-categories', body).then((r) => r.data?.data ?? r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['finance', 'fee-categories'] }),
+  });
+}
+
+// ─── Class-subject assignment ─────────────────────────────────────────────────
+
+export function useAssignSubjectToClassMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ classId, subjectId }: { classId: string; subjectId: string }) =>
+      api.post(`/students/classes/${classId}/subjects`, { subjectId }).then((r) => r.data?.data ?? r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: adminKeys.classes() });
+      qc.invalidateQueries({ queryKey: adminKeys.subjects() });
+    },
+  });
+}
+
+export function useUnassignSubjectFromClassMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ classId, subjectId }: { classId: string; subjectId: string }) =>
+      api.delete(`/students/classes/${classId}/subjects/${subjectId}`).then((r) => r.data?.data ?? r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: adminKeys.classes() });
+      qc.invalidateQueries({ queryKey: adminKeys.subjects() });
+    },
   });
 }

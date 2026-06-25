@@ -1009,7 +1009,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/teacher/interventions/create',
         pageBuilder: (context, state) => AppTransitions.utility(
           key: state.pageKey,
-          child: const teacher_screens.CreateInterventionScreen(),
+          child: teacher_screens.CreateInterventionScreen(
+            studentId: state.uri.queryParameters['studentId'],
+            classSubjectId: state.uri.queryParameters['classId'],
+          ),
         ),
       ),
       GoRoute(

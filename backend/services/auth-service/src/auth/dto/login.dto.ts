@@ -3,16 +3,21 @@ import { IsEmail, IsOptional, IsString, MinLength, ValidateIf } from 'class-vali
 
 export class LoginDto {
   @ApiPropertyOptional()
-  @ValidateIf((o: LoginDto) => !o.registrationNumber)
+  @ValidateIf((o: LoginDto) => !o.registrationNumber && !o.phoneNumber)
   @IsEmail()
   @IsOptional()
   email?: string;
 
   @ApiPropertyOptional()
-  @ValidateIf((o: LoginDto) => !o.email)
+  @ValidateIf((o: LoginDto) => !o.email && !o.phoneNumber)
   @IsString()
   @IsOptional()
   registrationNumber?: string;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  phoneNumber?: string;
 
   @ApiProperty()
   @IsString()

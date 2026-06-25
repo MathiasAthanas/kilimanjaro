@@ -152,13 +152,13 @@ export function useHodApprovalHistory() {
     queryKey: hodKeys.approvalHistory(),
     queryFn: () =>
       api
-        .get('/hod/approvals/history')
+        .get('/academics/assessments/approval-history')
         .then((r) =>
-          arrayFromApi(payloadOf(r), ['approvals', 'history']).map((raw) => {
+          arrayFromApi(payloadOf(r), ['data', 'approvals', 'history']).map((raw) => {
             const a = raw as Record<string, unknown>;
             const base = mapAssessment(a);
-            const decidedAt = a.approvedAt ?? a.rejectedAt ?? a.decidedAt ?? a.updatedAt;
-            const decision = a.approvedAt ? 'APPROVED' : a.rejectedAt ? 'REJECTED' : String(a.status ?? a.decision ?? '').toUpperCase();
+            const decidedAt = a.decidedAt ?? a.approvedAt ?? a.rejectedAt ?? a.updatedAt;
+            const decision = String(a.decision ?? (a.rejectionReason ? 'REJECTED' : (a.status === 'REJECTED' ? 'REJECTED' : 'APPROVED')));
             return {
               ...a,
               ...base,
@@ -175,6 +175,30 @@ export function useHodApprovalHistory() {
             };
           }),
         ),
+  });
+}
+
+// Fetch a single assessment by ID — used as fallback on the review page when
+// the assessment is no longer in the pending list (e.g. just approved).
+export function useAssessmentById(assessmentId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: [...hodKeys.all, 'assessment', assessmentId] as const,
+    queryFn: async () => {
+      const raw = await api.get(`/academics/assessments/${assessmentId}`).then(payloadOf) as Record<string, unknown>;
+      const base = mapAssessment(raw);
+      return {
+        ...base,
+        average: 0,
+        students: 0,
+        marked: 0,
+        highest: 0,
+        lowest: 0,
+        riskFlags: [] as string[],
+        age: base.submittedAt,
+      };
+    },
+    enabled: enabled && Boolean(assessmentId),
+    retry: false,
   });
 }
 
@@ -365,6 +389,32 @@ export function useHodTeacherDetail(teacherId: string) {
   });
 }
 
+export function useTeacherAssessmentHistory(teacherId: string) {
+  return useQuery({
+    queryKey: [...hodKeys.all, 'teacher-history', teacherId] as const,
+    staleTime: 60_000,
+    queryFn: async () => {
+      const raw = await api.get('/academics/assessments', { params: { teacherId } }).then(payloadOf);
+      const list = arrayFromApi(raw, ['assessments']) as Record<string, unknown>[];
+      return list.map((a) => {
+        const base = mapAssessment(a);
+        const stats = (a.statistics as ReviewStats | undefined) ?? EMPTY_STATS;
+        return {
+          ...base,
+          average: stats.mean > 0 ? Math.round(stats.mean) : Number(a.average ?? 0),
+          students: stats.count,
+          highest: stats.highest,
+          lowest: stats.lowest,
+          riskFlags: [] as string[],
+          age: base.submittedAt,
+          marked: stats.count,
+        };
+      });
+    },
+    enabled: Boolean(teacherId),
+  });
+}
+
 export function useHodAlerts() {
   return useQuery({
     queryKey: hodKeys.alerts(),
@@ -460,6 +510,41 @@ export function useHodStudentPerformance(studentId: string) {
   });
 }
 
+export function useStudentInterventionHistory(studentId: string) {
+  return useQuery({
+    queryKey: [...hodKeys.all, 'interventions', 'student', studentId] as const,
+    queryFn: () =>
+      api.get(`/academics/interventions/student/${studentId}`).then((r) =>
+        arrayFromApi(payloadOf(r), ['items', 'interventions']).map((raw) => {
+          const i = raw as Record<string, unknown>;
+          return {
+            id: String(i.id ?? crypto.randomUUID()),
+            type: String(i.type ?? 'OTHER'),
+            note: String(i.note ?? ''),
+            subjectName: String(i.subjectName ?? ''),
+            outcome: String(i.outcome ?? ''),
+            followUpDate: i.followUpDate ? String(i.followUpDate) : null,
+            isFollowedUp: Boolean(i.isFollowedUp ?? false),
+            createdAt: String(i.createdAt ?? ''),
+          };
+        }),
+      ),
+    enabled: Boolean(studentId),
+  });
+}
+
+export function useEscalateAlertMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ alertId, body }: { alertId: string; body: { studentId: string; subjectName?: string; note: string } }) =>
+      api.patch(`/academics/performance/alerts/${alertId}/escalate`, body).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: hodKeys.alerts() });
+      qc.invalidateQueries({ queryKey: hodKeys.interventions() });
+    },
+  });
+}
+
 export function useHodAudit() {
   return useQuery({
     queryKey: hodKeys.audit(),
@@ -531,5 +616,34 @@ export function useCreateHodAnnouncementMutation() {
     mutationFn: (body: Record<string, unknown>) =>
       api.post('/notifications/announcements', body).then((res) => res.data),
     onSuccess: () => qc.invalidateQueries({ queryKey: hodKeys.announcements() }),
+  });
+}
+
+export function useUpdateInterventionMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: Record<string, unknown> }) =>
+      api.patch(`/academics/interventions/${id}`, body).then((res) => res.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: hodKeys.interventions() });
+    },
+  });
+}
+
+export function useRejectPairingMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body?: Record<string, unknown> }) =>
+      api.patch(`/academics/performance/pairings/${id}/reject`, body ?? {}).then((res) => res.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: hodKeys.pairings() }),
+  });
+}
+
+export function useCompletePairingMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body?: Record<string, unknown> }) =>
+      api.patch(`/academics/performance/pairings/${id}/complete`, body ?? {}).then((res) => res.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: hodKeys.pairings() }),
   });
 }

@@ -94,7 +94,7 @@ class TeacherCourseDetailScreen extends StatelessWidget {
   );
 }
 
-class TeacherLessonDetailScreen extends StatelessWidget {
+class TeacherLessonDetailScreen extends ConsumerWidget {
   const TeacherLessonDetailScreen({
     super.key,
     required this.courseId,
@@ -104,39 +104,54 @@ class TeacherLessonDetailScreen extends StatelessWidget {
   final String lessonId;
 
   @override
-  Widget build(BuildContext context) => _TeacherElScaffold(
-    title: 'Linear Equations',
-    subtitle: 'Week 4 unit with content, tasks and Q&A.',
-    children: [
-      const _LessonStatusCard(),
-      _ActionCard(
-        'Text-first teacher note',
-        'Published. 39 views, optimized for low bandwidth.',
-        Icons.notes_rounded,
-        () {},
-      ),
-      _ActionCard(
-        'Worksheet PDF',
-        '420 KB. Downloadable. 28 downloads.',
-        Icons.picture_as_pdf_rounded,
-        () {},
-      ),
-      _ActionCard(
-        'Add material',
-        'Create a note, upload a file, or add a video/link.',
-        Icons.add_circle_rounded,
-        () => context.push(
-          '/teacher/courses/$courseId/lesson/$lessonId/material/new',
-        ),
-      ),
-      _ActionCard(
-        'Lesson Q&A',
-        '3 questions, 1 unresolved.',
-        Icons.forum_rounded,
-        () {},
-      ),
-    ],
-  );
+  Widget build(BuildContext context, WidgetRef ref) {
+    final lessonsAsync = ref.watch(elearningLessonsProvider(courseId));
+    final materialsAsync = ref.watch(elearningMaterialsProvider((courseId: courseId, lessonId: lessonId)));
+
+    return lessonsAsync.when(
+      loading: () => const _TeacherElScaffold(title: 'Lesson', subtitle: '', children: [Center(child: CircularProgressIndicator())]),
+      error: (e, _) => _TeacherElScaffold(title: 'Lesson', subtitle: '', children: [_ActionCard('Error', e.toString(), Icons.error_rounded, null)]),
+      data: (lessons) {
+        final lesson = lessons.where((l) => l.id == lessonId).firstOrNull;
+        return _TeacherElScaffold(
+          title: lesson?.title ?? 'Lesson',
+          subtitle: lesson != null ? 'Week ${lesson.weekNumber} · ${lesson.status}' : 'Lesson detail',
+          children: [
+            materialsAsync.when(
+              data: (materials) => Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _MetricGrid(values: [
+                    ('Materials', '${materials.length}'),
+                    ('Published', '${materials.where((m) => m.status == 'PUBLISHED').length}'),
+                    ('Total views', '${materials.fold(0, (sum, m) => sum + m.viewCount)}'),
+                  ]),
+                  const SizedBox(height: 12),
+                  ...materials.map((m) => Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: _ActionCard(
+                      m.title,
+                      '${m.type} · ${m.status} · ${m.viewCount} views',
+                      Icons.description_rounded,
+                      null,
+                    ),
+                  )),
+                ],
+              ),
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (_, __) => const SizedBox.shrink(),
+            ),
+            _ActionCard(
+              'Add material',
+              'Create a note, upload a file, or add a video/link.',
+              Icons.add_circle_rounded,
+              () => context.push('/teacher/courses/$courseId/lesson/$lessonId/material/new'),
+            ),
+          ],
+        );
+      },
+    );
+  }
 }
 
 class TeacherAddMaterialScreen extends StatelessWidget {
@@ -219,7 +234,7 @@ class TeacherAssignmentsScreen extends ConsumerWidget {
   );
 }
 
-class TeacherAssignmentDetailScreen extends StatelessWidget {
+class TeacherAssignmentDetailScreen extends ConsumerWidget {
   const TeacherAssignmentDetailScreen({
     super.key,
     required this.courseId,
@@ -229,29 +244,51 @@ class TeacherAssignmentDetailScreen extends StatelessWidget {
   final String assignmentId;
 
   @override
-  Widget build(BuildContext context) => _TeacherElScaffold(
-    title: 'Assignment Detail',
-    subtitle: 'Submissions, missing students, late work and feedback.',
-    children: [
-      const _MetricGrid(
-        values: [('Submitted', '30'), ('Missing', '12'), ('Late', '2')],
+  Widget build(BuildContext context, WidgetRef ref) {
+    final assignmentsAsync = ref.watch(elearningAssignmentsProvider(courseId));
+
+    return assignmentsAsync.when(
+      loading: () => const _TeacherElScaffold(
+        title: 'Assignment',
+        subtitle: '',
+        children: [Center(child: CircularProgressIndicator())],
       ),
-      _ActionCard(
-        'Amina Baraka Juma',
-        'Submitted text and photo. Awaiting score.',
-        Icons.rate_review_rounded,
-        () => context.push(
-          '/teacher/courses/$courseId/assignments/$assignmentId/grade/sub-1',
-        ),
+      error: (e, _) => _TeacherElScaffold(
+        title: 'Assignment',
+        subtitle: '',
+        children: [_ActionCard('Error', e.toString(), Icons.error_rounded, null)],
       ),
-      const _ActionCard(
-        'Brian Mwangi',
-        'Missing. Last opened 3 days ago.',
-        Icons.warning_rounded,
-        null,
-      ),
-    ],
-  );
+      data: (assignments) {
+        final assignment = assignments.where((a) => a.id == assignmentId).firstOrNull;
+        final dueText = assignment?.dueAt != null
+            ? 'Due ${assignment!.dueAt!.toLocal().toString().substring(0, 10)}'
+            : 'No due date';
+        return _TeacherElScaffold(
+          title: assignment?.title ?? 'Assignment',
+          subtitle: assignment != null ? '${assignment.status} · $dueText · ${assignment.type}' : 'Assignment detail',
+          children: [
+            _MetricGrid(values: [
+              ('Max score', '${assignment?.maxScore?.toStringAsFixed(0) ?? "—"}'),
+              ('Status', assignment?.status ?? '—'),
+              ('Late OK', assignment?.allowLateSubmission == true ? 'Yes' : 'No'),
+            ]),
+            const _ActionCard(
+              'Open grading desk',
+              'Use the web dashboard to review submissions, score and return feedback.',
+              Icons.open_in_browser_rounded,
+              null,
+            ),
+            _ActionCard(
+              'View all assignments',
+              'Back to course assignment list',
+              Icons.arrow_back_rounded,
+              () => context.pop(),
+            ),
+          ],
+        );
+      },
+    );
+  }
 }
 
 class TeacherGradeSubmissionScreen extends StatelessWidget {
@@ -283,7 +320,7 @@ class TeacherGradeSubmissionScreen extends StatelessWidget {
   );
 }
 
-class TeacherQuizDetailScreen extends StatelessWidget {
+class TeacherQuizDetailScreen extends ConsumerWidget {
   const TeacherQuizDetailScreen({
     super.key,
     required this.courseId,
@@ -293,31 +330,49 @@ class TeacherQuizDetailScreen extends StatelessWidget {
   final String quizId;
 
   @override
-  Widget build(BuildContext context) => _TeacherElScaffold(
-    title: 'Quiz Workspace',
-    subtitle: 'Build, preview, publish, see results and mark short answers.',
-    children: [
-      _ActionCard(
-        'Question builder',
-        'MCQ, true/false, short answer, points and explanations.',
-        Icons.edit_note_rounded,
-        () =>
-            context.push('/teacher/courses/$courseId/quizzes/$quizId/builder'),
+  Widget build(BuildContext context, WidgetRef ref) {
+    final quizAsync = ref.watch(elearningQuizProvider((courseId: courseId, quizId: quizId)));
+
+    return quizAsync.when(
+      loading: () => const _TeacherElScaffold(
+        title: 'Quiz',
+        subtitle: '',
+        children: [Center(child: CircularProgressIndicator())],
       ),
-      const _ActionCard(
-        'Results',
-        '42 attempts, 69% average, 9 manual marks pending.',
-        Icons.bar_chart_rounded,
-        null,
+      error: (e, _) => _TeacherElScaffold(
+        title: 'Quiz',
+        subtitle: '',
+        children: [_ActionCard('Error', e.toString(), Icons.error_rounded, null)],
       ),
-      const _ActionCard(
-        'Manual short-answer marking',
-        'Jabir Hassan has 2 responses awaiting marks.',
-        Icons.rate_review_rounded,
-        null,
-      ),
-    ],
-  );
+      data: (quiz) {
+        final qCount = quiz.questions.length;
+        final timeLabel = quiz.timeLimitMinutes != null ? '${quiz.timeLimitMinutes} min limit' : 'No time limit';
+        return _TeacherElScaffold(
+          title: quiz.title,
+          subtitle: '${quiz.status} · $qCount questions · ${quiz.totalPoints.toStringAsFixed(0)} pts · $timeLabel',
+          children: [
+            _MetricGrid(values: [
+              ('Questions', '$qCount'),
+              ('Pass mark', quiz.passingScore != null ? '${quiz.passingScore}%' : '—'),
+              ('Attempts', '${quiz.maxAttempts}'),
+            ]),
+            _ActionCard(
+              'Question builder',
+              'MCQ, true/false, short answer, points and explanations.',
+              Icons.edit_note_rounded,
+              () => context.push('/teacher/courses/$courseId/quizzes/$quizId/builder'),
+            ),
+            _ActionCard(
+              'Results and manual marking',
+              'View attempts, scores and mark short-answer responses.',
+              Icons.bar_chart_rounded,
+              () => context.push('/teacher/courses/$courseId/quizzes/$quizId/results'),
+            ),
+          ],
+        );
+      },
+    );
+  }
 }
 
 class TeacherQuizBuilderScreen extends StatelessWidget {
@@ -415,7 +470,7 @@ class _TeacherCourseCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => _ActionCard(
-    '${course.subjectName} · ${course.className}',
+    '${course.subjectName} · ${course.className} · ${course.stageLabel}',
     '${course.lessons.length} lessons · ${course.enrolledCount} students · ${course.status}',
     Icons.school_rounded,
     onTap,
@@ -494,6 +549,7 @@ class _FormCard extends StatelessWidget {
         children: fields
             .map(
               (field) => Padding(
+                key: ValueKey(field),
                 padding: const EdgeInsets.only(bottom: 12),
                 child: TextField(
                   decoration: InputDecoration(
@@ -523,10 +579,10 @@ class _LongInputCard extends StatelessWidget {
         children: [
           Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
           const SizedBox(height: 10),
-          TextField(
+          TextFormField(
+            initialValue: text,
             minLines: 4,
             maxLines: 7,
-            controller: TextEditingController(text: text),
             decoration: const InputDecoration(border: OutlineInputBorder()),
           ),
         ],
@@ -584,15 +640,6 @@ class _ReadinessCard extends StatelessWidget {
       '3 quizzes',
       'Parent visibility',
     ],
-  );
-}
-
-class _LessonStatusCard extends StatelessWidget {
-  const _LessonStatusCard();
-
-  @override
-  Widget build(BuildContext context) => const _MetricGrid(
-    values: [('Materials', '4'), ('Q&A', '3'), ('Progress', '84%')],
   );
 }
 

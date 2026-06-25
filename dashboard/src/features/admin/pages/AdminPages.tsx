@@ -1,4 +1,4 @@
-﻿import { AlertTriangle, CheckCircle2, ChevronDown, Download, Play, Plus, Shield, Trash2, UserPlus } from 'lucide-react';
+﻿import { AlertTriangle, ArrowLeft, CheckCircle2, ChevronDown, Database, Download, Edit2, Key, Lock, Play, Plus, Shield, Trash2, Unlock, UserPlus, X } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from 'react';
 import { downloadReportWhenReady } from '../../operations/api/operations.hooks';
 import { NavLink, useNavigate, useParams } from 'react-router-dom';
@@ -19,6 +19,7 @@ import {
   useAdminSubjects,
   useAdminUsers,
   useAcademicYears,
+  useTerms,
   useAssessmentTypes,
   useClassPathways,
   useGradingScales,
@@ -45,6 +46,39 @@ import {
   useUpdateUserMutation,
   useRunEngineAdminMutation,
   useSendManualNotificationMutation,
+  useCreateAcademicYearMutation,
+  useCreateTermMutation,
+  useDeleteAcademicYearMutation,
+  useDeleteTermMutation,
+  useDeleteClassMutation,
+  useDeleteSubjectMutation,
+  useDeleteGradingScaleMutation,
+  useUpdateSubjectMutation,
+  useUpdateClassMutation,
+  useUpdateNotificationTemplateMutation,
+  useStudentGuardians,
+  useStudentAttendance,
+  useStudentPerformance,
+  useStudentFinance,
+  useStudentDiscipline,
+  useUpdateStudentMutation,
+  useAddGuardianMutation,
+  useStudentPortalInviteMutation,
+  useStudentPortalPasswordResetMutation,
+  useClearCacheMutation,
+  useCancelAnnouncementMutation,
+  useCreateAnnouncementAdminMutation,
+  useDeleteFeeCategoryMutation,
+  useCreateFeeCategoryMutation,
+  useAssignSubjectToClassMutation,
+  useUnassignSubjectFromClassMutation,
+  useDepartments,
+  useCreateDepartmentMutation,
+  useUpdateDepartmentMutation,
+  useDeleteDepartmentMutation,
+  useDepartmentHods,
+  useAssignHodMutation,
+  useRemoveHodMutation,
 } from '../api/admin.hooks';
 import { useFeeCategories } from '../../finance/api/finance.hooks';
 import { useAnnouncements } from '../../common/common.hooks';
@@ -60,7 +94,7 @@ import { DataError } from '../../../components/feedback/DataError';
 import { EmptyState } from '../../../components/feedback/EmptyState';
 import { SkeletonTable } from '../../../components/common/SkeletonTable';
 
-// â”€â”€â”€ Home â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â"€â"€â"€ Home â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 export function AdminHomePage() {
   const { data: apiServiceHealth = [] as typeof serviceHealth } = useServiceHealth() as unknown as { data: typeof serviceHealth };
@@ -97,6 +131,7 @@ export function AdminHomePage() {
             <AdminQuickCard title="System Audit"           detail="Security and settings events."                    to="/admin/audit/system"            icon="eye"    />
             <AdminQuickCard title="System Status"          detail="Live service health and incident surface."         to="/admin/system-status"           icon="eye"    />
             <AdminQuickCard title="System Settings"        detail="Providers, versions, feature flags."              to="/admin/settings/system"                       />
+            <AdminQuickCard title="Departments"           detail="Department registry, HOD assignments."            to="/admin/departments"             icon="shield"  />
           </div>
         </div>
         <div className="space-y-4">
@@ -115,11 +150,21 @@ export function AdminHomePage() {
   );
 }
 
-// â”€â”€â”€ Users â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â"€â"€â"€ Users â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 export function AdminUsersPage() {
   return (
     <AdminShell title="User Management" eyebrow="Accounts, roles, security">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm font-semibold text-ks-muted">Manage all staff accounts, roles, and access permissions.</p>
+        <NavLink
+          to="/admin/users/create"
+          className="inline-flex items-center gap-2 rounded-xl bg-[#4338CA] px-4 py-2.5 text-sm font-black text-white shadow-sm transition hover:bg-[#3730a3]"
+        >
+          <UserPlus className="h-4 w-4" />
+          Register New User
+        </NavLink>
+      </div>
       <CsvImportZone entity="staff user" />
       <UsersTable />
     </AdminShell>
@@ -133,6 +178,7 @@ function UsersTable() {
   const resetPwMutation = useResetUserPwMutation();
   const [pending, setPending] = useState<Record<string, string>>({});
   const [userSearch, setUserSearch] = useState('');
+  const [resetResult, setResetResult] = useState<{ name: string; email: string; password: string } | null>(null);
 
   const handleToggle = (id: string, currentStatus: string) => {
     setPending((p) => ({ ...p, [id]: 'toggle' }));
@@ -149,10 +195,18 @@ function UsersTable() {
     }
   };
 
-  const handleResetPw = (id: string, name: string) => {
+  const handleResetPw = (id: string, name: string, email: string) => {
+    setPending((p) => ({ ...p, [id]: 'reset' }));
     resetPwMutation.mutate(id, {
-      onSuccess: () => toast(`Password reset link sent to ${name}`, 'success'),
-      onError: () => toast('Failed to send password reset', 'error'),
+      onSuccess: (result: any) => {
+        const tempPassword = String(result?.temporaryPassword ?? '');
+        setPending((p) => { const n = { ...p }; delete n[id]; return n; });
+        setResetResult({ name, email, password: tempPassword });
+      },
+      onError: () => {
+        setPending((p) => { const n = { ...p }; delete n[id]; return n; });
+        toast('Failed to reset password', 'error');
+      },
     });
   };
 
@@ -167,62 +221,97 @@ function UsersTable() {
   if (isError) return <DataError onRetry={refetch} />;
   if (!apiUsers.length) return <EmptyState title="No users found" description="Create the first user account to get started." />;
   return (
-    <AdminDataTable columns={['Name', 'Email', 'Role', 'Status', 'Linked Entity', 'Last Login', 'Actions']} onSearch={setUserSearch}>
-      {visibleUsers.map((user) => (
-        <tr key={user.id} className="hover:bg-slate-50">
-          <Td>
-            <p className="font-black text-slate-900">{user.name}</p>
-          </Td>
-          <Td className="text-slate-500">{user.email}</Td>
-          <Td>
-            <Badge tone={user.role === 'SYSTEM_ADMIN' || user.role === 'ADMIN' ? 'rose' : 'blue'}>{user.role}</Badge>
-          </Td>
-          <Td>
-            <Badge tone={user.status === 'ACTIVE' ? 'emerald' : user.status === 'LOCKED' ? 'amber' : 'slate'}>
-              {user.status}
-            </Badge>
-          </Td>
-          <Td className="text-slate-500">{user.linked}</Td>
-          <Td className="text-xs text-slate-400">{String(user.lastLogin ?? '').slice(0, 10)}</Td>
-          <Td>
-            <div className="flex items-center gap-3">
-              <NavLink className="text-xs font-black text-[#4338CA] hover:underline" to={`/admin/users/${user.id}`}>Edit</NavLink>
-              <button
-                disabled={!!pending[user.id]}
-                onClick={() => handleToggle(user.id, user.status)}
-                className="text-xs font-black text-slate-500 transition hover:text-slate-900 disabled:opacity-40"
-              >
-                {pending[user.id] ? 'â€¦' : user.status === 'LOCKED' ? 'Unlock' : 'Lock'}
-              </button>
-              <button
-                onClick={() => handleResetPw(user.id, user.name)}
-                className="text-xs font-black text-slate-400 transition hover:text-slate-700"
-              >
-                Reset PW
-              </button>
+    <div className="space-y-4">
+      {resetResult && (
+        <div className="flex items-start gap-4 rounded-2xl border border-amber-200 bg-amber-50 p-5">
+          <div className="flex-1">
+            <p className="text-sm font-black text-amber-900">Password reset — share these credentials with {resetResult.name}</p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              <div className="rounded-xl border border-amber-200 bg-white px-4 py-2.5">
+                <p className="text-[10px] font-black uppercase tracking-widest text-amber-500">Email</p>
+                <p className="mt-0.5 font-mono text-sm font-black text-slate-800">{resetResult.email}</p>
+              </div>
+              <div className="rounded-xl border border-amber-200 bg-white px-4 py-2.5">
+                <p className="text-[10px] font-black uppercase tracking-widest text-amber-500">Temporary Password</p>
+                <p className="mt-0.5 font-mono text-sm font-black text-slate-800">{resetResult.password}</p>
+              </div>
             </div>
-          </Td>
-        </tr>
-      ))}
-    </AdminDataTable>
+            <p className="mt-2 text-xs font-semibold text-amber-700">The user will be asked to change this password on first login.</p>
+          </div>
+          <button onClick={() => setResetResult(null)} className="shrink-0 text-amber-400 hover:text-amber-600">✕</button>
+        </div>
+      )}
+      <AdminDataTable columns={['Name', 'Email', 'Role', 'Status', 'Linked Entity', 'Last Login', 'Actions']} onSearch={setUserSearch}>
+        {visibleUsers.map((user) => (
+          <tr key={user.id} className="hover:bg-slate-50">
+            <Td>
+              <p className="font-black text-slate-900">{user.name}</p>
+            </Td>
+            <Td className="text-slate-500">{user.email}</Td>
+            <Td>
+              <Badge tone={user.role === 'SYSTEM_ADMIN' || user.role === 'ADMIN' ? 'rose' : 'blue'}>{roleLabel(user.role)}</Badge>
+            </Td>
+            <Td>
+              <Badge tone={user.status === 'ACTIVE' ? 'emerald' : user.status === 'LOCKED' ? 'amber' : 'slate'}>
+                {user.status}
+              </Badge>
+            </Td>
+            <Td className="text-slate-500">{user.linked}</Td>
+            <Td className="text-xs text-slate-400">{String(user.lastLogin ?? '').slice(0, 10)}</Td>
+            <Td>
+              <div className="flex items-center gap-3">
+                <NavLink className="text-xs font-black text-[#4338CA] hover:underline" to={`/admin/users/${user.id}`}>Edit</NavLink>
+                <button
+                  disabled={!!pending[user.id]}
+                  onClick={() => handleToggle(user.id, user.status)}
+                  className="text-xs font-black text-slate-500 transition hover:text-slate-900 disabled:opacity-40"
+                >
+                  {pending[user.id] === 'toggle' ? '…' : user.status === 'LOCKED' ? 'Unlock' : 'Lock'}
+                </button>
+                <button
+                  disabled={!!pending[user.id]}
+                  onClick={() => handleResetPw(user.id, user.name, user.email)}
+                  className="text-xs font-black text-slate-400 transition hover:text-slate-700 disabled:opacity-40"
+                >
+                  {pending[user.id] === 'reset' ? '…' : 'Reset PW'}
+                </button>
+              </div>
+            </Td>
+          </tr>
+        ))}
+      </AdminDataTable>
+    </div>
   );
 }
 
-// â”€â”€â”€ Create / Edit user â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â"€â"€â"€ Create / Edit user â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
+
+const ROLE_LABELS: Record<string, string> = {
+  TEACHER:            'Teacher',
+  HEAD_OF_DEPARTMENT: 'Head of Department',
+  ACADEMIC_QA:        'AQA Officer',
+  FINANCE:            'Finance Officer',
+  PRINCIPAL:          'Head master / Head of School',
+  SYSTEM_ADMIN:       'System Admin',
+};
+
+function roleLabel(role: string): string {
+  return ROLE_LABELS[role] ?? role;
+}
 
 const ROLE_OPTIONS = [
-  { value: 'TEACHER',            label: 'Teacher'            },
-  { value: 'HEAD_OF_DEPARTMENT', label: 'Head of Department' },
-  { value: 'ACADEMIC_QA',        label: 'AQA Officer'        },
-  { value: 'FINANCE',            label: 'Finance Officer'    },
-  { value: 'PRINCIPAL',          label: 'Principal'          },
-  { value: 'SYSTEM_ADMIN',       label: 'System Admin'       },
+  { value: 'TEACHER',            label: 'Teacher'                       },
+  { value: 'HEAD_OF_DEPARTMENT', label: 'Head of Department'            },
+  { value: 'ACADEMIC_QA',        label: 'AQA Officer'                   },
+  { value: 'FINANCE',            label: 'Finance Officer'               },
+  { value: 'PRINCIPAL',          label: 'Head master / Head of School'  },
+  { value: 'SYSTEM_ADMIN',       label: 'System Admin'                  },
 ];
 
 const STATUS_OPTIONS = [
-  { value: 'ACTIVE',   label: 'Active â€” can log in'             },
-  { value: 'INACTIVE', label: 'Inactive â€” no access'            },
-  { value: 'PENDING',  label: 'Pending â€” first login required'  },
+  { value: 'ACTIVE',   label: 'Active'   },
+  { value: 'INACTIVE', label: 'Inactive' },
+  { value: 'PENDING',  label: 'Pending'  },
 ];
 
 const DEPARTMENT_OPTIONS = [
@@ -235,7 +324,7 @@ const DEPARTMENT_OPTIONS = [
   { value: 'Primary Department', label: 'Primary Department' },
   { value: 'Academic Quality Assurance', label: 'Academic Quality Assurance' },
   { value: 'Finance Office', label: 'Finance Office' },
-  { value: 'Principal Office', label: 'Principal Office' },
+  { value: 'Principal Office', label: 'Headmaster\'s Office' },
   { value: 'System Administration', label: 'System Administration' },
 ];
 
@@ -342,7 +431,7 @@ export function CreateUserPage() {
                 <div className="mt-4 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
                   <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
                   <p className="text-sm font-semibold text-amber-800">
-                    <span className="font-black">{role}</span> is a privileged role with elevated system access.
+                    <span className="font-black">{roleLabel(role)}</span> is a privileged role with elevated system access.
                     Confirm this assignment is authorised before creating.
                   </p>
                 </div>
@@ -372,7 +461,7 @@ export function CreateUserPage() {
 
           {/* Permissions preview sidebar */}
           <div className="h-fit rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">Permissions for {role}</p>
+            <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">Permissions for {roleLabel(role)}</p>
             <ul className="mt-4 space-y-2.5">
               {rolePermissions(role).map((perm) => (
                 <li key={perm} className="flex items-start gap-2 text-sm font-semibold text-slate-700">
@@ -390,13 +479,169 @@ export function CreateUserPage() {
 
 export function UserDetailPage() {
   const { loading, user } = useUser();
-  if (loading) return <AdminShell title="Loadingâ€¦" eyebrow="User detail"><SkeletonTable cols={4} /></AdminShell>;
+  const navigate = useNavigate();
+  const deactivateMutation = useDeactivateUserMutation();
+  const activateMutation = useActivateUserMutation();
+  const resetPwMutation = useResetUserPwMutation();
+  const [pending, setPending] = React.useState<string | null>(null);
+  const [resetResult, setResetResult] = React.useState<string | null>(null);
+  const [dangerInput, setDangerInput] = React.useState('');
+  const [dangerNote, setDangerNote] = React.useState('');
+
+  if (loading) return <AdminShell title="Loading…" eyebrow="User detail"><SkeletonTable cols={4} /></AdminShell>;
   if (!user) return <AdminShell title="Not Found" eyebrow="User detail"><EmptyState title="User not found" description="This user account does not exist." /></AdminShell>;
+
+  const handleToggle = () => {
+    setPending('toggle');
+    if (user.status === 'ACTIVE' || user.status === 'INACTIVE') {
+      deactivateMutation.mutate(user.id, {
+        onSuccess: () => { toast('User locked', 'warning'); setPending(null); },
+        onError: () => { toast('Failed to lock user', 'error'); setPending(null); },
+      });
+    } else {
+      activateMutation.mutate(user.id, {
+        onSuccess: () => { toast('User unlocked', 'success'); setPending(null); },
+        onError: () => { toast('Failed to unlock user', 'error'); setPending(null); },
+      });
+    }
+  };
+
+  const handleResetPw = () => {
+    setPending('reset');
+    resetPwMutation.mutate(user.id, {
+      onSuccess: (result: any) => {
+        setResetResult(String(result?.temporaryPassword ?? '(check email)'));
+        setPending(null);
+      },
+      onError: () => { toast('Failed to reset password', 'error'); setPending(null); },
+    });
+  };
+
+  const handleDeactivate = () => {
+    if (dangerInput !== 'DEACTIVATE') return;
+    setPending('deactivate');
+    deactivateMutation.mutate(user.id, {
+      onSuccess: () => { toast('User deactivated', 'warning'); navigate('/admin/users'); },
+      onError: () => { toast('Failed to deactivate', 'error'); setPending(null); },
+    });
+  };
+
+  const isLocked = user.status === 'LOCKED';
+
   return (
     <AdminShell title={user.name} eyebrow="User detail and security">
+      <NavLink to="/admin/users" className="inline-flex items-center gap-1.5 text-sm font-black text-[#4338CA] hover:underline">
+        <ArrowLeft className="h-4 w-4" /> Back to Users
+      </NavLink>
+
       <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_360px]">
-        <UsersTable />
-        <DangerActionDialog title="Deactivate User" entity={user.email} confirmation="DEACTIVATE" />
+        <div className="space-y-gutter">
+          {/* Identity card */}
+          <AdminFormSection title="Identity" subtitle="Staff identity and access details">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">Full Name</p>
+                <p className="mt-1 font-black text-slate-900">{user.name}</p>
+              </div>
+              <div>
+                <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">Email Address</p>
+                <p className="mt-1 font-mono text-sm text-slate-700">{user.email}</p>
+              </div>
+              <div>
+                <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">Role</p>
+                <div className="mt-1">
+                  <Badge tone={user.role === 'SYSTEM_ADMIN' || user.role === 'ADMIN' ? 'rose' : 'blue'}>{roleLabel(user.role)}</Badge>
+                </div>
+              </div>
+              <div>
+                <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">Account Status</p>
+                <div className="mt-1">
+                  <Badge tone={user.status === 'ACTIVE' ? 'emerald' : user.status === 'LOCKED' ? 'amber' : 'slate'}>{user.status}</Badge>
+                </div>
+              </div>
+              <div>
+                <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">Linked Department</p>
+                <p className="mt-1 text-sm font-semibold text-slate-700">{user.linked || '—'}</p>
+              </div>
+              <div>
+                <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">Last Login</p>
+                <p className="mt-1 text-sm font-semibold text-slate-500">{user.lastLogin ? String(user.lastLogin).slice(0, 10) : 'Never'}</p>
+              </div>
+            </div>
+            <NavLink
+              to={`/admin/users/${user.id}/edit`}
+              className="mt-4 inline-flex items-center gap-2 rounded-xl bg-[#4338CA] px-4 py-2.5 text-sm font-black text-white shadow-sm transition hover:bg-[#3730a3]"
+            >
+              <Edit2 className="h-4 w-4" /> Edit User
+            </NavLink>
+          </AdminFormSection>
+
+          {/* Security Actions */}
+          <AdminFormSection title="Security Actions" subtitle="Account lock state and password management">
+            <div className="flex flex-wrap gap-3">
+              <button
+                disabled={!!pending}
+                onClick={handleToggle}
+                className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-black shadow-sm transition disabled:opacity-40 ${
+                  isLocked ? 'bg-emerald-500 text-white hover:bg-emerald-600' : 'bg-amber-500 text-white hover:bg-amber-600'
+                }`}
+              >
+                {isLocked ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
+                {pending === 'toggle' ? 'Processing…' : isLocked ? 'Unlock Account' : 'Lock Account'}
+              </button>
+              <button
+                disabled={!!pending}
+                onClick={handleResetPw}
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-black text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-40"
+              >
+                <Key className="h-4 w-4" />
+                {pending === 'reset' ? 'Resetting…' : 'Reset Password'}
+              </button>
+            </div>
+            {resetResult && (
+              <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-sm font-black text-amber-900">Temporary password — share with {user.name}</p>
+                  <button onClick={() => setResetResult(null)}><X className="h-4 w-4 text-amber-400" /></button>
+                </div>
+                <p className="mt-2 font-mono text-lg font-black text-amber-800">{resetResult}</p>
+                <p className="mt-1 text-xs font-semibold text-amber-700">User must change this on first login.</p>
+              </div>
+            )}
+          </AdminFormSection>
+        </div>
+
+        {/* Danger Zone */}
+        <div className="h-fit rounded-2xl border border-rose-200 bg-rose-50 p-6">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-rose-500" />
+            <div>
+              <h3 className="font-display text-lg font-black text-rose-800">Danger Zone</h3>
+              <p className="mt-1 text-sm font-semibold text-rose-700">Permanently deactivate this account. Action is logged in the audit trail.</p>
+            </div>
+          </div>
+          <div className="mt-5 space-y-3">
+            <input
+              value={dangerInput}
+              onChange={(e) => setDangerInput(e.target.value)}
+              placeholder="Type DEACTIVATE to confirm"
+              className="h-10 w-full rounded-xl border border-rose-200 bg-white px-3 font-mono text-sm font-black outline-none focus:border-rose-400"
+            />
+            <textarea
+              value={dangerNote}
+              onChange={(e) => setDangerNote(e.target.value)}
+              placeholder="Audit note required…"
+              className="h-20 w-full rounded-xl border border-rose-200 bg-white p-3 text-sm font-semibold outline-none focus:border-rose-400"
+            />
+            <button
+              disabled={dangerInput !== 'DEACTIVATE' || !!pending}
+              onClick={handleDeactivate}
+              className="w-full rounded-xl bg-rose-600 py-2.5 text-sm font-black text-white transition hover:bg-rose-700 disabled:opacity-40"
+            >
+              {pending === 'deactivate' ? 'Deactivating…' : 'Deactivate Account'}
+            </button>
+          </div>
+        </div>
       </div>
     </AdminShell>
   );
@@ -422,7 +667,7 @@ export function EditUserPage() {
   const isPrivileged = roleRisk(role) === 'high';
   const handleRoleChange = (nextRole: string) => { setRole(nextRole); setLinked(defaultDepartmentForRole(nextRole)); };
 
-  if (loading) return <AdminShell title="Loadingâ€¦" eyebrow="Account update"><SkeletonTable cols={3} /></AdminShell>;
+  if (loading) return <AdminShell title="Loading…" eyebrow="Account update"><SkeletonTable cols={3} /></AdminShell>;
   if (!user) return <AdminShell title="Not Found" eyebrow="Account update"><EmptyState title="User not found" description="This user account does not exist." /></AdminShell>;
 
   const handleSave = () => {
@@ -451,16 +696,16 @@ export function EditUserPage() {
             {isPrivileged && (
               <div className="mt-4 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
                 <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
-                <p className="text-sm font-semibold text-amber-800"><span className="font-black">{role}</span> is a privileged role. Confirm authorisation before saving.</p>
+                <p className="text-sm font-semibold text-amber-800"><span className="font-black">{roleLabel(role)}</span> is a privileged role. Confirm authorisation before saving.</p>
               </div>
             )}
           </AdminFormSection>
           <Button className="rounded-xl bg-[#4338CA]" disabled={updateMutation.isPending} onClick={handleSave}>
-            {updateMutation.isPending ? 'Savingâ€¦' : 'Save User'}
+            {updateMutation.isPending ? 'Saving…' : 'Save User'}
           </Button>
         </div>
         <div className="h-fit rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">Permissions for {role}</p>
+          <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">Permissions for {roleLabel(role)}</p>
           <ul className="mt-4 space-y-2.5">
             {rolePermissions(role).map((perm) => (
               <li key={perm} className="flex items-start gap-2 text-sm font-semibold text-slate-700">
@@ -474,20 +719,22 @@ export function EditUserPage() {
   );
 }
 
-// â”€â”€â”€ Academic setup hub â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â"€â"€â"€ Academic setup hub â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 export function AcademicSetupHubPage() {
   const { data: apiPathways = [] as typeof classPathways } = useClassPathways() as unknown as { data: typeof classPathways };
-  const cards: [string, string][] = [
-    ['Academic Years',         '/admin/academic/setup'],
-    ['Terms',                  '/admin/academic/setup'],
-    ['Mixed School Classes',   '/admin/classes'],
-    ['Stage Subjects',         '/admin/subjects'],
-    ['Class Subjects',         '/admin/academic/setup'],
-    ['Grading Scales',         '/admin/grading'],
-    ['Assessment Types',       '/admin/assessment-types'],
-    ['Stage Configuration',    '/admin/academic/stage-config'],
-    ['Cross-Stage Promotion',  '/admin/academic/promotion/cross-stage'],
+  const { data: apiYears = [] } = useAcademicYears();
+  const { data: apiTerms = [] } = useTerms();
+  const cards: [string, string, string][] = [
+    ['Academic Years',        `/admin/academic/years`,                  `${(apiYears as any[]).length} year${(apiYears as any[]).length !== 1 ? 's' : ''} configured`],
+    ['Terms',                 `/admin/academic/terms`,                  `${(apiTerms as any[]).length} term${(apiTerms as any[]).length !== 1 ? 's' : ''} configured`],
+    ['Mixed School Classes',  '/admin/classes',                         'Manage classes & streams'],
+    ['Stage Subjects',        '/admin/subjects',                        'Subjects by education stage'],
+    ['Class Subjects',        '/admin/academic/class-subjects',         'Per-class subject assignments'],
+    ['Grading Scales',        '/admin/grading',                        'Grade boundaries & scales'],
+    ['Assessment Types',      '/admin/assessment-types',                'CAT, exam, assignment weights'],
+    ['Stage Configuration',   '/admin/academic/stage-config',           'Stage rules & terminal years'],
+    ['Cross-Stage Promotion', '/admin/academic/promotion/cross-stage',  'Promotion & graduation rules'],
   ];
   return (
     <AdminShell title="Academic Setup Hub" eyebrow="School academic structure">
@@ -498,15 +745,479 @@ export function AcademicSetupHubPage() {
         { label: 'Pathways', value: String(apiPathways.length), detail: 'Promotion and graduation map', tone: 'rose' },
       ]} />
       <div className="grid gap-gutter md:grid-cols-2 xl:grid-cols-4">
-        {cards.map(([title, to]) => (
-          <AdminQuickCard key={title} title={title} detail="Setup active Â· last updated today." to={to} />
+        {cards.map(([title, to, detail]) => (
+          <AdminQuickCard key={title} title={title} detail={detail} to={to} />
         ))}
       </div>
     </AdminShell>
   );
 }
 
-// â”€â”€â”€ Classes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Academic Years ───────────────────────────────────────────────────────────
+
+export function AcademicYearsPage() {
+  const { data: apiYears = [] } = useAcademicYears();
+  const { data: apiTerms = [] } = useTerms();
+  const createYearMutation = useCreateAcademicYearMutation();
+  const deleteYearMutation = useDeleteAcademicYearMutation();
+  const [form, setForm] = useState({ name: '', startDate: '', endDate: '', isCurrent: false });
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const termsFor = (yearId: string) =>
+    (apiTerms as any[]).filter((t: any) => String(t.academicYearId) === String(yearId));
+
+  const submit = () => {
+    if (!form.name || !form.startDate || !form.endDate) {
+      toast('Name, start date and end date are required.', 'warning'); return;
+    }
+    createYearMutation.mutate(
+      { name: form.name, startDate: form.startDate, endDate: form.endDate, isCurrent: form.isCurrent },
+      {
+        onSuccess: () => { toast('Academic year created.', 'success'); setForm({ name: '', startDate: '', endDate: '', isCurrent: false }); },
+        onError: (e: any) => toast(e?.response?.data?.message ?? 'Failed to create academic year.', 'error'),
+      },
+    );
+  };
+
+  const startDelete = (id: string) => { setPendingDeleteId(id); setDeleteError(null); };
+  const cancelDelete = () => { setPendingDeleteId(null); setDeleteError(null); };
+  const confirmDelete = (id: string) => {
+    deleteYearMutation.mutate(id, {
+      onSuccess: () => { setPendingDeleteId(null); setDeleteError(null); toast('Academic year deleted.', 'success'); },
+      onError: (e: any) => setDeleteError(e?.response?.data?.message ?? 'Failed to delete academic year.'),
+    });
+  };
+
+  const years = (apiYears as any[]).slice().sort((a: any, b: any) =>
+    String(b.name ?? b.year ?? '').localeCompare(String(a.name ?? a.year ?? '')));
+
+  return (
+    <AdminShell title="Academic Years" eyebrow="Academic Setup">
+      <AdminFormSection title="Create Academic Year" subtitle="Define the start and end of a school year.">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <Field label="Year Name" value={form.name} placeholder="e.g. 2027 Academic Year"
+            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
+          <Field label="Start Date" type="date" value={form.startDate}
+            onChange={(e) => setForm((f) => ({ ...f, startDate: e.target.value }))} />
+          <Field label="End Date" type="date" value={form.endDate}
+            onChange={(e) => setForm((f) => ({ ...f, endDate: e.target.value }))} />
+          <div className="flex items-end pb-1">
+            <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 hover:border-slate-300">
+              <input type="checkbox" checked={form.isCurrent}
+                onChange={(e) => setForm((f) => ({ ...f, isCurrent: e.target.checked }))}
+                className="h-4 w-4 rounded accent-[#4338CA]" />
+              <span className="text-sm font-black text-slate-800">Set as current year</span>
+            </label>
+          </div>
+        </div>
+        <div className="mt-4">
+          <Button className="rounded-xl bg-[#4338CA]" loading={createYearMutation.isPending} onClick={submit}>
+            Create Academic Year
+          </Button>
+        </div>
+      </AdminFormSection>
+
+      <AdminFormSection title="All Academic Years" subtitle={`${years.length} year${years.length !== 1 ? 's' : ''} in the system`}>
+        {years.length === 0 ? (
+          <p className="py-4 text-sm font-semibold text-slate-500">No academic years yet. Create one above.</p>
+        ) : (
+          <div className="overflow-hidden rounded-xl border border-slate-200">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-[#1E1B4B] text-[11px] font-black uppercase tracking-widest text-white">
+                <tr>
+                  {['Year Name', 'Start Date', 'End Date', 'Terms', 'Status', ''].map((h) => (
+                    <th key={h} className="px-5 py-3">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {years.map((year: any) => {
+                  const terms = termsFor(year.id);
+                  const isCurrent = year.isCurrent === true || year.isActive === true;
+                  const isPending = pendingDeleteId === year.id;
+                  return (
+                    <tr key={year.id} className={isPending ? 'bg-red-50' : 'hover:bg-slate-50'}>
+                      <Td><span className="font-black text-slate-900">{year.name ?? year.year}</span></Td>
+                      <Td>{year.startDate ? new Date(year.startDate).toLocaleDateString() : '—'}</Td>
+                      <Td>{year.endDate ? new Date(year.endDate).toLocaleDateString() : '—'}</Td>
+                      <Td>{terms.length} term{terms.length !== 1 ? 's' : ''}</Td>
+                      <Td>
+                        {isCurrent
+                          ? <Badge tone="emerald">Current</Badge>
+                          : <Badge tone="slate">Past</Badge>}
+                      </Td>
+                      <Td>
+                        {isPending ? (
+                          <div className="flex flex-col gap-1.5">
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => confirmDelete(year.id)}
+                                disabled={deleteYearMutation.isPending}
+                                className="rounded-lg bg-red-600 px-3 py-1 text-xs font-black text-white hover:bg-red-700 disabled:opacity-50"
+                              >
+                                {deleteYearMutation.isPending ? 'Deleting…' : 'Yes, delete'}
+                              </button>
+                              <button
+                                onClick={cancelDelete}
+                                className="rounded-lg border border-slate-200 px-3 py-1 text-xs font-black text-slate-600 hover:bg-slate-100"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                            {deleteError && (
+                              <p className="flex items-start gap-1 text-[11px] font-semibold leading-tight text-red-600">
+                                <AlertTriangle className="mt-px h-3 w-3 shrink-0" />{deleteError}
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <button
+                            onClick={isCurrent ? undefined : () => startDelete(year.id)}
+                            disabled={isCurrent}
+                            title={isCurrent ? 'Cannot delete the current academic year — set another year as current first' : 'Delete this year'}
+                            className={`rounded-lg p-1.5 transition-colors ${isCurrent ? 'cursor-not-allowed text-slate-300' : 'text-slate-400 hover:bg-red-50 hover:text-red-600'}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
+                      </Td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </AdminFormSection>
+    </AdminShell>
+  );
+}
+
+// ─── Terms ────────────────────────────────────────────────────────────────────
+
+export function TermsPage() {
+  const { data: apiYears = [] } = useAcademicYears();
+  const { data: apiTerms = [] } = useTerms();
+  const createTermMutation = useCreateTermMutation();
+  const deleteTermMutation = useDeleteTermMutation();
+
+  const currentYear = (apiYears as any[]).find((y: any) => y.isCurrent === true || y.isActive === true)
+    ?? (apiYears as any[])[0];
+
+  const [form, setForm] = useState({ name: '', termNumber: '1', startDate: '', endDate: '', academicYearId: '' });
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (currentYear && !form.academicYearId) {
+      setForm((f) => ({ ...f, academicYearId: String(currentYear.id) }));
+    }
+  }, [currentYear?.id]);
+
+  const yearOptions = (apiYears as any[]).map((y: any) => ({ value: String(y.id), label: String(y.name ?? y.year) }));
+
+  const submit = () => {
+    if (!form.name || !form.startDate || !form.endDate || !form.academicYearId) {
+      toast('All fields are required.', 'warning'); return;
+    }
+    createTermMutation.mutate(
+      {
+        name: form.name,
+        termNumber: Number(form.termNumber),
+        startDate: form.startDate,
+        endDate: form.endDate,
+        academicYearId: form.academicYearId,
+      },
+      {
+        onSuccess: () => { toast('Term created.', 'success'); setForm((f) => ({ ...f, name: '', startDate: '', endDate: '' })); },
+        onError: (e: any) => toast(e?.response?.data?.message ?? 'Failed to create term.', 'error'),
+      },
+    );
+  };
+
+  const startDelete = (id: string) => { setPendingDeleteId(id); setDeleteError(null); };
+  const cancelDelete = () => { setPendingDeleteId(null); setDeleteError(null); };
+  const confirmDelete = (id: string) => {
+    deleteTermMutation.mutate(id, {
+      onSuccess: () => { setPendingDeleteId(null); setDeleteError(null); toast('Term deleted.', 'success'); },
+      onError: (e: any) => setDeleteError(e?.response?.data?.message ?? 'Failed to delete term.'),
+    });
+  };
+
+  const terms = (apiTerms as any[]).slice().sort((a: any, b: any) =>
+    String(a.academicYearId).localeCompare(String(b.academicYearId)) || Number(a.termNumber ?? 0) - Number(b.termNumber ?? 0));
+
+  const yearName = (yearId: string) => {
+    const y = (apiYears as any[]).find((y: any) => String(y.id) === String(yearId));
+    return y ? String(y.name ?? y.year) : '—';
+  };
+
+  return (
+    <AdminShell title="Terms" eyebrow="Academic Setup">
+      <AdminFormSection title="Create Term" subtitle="Add a term to an academic year.">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <Field label="Term Name" value={form.name} placeholder="e.g. Term 1"
+            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
+          <SelectField label="Term Number" value={form.termNumber}
+            onChange={(v) => setForm((f) => ({ ...f, termNumber: v }))}
+            options={[{ value: '1', label: 'Term 1' }, { value: '2', label: 'Term 2' }, { value: '3', label: 'Term 3' }]} />
+          <SelectField label="Academic Year" value={form.academicYearId}
+            onChange={(v) => setForm((f) => ({ ...f, academicYearId: v }))}
+            options={yearOptions.length ? yearOptions : [{ value: '', label: 'No years yet' }]} />
+          <Field label="Start Date" type="date" value={form.startDate}
+            onChange={(e) => setForm((f) => ({ ...f, startDate: e.target.value }))} />
+          <Field label="End Date" type="date" value={form.endDate}
+            onChange={(e) => setForm((f) => ({ ...f, endDate: e.target.value }))} />
+        </div>
+        <div className="mt-4">
+          <Button className="rounded-xl bg-[#4338CA]" loading={createTermMutation.isPending} onClick={submit}>
+            Create Term
+          </Button>
+        </div>
+      </AdminFormSection>
+
+      <AdminFormSection title="All Terms" subtitle={`${terms.length} term${terms.length !== 1 ? 's' : ''} across all years`}>
+        {terms.length === 0 ? (
+          <p className="py-4 text-sm font-semibold text-slate-500">No terms yet. Create one above.</p>
+        ) : (
+          <div className="overflow-hidden rounded-xl border border-slate-200">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-[#1E1B4B] text-[11px] font-black uppercase tracking-widest text-white">
+                <tr>
+                  {['Term', 'Academic Year', 'Start Date', 'End Date', 'Status', ''].map((h) => (
+                    <th key={h} className="px-5 py-3">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {terms.map((term: any) => {
+                  const now = new Date();
+                  const start = term.startDate ? new Date(term.startDate) : null;
+                  const end = term.endDate ? new Date(term.endDate) : null;
+                  const isCurrent = term.isCurrent === true;
+                  const status = isCurrent ? 'Active'
+                    : !start ? 'Unknown'
+                    : now < start ? 'Upcoming'
+                    : end && now > end ? 'Ended'
+                    : 'Active';
+                  const statusTone = status === 'Active' ? 'emerald' : status === 'Upcoming' ? 'sky' : 'slate';
+                  const isPending = pendingDeleteId === term.id;
+                  return (
+                    <tr key={term.id} className={isPending ? 'bg-red-50' : 'hover:bg-slate-50'}>
+                      <Td><span className="font-black text-slate-900">{term.name}</span>{term.termNumber ? <span className="ml-2 text-[11px] font-bold text-slate-400">Term {term.termNumber}</span> : null}</Td>
+                      <Td>{yearName(term.academicYearId)}</Td>
+                      <Td>{start ? start.toLocaleDateString() : '—'}</Td>
+                      <Td>{end ? end.toLocaleDateString() : '—'}</Td>
+                      <Td><Badge tone={statusTone as any}>{status}</Badge></Td>
+                      <Td>
+                        {isPending ? (
+                          <div className="flex flex-col gap-1.5">
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => confirmDelete(term.id)}
+                                disabled={deleteTermMutation.isPending}
+                                className="rounded-lg bg-red-600 px-3 py-1 text-xs font-black text-white hover:bg-red-700 disabled:opacity-50"
+                              >
+                                {deleteTermMutation.isPending ? 'Deleting…' : 'Yes, delete'}
+                              </button>
+                              <button
+                                onClick={cancelDelete}
+                                className="rounded-lg border border-slate-200 px-3 py-1 text-xs font-black text-slate-600 hover:bg-slate-100"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                            {deleteError && (
+                              <p className="flex items-start gap-1 text-[11px] font-semibold leading-tight text-red-600">
+                                <AlertTriangle className="mt-px h-3 w-3 shrink-0" />{deleteError}
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <button
+                            onClick={isCurrent ? undefined : () => startDelete(term.id)}
+                            disabled={isCurrent}
+                            title={isCurrent ? 'Cannot delete the current term — set another term as current first' : 'Delete this term'}
+                            className={`rounded-lg p-1.5 transition-colors ${isCurrent ? 'cursor-not-allowed text-slate-300' : 'text-slate-400 hover:bg-red-50 hover:text-red-600'}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
+                      </Td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </AdminFormSection>
+    </AdminShell>
+  );
+}
+
+// ─── Class Subjects ───────────────────────────────────────────────────────────
+
+export function ClassSubjectsPage() {
+  const { classId: routeClassId } = useParams();
+  const { data: apiClasses = [] as typeof adminClasses } = useAdminClasses() as unknown as { data: typeof adminClasses };
+  const { data: apiSubjects = [] as typeof adminSubjects } = useAdminSubjects() as unknown as { data: typeof adminSubjects };
+  const assignMutation = useAssignSubjectToClassMutation();
+  const unassignMutation = useUnassignSubjectFromClassMutation();
+  const [selectedClassId, setSelectedClassId] = useState(routeClassId ?? '');
+  const [pendingUnassignId, setPendingUnassignId] = useState<string | null>(null);
+  const [assignSubjectId, setAssignSubjectId] = useState('');
+
+  const sortedClasses = (apiClasses as any[]).slice().sort((a: any, b: any) =>
+    String(a.name ?? '').localeCompare(String(b.name ?? '')));
+  const classOptions = sortedClasses.map((c: any) => ({
+    value: String(c.id), label: `${String(c.name)}${String(c.stream ?? '').trim() ? ` — ${String(c.stream).trim()}` : ''}`,
+  }));
+
+  const selectedClass = (apiClasses as any[]).find((c: any) => String(c.id) === selectedClassId);
+
+  const allStageSubjects = selectedClass
+    ? (apiSubjects as any[]).filter((s: any) => {
+        const sStage = String(s.stage ?? s.educationStage ?? '').replace('-', '_').toUpperCase();
+        const cStage = String(selectedClass.stage ?? selectedClass.educationStage ?? '').replace('-', '_').toUpperCase();
+        return sStage === cStage;
+      })
+    : [];
+
+  const assignedIds: string[] = selectedClass
+    ? ((selectedClass as any).subjects ?? []).map((s: any) => String(s.id ?? s.subjectId ?? s))
+    : [];
+
+  const classSubjects = allStageSubjects.filter((s: any) => assignedIds.includes(String(s.id)));
+  const unassignedSubjects = allStageSubjects.filter((s: any) => !assignedIds.includes(String(s.id)));
+
+  const handleUnassign = (subjectId: string) => {
+    if (!selectedClassId) return;
+    unassignMutation.mutate({ classId: selectedClassId, subjectId }, {
+      onSuccess: () => { toast('Subject unassigned', 'warning'); setPendingUnassignId(null); },
+      onError: () => { toast('Failed to unassign subject', 'error'); setPendingUnassignId(null); },
+    });
+  };
+
+  const handleAssign = () => {
+    if (!selectedClassId || !assignSubjectId) return;
+    assignMutation.mutate({ classId: selectedClassId, subjectId: assignSubjectId }, {
+      onSuccess: () => { toast('Subject assigned', 'success'); setAssignSubjectId(''); },
+      onError: () => toast('Failed to assign subject', 'error'),
+    });
+  };
+
+  return (
+    <AdminShell title="Class Subjects" eyebrow="Academic Setup">
+      <AdminFormSection title="View & Manage Class Subjects" subtitle="Assign or remove subjects from a specific class.">
+        <div className="max-w-sm">
+          <SelectField
+            label="Select Class"
+            value={selectedClassId}
+            onChange={setSelectedClassId}
+            options={classOptions.length ? [{ value: '', label: 'Choose a class…' }, ...classOptions] : [{ value: '', label: 'No classes yet' }]}
+          />
+        </div>
+        {selectedClassId && selectedClass && (
+          <div className="mt-5 space-y-5">
+            <div className="flex items-center gap-3">
+              <p className="font-black text-slate-900">{selectedClass.name}{selectedClass.stream ? ` — ${selectedClass.stream}` : ''}</p>
+              <Badge tone={selectedClass.stage === 'Primary' ? 'emerald' : selectedClass.stage === 'A-Level' ? 'amber' : 'blue'}>
+                {String(selectedClass.stage ?? selectedClass.educationStage ?? '')}
+              </Badge>
+            </div>
+
+            {/* Assigned subjects table */}
+            {classSubjects.length === 0 ? (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-5 py-6 text-center">
+                <p className="text-sm font-semibold text-slate-500">No subjects assigned to this class yet.</p>
+              </div>
+            ) : (
+              <div className="overflow-hidden rounded-xl border border-slate-200">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-[#1E1B4B] text-[11px] font-black uppercase tracking-widest text-white">
+                    <tr>
+                      {['Subject', 'Code', 'Type', 'Stage', ''].map((h) => <th key={h} className="px-5 py-3">{h}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {classSubjects.map((s: any) => (
+                      <React.Fragment key={s.id}>
+                        <tr className="hover:bg-slate-50">
+                          <Td><span className="font-black text-slate-900">{s.name}</span></Td>
+                          <Td><span className="font-mono text-xs font-black text-[#4338CA]">{s.code ?? s.shortCode ?? '—'}</span></Td>
+                          <Td>{String(s.type ?? s.subjectType ?? '—')}</Td>
+                          <Td><Badge tone="blue">{String(s.stage ?? s.educationStage ?? '—')}</Badge></Td>
+                          <Td>
+                            {pendingUnassignId === s.id ? (
+                              <span className="flex items-center gap-2">
+                                <button
+                                  onClick={() => handleUnassign(s.id)}
+                                  disabled={unassignMutation.isPending}
+                                  className="rounded-lg bg-rose-600 px-2.5 py-1 text-xs font-black text-white hover:bg-rose-700 disabled:opacity-40"
+                                >
+                                  {unassignMutation.isPending ? 'Removing…' : 'Yes, remove'}
+                                </button>
+                                <button onClick={() => setPendingUnassignId(null)} className="rounded-lg border px-2.5 py-1 text-xs font-black text-slate-600 hover:bg-slate-100">Cancel</button>
+                              </span>
+                            ) : (
+                              <button
+                                onClick={() => setPendingUnassignId(s.id)}
+                                className="rounded-lg border border-rose-200 px-2.5 py-1 text-xs font-black text-rose-600 hover:bg-rose-50"
+                              >
+                                Unassign
+                              </button>
+                            )}
+                          </Td>
+                        </tr>
+                      </React.Fragment>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Assign new subject */}
+            {unassignedSubjects.length > 0 && (
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <p className="mb-3 font-black text-slate-800">Assign Subject to Class</p>
+                <div className="flex flex-wrap items-end gap-3">
+                  <div className="flex-1 min-w-[200px]">
+                    <SelectField
+                      label="Subject"
+                      value={assignSubjectId}
+                      onChange={setAssignSubjectId}
+                      options={[{ value: '', label: 'Choose subject…' }, ...unassignedSubjects.map((s: any) => ({ value: String(s.id), label: `${String(s.name)} (${String(s.code ?? '')})` }))]}
+                    />
+                  </div>
+                  <Button
+                    className="rounded-xl bg-[#4338CA]"
+                    disabled={!assignSubjectId}
+                    loading={assignMutation.isPending}
+                    onClick={handleAssign}
+                  >
+                    <Plus className="h-4 w-4" /> Assign
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+        {!selectedClassId && (
+          <p className="mt-4 text-sm font-semibold text-slate-400">Select a class above to manage its subjects.</p>
+        )}
+      </AdminFormSection>
+      <AdminFormSection title="Manage All Subjects" subtitle="To add or remove subjects globally, go to Subject Management.">
+        <NavLink to="/admin/subjects">
+          <Button className="rounded-xl bg-[#4338CA]">Open Subject Management →</Button>
+        </NavLink>
+      </AdminFormSection>
+    </AdminShell>
+  );
+}
+
+// â"€â"€â"€ Classes â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 /**
  * Normalise a subject-combination's subjects field.
@@ -541,7 +1252,7 @@ function combPrincipalLabel(subjects: unknown): string {
 }
 
 type ClassWizardState = {
-  educationStage: 'PRIMARY' | 'O_LEVEL' | 'A_LEVEL';
+  educationStage: 'EARLY_CHILDHOOD' | 'PRIMARY' | 'O_LEVEL' | 'A_LEVEL';
   level: string;
   stream: string;
   academicYearId: string;
@@ -656,6 +1367,10 @@ function generateUniversalPathways(classes: any[], academicYearId: string): Gene
 }
 
 const STAGE_LEVEL_OPTIONS = {
+  EARLY_CHILDHOOD: [
+    { value: 'nursery', label: 'Nursery' },
+    { value: 'pre-unit', label: 'Pre-Unit' },
+  ],
   PRIMARY: Array.from({ length: 7 }, (_, i) => ({ value: String(i + 1), label: `Class ${i + 1}` })),
   O_LEVEL: Array.from({ length: 4 }, (_, i) => ({ value: String(i + 1), label: `Form ${i + 1}` })),
   A_LEVEL: [
@@ -665,19 +1380,24 @@ const STAGE_LEVEL_OPTIONS = {
 };
 
 function curriculumForStage(stage: ClassWizardState['educationStage']) {
+  if (stage === 'EARLY_CHILDHOOD') return 'PRE_PRIMARY';
   if (stage === 'PRIMARY') return 'NECTA_PRIMARY';
   if (stage === 'A_LEVEL') return 'NECTA_ALEVEL';
   return 'NECTA_OLEVEL';
 }
 
 function displayNameForClass(stage: ClassWizardState['educationStage'], level: string, stream: string) {
-  if (stage === 'PRIMARY') return `Class ${level}${stream}`;
+  if (stage === 'EARLY_CHILDHOOD') return level === 'nursery' ? 'Nursery' : 'Pre-Unit';
+  if (stage === 'PRIMARY') return `Class ${level}${stream ? ` ${stream}` : ''}`.trim();
   if (stage === 'A_LEVEL') return `Form ${level} ${stream}`;
-  return `Form ${level}${stream}`;
+  return `Form ${level}${stream ? ` ${stream}` : ''}`.trim();
 }
 
 function isTerminalClass(stage: ClassWizardState['educationStage'], level: string) {
-  return (stage === 'PRIMARY' && level === '7') || (stage === 'O_LEVEL' && level === '4') || (stage === 'A_LEVEL' && level === '6');
+  return (stage === 'EARLY_CHILDHOOD' && level === 'pre-unit')
+    || (stage === 'PRIMARY' && level === '7')
+    || (stage === 'O_LEVEL' && level === '4')
+    || (stage === 'A_LEVEL' && level === '6');
 }
 
 export function ClassesPage() {
@@ -688,13 +1408,19 @@ export function ClassesPage() {
   const { data: apiUsers = [] as typeof adminUsers } = useAdminUsers() as unknown as { data: typeof adminUsers };
   const { data: academicYears = [] } = useAcademicYears();
   const createClassMutation = useCreateClassMutation();
+  const updateClassMutation = useUpdateClassMutation();
+  const deleteClassMutation = useDeleteClassMutation();
   const createClassPathwayMutation = useCreateClassPathwayMutation();
   const createCombinationMutation = useCreateCombinationMutation();
   const deleteCombinationMutation = useDeleteCombinationMutation();
   const [editingPathwayId, setEditingPathwayId] = useState<string | null>(null);
   const [pathwayEdits, setPathwayEdits] = useState<Record<string, { toClassId: string; transitionType: string; note: string }>>({});
+  const [editingClassId, setEditingClassId] = useState<string | null>(null);
+  const [classEditForm, setClassEditForm] = useState<{ stream: string; capacity: string; classTeacherId: string }>({ stream: '', capacity: '', classTeacherId: '' });
+  const [pendingDeleteClassId, setPendingDeleteClassId] = useState<string | null>(null);
+  const [deleteClassError, setDeleteClassError] = useState<string | null>(null);
 
-  // â”€â”€ Streams (O-Level / Primary): frontend-only custom labels â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // â"€â"€ Streams (O-Level / Primary): frontend-only custom labels â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
   const [customStreams, setCustomStreams] = useState<string[]>([]);
   const [newStreamInput, setNewStreamInput] = useState('');
 
@@ -709,7 +1435,7 @@ export function ClassesPage() {
     setNewStreamInput('');
   };
 
-  // â”€â”€ A-Level combinations form â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // â"€â"€ A-Level combinations form â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
   const [comboCode, setComboCode] = useState('');
   const [selectedSubjectIds, setSelectedSubjectIds] = useState<string[]>([]);
   const [principalIds, setPrincipalIds] = useState<string[]>([]);
@@ -834,8 +1560,8 @@ export function ClassesPage() {
     ...customStreams.map((s) => ({ value: s, label: `Stream ${s}` })),
   ];
   const streamOptions = classForm.educationStage === 'A_LEVEL'
-    ? (combinationOptions.length ? combinationOptions : [{ value: '', label: 'No combinations yet â€” add one below' }])
-    : allStreamOptions;
+    ? (combinationOptions.length ? combinationOptions : [{ value: '', label: 'No combinations yet — add one below' }])
+    : [{ value: '', label: 'No stream (single class)' }, ...allStreamOptions];
   const classOptions = apiClasses
     .slice()
     .sort((a: any, b: any) => classSortValue(a) - classSortValue(b) || String(a.name).localeCompare(String(b.name)))
@@ -864,7 +1590,7 @@ export function ClassesPage() {
       const next = { ...current, [key]: value };
       if (key === 'educationStage') {
         const stage = value as ClassWizardState['educationStage'];
-        next.level = stage === 'A_LEVEL' ? '5' : '1';
+        next.level = stage === 'A_LEVEL' ? '5' : stage === 'EARLY_CHILDHOOD' ? 'nursery' : '1';
         next.stream = stage === 'A_LEVEL' && combinationOptions[0]?.value ? combinationOptions[0].value : 'A';
         next.curriculumCode = curriculumForStage(stage);
       }
@@ -874,6 +1600,31 @@ export function ClassesPage() {
 
   const setClassField = (key: keyof ClassWizardState) => (event: React.ChangeEvent<HTMLInputElement>) =>
     setClassForm((current) => ({ ...current, [key]: event.target.value }));
+
+  const startClassEdit = (item: any) => {
+    setEditingClassId(String(item.id));
+    setClassEditForm({ stream: String(item.stream ?? ''), capacity: String(item.students ?? item.capacity ?? '40'), classTeacherId: '' });
+    setPendingDeleteClassId(null);
+  };
+  const cancelClassEdit = () => { setEditingClassId(null); };
+  const saveClassEdit = (classId: string) => {
+    updateClassMutation.mutate({ id: classId, payload: {
+      stream: classEditForm.stream,
+      capacity: classEditForm.capacity ? Number(classEditForm.capacity) : undefined,
+      classTeacherId: classEditForm.classTeacherId || undefined,
+    }}, {
+      onSuccess: () => { setEditingClassId(null); toast('Class updated.', 'success'); },
+      onError: (e: any) => toast(e?.response?.data?.message ?? 'Failed to update class.', 'error'),
+    });
+  };
+  const startClassDelete = (id: string) => { setPendingDeleteClassId(id); setDeleteClassError(null); setEditingClassId(null); };
+  const cancelClassDelete = () => { setPendingDeleteClassId(null); setDeleteClassError(null); };
+  const confirmClassDelete = (id: string) => {
+    deleteClassMutation.mutate(id, {
+      onSuccess: () => { setPendingDeleteClassId(null); setDeleteClassError(null); toast('Class deleted.', 'success'); },
+      onError: (e: any) => setDeleteClassError(e?.response?.data?.message ?? 'Failed to delete class.'),
+    });
+  };
 
   const submitClass = () => {
     const academicYearId = classForm.academicYearId || String(currentYear?.id ?? '');
@@ -1008,10 +1759,11 @@ export function ClassesPage() {
       ]} />
       <AdminFormSection
         title="Class Setup Wizard"
-        subtitle="Create Primary, O-Level and A-Level classes for the selected academic year."
+        subtitle="Create Early Childhood, Primary, O-Level and A-Level classes for the selected academic year."
       >
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <SelectField key={`stage-${classForm.educationStage}`} label="Education Stage" value={classForm.educationStage} onChange={setClassValue('educationStage')} options={[
+            { value: 'EARLY_CHILDHOOD', label: 'Early Childhood (Nursery / Pre-Unit)' },
             { value: 'PRIMARY', label: 'Primary' },
             { value: 'O_LEVEL', label: 'O-Level' },
             { value: 'A_LEVEL', label: 'A-Level' },
@@ -1023,10 +1775,10 @@ export function ClassesPage() {
           <SelectField key={`class-teacher-${classForm.classTeacherId}`} label="Class Teacher" value={classForm.classTeacherId || teacherOptions[0]?.value} onChange={setClassValue('classTeacherId')} options={teacherOptions.length ? teacherOptions : [{ value: '', label: 'Create a teacher first' }]} />
           <Field label="Capacity" value={classForm.capacity} onChange={setClassField('capacity')} type="number" />
           <SelectField key={`curriculum-${classForm.curriculumCode}`} label="Curriculum Code" value={classForm.curriculumCode} onChange={setClassValue('curriculumCode')} options={[
+            { value: 'PRE_PRIMARY', label: 'Pre-Primary (Nursery / Pre-Unit)' },
             { value: 'NECTA_PRIMARY', label: 'NECTA Primary' },
             { value: 'NECTA_OLEVEL', label: 'NECTA O-Level' },
             { value: 'NECTA_ALEVEL', label: 'NECTA A-Level' },
-            { value: 'NURSERY', label: 'Nursery / Kindergarten' },
           ]} />
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-3">
@@ -1043,32 +1795,94 @@ export function ClassesPage() {
             className="text-sm font-black text-[#4338CA] hover:underline"
             onClick={() => document.getElementById('manage-streams-combinations')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
           >
-            Manage streams &amp; combinations â†“
+            Manage streams &amp; combinations ↓
           </button>
         </div>
       </AdminFormSection>
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <AdminDataTable columns={['Class', 'Stage', 'Level', 'Stream', 'Students', 'Class Teacher', 'Next Pathway', 'Actions']}>
-          {apiClasses.map((item) => (
-            <tr key={item.id} className="hover:bg-slate-50">
-              <Td>
-                <p className="font-black text-slate-900">{item.name}</p>
-                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">{item.curriculum}</p>
-              </Td>
-              <Td><Badge tone={item.stage === 'Primary' ? 'emerald' : item.stage === 'A-Level' ? 'amber' : 'blue'}>{item.stage}</Badge></Td>
-              <Td>{item.level}</Td>
-              <Td>{item.stream}</Td>
-              <Td>{item.students}</Td>
-              <Td>{item.teacher}</Td>
-              <Td>{item.pathway}</Td>
-              <Td>
-                <NavLink className="text-xs font-black text-[#4338CA] hover:underline" to={`/admin/classes/${item.id}`}>Open</NavLink>
-              </Td>
-            </tr>
-          ))}
+        <AdminDataTable columns={['Class', 'Stage', 'Stream', 'Students', 'Teacher', 'Pathway', 'Actions']}>
+          {apiClasses.map((item) => {
+            const isEditing = editingClassId === String(item.id);
+            const isDeleting = pendingDeleteClassId === String(item.id);
+            return (
+              <React.Fragment key={item.id}>
+                <tr className={isDeleting ? 'bg-red-50' : isEditing ? 'bg-indigo-50' : 'hover:bg-slate-50'}>
+                  <Td>
+                    <p className="font-black text-slate-900">{item.name}</p>
+                    <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">{item.curriculum}</p>
+                  </Td>
+                  <Td><Badge tone={item.stage === 'Primary' ? 'emerald' : item.stage === 'A-Level' ? 'amber' : item.stage === 'Early Childhood' ? 'slate' : 'blue'}>{item.stage}</Badge></Td>
+                  <Td>{item.stream || <span className="text-slate-400">—</span>}</Td>
+                  <Td>{item.students}</Td>
+                  <Td className="max-w-[120px] truncate">{item.teacher || <span className="text-slate-400">—</span>}</Td>
+                  <Td className="max-w-[100px] truncate">{item.pathway || <span className="text-slate-400">—</span>}</Td>
+                  <Td>
+                    {isDeleting ? (
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => confirmClassDelete(String(item.id))} disabled={deleteClassMutation.isPending}
+                            className="rounded-lg bg-red-600 px-2.5 py-1 text-xs font-black text-white hover:bg-red-700 disabled:opacity-50">
+                            {deleteClassMutation.isPending ? 'Deleting…' : 'Confirm'}
+                          </button>
+                          <button onClick={cancelClassDelete} className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-black text-slate-600 hover:bg-slate-100">Cancel</button>
+                        </div>
+                        {deleteClassError && <p className="flex items-start gap-1 text-[10px] font-semibold leading-tight text-red-600"><AlertTriangle className="mt-px h-3 w-3 shrink-0" />{deleteClassError}</p>}
+                      </div>
+                    ) : isEditing ? (
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => saveClassEdit(String(item.id))} disabled={updateClassMutation.isPending}
+                          className="rounded-lg bg-[#4338CA] px-2.5 py-1 text-xs font-black text-white hover:bg-indigo-700 disabled:opacity-50">
+                          {updateClassMutation.isPending ? 'Saving…' : 'Save'}
+                        </button>
+                        <button onClick={cancelClassEdit} className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-black text-slate-600 hover:bg-slate-100">Cancel</button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1">
+                        <NavLink className="text-xs font-black text-[#4338CA] hover:underline" to={`/admin/classes/${item.id}`}>Open</NavLink>
+                        <span className="text-slate-300">·</span>
+                        <button onClick={() => startClassEdit(item)} className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" title="Edit stream / capacity">
+                          <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                        </button>
+                        <button onClick={() => startClassDelete(String(item.id))} className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600" title="Delete class">
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    )}
+                  </Td>
+                </tr>
+                {isEditing && (
+                  <tr className="bg-indigo-50">
+                    <td colSpan={7} className="px-5 py-3">
+                      <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-4">
+                        <div>
+                          <label className="block text-[11px] font-black uppercase tracking-widest text-slate-500 mb-1">Stream</label>
+                          <input value={classEditForm.stream} onChange={(e) => setClassEditForm((f) => ({ ...f, stream: e.target.value }))}
+                            placeholder="e.g. A, B, C"
+                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold focus:border-[#4338CA] focus:outline-none" />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-black uppercase tracking-widest text-slate-500 mb-1">Capacity</label>
+                          <input type="number" value={classEditForm.capacity} onChange={(e) => setClassEditForm((f) => ({ ...f, capacity: e.target.value }))}
+                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold focus:border-[#4338CA] focus:outline-none" />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-black uppercase tracking-widest text-slate-500 mb-1">Class Teacher</label>
+                          <select value={classEditForm.classTeacherId} onChange={(e) => setClassEditForm((f) => ({ ...f, classTeacherId: e.target.value }))}
+                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold focus:border-[#4338CA] focus:outline-none">
+                            <option value="">— keep current —</option>
+                            {teacherOptions.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                          </select>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
+            );
+          })}
         </AdminDataTable>
         <div className="space-y-4" id="manage-streams-combinations">
-          {/* â”€â”€ Promotion Pathways â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+          {/* â"€â"€ Promotion Pathways â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ */}
           <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
             <p className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-400">Universal Promotion Pathways</p>
             <p className="mt-1 text-xs font-semibold text-slate-500">
@@ -1144,7 +1958,7 @@ export function ClassesPage() {
                   {!isEditing ? (
                     <>
                       <div className="flex items-center justify-between gap-3">
-                        <p className="font-black text-slate-900">{pathway.from} {'â†’'} {pathway.to}</p>
+                        <p className="font-black text-slate-900">{pathway.from} {'→'} {pathway.to}</p>
                         <Badge tone={pathway.type === 'Graduation' ? 'emerald' : 'blue'}>{pathway.type}</Badge>
                       </div>
                       <p className="mt-1 text-xs font-semibold text-slate-500">{pathway.rule}</p>
@@ -1196,10 +2010,10 @@ export function ClassesPage() {
             </div>
           </div>
 
-          {/* â”€â”€ Streams (O-Level / Primary) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+          {/* â"€â"€ Streams (O-Level / Primary) â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ */}
           <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-400">Streams Â· O-Level &amp; Primary</p>
-            <p className="mt-1 text-xs font-semibold text-slate-500">Standard streams Aâ€“D are always available. Add extras here (e.g. E, STEM).</p>
+            <p className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-400">Streams · O-Level &amp; Primary</p>
+            <p className="mt-1 text-xs font-semibold text-slate-500">Standard streams A–D are always available. Add extras here (e.g. E, STEM).</p>
             <div className="mt-4 flex flex-wrap gap-2">
               {STANDARD_STREAM_OPTIONS.map((o) => (
                 <span key={o.value} className="rounded-lg border border-slate-200 bg-slate-100 px-3 py-1.5 text-xs font-black text-slate-500">
@@ -1235,7 +2049,7 @@ export function ClassesPage() {
             </div>
           </div>
 
-          {/* â”€â”€ A-Level Combinations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+          {/* â"€â"€ A-Level Combinations â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ */}
           <div className="rounded-[28px] border border-amber-100 bg-amber-50 p-5">
             <p className="text-[11px] font-black uppercase tracking-[0.24em] text-amber-700">A-Level Combinations</p>
             <p className="mt-1 text-xs font-semibold text-amber-700/70">Combinations appear in the Stream dropdown when A-Level is selected.</p>
@@ -1258,14 +2072,14 @@ export function ClassesPage() {
                 {aLevelSubjects.length === 0 ? (
                   <div className="mt-2 rounded-xl border border-dashed border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-700">
                     No A-Level subjects found.{' '}
-                    <NavLink to="/admin/subjects" className="font-black underline">Add subjects first â†’</NavLink>
+                    <NavLink to="/admin/subjects" className="font-black underline">Add subjects first →</NavLink>
                   </div>
                 ) : (
                   <>
                     <input
                       value={subjectSearch}
                       onChange={(e) => setSubjectSearch(e.target.value)}
-                      placeholder="Filter subjectsâ€¦"
+                      placeholder="Filter subjects…"
                       className="mt-2 h-9 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-semibold outline-none transition focus:border-[#4338CA] focus:bg-white"
                     />
                     <div className="mt-2 max-h-44 overflow-y-auto space-y-1 rounded-xl border border-slate-100 p-2">
@@ -1310,7 +2124,7 @@ export function ClassesPage() {
               {selectedSubjects.length > 0 && (
                 <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-xs">
                   <p className="font-black text-slate-500 uppercase tracking-widest mb-1">Preview</p>
-                  <p className="font-semibold text-slate-700">{comboCode || '???'} â€” {autoComboName}</p>
+                  <p className="font-semibold text-slate-700">{comboCode || '???'} — {autoComboName}</p>
                   {principalIds.length > 0 && (
                     <p className="mt-0.5 text-amber-700 font-semibold">
                       Principal: {selectedSubjects.filter((s: any) => principalIds.includes(String(s.id))).map((s: any) => s.name).join(', ')}
@@ -1374,24 +2188,123 @@ export function ClassesPage() {
 
 export function ClassDetailPage() {
   const { classId } = useParams();
-  const { data: apiClasses = [] as typeof adminClasses, isLoading } = useAdminClasses() as unknown as { data: typeof adminClasses; isLoading: boolean };
-  if (isLoading) return <AdminShell title="Loadingâ€¦" eyebrow="Class detail"><SkeletonTable cols={4} /></AdminShell>;
+  const { data: apiClasses = [] as typeof adminClasses, isLoading: classLoading } = useAdminClasses() as unknown as { data: typeof adminClasses; isLoading: boolean };
+  const { data: allStudents = [] as typeof adminStudents, isLoading: studentsLoading } = useAdminStudents() as unknown as { data: typeof adminStudents; isLoading: boolean };
+  const { data: allUsers = [] as typeof adminUsers } = useAdminUsers() as unknown as { data: typeof adminUsers };
+
+  if (classLoading || studentsLoading) return <AdminShell title="Loading…" eyebrow="Class detail"><SkeletonTable cols={4} /></AdminShell>;
   const klass = apiClasses.find((c) => c.id === classId) ?? null;
   if (!klass) return <AdminShell title="Not Found" eyebrow="Class detail"><EmptyState title="Class not found" description="This class does not exist." /></AdminShell>;
+
+  const classStudents = allStudents.filter((s: any) => s.classId === classId || s.className === klass.name || s.class === klass.name);
+  const classTeacher = allUsers.find((u: any) => u.id === (klass as any).classTeacherId);
+
   return (
     <AdminShell title={klass.name} eyebrow="Class detail">
-      <StudentsTable />
-      <AdminQuickCard title="Assign Subjects" detail="Class-subject assignment matrix." to="/admin/academic/setup" />
+      <NavLink to="/admin/classes" className="inline-flex items-center gap-1.5 text-sm font-black text-[#4338CA] hover:underline mb-4 block">
+        <ArrowLeft className="h-4 w-4" /> Back to Classes
+      </NavLink>
+
+      {/* Class header card */}
+      <AdminFormSection title="Class Overview" subtitle="Enrolment and assigned teacher details">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div>
+            <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">Class Name</p>
+            <p className="mt-1 font-black text-slate-900">{klass.name}</p>
+          </div>
+          <div>
+            <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">Education Stage</p>
+            <div className="mt-1">
+              <Badge tone="blue">{String((klass as any).stage ?? '—')}</Badge>
+            </div>
+          </div>
+          <div>
+            <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">Stream / Section</p>
+            <p className="mt-1 font-semibold text-slate-700">{String((klass as any).stream ?? '—')}</p>
+          </div>
+          <div>
+            <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">Class Teacher</p>
+            <p className="mt-1 font-semibold text-slate-700">{classTeacher?.name ?? 'Not assigned'}</p>
+          </div>
+          <div>
+            <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">Capacity</p>
+            <p className="mt-1 font-semibold text-slate-700">{String((klass as any).capacity ?? '—')}</p>
+          </div>
+          <div>
+            <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">Enrolled</p>
+            <p className="mt-1 font-black text-[#4338CA]">{classStudents.length}</p>
+          </div>
+        </div>
+        <div className="mt-4 flex flex-wrap gap-3">
+          <NavLink
+            to={`/admin/classes/${classId}/subjects`}
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-black text-slate-700 shadow-sm hover:bg-slate-50"
+          >
+            <Database className="h-4 w-4" /> Manage Subjects
+          </NavLink>
+          <NavLink
+            to="/admin/students/enrol"
+            className="inline-flex items-center gap-2 rounded-xl bg-[#4338CA] px-4 py-2.5 text-sm font-black text-white shadow-sm hover:bg-[#3730a3]"
+          >
+            <Plus className="h-4 w-4" /> Enrol Student
+          </NavLink>
+        </div>
+      </AdminFormSection>
+
+      {/* Student Roster */}
+      <div className="mt-gutter">
+        <h3 className="mb-3 font-display text-lg font-black text-slate-900">Student Roster</h3>
+        {classStudents.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-8 py-12 text-center">
+            <p className="font-black text-slate-700">No students enrolled</p>
+            <p className="mt-1 text-sm text-slate-500">Enrol students into this class to see them here.</p>
+            <NavLink to="/admin/students/enrol" className="mt-4 inline-flex items-center gap-2 rounded-xl bg-[#4338CA] px-4 py-2.5 text-sm font-black text-white shadow-sm hover:bg-[#3730a3]">
+              <Plus className="h-4 w-4" /> Enrol First Student
+            </NavLink>
+          </div>
+        ) : (
+          <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <table className="min-w-full text-sm">
+              <thead className="border-b border-slate-100">
+                <tr>
+                  {['Reg No', 'Name', 'Status', 'Risk', 'Balance', ''].map((h) => (
+                    <th key={h} className="px-4 py-3 text-left text-[11px] font-black uppercase tracking-widest text-slate-500">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {classStudents.map((s: any) => (
+                  <tr key={s.id} className="transition hover:bg-slate-50">
+                    <td className="px-4 py-3 font-mono text-xs text-slate-500">{s.admissionNumber ?? s.regNo ?? '—'}</td>
+                    <td className="px-4 py-3 font-black text-slate-900">{s.name}</td>
+                    <td className="px-4 py-3">
+                      <Badge tone={s.status === 'ACTIVE' ? 'emerald' : 'amber'}>{String(s.status ?? 'ACTIVE')}</Badge>
+                    </td>
+                    <td className="px-4 py-3">
+                      <Badge tone={s.riskLevel === 'HIGH' ? 'rose' : s.riskLevel === 'MEDIUM' ? 'amber' : 'emerald'}>{String(s.riskLevel ?? 'LOW')}</Badge>
+                    </td>
+                    <td className="px-4 py-3 font-mono text-sm text-slate-700">{s.balance != null ? `UGX ${Number(s.balance).toLocaleString()}` : '—'}</td>
+                    <td className="px-4 py-3">
+                      <NavLink to={`/admin/students/${s.id}`} className="text-xs font-black text-[#4338CA] hover:underline">Open →</NavLink>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </AdminShell>
   );
 }
 
-// â”€â”€â”€ Subjects â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â"€â"€â"€ Subjects â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 export function SubjectsPage() {
   const createSubjectMutation = useCreateSubjectMutation();
-  const [form, setForm] = useState({ name: '', code: '', stage: 'O_LEVEL', department: '' });
-  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
+  const { data: deptList = [] } = useDepartments();
+  const [form, setForm] = useState({ name: '', code: '', stage: 'O_LEVEL', departmentId: '', department: '' });
+  const set = (k: 'name' | 'code') => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((f) => ({ ...f, [k]: k === 'code' ? e.target.value.toUpperCase() : e.target.value }));
 
   const submit = () => {
@@ -1402,7 +2315,7 @@ export function SubjectsPage() {
     createSubjectMutation.mutate(form, {
       onSuccess: () => {
         toast(`Subject "${form.name}" created successfully.`, 'success');
-        setForm({ name: '', code: '', stage: 'O_LEVEL', department: '' });
+        setForm({ name: '', code: '', stage: 'O_LEVEL', departmentId: '', department: '' });
       },
       onError: (err) => toast(err instanceof Error ? err.message : 'Failed to create subject', 'error'),
     });
@@ -1427,14 +2340,25 @@ export function SubjectsPage() {
               { value: 'A_LEVEL', label: 'A-Level' },
             ]}
           />
-          <Field label="Department" value={form.department} onChange={set('department')} placeholder="e.g. Sciences" />
+          <SelectField
+            label="Department"
+            value={form.departmentId}
+            onChange={(v) => {
+              const dept = (deptList as any[]).find((d: any) => d.id === v);
+              setForm((f) => ({ ...f, departmentId: v, department: dept?.name ?? '' }));
+            }}
+            options={[
+              { value: '', label: 'None' },
+              ...(deptList as any[]).map((d: any) => ({ value: d.id, label: d.name })),
+            ]}
+          />
         </div>
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <Button className="rounded-xl bg-[#4338CA]" loading={createSubjectMutation.isPending} onClick={submit}>
             <Plus className="h-4 w-4" /> Add Subject
           </Button>
           <NavLink className="text-sm font-black text-[#4338CA] hover:underline" to="/admin/classes">
-            â† Back to Classes &amp; Combinations
+            ← Back to Classes &amp; Combinations
           </NavLink>
         </div>
       </AdminFormSection>
@@ -1445,54 +2369,270 @@ export function SubjectsPage() {
 
 function SubjectsTable() {
   const { data: apiSubjects = [] as typeof adminSubjects, isLoading, isError, refetch } = useAdminSubjects() as unknown as { data: typeof adminSubjects; isLoading: boolean; isError: boolean; refetch: () => void };
+  const { data: deptList = [] } = useDepartments();
+  const updateSubjectMutation = useUpdateSubjectMutation();
+  const deleteSubjectMutation = useDeleteSubjectMutation();
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<{ name: string; code: string; stage: string; departmentId: string; department: string }>({ name: '', code: '', stage: '', departmentId: '', department: '' });
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const startEdit = (item: any) => {
+    setEditingId(String(item.id));
+    setEditForm({ name: String(item.name ?? ''), code: String(item.code ?? ''), stage: String(item.stage ?? item.educationStage ?? 'O_LEVEL'), departmentId: String(item.departmentId ?? ''), department: String(item.department ?? '') });
+    setPendingDeleteId(null);
+  };
+  const cancelEdit = () => setEditingId(null);
+  const saveEdit = (id: string) => {
+    const stageMap: Record<string, string> = { 'Primary': 'PRIMARY', 'O-Level': 'O_LEVEL', 'A-Level': 'A_LEVEL', 'Pre-Primary': 'PRE_PRIMARY' };
+    updateSubjectMutation.mutate({ id, payload: { name: editForm.name.trim(), code: editForm.code.trim().toUpperCase(), educationStage: stageMap[editForm.stage] ?? editForm.stage, departmentId: editForm.departmentId || undefined, department: editForm.department || undefined } }, {
+      onSuccess: () => { setEditingId(null); toast('Subject updated.', 'success'); },
+      onError: (e: any) => toast(e?.response?.data?.message ?? 'Failed to update subject.', 'error'),
+    });
+  };
+  const startDelete = (id: string) => { setPendingDeleteId(id); setDeleteError(null); setEditingId(null); };
+  const cancelDelete = () => { setPendingDeleteId(null); setDeleteError(null); };
+  const confirmDelete = (id: string) => {
+    deleteSubjectMutation.mutate(id, {
+      onSuccess: () => { setPendingDeleteId(null); setDeleteError(null); toast('Subject deleted.', 'success'); },
+      onError: (e: any) => setDeleteError(e?.response?.data?.message ?? 'Failed to delete subject.'),
+    });
+  };
+
   if (isLoading) return <SkeletonTable cols={8} />;
   if (isError) return <DataError onRetry={refetch} />;
   if (!apiSubjects.length) return <EmptyState title="No subjects configured" description="Add subjects through the academic setup wizard." />;
+
   return (
-    <AdminDataTable columns={['Subject', 'Code', 'Stage', 'Department', 'Status', 'Classes', 'Teachers', 'Actions']}>
-      {apiSubjects.map((item) => (
-        <tr key={item.id} className="hover:bg-slate-50">
-          <Td><p className="font-black text-slate-900">{item.name}</p></Td>
-          <Td className="font-mono text-xs text-slate-500">{item.code}</Td>
-          <Td><Badge tone={item.stage === 'Primary' ? 'emerald' : item.stage === 'A-Level' ? 'amber' : 'blue'}>{item.stage}</Badge></Td>
-          <Td>{item.department}</Td>
-          <Td><Badge tone="emerald">{item.status}</Badge></Td>
-          <Td>{item.classes}</Td>
-          <Td>{item.teachers}</Td>
-          <Td>
-            <NavLink className="text-xs font-black text-[#4338CA] hover:underline" to={`/admin/subjects/${item.id}`}>Open</NavLink>
-          </Td>
-        </tr>
-      ))}
+    <AdminDataTable columns={['Subject', 'Code', 'Stage', 'Department', 'Classes', 'Actions']}>
+      {apiSubjects.map((item) => {
+        const isEditing = editingId === String(item.id);
+        const isDeleting = pendingDeleteId === String(item.id);
+        const stageTone = item.stage === 'Primary' ? 'emerald' : item.stage === 'A-Level' ? 'amber' : item.stage === 'Pre-Primary' ? 'sky' : 'blue';
+        return (
+          <React.Fragment key={item.id}>
+            <tr className={isDeleting ? 'bg-red-50' : isEditing ? 'bg-indigo-50' : 'hover:bg-slate-50'}>
+              <Td><p className="font-black text-slate-900">{item.name}</p></Td>
+              <Td className="font-mono text-xs text-slate-500">{item.code}</Td>
+              <Td><Badge tone={stageTone as any}>{item.stage}</Badge></Td>
+              <Td>{item.department || <span className="text-slate-400">—</span>}</Td>
+              <Td>{item.classes}</Td>
+              <Td>
+                {isDeleting ? (
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => confirmDelete(String(item.id))} disabled={deleteSubjectMutation.isPending}
+                        className="rounded-lg bg-red-600 px-2.5 py-1 text-xs font-black text-white hover:bg-red-700 disabled:opacity-50">
+                        {deleteSubjectMutation.isPending ? 'Deleting…' : 'Confirm'}
+                      </button>
+                      <button onClick={cancelDelete} className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-black text-slate-600 hover:bg-slate-100">Cancel</button>
+                    </div>
+                    {deleteError && <p className="flex items-start gap-1 text-[10px] font-semibold leading-tight text-red-600"><AlertTriangle className="mt-px h-3 w-3 shrink-0" />{deleteError}</p>}
+                  </div>
+                ) : isEditing ? (
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => saveEdit(String(item.id))} disabled={updateSubjectMutation.isPending}
+                      className="rounded-lg bg-[#4338CA] px-2.5 py-1 text-xs font-black text-white hover:bg-indigo-700 disabled:opacity-50">
+                      {updateSubjectMutation.isPending ? 'Saving…' : 'Save'}
+                    </button>
+                    <button onClick={cancelEdit} className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-black text-slate-600 hover:bg-slate-100">Cancel</button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => startEdit(item)} className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" title="Edit subject">
+                      <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                    </button>
+                    <button onClick={() => startDelete(String(item.id))} className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600" title="Delete subject">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                )}
+              </Td>
+            </tr>
+            {isEditing && (
+              <tr className="bg-indigo-50">
+                <td colSpan={6} className="px-5 py-3">
+                  <div className="grid gap-3 md:grid-cols-4">
+                    <div>
+                      <label className="block text-[11px] font-black uppercase tracking-widest text-slate-500 mb-1">Name</label>
+                      <input value={editForm.name} onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold focus:border-[#4338CA] focus:outline-none" />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-black uppercase tracking-widest text-slate-500 mb-1">Code</label>
+                      <input value={editForm.code} onChange={(e) => setEditForm((f) => ({ ...f, code: e.target.value.toUpperCase() }))}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-mono font-semibold focus:border-[#4338CA] focus:outline-none" />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-black uppercase tracking-widest text-slate-500 mb-1">Stage</label>
+                      <select value={editForm.stage} onChange={(e) => setEditForm((f) => ({ ...f, stage: e.target.value }))}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold focus:border-[#4338CA] focus:outline-none">
+                        {[['PRE_PRIMARY','Pre-Primary'],['PRIMARY','Primary'],['O_LEVEL','O-Level'],['A_LEVEL','A-Level']].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-black uppercase tracking-widest text-slate-500 mb-1">Department</label>
+                      <select value={editForm.departmentId} onChange={(e) => {
+                        const dept = (deptList as any[]).find((d: any) => d.id === e.target.value);
+                        setEditForm((f) => ({ ...f, departmentId: e.target.value, department: dept?.name ?? '' }));
+                      }} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold focus:border-[#4338CA] focus:outline-none">
+                        <option value="">None</option>
+                        {(deptList as any[]).map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            )}
+          </React.Fragment>
+        );
+      })}
     </AdminDataTable>
   );
 }
 
 export function SubjectDetailPage() {
   const { subjectId } = useParams();
+  const navigate = useNavigate();
   const { data: apiSubjects = [] as typeof adminSubjects, isLoading } = useAdminSubjects() as unknown as { data: typeof adminSubjects; isLoading: boolean };
-  if (isLoading) return <AdminShell title="Loadingâ€¦" eyebrow="Subject detail"><SkeletonTable cols={3} /></AdminShell>;
+  const { data: apiClasses = [] as typeof adminClasses } = useAdminClasses() as unknown as { data: typeof adminClasses };
+  const { data: allUsers = [] as typeof adminUsers } = useAdminUsers() as unknown as { data: typeof adminUsers };
+  const updateMutation = useUpdateSubjectMutation();
+  const deleteMutation = useDeleteSubjectMutation();
+  const [form, setForm] = useState({ name: '', code: '', stage: '', department: '' });
+  const [dangerInput, setDangerInput] = useState('');
+  const [pendingDelete, setPendingDelete] = useState(false);
+
   const subject = apiSubjects.find((s) => s.id === subjectId) ?? null;
+
+  React.useEffect(() => {
+    if (subject) {
+      setForm({
+        name: String(subject.name ?? ''),
+        code: String((subject as any).code ?? (subject as any).shortCode ?? ''),
+        stage: String((subject as any).stage ?? (subject as any).educationStage ?? ''),
+        department: String((subject as any).department ?? ''),
+      });
+    }
+  }, [subject?.id]);
+
+  if (isLoading) return <AdminShell title="Loading…" eyebrow="Subject detail"><SkeletonTable cols={3} /></AdminShell>;
   if (!subject) return <AdminShell title="Not Found" eyebrow="Subject detail"><EmptyState title="Subject not found" description="This subject does not exist." /></AdminShell>;
+
+  const classCount = (apiClasses as any[]).filter((c: any) => {
+    const subs = (c.subjects ?? []) as any[];
+    return subs.some((s: any) => String(s.id ?? s.subjectId ?? s) === subjectId);
+  }).length;
+  const teacherCount = (allUsers as any[]).filter((u: any) => u.role === 'TEACHER' && String((u as any).subjectId ?? '') === subjectId).length;
+
+  const handleUpdate = () => {
+    if (!form.name.trim() || !form.code.trim()) { toast('Name and code required', 'warning'); return; }
+    updateMutation.mutate({ id: subjectId!, payload: form }, {
+      onSuccess: () => toast('Subject updated', 'success'),
+      onError: () => toast('Failed to update subject', 'error'),
+    });
+  };
+
+  const handleDelete = () => {
+    if (dangerInput !== 'DELETE') return;
+    setPendingDelete(true);
+    deleteMutation.mutate(subjectId!, {
+      onSuccess: () => { toast('Subject deleted', 'warning'); navigate('/admin/subjects'); },
+      onError: () => { toast('Failed to delete subject', 'error'); setPendingDelete(false); },
+    });
+  };
+
+  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
+    setForm((f) => ({ ...f, [k]: k === 'code' ? e.target.value.toUpperCase() : e.target.value }));
+
   return (
     <AdminShell title={subject.name} eyebrow="Subject detail">
-      <div className="grid gap-gutter xl:grid-cols-3">
-        <AdminQuickCard title="Assigned Classes" detail={`${subject.classes} classes assigned.`} to="/admin/academic/setup" />
-        <AdminQuickCard title="Teachers" detail={`${subject.teachers} teachers assigned.`} to="/admin/users" />
-        <AdminQuickCard title="Analytics" detail="Open subject analytics." to={`/analytics/academic/subjects/${subject.id}`} />
+      <NavLink to="/admin/subjects" className="inline-flex items-center gap-1.5 text-sm font-black text-[#4338CA] hover:underline mb-4 block">
+        <ArrowLeft className="h-4 w-4" /> Back to Subjects
+      </NavLink>
+
+      {/* Metrics strip */}
+      <div className="grid gap-4 md:grid-cols-4 mb-gutter">
+        {[
+          { label: 'Code', value: String((subject as any).code ?? (subject as any).shortCode ?? '—') },
+          { label: 'Stage', value: String((subject as any).stage ?? (subject as any).educationStage ?? '—') },
+          { label: 'Classes', value: String(classCount || ((subject as any).classes ?? 0)) },
+          { label: 'Teachers', value: String(teacherCount || ((subject as any).teachers ?? 0)) },
+        ].map(({ label, value }) => (
+          <div key={label} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">{label}</p>
+            <p className="mt-1 text-2xl font-black text-slate-900">{value}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_360px]">
+        {/* Edit form */}
+        <AdminFormSection title="Edit Subject" subtitle="Update subject name, code, stage, or department.">
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field label="Subject Name" value={form.name} onChange={set('name')} placeholder="e.g. Physics" />
+            <Field label="Subject Code" value={form.code} onChange={(e) => setForm((f) => ({ ...f, code: e.target.value.toUpperCase() }))} placeholder="e.g. PHY" />
+            <SelectField
+              label="Education Stage"
+              value={form.stage}
+              onChange={(v) => setForm((f) => ({ ...f, stage: v }))}
+              options={[
+                { value: 'PRIMARY', label: 'Primary' },
+                { value: 'O_LEVEL', label: 'O-Level' },
+                { value: 'A_LEVEL', label: 'A-Level' },
+              ]}
+            />
+            <Field label="Department" value={form.department} onChange={(e) => setForm((f) => ({ ...f, department: e.target.value }))} placeholder="e.g. Sciences" />
+          </div>
+          <div className="mt-4">
+            <Button className="rounded-xl bg-[#4338CA]" loading={updateMutation.isPending} onClick={handleUpdate}>
+              Save Changes
+            </Button>
+          </div>
+        </AdminFormSection>
+
+        {/* Danger zone */}
+        <div className="h-fit rounded-2xl border border-rose-200 bg-rose-50 p-6">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-rose-500" />
+            <div>
+              <h3 className="font-display text-lg font-black text-rose-800">Delete Subject</h3>
+              <p className="mt-1 text-sm font-semibold text-rose-700">Permanently removes the subject and all class assignments.</p>
+            </div>
+          </div>
+          <div className="mt-5 space-y-3">
+            <input
+              value={dangerInput}
+              onChange={(e) => setDangerInput(e.target.value)}
+              placeholder="Type DELETE to confirm"
+              className="h-10 w-full rounded-xl border border-rose-200 bg-white px-3 font-mono text-sm font-black outline-none focus:border-rose-400"
+            />
+            <button
+              disabled={dangerInput !== 'DELETE' || pendingDelete}
+              onClick={handleDelete}
+              className="w-full rounded-xl bg-rose-600 py-2.5 text-sm font-black text-white transition hover:bg-rose-700 disabled:opacity-40"
+            >
+              {pendingDelete ? 'Deleting…' : 'Delete Subject'}
+            </button>
+          </div>
+        </div>
       </div>
     </AdminShell>
   );
 }
 
-// â”€â”€â”€ Grading scales â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â"€â"€â"€ Grading scales â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 export function GradingPage() {
   const { data: apiGradingScales = [] as typeof gradingScales } = useGradingScales() as unknown as { data: typeof gradingScales };
   const createGradingScaleMutation = useCreateGradingScaleMutation();
   const activateGradingScaleMutation = useActivateGradingScaleMutation();
+  const deleteGradingScaleMutation = useDeleteGradingScaleMutation();
   const { data: academicYears = [] } = useAcademicYears();
   const currentYear = (academicYears as any[]).find((year) => year.isCurrent) ?? (academicYears as any[])[0];
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
   const saveScale = (scale: any) => (payload: { name: string; boundaries: Array<{ label: string; min: number; max: number; points: number; remark: string; isPassing: boolean }> }) => {
     const academicYearId = String(scale.academicYearId ?? currentYear?.id ?? '');
     if (!academicYearId) {
@@ -1524,22 +2664,54 @@ export function GradingPage() {
       onError: (error) => toast(error instanceof Error ? error.message : 'Failed to activate grading scale', 'error'),
     });
   };
+  const confirmDeleteScale = (id: string) => {
+    deleteGradingScaleMutation.mutate(id, {
+      onSuccess: () => { setPendingDeleteId(null); setDeleteError(null); toast('Grading scale deleted.', 'success'); },
+      onError: (e: any) => setDeleteError(e?.response?.data?.message ?? 'Failed to delete grading scale.'),
+    });
+  };
+
   return (
     <AdminShell title="Grading Scales" eyebrow="Grade boundaries and activation">
-      {apiGradingScales.map((scale) => (
-        <div key={scale.id} className="space-y-2">
-          <div className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
-            <p className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">{scale.scope}</p>
-            <Badge tone={scale.active ? 'emerald' : 'amber'}>{scale.active ? 'Active' : 'Draft'}</Badge>
+      {apiGradingScales.map((scale) => {
+        const isDeleting = pendingDeleteId === scale.id;
+        return (
+          <div key={scale.id} className="space-y-2">
+            <div className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
+              <p className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">{scale.scope}</p>
+              <div className="flex items-center gap-3">
+                <Badge tone={scale.active ? 'emerald' : 'amber'}>{scale.active ? 'Active' : 'Draft'}</Badge>
+                {isDeleting ? (
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => confirmDeleteScale(scale.id)} disabled={deleteGradingScaleMutation.isPending}
+                        className="rounded-lg bg-red-600 px-3 py-1 text-xs font-black text-white hover:bg-red-700 disabled:opacity-50">
+                        {deleteGradingScaleMutation.isPending ? 'Deleting…' : 'Yes, delete'}
+                      </button>
+                      <button onClick={() => { setPendingDeleteId(null); setDeleteError(null); }}
+                        className="rounded-lg border border-slate-200 px-3 py-1 text-xs font-black text-slate-600 hover:bg-slate-100">Cancel</button>
+                    </div>
+                    {deleteError && <p className="flex items-start gap-1 text-[11px] font-semibold leading-tight text-red-600"><AlertTriangle className="mt-px h-3 w-3 shrink-0" />{deleteError}</p>}
+                  </div>
+                ) : (
+                  <button onClick={() => { setPendingDeleteId(scale.id); setDeleteError(null); }}
+                    disabled={scale.active}
+                    title={scale.active ? 'Activate another scale first before deleting this one' : 'Delete this scale'}
+                    className={`rounded-lg p-1.5 transition-colors ${scale.active ? 'cursor-not-allowed text-slate-300' : 'text-slate-400 hover:bg-red-50 hover:text-red-600'}`}>
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+            </div>
+            <GradingBoundaryEditor
+              scale={scale}
+              loading={createGradingScaleMutation.isPending || activateGradingScaleMutation.isPending}
+              onSave={saveScale(scale)}
+              onActivate={() => activateScale(scale.id)}
+            />
           </div>
-          <GradingBoundaryEditor
-            scale={scale}
-            loading={createGradingScaleMutation.isPending || activateGradingScaleMutation.isPending}
-            onSave={saveScale(scale)}
-            onActivate={() => activateScale(scale.id)}
-          />
-        </div>
-      ))}
+        );
+      })}
       <NavLink to="/admin/grading/create">
         <Button variant="secondary" className="rounded-xl">+ Create New Scale</Button>
       </NavLink>
@@ -1585,7 +2757,7 @@ export function CreateGradingScalePage() {
   );
 }
 
-// â”€â”€â”€ Assessment types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â"€â"€â"€ Assessment types â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 export function AssessmentTypesPage() {
   const { data: apiAssessmentTypes = [] as typeof assessmentTypes } = useAssessmentTypes() as unknown as { data: typeof assessmentTypes };
@@ -1620,7 +2792,7 @@ export function AssessmentTypesPage() {
   );
 }
 
-// â”€â”€â”€ Students â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â"€â"€â"€ Students â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 export function StudentsPage() {
   return (
@@ -1661,7 +2833,7 @@ function StudentsTable() {
   );
 }
 
-// â”€â”€â”€ Enrol student â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â"€â"€â"€ Enrol student â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 const ENROL_STEPS = ['Identity', 'Admission', 'Class', 'Guardians', 'Portal', 'Review'];
 
@@ -1794,7 +2966,7 @@ export function EnrolStudentPage() {
                 : i === step ? 'bg-[#4338CA] text-white ring-4 ring-[#4338CA]/20'
                 :              'bg-slate-100 text-slate-500 hover:bg-slate-200'
                 }`}>
-                  {i < step ? 'âœ“' : i + 1}
+                  {i < step ? 'âœ"' : i + 1}
                 </span>
                 <span className={`text-sm font-black transition ${i === step ? 'text-[#4338CA]' : 'text-slate-400'}`}>
                   {label}
@@ -1898,14 +3070,14 @@ export function EnrolStudentPage() {
           <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {([
               ['First Name', form.firstName],
-              ['Middle Name', form.middleName || 'â€”'],
+              ['Middle Name', form.middleName || '—'],
               ['Last Name', form.lastName],
-              ['Date of Birth', form.dateOfBirth || 'â€”'],
-              ['Gender', form.gender || 'â€”'],
-              ['National ID', form.nationalId || 'â€”'],
-              ['Admission Date', form.admissionDate || 'â€”'],
-              ['Class', (enrolClasses.find((c) => c.id === form.classId)?.name ?? form.classId) || 'â€”'],
-              ['Guardian', form.guardianFirstName ? `${form.guardianFirstName} ${form.guardianLastName} Â· ${form.guardianPhone}` : 'â€”'],
+              ['Date of Birth', form.dateOfBirth || '—'],
+              ['Gender', form.gender || '—'],
+              ['National ID', form.nationalId || '—'],
+              ['Admission Date', form.admissionDate || '—'],
+              ['Class', (enrolClasses.find((c) => c.id === form.classId)?.name ?? form.classId) || '—'],
+              ['Guardian', form.guardianFirstName ? `${form.guardianFirstName} ${form.guardianLastName} · ${form.guardianPhone}` : '—'],
             ] as const).map(([label, val]) => (
               <div key={label} className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{label}</p>
@@ -1933,70 +3105,409 @@ export function EnrolStudentPage() {
   );
 }
 
-// â”€â”€â”€ Student profile â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â"€â"€â"€ Student profile â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 export function StudentAdminProfilePage() {
   const { id } = useParams();
   const { data: apiStudents = [] as typeof adminStudents, isLoading } = useAdminStudents() as unknown as { data: typeof adminStudents; isLoading: boolean };
-  if (isLoading) return <AdminShell title="Loadingâ€¦" eyebrow="Admin student profile"><SkeletonTable cols={4} /></AdminShell>;
+  const { data: guardians = [] } = useStudentGuardians(id) as unknown as { data: any[] };
+  const { data: attendance = null } = useStudentAttendance(id) as unknown as { data: any };
+  const { data: performance = [] } = useStudentPerformance(id) as unknown as { data: any[] };
+  const { data: finance = null } = useStudentFinance(id) as unknown as { data: any };
+  const { data: discipline = [] } = useStudentDiscipline(id) as unknown as { data: any[] };
+  const { data: auditRaw = [] } = useAdminAuditEvents() as unknown as { data: any[] };
+  const updateMutation = useUpdateStudentMutation();
+  const addGuardianMutation = useAddGuardianMutation();
+  const inviteMutation = useStudentPortalInviteMutation();
+  const resetPortalMutation = useStudentPortalPasswordResetMutation();
+  const [activePanel, setActivePanel] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({ name: '', className: '', admissionNumber: '' });
+  const [guardianForm, setGuardianForm] = useState({ name: '', phone: '', relationship: 'Parent' });
+
   const student = apiStudents.find((s) => s.id === id) ?? null;
+
+  React.useEffect(() => {
+    if (student) {
+      setEditForm({
+        name: String(student.name ?? ''),
+        className: String(student.className ?? ''),
+        admissionNumber: String(student.registration ?? (student as any).admissionNumber ?? ''),
+      });
+    }
+  }, [student?.id]);
+
+  if (isLoading) return <AdminShell title="Loading…" eyebrow="Admin student profile"><SkeletonTable cols={4} /></AdminShell>;
   if (!student) return <AdminShell title="Not Found" eyebrow="Admin student profile"><EmptyState title="Student not found" description="This student record does not exist." /></AdminShell>;
+
+  const auditEvents = auditRaw.filter((e: any) =>
+    String(e.entityId ?? '') === id || String(e.actorName ?? '').toLowerCase().includes(String(student.name ?? '').toLowerCase())
+  );
+
+  const toggle = (panel: string) => setActivePanel((p) => (p === panel ? null : panel));
+
+  const handleUpdateIdentity = () => {
+    updateMutation.mutate({ id: id!, body: editForm as Record<string, unknown> }, {
+      onSuccess: () => toast('Student updated', 'success'),
+      onError: () => toast('Failed to update', 'error'),
+    });
+  };
+
+  const handleAddGuardian = () => {
+    if (!guardianForm.name || !guardianForm.phone) { toast('Name and phone required', 'warning'); return; }
+    addGuardianMutation.mutate({ studentId: id!, body: guardianForm as Record<string, unknown> }, {
+      onSuccess: () => { toast('Guardian added', 'success'); setGuardianForm({ name: '', phone: '', relationship: 'Parent' }); },
+      onError: () => toast('Failed to add guardian', 'error'),
+    });
+  };
+
+  const panels = [
+    { key: 'identity', label: 'Identity' },
+    { key: 'guardians', label: 'Guardians' },
+    { key: 'portal', label: 'Portal Account' },
+    { key: 'attendance', label: 'Attendance' },
+    { key: 'performance', label: 'Performance' },
+    { key: 'finance', label: 'Finance' },
+    { key: 'discipline', label: 'Discipline' },
+    { key: 'audit', label: 'Audit Trail' },
+  ];
+
   return (
     <AdminShell title={student.name} eyebrow="Admin student profile">
-      {/* Quick stats */}
+      <NavLink to="/admin/students" className="inline-flex items-center gap-1.5 text-sm font-black text-[#4338CA] hover:underline mb-4 block">
+        <ArrowLeft className="h-4 w-4" /> Back to Students
+      </NavLink>
+
       <AdminMetricStrip items={[
-        { label: 'Registration', value: student.registration, detail: student.className, tone: 'blue' },
-        { label: 'Status',       value: student.status,       detail: 'Active registry',  tone: 'green' },
-        { label: 'Guardians',    value: String(student.guardians), detail: 'on record', tone: 'blue' },
-        { label: 'Balance',      value: `TZS ${Number(student.balance ?? 0).toLocaleString('en-US')}`, detail: 'Outstanding', tone: (student.balance ?? 0) > 0 ? 'amber' : 'green' },
-        { label: 'Risk',         value: student.risk,          detail: 'Academic risk band', tone: student.risk === 'CRITICAL' ? 'rose' : 'amber' },
-        { label: 'Portal',       value: student.linked ? 'Linked' : 'Missing', detail: 'Account status', tone: student.linked ? 'green' : 'rose' },
+        { label: 'Registration', value: String(student.registration ?? (student as any).admissionNumber ?? '—'), detail: String(student.className ?? ''), tone: 'blue' },
+        { label: 'Status', value: String(student.status ?? 'ACTIVE'), detail: 'Registry', tone: 'green' },
+        { label: 'Guardians', value: String((guardians ?? []).length || (student.guardians ?? 0)), detail: 'on record', tone: 'blue' },
+        { label: 'Balance', value: `UGX ${Number(finance?.balance ?? student.balance ?? 0).toLocaleString()}`, detail: 'Outstanding', tone: (finance?.balance ?? student.balance ?? 0) > 0 ? 'amber' : 'green' },
+        { label: 'Risk', value: String(student.risk ?? 'LOW'), detail: 'Academic risk band', tone: student.risk === 'CRITICAL' ? 'rose' : 'amber' },
+        { label: 'Portal', value: student.linked ? 'Linked' : 'Not linked', detail: 'Account', tone: student.linked ? 'green' : 'rose' },
       ]} />
-      <div className="grid gap-gutter md:grid-cols-2 xl:grid-cols-4">
-        {(['Identity', 'Guardians', 'Portal Account', 'Attendance', 'Performance', 'Finance', 'Discipline', 'Audit'] as const).map((title) => (
-          <AdminQuickCard key={title} title={title} detail="Linked panel with edit controls." to="/admin/students" />
+
+      <div className="mt-gutter space-y-3">
+        {panels.map(({ key, label }) => (
+          <div key={key} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <button
+              onClick={() => toggle(key)}
+              className="flex w-full items-center justify-between px-6 py-4 text-left transition hover:bg-slate-50"
+            >
+              <span className="font-black text-slate-900">{label}</span>
+              <ChevronDown className={`h-5 w-5 text-slate-400 transition-transform ${activePanel === key ? 'rotate-180' : ''}`} />
+            </button>
+            {activePanel === key && (
+              <div className="border-t border-slate-100 px-6 py-5">
+                {key === 'identity' && (
+                  <div className="space-y-4">
+                    <div className="grid gap-4 md:grid-cols-3">
+                      <Field label="Full Name" value={editForm.name} onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))} />
+                      <Field label="Class" value={editForm.className} onChange={(e) => setEditForm((f) => ({ ...f, className: e.target.value }))} />
+                      <Field label="Admission Number" value={editForm.admissionNumber} onChange={(e) => setEditForm((f) => ({ ...f, admissionNumber: e.target.value }))} />
+                    </div>
+                    <Button className="rounded-xl bg-[#4338CA]" loading={updateMutation.isPending} onClick={handleUpdateIdentity}>Save Changes</Button>
+                  </div>
+                )}
+                {key === 'guardians' && (
+                  <div className="space-y-5">
+                    {(guardians ?? []).length === 0 ? (
+                      <p className="text-sm text-slate-500">No guardians on record.</p>
+                    ) : (
+                      <div className="overflow-x-auto rounded-xl border border-slate-200">
+                        <table className="w-full text-sm">
+                          <thead className="bg-slate-50 text-[11px] font-black uppercase tracking-widest text-slate-500">
+                            <tr>{['Name', 'Phone', 'Relationship'].map((h) => <th key={h} className="px-4 py-2 text-left">{h}</th>)}</tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {(guardians ?? []).map((g: any, i: number) => (
+                              <tr key={i} className="hover:bg-slate-50">
+                                <Td>{String(g.name ?? '—')}</Td>
+                                <Td className="font-mono text-xs">{String(g.phone ?? g.phoneNumber ?? '—')}</Td>
+                                <Td>{String(g.relationship ?? g.relation ?? '—')}</Td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                      <p className="mb-3 font-black text-slate-800">Add Guardian</p>
+                      <div className="grid gap-3 md:grid-cols-3">
+                        <Field label="Name" value={guardianForm.name} onChange={(e) => setGuardianForm((f) => ({ ...f, name: e.target.value }))} />
+                        <Field label="Phone" value={guardianForm.phone} onChange={(e) => setGuardianForm((f) => ({ ...f, phone: e.target.value }))} />
+                        <SelectField label="Relationship" value={guardianForm.relationship} onChange={(v) => setGuardianForm((f) => ({ ...f, relationship: v }))} options={[{ value: 'Parent', label: 'Parent' }, { value: 'Guardian', label: 'Guardian' }, { value: 'Sibling', label: 'Sibling' }, { value: 'Other', label: 'Other' }]} />
+                      </div>
+                      <div className="mt-3">
+                        <Button className="rounded-xl bg-[#4338CA]" loading={addGuardianMutation.isPending} onClick={handleAddGuardian}><Plus className="h-4 w-4" /> Add</Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {key === 'portal' && (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-3">
+                      <p className="font-semibold text-slate-700">Portal account:</p>
+                      <Badge tone={student.linked ? 'emerald' : 'slate'}>{student.linked ? 'Linked' : 'Not linked'}</Badge>
+                    </div>
+                    <div className="flex flex-wrap gap-3">
+                      <button
+                        onClick={() => inviteMutation.mutate(id!, { onSuccess: () => toast('Invite sent', 'success'), onError: () => toast('Failed to send invite', 'error') })}
+                        disabled={inviteMutation.isPending}
+                        className="inline-flex items-center gap-2 rounded-xl bg-[#4338CA] px-4 py-2.5 text-sm font-black text-white shadow-sm hover:bg-[#3730a3] disabled:opacity-40"
+                      >
+                        {inviteMutation.isPending ? 'Sending…' : 'Send Invite'}
+                      </button>
+                      <button
+                        onClick={() => resetPortalMutation.mutate(id!, { onSuccess: () => toast('Portal password reset', 'warning'), onError: () => toast('Failed to reset', 'error') })}
+                        disabled={resetPortalMutation.isPending}
+                        className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-black text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-40"
+                      >
+                        <Key className="h-4 w-4" /> {resetPortalMutation.isPending ? 'Resetting…' : 'Reset Portal Password'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {key === 'attendance' && (
+                  <div>
+                    {!attendance ? (
+                      <p className="text-sm text-slate-500">No attendance data available.</p>
+                    ) : (
+                      <div className="grid gap-4 md:grid-cols-3">
+                        {[
+                          { label: 'Present', value: String(attendance.present ?? '—') },
+                          { label: 'Absent', value: String(attendance.absent ?? '—') },
+                          { label: 'Rate', value: `${String(attendance.rate ?? attendance.attendanceRate ?? '—')}%` },
+                        ].map(({ label, value }) => (
+                          <div key={label} className="rounded-xl border border-slate-200 p-4 text-center">
+                            <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">{label}</p>
+                            <p className="mt-1 text-2xl font-black text-slate-900">{value}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+                {key === 'performance' && (
+                  <div>
+                    {(performance ?? []).length === 0 ? (
+                      <p className="text-sm text-slate-500">No performance records.</p>
+                    ) : (
+                      <div className="overflow-x-auto rounded-xl border border-slate-200">
+                        <table className="w-full text-sm">
+                          <thead className="bg-slate-50 text-[11px] font-black uppercase tracking-widest text-slate-500">
+                            <tr>{['Subject', 'Score', 'Grade', 'Term'].map((h) => <th key={h} className="px-4 py-2 text-left">{h}</th>)}</tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {(performance ?? []).map((p: any, i: number) => (
+                              <tr key={i}>
+                                <Td>{String(p.subject ?? p.subjectName ?? '—')}</Td>
+                                <Td className="font-mono">{String(p.score ?? p.marks ?? '—')}</Td>
+                                <Td><Badge tone={p.grade === 'A' ? 'emerald' : p.grade === 'F' ? 'rose' : 'blue'}>{String(p.grade ?? '—')}</Badge></Td>
+                                <Td>{String(p.term ?? p.termName ?? '—')}</Td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {key === 'finance' && (
+                  <div className="space-y-4">
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div className="rounded-xl border border-slate-200 p-4">
+                        <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">Outstanding Balance</p>
+                        <p className="mt-1 text-2xl font-black text-slate-900">UGX {Number(finance?.balance ?? student.balance ?? 0).toLocaleString()}</p>
+                      </div>
+                      <div className="rounded-xl border border-slate-200 p-4">
+                        <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">Total Paid</p>
+                        <p className="mt-1 text-2xl font-black text-slate-900">UGX {Number(finance?.totalPaid ?? 0).toLocaleString()}</p>
+                      </div>
+                    </div>
+                    {(finance?.transactions ?? []).length > 0 && (
+                      <div className="overflow-x-auto rounded-xl border border-slate-200">
+                        <table className="w-full text-sm">
+                          <thead className="bg-slate-50 text-[11px] font-black uppercase tracking-widest text-slate-500">
+                            <tr>{['Date', 'Description', 'Amount', 'Type'].map((h) => <th key={h} className="px-4 py-2 text-left">{h}</th>)}</tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {(finance?.transactions ?? []).map((t: any, i: number) => (
+                              <tr key={i}>
+                                <Td className="font-mono text-xs">{String(t.date ?? '—').slice(0, 10)}</Td>
+                                <Td>{String(t.description ?? t.desc ?? '—')}</Td>
+                                <Td className="font-mono">UGX {Number(t.amount ?? 0).toLocaleString()}</Td>
+                                <Td><Badge tone={t.type === 'payment' ? 'emerald' : 'amber'}>{String(t.type ?? 'charge')}</Badge></Td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {key === 'discipline' && (
+                  <div>
+                    {(discipline ?? []).length === 0 ? (
+                      <p className="text-sm text-slate-500">No discipline records.</p>
+                    ) : (
+                      <div className="overflow-x-auto rounded-xl border border-slate-200">
+                        <table className="w-full text-sm">
+                          <thead className="bg-slate-50 text-[11px] font-black uppercase tracking-widest text-slate-500">
+                            <tr>{['Date', 'Incident', 'Severity', 'Action'].map((h) => <th key={h} className="px-4 py-2 text-left">{h}</th>)}</tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {(discipline ?? []).map((d: any, i: number) => (
+                              <tr key={i}>
+                                <Td className="font-mono text-xs">{String(d.date ?? '—').slice(0, 10)}</Td>
+                                <Td>{String(d.incident ?? d.description ?? '—')}</Td>
+                                <Td><Badge tone={d.severity === 'HIGH' ? 'rose' : d.severity === 'MEDIUM' ? 'amber' : 'slate'}>{String(d.severity ?? 'LOW')}</Badge></Td>
+                                <Td>{String(d.action ?? d.resolution ?? '—')}</Td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {key === 'audit' && (
+                  <div>
+                    {auditEvents.length === 0 ? (
+                      <p className="text-sm text-slate-500">No audit events for this student.</p>
+                    ) : (
+                      <div className="overflow-x-auto rounded-xl border border-slate-200">
+                        <table className="w-full text-sm">
+                          <thead className="bg-slate-50 text-[11px] font-black uppercase tracking-widest text-slate-500">
+                            <tr>{['Time', 'Action', 'Actor', 'Details'].map((h) => <th key={h} className="px-4 py-2 text-left">{h}</th>)}</tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {auditEvents.slice(0, 20).map((e: any, i: number) => (
+                              <tr key={i}>
+                                <Td className="font-mono text-xs whitespace-nowrap">{String(e.createdAt ?? e.timestamp ?? '').slice(0, 19).replace('T', ' ')}</Td>
+                                <Td><Badge tone="blue">{String(e.action ?? e.event ?? '—')}</Badge></Td>
+                                <Td>{String(e.actorName ?? e.actor ?? '—')}</Td>
+                                <Td className="max-w-[200px] truncate text-xs text-slate-500">{String(e.details ?? e.metadata ?? '—')}</Td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         ))}
       </div>
     </AdminShell>
   );
 }
 
-// â”€â”€â”€ Fee categories â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â"€â"€â"€ Fee categories â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 export function AdminFeeCategoriesPage() {
   const { data: rawCategories = [], isLoading, isError, refetch } = useFeeCategories() as unknown as { data: Array<{ id?: string; code?: string; name?: string; type?: string; category?: string; amount?: number; defaultAmount?: number; usedByStructures?: number }> | undefined; isLoading: boolean; isError: boolean; refetch: () => void };
+  const createMutation = useCreateFeeCategoryMutation();
+  const deleteMutation = useDeleteFeeCategoryMutation();
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [createForm, setCreateForm] = useState({ code: '', name: '', type: 'Mandatory', amount: '' });
+  const setF = (k: keyof typeof createForm) => (e: React.ChangeEvent<HTMLInputElement>) =>
+    setCreateForm((f) => ({ ...f, [k]: k === 'code' ? e.target.value.toUpperCase() : e.target.value }));
+
   const categories = (rawCategories ?? []).map((c) => ({
-        id: c.id ?? '',
-        code: c.code ?? c.id ?? '',
-        name: c.name ?? '',
-        type: c.type ?? c.category ?? 'Optional',
-        amount: c.amount ?? c.defaultAmount ?? 0,
-        used: c.usedByStructures ?? 0,
-      }));
+    id: c.id ?? '',
+    code: c.code ?? c.id ?? '',
+    name: c.name ?? '',
+    type: c.type ?? c.category ?? 'Optional',
+    amount: c.amount ?? c.defaultAmount ?? 0,
+    used: c.usedByStructures ?? 0,
+  }));
+
+  const handleCreate = () => {
+    if (!createForm.code.trim() || !createForm.name.trim()) { toast('Code and name are required', 'warning'); return; }
+    createMutation.mutate({ ...createForm, amount: Number(createForm.amount) }, {
+      onSuccess: () => { toast('Fee category created', 'success'); setCreateForm({ code: '', name: '', type: 'Mandatory', amount: '' }); },
+      onError: () => toast('Failed to create fee category', 'error'),
+    });
+  };
+
+  const handleDelete = (id: string) => {
+    deleteMutation.mutate(id, {
+      onSuccess: () => { toast('Fee category deleted', 'warning'); setPendingDeleteId(null); },
+      onError: () => { toast('Failed to delete fee category', 'error'); setPendingDeleteId(null); },
+    });
+  };
+
   if (isLoading) return <AdminShell title="Fee Categories" eyebrow="Finance setup"><SkeletonTable cols={5} /></AdminShell>;
   if (isError) return <AdminShell title="Fee Categories" eyebrow="Finance setup"><DataError onRetry={refetch} /></AdminShell>;
   return (
     <AdminShell title="Fee Categories" eyebrow="Finance setup with dependency safety">
+      {/* Create form */}
+      <AdminFormSection title="Add Fee Category" subtitle="Categories are used in fee structures. Deleting a category removes it from all structures.">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <Field label="Code" value={createForm.code} onChange={setF('code')} placeholder="e.g. TUITION" />
+          <Field label="Name" value={createForm.name} onChange={setF('name')} placeholder="e.g. Tuition Fee" />
+          <SelectField
+            label="Type"
+            value={createForm.type}
+            onChange={(v) => setCreateForm((f) => ({ ...f, type: v }))}
+            options={[{ value: 'Mandatory', label: 'Mandatory' }, { value: 'Optional', label: 'Optional' }]}
+          />
+          <Field label="Default Amount (UGX)" value={createForm.amount} onChange={setF('amount')} placeholder="e.g. 500000" />
+        </div>
+        <div className="mt-4">
+          <Button className="rounded-xl bg-[#4338CA]" loading={createMutation.isPending} onClick={handleCreate}>
+            <Plus className="h-4 w-4" /> Create Category
+          </Button>
+        </div>
+      </AdminFormSection>
+
+      {/* Table */}
       <AdminDataTable columns={['Code', 'Name', 'Type', 'Amount', 'Used By', 'Actions']}>
-        {categories.length === 0 && <tr><td colSpan={6} className="px-5 py-6 text-center text-sm text-slate-500">No fee categories yet. <NavLink to="/finance/fee-categories/create" className="font-black text-[#4338CA] hover:underline">Create one â†’</NavLink></td></tr>}
+        {categories.length === 0 && (
+          <tr><td colSpan={6} className="px-5 py-6 text-center text-sm text-slate-500">No fee categories yet — add one above.</td></tr>
+        )}
         {categories.map((cat) => (
-          <tr key={cat.id || cat.code} className="hover:bg-slate-50">
-            <Td className="font-mono text-xs text-slate-500">{cat.code}</Td>
-            <Td><p className="font-black text-slate-900">{cat.name}</p></Td>
-            <Td><Badge tone={cat.type === 'Mandatory' ? 'rose' : 'blue'}>{cat.type}</Badge></Td>
-            <Td className="font-mono text-xs">TZS {cat.amount.toLocaleString('en-US')}</Td>
-            <Td>{cat.used} structures</Td>
-            <Td>
-              <DangerActionDialog title="Delete Category" entity={cat.code} confirmation="DELETE" />
-            </Td>
-          </tr>
+          <React.Fragment key={cat.id || cat.code}>
+            <tr className="hover:bg-slate-50">
+              <Td className="font-mono text-xs text-slate-500">{cat.code}</Td>
+              <Td><p className="font-black text-slate-900">{cat.name}</p></Td>
+              <Td><Badge tone={cat.type === 'Mandatory' ? 'rose' : 'blue'}>{cat.type}</Badge></Td>
+              <Td className="font-mono text-xs">UGX {cat.amount.toLocaleString('en-US')}</Td>
+              <Td>{`${cat.used} structures`}</Td>
+              <Td>
+                {pendingDeleteId === cat.id ? (
+                  <span className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleDelete(cat.id)}
+                      disabled={deleteMutation.isPending}
+                      className="rounded-lg bg-rose-600 px-2.5 py-1 text-xs font-black text-white hover:bg-rose-700 disabled:opacity-40"
+                    >
+                      {deleteMutation.isPending ? 'Deleting…' : 'Yes, delete'}
+                    </button>
+                    <button onClick={() => setPendingDeleteId(null)} className="rounded-lg border px-2.5 py-1 text-xs font-black text-slate-600 hover:bg-slate-100">Cancel</button>
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => setPendingDeleteId(cat.id)}
+                    disabled={cat.used > 0}
+                    title={cat.used > 0 ? 'Remove from all fee structures first' : 'Delete category'}
+                    className="inline-flex items-center gap-1 rounded-lg border border-rose-200 px-2.5 py-1 text-xs font-black text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <Trash2 className="h-3 w-3" /> Delete
+                  </button>
+                )}
+              </Td>
+            </tr>
+          </React.Fragment>
         ))}
       </AdminDataTable>
     </AdminShell>
   );
 }
 
-// â”€â”€â”€ Performance engine â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â"€â"€â"€ Performance engine â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 export function PerformanceEngineAdminPage() {
   const runMutation = useRunEngineAdminMutation();
@@ -2004,12 +3515,12 @@ export function PerformanceEngineAdminPage() {
   const set = (k: keyof typeof thresholds) => (e: React.ChangeEvent<HTMLInputElement>) => setThresholds((p) => ({ ...p, [k]: e.target.value }));
 
   const handleRun = () => {
-    toast('Performance engine startedâ€¦', 'info');
+    toast('Performance engine started…', 'info');
     runMutation.mutate({ scope: 'WHOLE_SCHOOL', thresholds: { failure: Number(thresholds.failure), atRisk: Number(thresholds.atRisk), excellence: Number(thresholds.excellence), maxPairs: Number(thresholds.maxPairs), strategy: thresholds.strategy } }, {
       onSuccess: (result) => {
         const r = result as Record<string, unknown> | undefined;
         const processed = r?.studentsProcessed ?? r?.count ?? 'all';
-        toast(`Engine run complete â€” ${processed} students processed`, 'success');
+        toast(`Engine run complete — ${processed} students processed`, 'success');
       },
       onError: () => toast('Engine run failed. Please check service logs.', 'error'),
     });
@@ -2041,11 +3552,11 @@ export function PerformanceEngineAdminPage() {
               <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
                 <div className="h-full animate-pulse rounded-full bg-[#4338CA]" style={{ width: '60%' }} />
               </div>
-              <span className="text-xs font-bold text-slate-500">Runningâ€¦</span>
+              <span className="text-xs font-bold text-slate-500">Running…</span>
             </div>
           )}
           <Button className="mt-4 w-full rounded-xl bg-[#4338CA]" loading={runMutation.isPending} onClick={handleRun}>
-            <Play className="h-4 w-4" /> {runMutation.isPending ? 'Runningâ€¦' : 'Run Engine Now'}
+            <Play className="h-4 w-4" /> {runMutation.isPending ? 'Running…' : 'Run Engine Now'}
           </Button>
         </div>
       </div>
@@ -2053,7 +3564,7 @@ export function PerformanceEngineAdminPage() {
   );
 }
 
-// â”€â”€â”€ Notification templates â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â"€â"€â"€ Notification templates â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 export function NotificationTemplatesPage() {
   const { data: apiTemplates = [] as typeof notificationTemplates } = useNotificationTemplates() as unknown as { data: typeof notificationTemplates };
@@ -2081,10 +3592,30 @@ export function NotificationTemplatesPage() {
 export function NotificationTemplateDetailPage() {
   const { id } = useParams();
   const { data: apiTemplates = [] as typeof notificationTemplates, isLoading } = useNotificationTemplates() as unknown as { data: typeof notificationTemplates; isLoading: boolean };
-  if (isLoading) return <AdminShell title="Loadingâ€¦" eyebrow="Template editor"><SkeletonTable cols={3} /></AdminShell>;
+  const saveMutation = useUpdateNotificationTemplateMutation();
+
+  if (isLoading) return <AdminShell title="Loading…" eyebrow="Template editor"><SkeletonTable cols={3} /></AdminShell>;
   const tpl = apiTemplates.find((t) => t.id === id) ?? null;
   if (!tpl) return <AdminShell title="Not Found" eyebrow="Template editor"><EmptyState title="Template not found" description="This notification template does not exist." /></AdminShell>;
-  return <AdminShell title={tpl.name} eyebrow="Template editor"><NotificationTemplateEditor template={tpl} /></AdminShell>;
+
+  const handleSave = (body: string) => {
+    saveMutation.mutate({ id: tpl.id!, payload: { body } }, {
+      onSuccess: () => toast('Template saved', 'success'),
+      onError: () => toast('Failed to save template', 'error'),
+    });
+  };
+
+  return (
+    <AdminShell title={tpl.name} eyebrow="Template editor">
+      <NavLink to="/admin/notifications/templates" className="inline-flex items-center gap-1.5 text-sm font-black text-[#4338CA] hover:underline mb-4 block">
+        <ArrowLeft className="h-4 w-4" /> Back to Templates
+      </NavLink>
+      <NotificationTemplateEditor template={tpl} onSave={handleSave} />
+      {saveMutation.isPending && (
+        <p className="mt-2 text-sm font-semibold text-slate-500">Saving…</p>
+      )}
+    </AdminShell>
+  );
 }
 
 export function SendManualNotificationPage() {
@@ -2110,10 +3641,10 @@ export function SendManualNotificationPage() {
             <SelectField label="Channel" options={[{ value: 'SMS', label: 'SMS' }, { value: 'Email', label: 'Email' }, { value: 'Push', label: 'Push (app)' }, { value: 'All', label: 'All channels' }]} value={form.channel} onChange={setField('channel')} />
             <SelectField label="Priority" options={[{ value: 'normal', label: 'Normal' }, { value: 'high', label: 'High' }, { value: 'urgent', label: 'Urgent' }]} value={form.priority} onChange={setField('priority')} />
           </div>
-          <textarea className="mt-4 h-36 w-full rounded-xl border border-slate-200 bg-slate-50 p-4 font-semibold outline-none transition focus:border-[#4338CA] focus:bg-white" placeholder="Message bodyâ€¦" value={form.body} onChange={(e) => setField('body')(e.target.value)} />
+          <textarea className="mt-4 h-36 w-full rounded-xl border border-slate-200 bg-slate-50 p-4 font-semibold outline-none transition focus:border-[#4338CA] focus:bg-white" placeholder="Message body…" value={form.body} onChange={(e) => setField('body')(e.target.value)} />
           <div className="mt-4 flex gap-3">
             <Button className="rounded-xl bg-[#4338CA]" disabled={sendMutation.isPending} onClick={handleSend}>
-              {sendMutation.isPending ? 'Sendingâ€¦' : 'Send Notification'}
+              {sendMutation.isPending ? 'Sending…' : 'Send Notification'}
             </Button>
             <Button variant="secondary" className="rounded-xl" onClick={() => navigate(-1)}>Cancel</Button>
           </div>
@@ -2140,14 +3671,14 @@ export function NotificationLogsPage() {
             <Td className="text-xs text-slate-400">
               {log.time && !log.time.startsWith('[object')
                 ? new Date(log.time).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })
-                : 'â€”'}
+                : '—'}
             </Td>
             <Td><Badge tone="blue">{log.channel}</Badge></Td>
             <Td className="font-mono text-xs text-slate-500">{log.recipient}</Td>
             <Td className="text-xs">{log.eventType.split('_').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ')}</Td>
             <Td><Badge tone={log.status === 'FAILED' ? 'rose' : 'emerald'}>{log.status}</Badge></Td>
             <Td>{log.attempts}</Td>
-            <Td className="text-xs text-slate-500">{log.provider || 'â€”'}</Td>
+            <Td className="text-xs text-slate-500">{log.provider || '—'}</Td>
           </tr>
         ))}
       </AdminDataTable>
@@ -2155,19 +3686,9 @@ export function NotificationLogsPage() {
   );
 }
 
-// â”€â”€â”€ Analytics & reports â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â"€â"€â"€ Analytics & reports â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
-export function AdminAnalyticsPage() {
-  return (
-    <AdminShell title="Analytics Full Access" eyebrow="All school analytics">
-      <div className="grid gap-gutter md:grid-cols-2 xl:grid-cols-3">
-        {(['School overview', 'Academic health', 'Finance health', 'Enrolment trends', 'Attendance health', 'Notification health'] as const).map((title) => (
-          <AdminQuickCard key={title} title={title} detail="Exportable with source labels." to="/analytics" />
-        ))}
-      </div>
-    </AdminShell>
-  );
-}
+export { AdminAnalyticsPage } from '../../analytics/pages/AdminAnalyticsPage';
 
 export function AdminReportsPage() {
   const { data: apiReportJobs = [] as typeof reportJobs } = useAdminReportJobs() as unknown as { data: typeof reportJobs };
@@ -2198,7 +3719,7 @@ export function AdminReportDetailPage() {
   const { data: apiReportJobs = [] as typeof reportJobs, isLoading } = useAdminReportJobs() as unknown as { data: typeof reportJobs; isLoading: boolean };
   const [downloading, setDownloading] = useState(false);
 
-  if (isLoading) return <AdminShell title="Loadingâ€¦" eyebrow="Report detail"><SkeletonTable cols={3} /></AdminShell>;
+  if (isLoading) return <AdminShell title="Loading…" eyebrow="Report detail"><SkeletonTable cols={3} /></AdminShell>;
   const job = apiReportJobs.find((r) => r.id === id) ?? null;
   if (!job) return <AdminShell title="Not Found" eyebrow="Report detail"><EmptyState title="Report not found" description="This report job does not exist." /></AdminShell>;
 
@@ -2223,13 +3744,13 @@ export function AdminReportDetailPage() {
         { label: 'Requested', value: job.requestedBy, detail: job.created.slice(0, 10) },
       ]} />
       <Button className="rounded-xl bg-[#4338CA]" disabled={downloading} onClick={handleDownload}>
-        <Download className="h-4 w-4" /> {downloading ? 'Downloadingâ€¦' : 'Download'}
+        <Download className="h-4 w-4" /> {downloading ? 'Downloading…' : 'Download'}
       </Button>
     </AdminShell>
   );
 }
 
-// â”€â”€â”€ Audit â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â"€â"€â"€ Audit â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 export function FinanceAuditAdminPage() {
   return <AdminShell title="Financial Audit Log" eyebrow="Immutable finance events"><AuditPanel /></AdminShell>;
@@ -2303,8 +3824,8 @@ function AuditEventCard({ event }: { event: AuditEvent }) {
               {event.action}
             </span>
             {actorLabel && <span>{actorLabel}</span>}
-            {entityLabel && <><span className="text-slate-300">Â·</span><span>{entityLabel}</span></>}
-            {entityId && <span className="font-mono text-xs text-slate-400">{entityId.slice(0, 8)}â€¦</span>}
+            {entityLabel && <><span className="text-slate-300">·</span><span>{entityLabel}</span></>}
+            {entityId && <span className="font-mono text-xs text-slate-400">{entityId.slice(0, 8)}…</span>}
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2 pt-1">
@@ -2352,7 +3873,7 @@ function AuditEventCard({ event }: { event: AuditEvent }) {
               {performedById && (
                 <div>
                   <span className="font-black uppercase tracking-widest text-slate-400">Actor ID: </span>
-                  <span className="font-mono font-semibold text-slate-500">{performedById.slice(0, 8)}â€¦</span>
+                  <span className="font-mono font-semibold text-slate-500">{performedById.slice(0, 8)}…</span>
                 </div>
               )}
               {ipAddress && (
@@ -2383,7 +3904,7 @@ function AuditPanel() {
   );
 }
 
-// â”€â”€â”€ System settings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â"€â"€â"€ System settings â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 export function SystemSettingsPage() {
   const { data: apiSettings } = useSystemSettings() as unknown as { data: Record<string, unknown> | undefined };
@@ -2450,7 +3971,7 @@ export function SystemSettingsPage() {
         <div className="space-y-4">
           <DangerActionDialog title="Reset All Sessions" entity="All active users" confirmation="RESET" />
           <Button className="w-full rounded-xl bg-[#4338CA]" disabled={saveMutation.isPending} onClick={handleSave}>
-            {saveMutation.isPending ? 'Savingâ€¦' : 'Save Settings'}
+            {saveMutation.isPending ? 'Saving…' : 'Save Settings'}
           </Button>
         </div>
       </div>
@@ -2458,42 +3979,106 @@ export function SystemSettingsPage() {
   );
 }
 
-// â”€â”€â”€ Announcements â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â"€â"€â"€ Announcements â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 export function AdminAnnouncementsPage() {
   const { data: rawAnnouncements = [], isLoading, isError, refetch } = useAnnouncements() as unknown as { data: Array<{ id?: string; title?: string; author?: string; createdBy?: string; audience?: string; targetRoles?: string[]; status?: string; priority?: string }> | undefined; isLoading: boolean; isError: boolean; refetch: () => void };
+  const cancelMutation = useCancelAnnouncementMutation();
+  const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+
   const items = (rawAnnouncements ?? []).map((a) => ({
-        id: a.id ?? a.title ?? String(Math.random()),
-        title: a.title ?? '',
-        author: a.author ?? a.createdBy ?? 'Admin',
-        audience: a.audience ?? ((a.targetRoles ?? []).join(', ') || 'All roles'),
-        status: a.status?.toUpperCase() ?? 'ACTIVE',
-        priority: a.priority ?? 'Normal',
-      }));
+    id: a.id ?? a.title ?? String(Math.random()),
+    title: a.title ?? '',
+    author: a.author ?? a.createdBy ?? 'Admin',
+    audience: a.audience ?? ((a.targetRoles ?? []).join(', ') || 'All roles'),
+    status: a.status?.toUpperCase() ?? 'ACTIVE',
+    priority: a.priority ?? 'Normal',
+  }));
+
+  const handleCancel = (id: string) => {
+    if (!cancelReason.trim()) { toast('Cancellation reason is required', 'warning'); return; }
+    cancelMutation.mutate({ id, reason: cancelReason }, {
+      onSuccess: () => { toast('Announcement cancelled', 'warning'); setPendingCancelId(null); setCancelReason(''); },
+      onError: () => toast('Failed to cancel announcement', 'error'),
+    });
+  };
+
   return (
     <AdminShell title="Announcements Admin" eyebrow="Create, edit, cancel with reason">
+      <div className="mb-4 flex justify-end">
+        <NavLink
+          to="/admin/announcements/create"
+          className="inline-flex items-center gap-2 rounded-xl bg-[#4338CA] px-4 py-2.5 text-sm font-black text-white shadow-sm hover:bg-[#3730a3]"
+        >
+          <Plus className="h-4 w-4" /> Create Announcement
+        </NavLink>
+      </div>
       <AdminDataTable columns={['Title', 'Author', 'Audience', 'Status', 'Priority', 'Actions']}>
-        {isLoading && <tr><td colSpan={6} className="px-5 py-6 text-center text-sm text-slate-500">Loadingâ€¦</td></tr>}
+        {isLoading && <tr><td colSpan={6} className="px-5 py-6 text-center text-sm text-slate-500">Loading…</td></tr>}
         {isError && <tr><td colSpan={6} className="px-5 py-6 text-center text-sm text-rose-500">Failed to load. <button onClick={refetch} className="font-black underline">Retry</button></td></tr>}
-        {!isLoading && !isError && items.length === 0 && <tr><td colSpan={6} className="px-5 py-6 text-center text-sm text-slate-500">No announcements yet.</td></tr>}
+        {!isLoading && !isError && items.length === 0 && <tr><td colSpan={6} className="px-5 py-6 text-center text-sm text-slate-500">No announcements yet. <NavLink to="/admin/announcements/create" className="font-black text-[#4338CA] hover:underline">Create one →</NavLink></td></tr>}
         {items.map((item) => (
-          <tr key={item.id} className="hover:bg-slate-50">
-            <Td><p className="font-black text-slate-900">{item.title}</p></Td>
-            <Td>{item.author}</Td>
-            <Td>{item.audience}</Td>
-            <Td><Badge tone="emerald">{item.status}</Badge></Td>
-            <Td><Badge tone={item.priority === 'High' ? 'rose' : 'blue'}>{item.priority}</Badge></Td>
-            <Td>
-              <DangerActionDialog title="Cancel Announcement" entity={item.title} confirmation="CANCEL" />
-            </Td>
-          </tr>
+          <React.Fragment key={item.id}>
+            <tr className="hover:bg-slate-50">
+              <Td><p className="font-black text-slate-900">{item.title}</p></Td>
+              <Td>{item.author}</Td>
+              <Td>{item.audience}</Td>
+              <Td><Badge tone={item.status === 'CANCELLED' ? 'slate' : 'emerald'}>{item.status}</Badge></Td>
+              <Td><Badge tone={item.priority === 'High' || item.priority === 'Urgent' ? 'rose' : 'blue'}>{item.priority}</Badge></Td>
+              <Td>
+                {item.status !== 'CANCELLED' && (
+                  pendingCancelId === item.id ? null : (
+                    <button
+                      onClick={() => { setPendingCancelId(item.id); setCancelReason(''); }}
+                      className="rounded-lg border border-amber-200 px-2.5 py-1 text-xs font-black text-amber-700 hover:bg-amber-50"
+                    >
+                      Cancel
+                    </button>
+                  )
+                )}
+              </Td>
+            </tr>
+            {pendingCancelId === item.id && (
+              <tr>
+                <td colSpan={6} className="bg-amber-50 px-6 py-4">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-end">
+                    <div className="flex-1">
+                      <label className="mb-1 block text-xs font-black uppercase tracking-widest text-amber-800">Cancellation Reason</label>
+                      <textarea
+                        value={cancelReason}
+                        onChange={(e) => setCancelReason(e.target.value)}
+                        placeholder="State the reason for cancellation…"
+                        className="h-16 w-full rounded-xl border border-amber-200 bg-white p-2 text-sm font-semibold outline-none focus:border-amber-400"
+                      />
+                    </div>
+                    <div className="flex gap-2 shrink-0">
+                      <button
+                        onClick={() => handleCancel(item.id)}
+                        disabled={!cancelReason.trim() || cancelMutation.isPending}
+                        className="rounded-xl bg-amber-600 px-4 py-2 text-sm font-black text-white hover:bg-amber-700 disabled:opacity-40"
+                      >
+                        {cancelMutation.isPending ? 'Cancelling…' : 'Confirm Cancel'}
+                      </button>
+                      <button
+                        onClick={() => setPendingCancelId(null)}
+                        className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-700 hover:bg-slate-50"
+                      >
+                        Back
+                      </button>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            )}
+          </React.Fragment>
         ))}
       </AdminDataTable>
     </AdminShell>
   );
 }
 
-// â”€â”€â”€ Stage Configuration (Gap 10) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â"€â"€â"€ Stage Configuration (Gap 10) â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 const STAGE_DESCRIPTIONS: Record<string, { label: string; note: string; tone: 'emerald' | 'blue' | 'amber' }> = {
   PRIMARY: { label: 'Primary School', note: 'Class 1 up to terminal year (Class 6 or 7). Pass mark: 50 %. PSLE national exam at terminal year.', tone: 'emerald' },
@@ -2595,11 +4180,11 @@ export function StageConfigPage() {
   };
 
   return (
-    <AdminShell title="Stage Range Configuration" eyebrow="Primary Â· O-Level Â· A-Level school structure">
+    <AdminShell title="Stage Range Configuration" eyebrow="Primary · O-Level · A-Level school structure">
       <AdminMetricStrip items={[
         { label: 'Primary',  value: `Class 1-${config.terminalPrimary}`, detail: 'Configurable terminal year', tone: 'green'  },
-        { label: 'O-Level',  value: 'Form 1â€“4',                   detail: 'CSEE at Form 4',              tone: 'blue'  },
-        { label: 'A-Level',  value: 'Form 5â€“6',                   detail: 'ACSEE at Form 6',             tone: 'amber' },
+        { label: 'O-Level',  value: 'Form 1–4',                   detail: 'CSEE at Form 4',              tone: 'blue'  },
+        { label: 'A-Level',  value: 'Form 5–6',                   detail: 'ACSEE at Form 6',             tone: 'amber' },
         { label: 'Reg. Prefix', value: `${config.primaryPrefix} / ${config.oLevelPrefix} / ${config.aLevelPrefix}`,     detail: 'Stage-prefixed numbers',      tone: 'blue'  },
       ]} />
 
@@ -2629,7 +4214,7 @@ export function StageConfigPage() {
             value={config.terminalPrimary}
             options={[
               { value: '6', label: 'Class 6 (6-year primary)' },
-              { value: '7', label: 'Class 7 (7-year primary â€” Tanzania standard)' },
+              { value: '7', label: 'Class 7 (7-year primary — Tanzania standard)' },
             ]}
             onChange={(value) => setConfigValue('terminalPrimary', value)}
           />
@@ -2643,7 +4228,7 @@ export function StageConfigPage() {
       </AdminFormSection>
 
       {/* O-Level */}
-      <AdminFormSection title="O-Level Stage" subtitle="Form 1â€“4 configuration. CSEE readiness template activates at Form 4.">
+      <AdminFormSection title="O-Level Stage" subtitle="Form 1–4 configuration. CSEE readiness template activates at Form 4.">
         <div className="grid gap-4 md:grid-cols-3">
           <Field label="Entry Form Level" value="Form 1" readOnly />
           <Field label="Terminal Form Level" value="Form 4" readOnly />
@@ -2660,7 +4245,7 @@ export function StageConfigPage() {
       </AdminFormSection>
 
       {/* A-Level */}
-      <AdminFormSection title="A-Level Stage" subtitle="Form 5â€“6. Combination-based subjects. ACSEE readiness template at Form 6.">
+      <AdminFormSection title="A-Level Stage" subtitle="Form 5–6. Combination-based subjects. ACSEE readiness template at Form 6.">
         <div className="grid gap-4 md:grid-cols-3">
           <Field label="Entry Form Level" value="Form 5" readOnly />
           <Field label="Terminal Form Level" value="Form 6" readOnly />
@@ -2689,7 +4274,7 @@ export function StageConfigPage() {
   );
 }
 
-// â”€â”€â”€ Cross-Stage Promotion (Gap 11) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â"€â"€â"€ Cross-Stage Promotion (Gap 11) â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 const CROSS_STAGE_FLOWS = [
   {
@@ -2698,7 +4283,7 @@ const CROSS_STAGE_FLOWS = [
     to: 'Form 1 (O-Level)',
     type: 'CROSS_STAGE',
     rule: 'Student must pass PSLE. New registration number issued: KS-S-YYYY-NNNNN.',
-    badge: 'Primary â†’ O-Level',
+    badge: 'Primary → O-Level',
     tone: 'emerald' as const,
   },
   {
@@ -2707,7 +4292,7 @@ const CROSS_STAGE_FLOWS = [
     to: 'Form 5 (A-Level)',
     type: 'CROSS_STAGE',
     rule: 'Student must select an A-Level combination. New registration number: KS-A-YYYY-NNNNN.',
-    badge: 'O-Level â†’ A-Level',
+    badge: 'O-Level → A-Level',
     tone: 'amber' as const,
   },
   {
@@ -2716,7 +4301,7 @@ const CROSS_STAGE_FLOWS = [
     to: 'Graduation',
     type: 'GRADUATION',
     rule: 'Student graduates. ACSEE results recorded. Status set to GRADUATED.',
-    badge: 'A-Level â†’ Graduate',
+    badge: 'A-Level → Graduate',
     tone: 'blue' as const,
   },
 ];
@@ -2789,7 +4374,7 @@ export function CrossStagePromotionPage() {
   };
 
   return (
-    <AdminShell title="Cross-Stage Promotion Workflow" eyebrow="Primary â†’ O-Level Â· O-Level â†’ A-Level Â· Graduation">
+    <AdminShell title="Cross-Stage Promotion Workflow" eyebrow="Primary → O-Level · O-Level → A-Level · Graduation">
       <div className="grid gap-3 lg:grid-cols-3">
         {CROSS_STAGE_FLOWS.map((f) => (
           <button
@@ -2861,7 +4446,481 @@ export function CrossStagePromotionPage() {
   );
 }
 
-// â”€â”€â”€ Util â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── System Status ─────────────────────────────────────────────────────────────
+
+const PM2_SERVICES = [
+  'ks-auth-service',
+  'ks-students-service',
+  'ks-academics-service',
+  'ks-analytics-service',
+  'ks-finance-service',
+  'ks-notifications-service',
+  'ks-operations-service',
+  'ks-gateway',
+] as const;
+
+export function AdminSystemStatusPage() {
+  const { data: health = null } = useServiceHealth() as unknown as { data: any };
+  const clearCacheMutation = useClearCacheMutation();
+  const [dangerInput, setDangerInput] = useState('');
+  const [pendingClearAll, setPendingClearAll] = useState(false);
+
+  const services: any[] = Array.isArray(health?.services) ? health.services : [];
+  const total = services.length || PM2_SERVICES.length;
+  const healthy = services.filter((s: any) => s.status === 'healthy' || s.status === 'up').length;
+  const degraded = services.filter((s: any) => s.status === 'degraded').length;
+  const down = services.filter((s: any) => s.status === 'down' || s.status === 'error').length;
+
+  const getStatus = (name: string): 'healthy' | 'degraded' | 'down' | 'unknown' => {
+    const svc = services.find((s: any) => s.name === name || s.service === name);
+    if (!svc) return 'unknown';
+    if (svc.status === 'healthy' || svc.status === 'up') return 'healthy';
+    if (svc.status === 'degraded') return 'degraded';
+    return 'down';
+  };
+
+  const statusDot = (st: ReturnType<typeof getStatus>) => {
+    const colors = { healthy: 'bg-emerald-500', degraded: 'bg-amber-400', down: 'bg-rose-500', unknown: 'bg-slate-300' };
+    return <span className={`inline-block h-2.5 w-2.5 rounded-full ${colors[st]}`} />;
+  };
+
+  const handleClearDomain = (domain: string) => {
+    clearCacheMutation.mutate(domain, {
+      onSuccess: () => toast(`${domain} cache cleared`, 'success'),
+      onError: () => toast(`Failed to clear ${domain} cache`, 'error'),
+    });
+  };
+
+  const handleClearAll = () => {
+    if (dangerInput !== 'CLEAR ALL') return;
+    setPendingClearAll(true);
+    clearCacheMutation.mutate('all', {
+      onSuccess: () => { toast('All caches cleared', 'warning'); setPendingClearAll(false); setDangerInput(''); },
+      onError: () => { toast('Failed to clear all caches', 'error'); setPendingClearAll(false); },
+    });
+  };
+
+  const cacheDomains = ['students', 'academics', 'finance', 'notifications', 'analytics'];
+
+  return (
+    <AdminShell title="System Status" eyebrow="Service health, cache management, PM2 processes">
+      {/* Metrics strip */}
+      <div className="grid gap-4 md:grid-cols-4 mb-gutter">
+        {[
+          { label: 'Total Services', value: String(total), tone: 'blue' },
+          { label: 'Healthy', value: String(healthy), tone: 'green' },
+          { label: 'Degraded', value: String(degraded), tone: 'amber' },
+          { label: 'Down', value: String(down), tone: 'rose' },
+        ].map(({ label, value, tone }) => (
+          <div key={label} className={`rounded-2xl border p-5 shadow-sm ${tone === 'rose' && Number(value) > 0 ? 'border-rose-200 bg-rose-50' : 'border-slate-200 bg-white'}`}>
+            <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">{label}</p>
+            <p className={`mt-1 text-3xl font-black ${tone === 'rose' && Number(value) > 0 ? 'text-rose-700' : tone === 'amber' && Number(value) > 0 ? 'text-amber-700' : 'text-slate-900'}`}>{value}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="space-y-gutter">
+          {/* PM2 processes */}
+          <AdminFormSection title="PM2 Processes" subtitle="All microservices managed via PM2">
+            <div className="grid gap-3 md:grid-cols-2">
+              {PM2_SERVICES.map((name) => {
+                const st = getStatus(name);
+                return (
+                  <div key={name} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+                    {statusDot(st)}
+                    <div className="flex-1 min-w-0">
+                      <p className="font-mono text-sm font-black text-slate-900 truncate">{name}</p>
+                    </div>
+                    <Badge tone={st === 'healthy' ? 'emerald' : st === 'degraded' ? 'amber' : st === 'down' ? 'rose' : 'slate'}>{st}</Badge>
+                  </div>
+                );
+              })}
+            </div>
+          </AdminFormSection>
+
+          {/* Cache management */}
+          <AdminFormSection title="Redis Cache" subtitle="Clear domain-specific caches without a full restart">
+            <div className="flex flex-wrap gap-3">
+              {cacheDomains.map((domain) => (
+                <button
+                  key={domain}
+                  onClick={() => handleClearDomain(domain)}
+                  disabled={clearCacheMutation.isPending}
+                  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-40"
+                >
+                  <Database className="h-3.5 w-3.5" /> {domain}
+                </button>
+              ))}
+            </div>
+          </AdminFormSection>
+        </div>
+
+        {/* Danger zone */}
+        <div className="h-fit rounded-2xl border border-rose-200 bg-rose-50 p-6">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-rose-500" />
+            <div>
+              <h3 className="font-display text-lg font-black text-rose-800">Clear All Caches</h3>
+              <p className="mt-1 text-sm font-semibold text-rose-700">Flushes Redis for all domains. Causes a brief spike in DB load.</p>
+            </div>
+          </div>
+          <div className="mt-5 space-y-3">
+            <input
+              value={dangerInput}
+              onChange={(e) => setDangerInput(e.target.value)}
+              placeholder="Type CLEAR ALL to confirm"
+              className="h-10 w-full rounded-xl border border-rose-200 bg-white px-3 font-mono text-sm font-black outline-none focus:border-rose-400"
+            />
+            <button
+              disabled={dangerInput !== 'CLEAR ALL' || pendingClearAll}
+              onClick={handleClearAll}
+              className="w-full rounded-xl bg-rose-600 py-2.5 text-sm font-black text-white transition hover:bg-rose-700 disabled:opacity-40"
+            >
+              {pendingClearAll ? 'Clearing…' : 'Clear All Caches'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </AdminShell>
+  );
+}
+
+// ─── Create Announcement ────────────────────────────────────────────────────────
+
+export function CreateAnnouncementAdminPage() {
+  const navigate = useNavigate();
+  const createMutation = useCreateAnnouncementAdminMutation();
+  const [form, setForm] = useState({
+    title: '',
+    body: '',
+    audience: 'All',
+    priority: 'Normal',
+    expiryDate: '',
+  });
+  const setF = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+    setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const handleSubmit = () => {
+    if (!form.title.trim() || !form.body.trim()) {
+      toast('Title and body are required', 'warning');
+      return;
+    }
+    createMutation.mutate(form, {
+      onSuccess: () => { toast('Announcement created', 'success'); navigate('/admin/announcements'); },
+      onError: () => toast('Failed to create announcement', 'error'),
+    });
+  };
+
+  return (
+    <AdminShell title="Create Announcement" eyebrow="Broadcast to staff, parents, and students">
+      <NavLink to="/admin/announcements" className="inline-flex items-center gap-1.5 text-sm font-black text-[#4338CA] hover:underline mb-4 block">
+        <ArrowLeft className="h-4 w-4" /> Back to Announcements
+      </NavLink>
+      <div className="max-w-2xl">
+        <AdminFormSection title="Announcement Details" subtitle="Compose a new announcement and select your audience.">
+          <div className="space-y-4">
+            <Field
+              label="Title"
+              value={form.title}
+              onChange={setF('title')}
+              placeholder="e.g. Term 2 Opening Date"
+            />
+            <div>
+              <label className="mb-1 block text-[11px] font-black uppercase tracking-widest text-slate-500">Body</label>
+              <textarea
+                value={form.body}
+                onChange={setF('body')}
+                placeholder="Write the announcement message…"
+                className="h-32 w-full rounded-xl border border-slate-200 p-3 text-sm font-semibold outline-none focus:border-[#4338CA]"
+              />
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <SelectField
+                label="Audience"
+                value={form.audience}
+                onChange={(v) => setForm((f) => ({ ...f, audience: v }))}
+                options={[
+                  { value: 'All', label: 'All (Staff, Parents, Students)' },
+                  { value: 'Parents', label: 'Parents / Guardians' },
+                  { value: 'Teachers', label: 'Teachers' },
+                  { value: 'Students', label: 'Students' },
+                  { value: 'Staff', label: 'Staff (Teachers + Admin)' },
+                ]}
+              />
+              <SelectField
+                label="Priority"
+                value={form.priority}
+                onChange={(v) => setForm((f) => ({ ...f, priority: v }))}
+                options={[
+                  { value: 'Normal', label: 'Normal' },
+                  { value: 'High', label: 'High' },
+                  { value: 'Urgent', label: 'Urgent' },
+                ]}
+              />
+            </div>
+            <Field
+              label="Expiry Date (optional)"
+              value={form.expiryDate}
+              onChange={setF('expiryDate')}
+              placeholder="YYYY-MM-DD"
+            />
+          </div>
+          <div className="mt-5 flex gap-3">
+            <Button className="rounded-xl bg-[#4338CA]" loading={createMutation.isPending} onClick={handleSubmit}>
+              Publish Announcement
+            </Button>
+            <NavLink to="/admin/announcements">
+              <Button className="rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50">
+                Cancel
+              </Button>
+            </NavLink>
+          </div>
+        </AdminFormSection>
+      </div>
+    </AdminShell>
+  );
+}
+
+// ─── Departments ──────────────────────────────────────────────────────────────
+
+export function DepartmentsPage() {
+  const { data: depts = [], isLoading, isError, refetch } = useDepartments();
+  const { data: apiUsers = [] } = useAdminUsers();
+  const { data: apiYears = [] } = useAcademicYears();
+  const createDeptMutation = useCreateDepartmentMutation();
+  const updateDeptMutation = useUpdateDepartmentMutation();
+  const deleteDeptMutation = useDeleteDepartmentMutation();
+  const assignHodMutation = useAssignHodMutation();
+  const removeHodMutation = useRemoveHodMutation();
+
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [createForm, setCreateForm] = useState({ name: '', code: '', description: '' });
+  const [editForm, setEditForm] = useState<{ name: string; code: string; description: string } | null>(null);
+  const [assignForm, setAssignForm] = useState({ userId: '', academicYearId: '' });
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+
+  const selected = (depts as any[]).find((d: any) => d.id === selectedId) ?? null;
+  const { data: hods = [] } = useDepartmentHods(selectedId ?? undefined);
+  const hodUsers = (apiUsers as any[]).filter((u: any) => u.role === 'HEAD_OF_DEPARTMENT');
+
+  const submitCreate = () => {
+    if (!createForm.name.trim() || !createForm.code.trim()) { toast('Name and code are required', 'warning'); return; }
+    createDeptMutation.mutate(createForm, {
+      onSuccess: () => { toast('Department created', 'success'); setCreateForm({ name: '', code: '', description: '' }); },
+      onError: (e: any) => toast(e?.response?.data?.message ?? 'Failed to create department', 'error'),
+    });
+  };
+
+  const submitEdit = () => {
+    if (!editForm || !selectedId) return;
+    updateDeptMutation.mutate({ id: selectedId, payload: editForm }, {
+      onSuccess: () => { toast('Department updated', 'success'); setEditForm(null); },
+      onError: (e: any) => toast(e?.response?.data?.message ?? 'Failed to update department', 'error'),
+    });
+  };
+
+  const confirmDelete = (id: string) => {
+    deleteDeptMutation.mutate(id, {
+      onSuccess: () => { setPendingDeleteId(null); setDeleteError(null); setSelectedId(null); toast('Department deleted', 'success'); },
+      onError: (e: any) => setDeleteError(e?.response?.data?.message ?? 'Cannot delete department'),
+    });
+  };
+
+  const submitAssignHod = () => {
+    if (!selectedId || !assignForm.userId || !assignForm.academicYearId) { toast('Select a user and academic year', 'warning'); return; }
+    const user = (apiUsers as any[]).find((u: any) => u.id === assignForm.userId);
+    const nameParts = String(user?.name ?? '').split(' ');
+    assignHodMutation.mutate({
+      departmentId: selectedId,
+      payload: {
+        userId: assignForm.userId,
+        firstName: nameParts[0] ?? '',
+        lastName: nameParts.slice(1).join(' ') || '',
+        academicYearId: assignForm.academicYearId,
+      },
+    }, {
+      onSuccess: () => { toast('HOD assigned', 'success'); setAssignForm({ userId: '', academicYearId: '' }); },
+      onError: (e: any) => toast(e?.response?.data?.message ?? 'Failed to assign HOD', 'error'),
+    });
+  };
+
+  return (
+    <AdminShell title="Department Management" eyebrow="Registry, HOD assignments, department oversight">
+      <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_420px]">
+
+        {/* Left — department list + create */}
+        <div className="space-y-gutter">
+          <AdminFormSection title="Create Department" subtitle="Add a new academic or administrative department.">
+            <div className="grid gap-4 md:grid-cols-3">
+              <Field label="Name" value={createForm.name} onChange={(e) => setCreateForm((f) => ({ ...f, name: e.target.value }))} placeholder="e.g. Science" />
+              <Field label="Code" value={createForm.code} onChange={(e) => setCreateForm((f) => ({ ...f, code: e.target.value.toUpperCase() }))} placeholder="e.g. SCI" />
+              <Field label="Description (optional)" value={createForm.description} onChange={(e) => setCreateForm((f) => ({ ...f, description: e.target.value }))} placeholder="Short description" />
+            </div>
+            <div className="mt-4">
+              <Button className="rounded-xl bg-[#4338CA]" loading={createDeptMutation.isPending} onClick={submitCreate}>
+                <Plus className="h-4 w-4" /> Create Department
+              </Button>
+            </div>
+          </AdminFormSection>
+
+          {isLoading ? <SkeletonTable cols={4} /> : isError ? <DataError onRetry={refetch} /> : (
+            <AdminDataTable columns={['Department', 'Code', 'Active HOD', 'Actions']}>
+              {(depts as any[]).map((dept: any) => {
+                const isSystemDept = Boolean(dept.isSystemDefault);
+                const isPendingDelete = pendingDeleteId === dept.id;
+                return (
+                  <React.Fragment key={dept.id}>
+                    <tr
+                      onClick={() => { setSelectedId(dept.id === selectedId ? null : dept.id); setEditForm(null); setDeleteError(null); setPendingDeleteId(null); }}
+                      className={`cursor-pointer transition ${dept.id === selectedId ? 'bg-indigo-50 ring-1 ring-inset ring-indigo-200' : 'hover:bg-slate-50'}`}
+                    >
+                      <Td>
+                        <div className="flex items-center gap-2">
+                          {isSystemDept && <span title="System default — cannot delete" className="text-amber-500 select-none">⚖</span>}
+                          <span className="font-black text-slate-900">{dept.name}</span>
+                          {isSystemDept && <Badge tone="amber">System</Badge>}
+                        </div>
+                      </Td>
+                      <Td className="font-mono text-xs text-slate-500">{dept.code}</Td>
+                      <Td>{dept.activeHodName ? <span className="font-semibold text-slate-700">{dept.activeHodName}</span> : <span className="text-slate-400">—</span>}</Td>
+                      <td className="px-5 py-3 font-semibold text-slate-700" onClick={(e) => e.stopPropagation()}>
+                        {isPendingDelete ? (
+                          <div className="flex flex-col gap-1">
+                            <div className="flex gap-2">
+                              <button onClick={() => confirmDelete(dept.id)} disabled={deleteDeptMutation.isPending}
+                                className="rounded-lg bg-red-600 px-2.5 py-1 text-xs font-black text-white hover:bg-red-700 disabled:opacity-50">
+                                {deleteDeptMutation.isPending ? 'Deleting…' : 'Confirm'}
+                              </button>
+                              <button onClick={() => { setPendingDeleteId(null); setDeleteError(null); }}
+                                className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-black text-slate-600 hover:bg-slate-100">Cancel</button>
+                            </div>
+                            {deleteError && <p className="text-[10px] font-semibold text-red-600">{deleteError}</p>}
+                          </div>
+                        ) : (
+                          <div className="flex gap-1">
+                            <button onClick={() => { setSelectedId(dept.id); setEditForm({ name: dept.name, code: dept.code, description: dept.description ?? '' }); }}
+                              className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" title="Edit">
+                              <Edit2 className="h-3.5 w-3.5" />
+                            </button>
+                            {!isSystemDept && (
+                              <button onClick={() => { setPendingDeleteId(dept.id); setDeleteError(null); }}
+                                className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600" title="Delete">
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                            {isSystemDept && (
+                              <span title="System default cannot be deleted" className="rounded p-1 text-slate-300 cursor-not-allowed">
+                                <Lock className="h-3.5 w-3.5" />
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  </React.Fragment>
+                );
+              })}
+            </AdminDataTable>
+          )}
+        </div>
+
+        {/* Right — selected department detail panel */}
+        {selected && (
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">Department</p>
+                  <p className="mt-0.5 font-display text-xl font-black text-ks-navy">{selected.name}</p>
+                  <p className="text-xs font-mono text-slate-500">{selected.code}</p>
+                </div>
+                <button onClick={() => { setSelectedId(null); setEditForm(null); }} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              {editForm ? (
+                <div className="space-y-3">
+                  <Field label="Name" value={editForm.name} onChange={(e) => setEditForm((f) => f ? { ...f, name: e.target.value } : f)} placeholder="Department name" />
+                  <Field label="Code" value={editForm.code} onChange={(e) => setEditForm((f) => f ? { ...f, code: e.target.value.toUpperCase() } : f)} placeholder="Department code" />
+                  <Field label="Description" value={editForm.description} onChange={(e) => setEditForm((f) => f ? { ...f, description: e.target.value } : f)} placeholder="Optional description" />
+                  <div className="flex gap-2 pt-1">
+                    <Button className="rounded-xl bg-[#4338CA] text-sm" loading={updateDeptMutation.isPending} onClick={submitEdit}>Save</Button>
+                    <button onClick={() => setEditForm(null)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-black text-slate-600 hover:bg-slate-50">Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-slate-600">{selected.description || <span className="italic text-slate-400">No description</span>}</p>
+              )}
+            </div>
+
+            {/* HOD Assignments */}
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
+              <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">HOD Assignments</p>
+              {(hods as any[]).length === 0 ? (
+                <p className="text-sm text-slate-400 italic">No HOD assigned yet.</p>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-100">
+                      <th className="pb-2 text-left text-[10px] font-black uppercase tracking-widest text-slate-500">HOD</th>
+                      <th className="pb-2 text-left text-[10px] font-black uppercase tracking-widest text-slate-500">Year</th>
+                      <th className="pb-2 text-left text-[10px] font-black uppercase tracking-widest text-slate-500">Status</th>
+                      <th />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(hods as any[]).map((hod: any) => (
+                      <tr key={hod.id} className="border-b border-slate-50">
+                        <td className="py-2 font-semibold text-slate-800">{hod.firstName} {hod.lastName}</td>
+                        <td className="py-2 text-slate-500">{hod.academicYearId}</td>
+                        <td className="py-2">
+                          <Badge tone={hod.isActive ? 'emerald' : 'slate'}>{hod.isActive ? 'Active' : 'Removed'}</Badge>
+                        </td>
+                        <td className="py-2 text-right">
+                          {hod.isActive && (
+                            <button onClick={() => removeHodMutation.mutate({ departmentId: selected.id, userId: hod.userId, academicYearId: hod.academicYearId }, {
+                              onSuccess: () => toast('HOD removed', 'warning'),
+                              onError: (e: any) => toast(e?.response?.data?.message ?? 'Failed', 'error'),
+                            })} className="text-xs font-black text-rose-600 hover:underline">Remove</button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+
+              {/* Assign HOD form */}
+              <div className="space-y-3 pt-2 border-t border-slate-100">
+                <p className="text-xs font-black text-slate-500 uppercase tracking-widest">Assign HOD</p>
+                <SelectField
+                  label="HOD User"
+                  value={assignForm.userId}
+                  onChange={(v) => setAssignForm((f) => ({ ...f, userId: v }))}
+                  options={[{ value: '', label: 'Select HOD user…' }, ...hodUsers.map((u: any) => ({ value: u.id, label: u.name }))]}
+                />
+                <SelectField
+                  label="Academic Year"
+                  value={assignForm.academicYearId}
+                  onChange={(v) => setAssignForm((f) => ({ ...f, academicYearId: v }))}
+                  options={[{ value: '', label: 'Select year…' }, ...(apiYears as any[]).map((y: any) => ({ value: y.id, label: y.name ?? y.id }))]}
+                />
+                <Button className="rounded-xl bg-[#4338CA] w-full text-sm" loading={assignHodMutation.isPending} onClick={submitAssignHod}>
+                  <UserPlus className="h-4 w-4" /> Assign HOD
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </AdminShell>
+  );
+}
+
+// ─── Util ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 function useUser() {
   const { id } = useParams();

@@ -28,4 +28,13 @@ export class CreateSubjectDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @IsOptional()
+  @IsString()
+  departmentId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  department?: string;
 }

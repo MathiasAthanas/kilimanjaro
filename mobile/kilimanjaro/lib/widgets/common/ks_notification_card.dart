@@ -108,11 +108,15 @@ class KSNotificationCard extends StatelessWidget {
                         leadingDot: false,
                       ),
                       const SizedBox(width: 8),
-                      Text(
-                        DateFormat('MMM d, h:mm a').format(item.createdAt),
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: isDark ? AppColors.darkMuted : AppColors.textMuted,
+                      Flexible(
+                        child: Text(
+                          DateFormat('MMM d, h:mm a').format(item.createdAt),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: isDark ? AppColors.darkMuted : AppColors.textMuted,
+                          ),
                         ),
                       ),
                     ],

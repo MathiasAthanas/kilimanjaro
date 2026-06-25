@@ -8,7 +8,7 @@ const labels: Record<string, string> = {
   hod: 'HOD Desktop Dashboard',
   aqa: 'AQA Command Center',
   finance: 'Finance Office',
-  principal: 'Principal Executive Workspace',
+  principal: 'Headmaster Executive Workspace',
   admin: 'Admin System Management',
   reports: 'Reports and Exports',
 };

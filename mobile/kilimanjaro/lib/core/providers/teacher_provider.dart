@@ -1,58 +1,154 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../models/announcement_model.dart';
 import '../../models/teacher_models.dart';
+import '../config/app_config.dart';
+import '../services/api/api_teacher_service.dart';
+import '../services/interfaces/teacher_service_interface.dart';
+import 'auth_provider.dart';
 
-final teacherClassesProvider = Provider<List<TeacherClassSubject>>(
-  (ref) => _classes,
-);
+// ─── Service ─────────────────────────────────────────────────────────────────
 
-final teacherClassByIdProvider = Provider.family<TeacherClassSubject?, String>((
-  ref,
-  id,
-) {
-  return _classes.where((item) => item.id == id).firstOrNull;
+final teacherServiceProvider = Provider<ITeacherService?>((ref) {
+  if (AppConfig.useMockData) return null;
+  return ApiTeacherService(ref.watch(secureStorageProvider));
+});
+
+// ─── Internal async loaders ──────────────────────────────────────────────────
+
+final _teacherClassesLoader = FutureProvider<List<TeacherClassSubject>>((ref) async {
+  final svc = ref.watch(teacherServiceProvider);
+  if (svc == null) return _classes;
+  return svc.getClasses();
+});
+
+final _teacherStudentsLoader =
+    FutureProvider.family<List<TeacherStudent>, String>((ref, classSubjectId) async {
+  final svc = ref.watch(teacherServiceProvider);
+  if (svc == null) return _studentsByClass[classSubjectId] ?? const [];
+  return svc.getStudentsForClass(classSubjectId);
+});
+
+final _teacherAssessmentsLoader = FutureProvider<List<TeacherAssessment>>((ref) async {
+  final svc = ref.watch(teacherServiceProvider);
+  if (svc == null) return _assessments;
+  return svc.getAssessments();
+});
+
+final _teacherAttendanceSessionsLoader =
+    FutureProvider<List<TeacherAttendanceSession>>((ref) async {
+  final svc = ref.watch(teacherServiceProvider);
+  if (svc == null) return _attendanceSessions;
+  return svc.getAttendanceSessions();
+});
+
+final _teacherAlertsLoader = FutureProvider<List<TeacherPerformanceAlert>>((ref) async {
+  final svc = ref.watch(teacherServiceProvider);
+  if (svc == null) return _alerts;
+  return svc.getAlerts();
+});
+
+final _teacherPairingsLoader = FutureProvider<List<TeacherPairing>>((ref) async {
+  final svc = ref.watch(teacherServiceProvider);
+  if (svc == null) return _pairings;
+  return svc.getPairings();
+});
+
+final _teacherTimetableLoader = FutureProvider<List<TeacherTimetableSlot>>((ref) async {
+  final svc = ref.watch(teacherServiceProvider);
+  if (svc == null) return _timetable;
+  return svc.getTimetable();
+});
+
+final _teacherSyllabusLoader = FutureProvider<List<TeacherSyllabusProgress>>((ref) async {
+  final svc = ref.watch(teacherServiceProvider);
+  if (svc == null) return _syllabus;
+  return svc.getSyllabusProgress();
+});
+
+final _teacherAnnouncementsLoader = FutureProvider<List<TeacherAnnouncement>>((ref) async {
+  final svc = ref.watch(teacherServiceProvider);
+  if (svc == null) return _announcements;
+  final raw = await svc.getAnnouncements();
+  return raw.map(_toTeacherAnnouncement).toList();
+});
+
+TeacherAnnouncement _toTeacherAnnouncement(AnnouncementModel a) {
+  return TeacherAnnouncement(
+    id: a.id,
+    title: a.title,
+    body: a.body,
+    target: a.authorRole,
+    dateLabel: '${a.publishedAt.day}/${a.publishedAt.month}/${a.publishedAt.year}',
+  );
+}
+
+// ─── Public providers (same names screens use) ───────────────────────────────
+
+final teacherClassesProvider = Provider<List<TeacherClassSubject>>((ref) {
+  return ref.watch(_teacherClassesLoader).value
+      ?? (AppConfig.useMockData ? _classes : const []);
+});
+
+final teacherClassByIdProvider = Provider.family<TeacherClassSubject?, String>((ref, id) {
+  return ref.watch(teacherClassesProvider).where((c) => c.id == id).firstOrNull;
 });
 
 final teacherStudentsForClassProvider =
     Provider.family<List<TeacherStudent>, String>((ref, classSubjectId) {
-      return _studentsByClass[classSubjectId] ?? const <TeacherStudent>[];
-    });
+  return ref.watch(_teacherStudentsLoader(classSubjectId)).value
+      ?? (AppConfig.useMockData ? _studentsByClass[classSubjectId] ?? const [] : const []);
+});
 
-final teacherStudentByIdProvider = Provider.family<TeacherStudent?, String>((
-  ref,
-  studentId,
-) {
-  for (final students in _studentsByClass.values) {
-    final match = students.where((item) => item.id == studentId).firstOrNull;
+final teacherStudentByIdProvider = Provider.family<TeacherStudent?, String>((ref, studentId) {
+  for (final cls in ref.watch(teacherClassesProvider)) {
+    final match = ref.watch(teacherStudentsForClassProvider(cls.id))
+        .where((s) => s.id == studentId)
+        .firstOrNull;
     if (match != null) return match;
   }
   return null;
 });
 
-final teacherAssessmentsProvider = Provider<List<TeacherAssessment>>(
-  (ref) => _assessments,
-);
+final teacherAssessmentsProvider = Provider<List<TeacherAssessment>>((ref) {
+  return ref.watch(_teacherAssessmentsLoader).value
+      ?? (AppConfig.useMockData ? _assessments : const []);
+});
 
 final teacherAssessmentByIdProvider =
     Provider.family<TeacherAssessment?, String>((ref, assessmentId) {
-      return _assessments.where((item) => item.id == assessmentId).firstOrNull;
-    });
+  return ref.watch(teacherAssessmentsProvider)
+      .where((a) => a.id == assessmentId)
+      .firstOrNull;
+});
 
-final teacherMarksControllerProvider =
-    StateNotifierProvider<
-      TeacherMarksController,
-      Map<String, List<TeacherMarkEntry>>
-    >((ref) {
-      return TeacherMarksController();
-    });
+// ─── Marks controller ─────────────────────────────────────────────────────────
 
 class TeacherMarksController
     extends StateNotifier<Map<String, List<TeacherMarkEntry>>> {
-  TeacherMarksController() : super(_initialMarks);
+  TeacherMarksController(this._service)
+      : super(AppConfig.useMockData ? _initialMarks : const {});
+
+  final ITeacherService? _service;
+
+  /// Load mark sheet from API for the given assessment (no-op if already loaded).
+  Future<void> loadSheet(String assessmentId) async {
+    if (_service == null || state.containsKey(assessmentId)) return;
+    // _service is promoted to non-null after the null check above
+    final sheet = await _service.getMarkSheet(assessmentId);
+    state = {...state, assessmentId: sheet};
+  }
+
+  /// Submit marks then send the assessment for HOD approval.
+  Future<void> submitSheet(String assessmentId) async {
+    if (_service == null) return;
+    await _service.submitMarks(assessmentId, state[assessmentId] ?? []);
+    await _service.submitAssessmentForApproval(assessmentId);
+  }
 
   void updateScore(String assessmentId, String studentId, double? score) {
     final rows = [...?state[assessmentId]];
-    final index = rows.indexWhere((item) => item.student.id == studentId);
+    final index = rows.indexWhere((r) => r.student.id == studentId);
     if (index < 0) return;
     rows[index] = rows[index].copyWith(score: score, isAbsent: false);
     state = {...state, assessmentId: rows};
@@ -60,42 +156,68 @@ class TeacherMarksController
 
   void markAbsent(String assessmentId, String studentId) {
     final rows = [...?state[assessmentId]];
-    final index = rows.indexWhere((item) => item.student.id == studentId);
+    final index = rows.indexWhere((r) => r.student.id == studentId);
     if (index < 0) return;
     rows[index] = rows[index].copyWith(isAbsent: true, clearScore: true);
     state = {...state, assessmentId: rows};
   }
 }
 
-final teacherAttendanceSessionsProvider =
-    Provider<List<TeacherAttendanceSession>>((ref) => _attendanceSessions);
+final teacherMarksControllerProvider =
+    StateNotifierProvider<TeacherMarksController, Map<String, List<TeacherMarkEntry>>>((ref) {
+  return TeacherMarksController(ref.watch(teacherServiceProvider));
+});
 
-final teacherAttendanceControllerProvider =
-    StateNotifierProvider<
-      TeacherAttendanceController,
-      Map<String, Map<String, TeacherAttendanceStatus?>>
-    >((ref) {
-      return TeacherAttendanceController();
-    });
+// ─── Attendance ────────────────────────────────────────────────────────────────
+
+final teacherAttendanceSessionsProvider =
+    Provider<List<TeacherAttendanceSession>>((ref) {
+  return ref.watch(_teacherAttendanceSessionsLoader).value
+      ?? (AppConfig.useMockData ? _attendanceSessions : const []);
+});
 
 class TeacherAttendanceController
     extends StateNotifier<Map<String, Map<String, TeacherAttendanceStatus?>>> {
-  TeacherAttendanceController()
-    : super({
-        for (final session in _attendanceSessions)
-          session.id: {
-            for (final student
-                in _studentsByClass[session.classSubjectId] ??
-                    const <TeacherStudent>[])
-              student.id: null,
-          },
-      });
+  TeacherAttendanceController(this._service) : super(_buildInitialState());
 
-  void setStatus(
-    String sessionId,
-    String studentId,
-    TeacherAttendanceStatus status,
-  ) {
+  final ITeacherService? _service;
+
+  static Map<String, Map<String, TeacherAttendanceStatus?>> _buildInitialState() {
+    if (!AppConfig.useMockData) return const {};
+    return {
+      for (final session in _attendanceSessions)
+        session.id: {
+          for (final student
+              in _studentsByClass[session.classSubjectId] ?? const <TeacherStudent>[])
+            student.id: null,
+        },
+    };
+  }
+
+  /// Load the student roster for a session from the API (no-op if already loaded).
+  Future<void> loadSession(String sessionId, String classSubjectId) async {
+    if (_service == null || state.containsKey(sessionId)) return;
+    final students = await _service.getStudentsForClass(classSubjectId);
+    state = {
+      ...state,
+      sessionId: {for (final s in students) s.id: null},
+    };
+  }
+
+  /// Submit attendance records to the API.
+  Future<void> submitAttendance(String sessionId, String classSubjectId) async {
+    if (_service == null) return;
+    final sessionState = state[sessionId] ?? {};
+    final entries = sessionState.entries
+        .map((e) => {
+              'studentId': e.key,
+              'status': e.value == null ? 'PRESENT' : e.value!.name.toUpperCase(),
+            })
+        .toList();
+    await _service.markAttendance(classSubjectId, DateTime.now(), entries);
+  }
+
+  void setStatus(String sessionId, String studentId, TeacherAttendanceStatus status) {
     state = {
       ...state,
       sessionId: {...?state[sessionId], studentId: status},
@@ -103,37 +225,57 @@ class TeacherAttendanceController
   }
 }
 
-final teacherAlertsProvider = Provider<List<TeacherPerformanceAlert>>(
-  (ref) => _alerts,
-);
+final teacherAttendanceControllerProvider =
+    StateNotifierProvider<
+      TeacherAttendanceController,
+      Map<String, Map<String, TeacherAttendanceStatus?>>
+    >((ref) {
+  return TeacherAttendanceController(ref.watch(teacherServiceProvider));
+});
+
+// ─── Alerts, pairings, timetable, syllabus, announcements ─────────────────────
+
+final teacherAlertsProvider = Provider<List<TeacherPerformanceAlert>>((ref) {
+  return ref.watch(_teacherAlertsLoader).value
+      ?? (AppConfig.useMockData ? _alerts : const []);
+});
 
 final teacherAlertByIdProvider =
     Provider.family<TeacherPerformanceAlert?, String>((ref, id) {
-      return _alerts.where((item) => item.id == id).firstOrNull;
-    });
-
-final teacherPairingsProvider = Provider<List<TeacherPairing>>(
-  (ref) => _pairings,
-);
-
-final teacherPairingByIdProvider = Provider.family<TeacherPairing?, String>((
-  ref,
-  id,
-) {
-  return _pairings.where((item) => item.id == id).firstOrNull;
+  return ref.watch(teacherAlertsProvider).where((a) => a.id == id).firstOrNull;
 });
 
-final teacherTimetableProvider = Provider<List<TeacherTimetableSlot>>(
-  (ref) => _timetable,
-);
+final teacherPairingsProvider = Provider<List<TeacherPairing>>((ref) {
+  return ref.watch(_teacherPairingsLoader).value
+      ?? (AppConfig.useMockData ? _pairings : const []);
+});
 
-final teacherSyllabusProvider = Provider<List<TeacherSyllabusProgress>>(
-  (ref) => _syllabus,
-);
+final teacherPairingByIdProvider = Provider.family<TeacherPairing?, String>((ref, id) {
+  return ref.watch(teacherPairingsProvider).where((p) => p.id == id).firstOrNull;
+});
 
-final teacherAnnouncementsProvider = Provider<List<TeacherAnnouncement>>(
-  (ref) => _announcements,
-);
+final teacherTimetableProvider = Provider<List<TeacherTimetableSlot>>((ref) {
+  return ref.watch(_teacherTimetableLoader).value
+      ?? (AppConfig.useMockData ? _timetable : const []);
+});
+
+final teacherSyllabusProvider = Provider<List<TeacherSyllabusProgress>>((ref) {
+  return ref.watch(_teacherSyllabusLoader).value
+      ?? (AppConfig.useMockData ? _syllabus : const []);
+});
+
+final teacherAnnouncementsProvider = Provider<List<TeacherAnnouncement>>((ref) {
+  return ref.watch(_teacherAnnouncementsLoader).value
+      ?? (AppConfig.useMockData ? _announcements : const []);
+});
+
+final teacherHighPerformersProvider =
+    Provider.family<List<TeacherStudent>, String>((ref, classSubjectId) {
+  final students = ref.watch(teacherStudentsForClassProvider(classSubjectId));
+  return [...students]..sort((a, b) => b.averageScore.compareTo(a.averageScore));
+});
+
+// ─── Mock data ────────────────────────────────────────────────────────────────
 
 const _classes = <TeacherClassSubject>[
   TeacherClassSubject(
@@ -358,8 +500,7 @@ final _initialMarks = <String, List<TeacherMarkEntry>>{
   for (final assessment in _assessments)
     assessment.id: [
       for (final student
-          in _studentsByClass[assessment.classSubjectId] ??
-              const <TeacherStudent>[])
+          in _studentsByClass[assessment.classSubjectId] ?? const <TeacherStudent>[])
         TeacherMarkEntry(student: student, score: student.currentMark),
     ],
 };
@@ -444,79 +585,19 @@ final _pairings = <TeacherPairing>[
 ];
 
 const _timetable = <TeacherTimetableSlot>[
-  TeacherTimetableSlot(
-    day: 'Mon',
-    time: '07:30',
-    classSubjectId: 'math-f2a',
-    title: 'Math F2A',
-    room: 'Room 12',
-  ),
-  TeacherTimetableSlot(
-    day: 'Mon',
-    time: '09:30',
-    classSubjectId: 'physics-f3b',
-    title: 'Physics F3B',
-    room: 'Lab 2',
-  ),
-  TeacherTimetableSlot(
-    day: 'Mon',
-    time: '11:30',
-    classSubjectId: 'physics-f3a',
-    title: 'Physics F3A',
-    room: 'Lab 1',
-  ),
-  TeacherTimetableSlot(
-    day: 'Tue',
-    time: '07:30',
-    classSubjectId: 'math-f3a',
-    title: 'Math F3A',
-    room: 'Room 8',
-  ),
-  TeacherTimetableSlot(
-    day: 'Wed',
-    time: '11:30',
-    classSubjectId: 'math-f3a',
-    title: 'Math F3A',
-    room: 'Room 8',
-  ),
-  TeacherTimetableSlot(
-    day: 'Fri',
-    time: '10:30',
-    classSubjectId: 'physics-f3b',
-    title: 'Physics F3B',
-    room: 'Lab 2',
-  ),
+  TeacherTimetableSlot(day: 'Mon', time: '07:30', classSubjectId: 'math-f2a', title: 'Math F2A', room: 'Room 12'),
+  TeacherTimetableSlot(day: 'Mon', time: '09:30', classSubjectId: 'physics-f3b', title: 'Physics F3B', room: 'Lab 2'),
+  TeacherTimetableSlot(day: 'Mon', time: '11:30', classSubjectId: 'physics-f3a', title: 'Physics F3A', room: 'Lab 1'),
+  TeacherTimetableSlot(day: 'Tue', time: '07:30', classSubjectId: 'math-f3a', title: 'Math F3A', room: 'Room 8'),
+  TeacherTimetableSlot(day: 'Wed', time: '11:30', classSubjectId: 'math-f3a', title: 'Math F3A', room: 'Room 8'),
+  TeacherTimetableSlot(day: 'Fri', time: '10:30', classSubjectId: 'physics-f3b', title: 'Physics F3B', room: 'Lab 2'),
 ];
 
 const _syllabus = <TeacherSyllabusProgress>[
-  TeacherSyllabusProgress(
-    classSubjectId: 'math-f2a',
-    title: 'Mathematics Form 2A',
-    covered: 12,
-    total: 18,
-    nextTopic: 'Linear equations',
-  ),
-  TeacherSyllabusProgress(
-    classSubjectId: 'math-f3a',
-    title: 'Mathematics Form 3A',
-    covered: 14,
-    total: 18,
-    nextTopic: 'Trigonometry',
-  ),
-  TeacherSyllabusProgress(
-    classSubjectId: 'physics-f3a',
-    title: 'Physics Form 3A',
-    covered: 10,
-    total: 16,
-    nextTopic: 'Waves',
-  ),
-  TeacherSyllabusProgress(
-    classSubjectId: 'physics-f3b',
-    title: 'Physics Form 3B',
-    covered: 11,
-    total: 16,
-    nextTopic: 'Electricity',
-  ),
+  TeacherSyllabusProgress(classSubjectId: 'math-f2a', title: 'Mathematics Form 2A', covered: 12, total: 18, nextTopic: 'Linear equations'),
+  TeacherSyllabusProgress(classSubjectId: 'math-f3a', title: 'Mathematics Form 3A', covered: 14, total: 18, nextTopic: 'Trigonometry'),
+  TeacherSyllabusProgress(classSubjectId: 'physics-f3a', title: 'Physics Form 3A', covered: 10, total: 16, nextTopic: 'Waves'),
+  TeacherSyllabusProgress(classSubjectId: 'physics-f3b', title: 'Physics Form 3B', covered: 11, total: 16, nextTopic: 'Electricity'),
 ];
 
 const _announcements = <TeacherAnnouncement>[

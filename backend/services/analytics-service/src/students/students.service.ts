@@ -646,4 +646,212 @@ export class StudentsService {
       .filter((row) => !classId || row.className === classId)
       .slice(0, 50);
   }
+
+  async myDashboard(studentId: string, academicYearId?: string, termId?: string) {
+    const yearId = await this.resolveYear(academicYearId);
+    const currentTerm = termId
+      ? await this.prisma.term.findUnique({ where: { id: termId } })
+      : await this.prisma.term.findFirst({ where: { academicYearId: yearId, isCurrent: true } });
+    const scopedTermId = currentTerm?.id;
+    const cacheKey = `analytics:student:dashboard:${studentId}:${yearId || 'cur'}:${scopedTermId || 'cur'}`;
+    const cached = await this.redis.get<any>(cacheKey);
+    if (cached) return cached;
+
+    const [results, reportCard, attendance, alerts, interventions, invoices, notifications, trends] = await Promise.all([
+      this.prisma.termResult.findMany({
+        where: { studentId, termId: scopedTermId || undefined, isPublished: true },
+        orderBy: { subjectName: 'asc' },
+      }),
+      this.prisma.reportCard.findFirst({
+        where: { studentId, termId: scopedTermId || undefined, isPublished: true },
+        orderBy: [{ academicYearId: 'desc' }],
+      }),
+      this.prisma.attendanceRecord.findMany({
+        where: { studentId, termId: scopedTermId || undefined },
+        orderBy: { date: 'asc' },
+      }),
+      this.prisma.performanceAlert.findMany({ where: { studentId, isResolved: false }, orderBy: { createdAt: 'desc' } }),
+      this.prisma.academicIntervention.findMany({ where: { studentId }, take: 5, orderBy: { createdAt: 'desc' } }),
+      this.prisma.invoice.findMany({ where: { studentId, academicYearId: yearId || undefined }, orderBy: { dueDate: 'desc' }, take: 3 }),
+      this.prisma.notification.findMany({
+        where: { recipientId: studentId, createdAt: { gte: new Date(Date.now() - 30 * 86400000) } },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+      }),
+      this.prisma.performanceTrend.findMany({ where: { studentId } }),
+    ]);
+
+    const classSubjectIds = [...new Set(results.map((r) => r.classSubjectId))];
+    const classSubjects = classSubjectIds.length
+      ? await this.prisma.classSubject.findMany({ where: { id: { in: classSubjectIds } }, select: { id: true, subjectId: true } })
+      : [];
+
+    const present = attendance.filter((a) => a.status === 'PRESENT').length;
+    const attendanceRate = attendance.length ? (present / attendance.length) * 100 : 0;
+
+    const scoreJourney = results
+      .filter((r) => r.weightedTotal > 0)
+      .slice(0, 10)
+      .map((r) => ({ label: r.subjectName, score: r.weightedTotal }));
+
+    const subjectRadar = Object.entries(
+      results.reduce<Record<string, number[]>>((acc, r) => {
+        if (!acc[r.subjectName]) acc[r.subjectName] = [];
+        acc[r.subjectName].push(r.weightedTotal);
+        return acc;
+      }, {}),
+    ).map(([subject, scores]) => ({ subject, avgScore: mean(scores) }));
+
+    const calendar = attendance.map((a) => ({ date: a.date.toISOString().slice(0, 10), status: a.status as string }));
+
+    const outstanding = invoices.reduce((acc, inv) => acc + Number(inv.outstandingBalance), 0);
+
+    const result = {
+      summary: {
+        termName: currentTerm?.name || null,
+        overallAverage: reportCard?.overallAverage || mean(results.map((r) => r.weightedTotal)),
+        overallGrade: reportCard?.overallGrade || null,
+        rank: reportCard?.rank || null,
+        totalInClass: reportCard?.totalStudentsInClass || null,
+        passingSubjects: results.filter((r) => r.isPassing).length,
+        failingSubjects: results.filter((r) => !r.isPassing).length,
+        attendanceRate,
+        activeAlerts: alerts.length,
+        outstandingBalance: outstanding,
+      },
+      subjectResults: results.map((r) => ({
+        subjectName: r.subjectName,
+        score: r.weightedTotal,
+        grade: r.grade,
+        isPassing: r.isPassing,
+        trend: trends.find((t) => t.subjectId === classSubjects.find((cs) => cs.id === r.classSubjectId)?.subjectId)?.trendDirection || 'STABLE',
+      })),
+      scoreJourney,
+      subjectRadar,
+      attendanceCalendar: calendar,
+      activeAlerts: alerts.map((a) => ({ alertType: a.alertType, severity: a.severity, subjectName: a.subjectName, message: a.message })),
+      interventions: interventions.map((i) => ({ type: i.type, note: i.note, createdAt: i.createdAt })),
+      recentNotifications: notifications.map((n) => ({ eventType: n.eventType, channel: n.channel as string, status: n.status as string, createdAt: n.createdAt })),
+      invoices: invoices.map((inv) => ({
+        invoiceNumber: inv.invoiceNumber,
+        totalAmount: Number(inv.totalAmount),
+        paidAmount: Number(inv.paidAmount),
+        outstandingBalance: Number(inv.outstandingBalance),
+        status: inv.status as string,
+        dueDate: inv.dueDate,
+      })),
+    };
+
+    await this.redis.set(cacheKey, result, 300);
+    return result;
+  }
+
+  async parentChildDashboard(childId: string, parentAuthId: string, academicYearId?: string, termId?: string) {
+    const link = await this.prisma.studentGuardianLink.findFirst({ where: { studentId: childId, guardianId: parentAuthId } });
+    if (!link) {
+      const ids = await this.downstream.guardianStudentIds(parentAuthId);
+      if (!ids.includes(childId)) {
+        const { ForbiddenException } = await import('@nestjs/common');
+        throw new ForbiddenException('Not authorized to view this student');
+      }
+    }
+
+    const yearId = await this.resolveYear(academicYearId);
+    const currentTerm = termId
+      ? await this.prisma.term.findUnique({ where: { id: termId } })
+      : await this.prisma.term.findFirst({ where: { academicYearId: yearId, isCurrent: true } });
+    const scopedTermId = currentTerm?.id;
+    const cacheKey = `analytics:parent:child:${childId}:${parentAuthId}:${yearId || 'cur'}:${scopedTermId || 'cur'}`;
+    const cached = await this.redis.get<any>(cacheKey);
+    if (cached) return cached;
+
+    const student = await this.prisma.student.findUnique({ where: { id: childId } });
+    const [results, reportCard, attendance, alerts, invoices, notifications] = await Promise.all([
+      this.prisma.termResult.findMany({
+        where: { studentId: childId, termId: scopedTermId || undefined, isPublished: true },
+        orderBy: { subjectName: 'asc' },
+      }),
+      this.prisma.reportCard.findFirst({
+        where: { studentId: childId, termId: scopedTermId || undefined, isPublished: true },
+        orderBy: [{ academicYearId: 'desc' }],
+      }),
+      this.prisma.attendanceRecord.findMany({
+        where: { studentId: childId, termId: scopedTermId || undefined },
+        orderBy: { date: 'asc' },
+      }),
+      this.prisma.performanceAlert.findMany({ where: { studentId: childId, isResolved: false } }),
+      this.prisma.invoice.findMany({
+        where: { studentId: childId, academicYearId: yearId || undefined },
+        orderBy: { dueDate: 'desc' },
+        take: 5,
+      }),
+      this.prisma.notification.findMany({
+        where: { recipientId: parentAuthId, createdAt: { gte: new Date(Date.now() - 30 * 86400000) } },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+      }),
+    ]);
+
+    const present = attendance.filter((a) => a.status === 'PRESENT').length;
+    const absent = attendance.filter((a) => a.status === 'ABSENT').length;
+    const late = attendance.filter((a) => a.status === 'LATE').length;
+    const excused = attendance.filter((a) => a.status === 'EXCUSED').length;
+    const attendanceRate = attendance.length ? (present / attendance.length) * 100 : 0;
+
+    const outstanding = invoices.reduce((acc, inv) => acc + Number(inv.outstandingBalance), 0);
+
+    const result = {
+      student: student
+        ? { id: student.id, fullName: `${student.firstName} ${student.lastName}`, status: student.status as string, profilePhotoUrl: student.profilePhotoUrl }
+        : null,
+      termName: currentTerm?.name || null,
+      summary: {
+        overallAverage: reportCard?.overallAverage || mean(results.map((r) => r.weightedTotal)),
+        overallGrade: reportCard?.overallGrade || null,
+        rank: reportCard?.rank || null,
+        totalInClass: reportCard?.totalStudentsInClass || null,
+        attendanceRate,
+        activeAlerts: alerts.length,
+        outstandingBalance: outstanding,
+      },
+      subjectResults: results.map((r) => ({
+        subjectName: r.subjectName,
+        score: r.weightedTotal,
+        grade: r.grade,
+        isPassing: r.isPassing,
+      })),
+      attendance: {
+        rate: attendanceRate,
+        present,
+        absent,
+        late,
+        excused,
+        total: attendance.length,
+        calendar: attendance.map((a) => ({ date: a.date.toISOString().slice(0, 10), status: a.status as string })),
+      },
+      invoices: invoices.map((inv) => ({
+        invoiceNumber: inv.invoiceNumber,
+        totalAmount: Number(inv.totalAmount),
+        paidAmount: Number(inv.paidAmount),
+        outstandingBalance: Number(inv.outstandingBalance),
+        status: inv.status as string,
+        dueDate: inv.dueDate,
+      })),
+      activeAlerts: alerts.map((a) => ({
+        alertType: a.alertType as string,
+        severity: a.severity as string,
+        subjectName: a.subjectName,
+        message: a.message,
+      })),
+      recentNotifications: notifications.map((n) => ({
+        eventType: n.eventType,
+        channel: n.channel as string,
+        status: n.status as string,
+        createdAt: n.createdAt,
+      })),
+    };
+
+    await this.redis.set(cacheKey, result, 300);
+    return result;
+  }
 }

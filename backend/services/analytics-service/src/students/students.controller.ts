@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Controller, Get, Param, Query, ForbiddenException } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ROLES } from '../common/constants/roles';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -55,6 +55,30 @@ export class StudentsController {
   @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA, ROLES.HEAD_OF_DEPARTMENT, ROLES.TEACHER, ROLES.FINANCE)
   mostImproved(@Query('classId') classId?: string, @Query('subjectId') subjectId?: string, @Query('termId') termId?: string) {
     return this.service.mostImproved(classId, subjectId, termId);
+  }
+
+  @Get('my-dashboard')
+  @Roles(ROLES.STUDENT)
+  @ApiOperation({ summary: 'Student personal learning dashboard' })
+  myDashboard(
+    @CurrentUser() user: RequestUser,
+    @Query('academicYearId') academicYearId?: string,
+    @Query('termId') termId?: string,
+  ) {
+    return this.service.myDashboard(user.id, academicYearId, termId);
+  }
+
+  @Get('parent-child/:childId')
+  @Roles(ROLES.PARENT, ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL)
+  @ApiOperation({ summary: "Parent view of child's academic overview" })
+  parentChildDashboard(
+    @Param('childId') childId: string,
+    @CurrentUser() user: RequestUser,
+    @Query('academicYearId') academicYearId?: string,
+    @Query('termId') termId?: string,
+  ) {
+    const parentId = user.role === 'PARENT' ? user.id : childId;
+    return this.service.parentChildDashboard(childId, parentId, academicYearId, termId);
   }
 
   @Get(':studentId')

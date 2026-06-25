@@ -34,6 +34,7 @@ export class AuthService {
   async validateLocalCredentials(input: {
     email?: string;
     registrationNumber?: string;
+    phoneNumber?: string;
     password: string;
     ip: string;
     userAgent: string;
@@ -42,6 +43,7 @@ export class AuthService {
       {
         email: input.email,
         registrationNumber: input.registrationNumber,
+        phoneNumber: input.phoneNumber,
         password: input.password,
       },
       { ip: input.ip, userAgent: input.userAgent },
@@ -66,7 +68,9 @@ export class AuthService {
       ? await this.usersService.findByEmail(dto.email)
       : dto.registrationNumber
         ? await this.usersService.findByRegistrationNumber(dto.registrationNumber)
-        : null;
+        : dto.phoneNumber
+          ? await this.usersService.findByPhoneNumber(dto.phoneNumber)
+          : null;
 
     if (!user) {
       await this.auditService.createLog({

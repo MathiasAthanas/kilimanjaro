@@ -329,6 +329,10 @@ class MarksEntrySheetScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Trigger lazy API load for this assessment's mark sheet (idempotent)
+    Future.microtask(() =>
+        ref.read(teacherMarksControllerProvider.notifier).loadSheet(assessmentId));
+
     final assessment = ref.watch(teacherAssessmentByIdProvider(assessmentId));
     final rows =
         ref.watch(teacherMarksControllerProvider)[assessmentId] ??
@@ -641,7 +645,12 @@ class AssessmentSubmitConfirmScreen extends ConsumerWidget {
           KSButton(
             label: 'Submit to HOD',
             onPressed: entered == rows.length
-                ? () => context.go('/teacher/marks/$assessmentId/review')
+                ? () {
+                    ref
+                        .read(teacherMarksControllerProvider.notifier)
+                        .submitSheet(assessmentId);
+                    context.go('/teacher/marks/$assessmentId/review');
+                  }
                 : null,
           ),
         ],
@@ -706,23 +715,76 @@ class MarksReviewScreen extends ConsumerWidget {
   }
 }
 
-class AttendanceMarkingScreen extends ConsumerWidget {
+class AttendanceMarkingScreen extends ConsumerStatefulWidget {
   const AttendanceMarkingScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AttendanceMarkingScreen> createState() =>
+      _AttendanceMarkingScreenState();
+}
+
+class _AttendanceMarkingScreenState
+    extends ConsumerState<AttendanceMarkingScreen> {
+  late String _sessionId;
+
+  @override
+  void initState() {
+    super.initState();
+    final sessions = ref.read(teacherAttendanceSessionsProvider);
+    _sessionId = sessions.isNotEmpty ? sessions.first.id : '';
+  }
+
+  void _loadSession(String sessionId, String classSubjectId) {
+    ref
+        .read(teacherAttendanceControllerProvider.notifier)
+        .loadSession(sessionId, classSubjectId);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final sessions = ref.watch(teacherAttendanceSessionsProvider);
-    final selected = sessions.first;
-    final students = ref.watch(
-      teacherStudentsForClassProvider(selected.classSubjectId),
+
+    // When sessions arrive from API, auto-select first and load its roster
+    ref.listen(teacherAttendanceSessionsProvider, (prev, next) {
+      if (next.isNotEmpty && _sessionId.isEmpty) {
+        setState(() => _sessionId = next.first.id);
+        _loadSession(next.first.id, next.first.classSubjectId);
+      }
+    });
+
+    if (sessions.isEmpty) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    final session = sessions.firstWhere(
+      (s) => s.id == _sessionId,
+      orElse: () => sessions.first,
     );
-    final state =
-        ref.watch(teacherAttendanceControllerProvider)[selected.id] ?? {};
-    final marked = state.values.whereType<TeacherAttendanceStatus>().length;
+    final students = ref.watch(
+      teacherStudentsForClassProvider(session.classSubjectId),
+    );
+    final allState = ref.watch(teacherAttendanceControllerProvider);
+    final state = allState[session.id] ?? {};
+    final marked =
+        state.values.whereType<TeacherAttendanceStatus>().length;
+    final presentCount = state.values
+        .where((v) => v == TeacherAttendanceStatus.present)
+        .length;
+    final absentCount = state.values
+        .where((v) => v == TeacherAttendanceStatus.absent)
+        .length;
+    final lateCount = state.values
+        .where((v) => v == TeacherAttendanceStatus.late)
+        .length;
+    final excusedCount = state.values
+        .where((v) => v == TeacherAttendanceStatus.excused)
+        .length;
+    final allMarked = marked == students.length;
+
     return Scaffold(
       appBar: KSAppBar(
-        title: selected.title,
-        subtitle: '${selected.timeLabel} · $marked of ${students.length} marked.',
+        title: 'Attendance',
+        subtitle: '${session.timeLabel} · ${session.title}',
         showBack: false,
         variant: KSAppBarVariant.hero,
         actions: [
@@ -730,67 +792,295 @@ class AttendanceMarkingScreen extends ConsumerWidget {
           IconButton(
             onPressed: () => context.push('/teacher/attendance/history'),
             icon: const Icon(Icons.history_rounded),
+            color: AppColors.white,
           ),
         ],
       ),
       body: TeacherSurface(
         children: [
-          SizedBox(
-            height: 44,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: sessions.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 8),
-              itemBuilder: (context, index) {
-                final session = sessions[index];
-                return TeacherStatusPill(
-                  label:
-                      '${session.timeLabel} ${session.title.split(' ').last}',
-                  color: session == selected
-                      ? AppColors.skyBlue600
-                      : session.isUrgent
-                      ? AppColors.accentRose
-                      : AppColors.textSecondary,
-                );
-              },
+          // ── Class / session selector ──────────────────────────────────
+          TeacherCard(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'SELECT CLASS',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w900,
+                    color: AppColors.textMuted,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: sessions.map((s) {
+                      final isSelected = s.id == _sessionId;
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: GestureDetector(
+                          onTap: () {
+                            setState(() => _sessionId = s.id);
+                            _loadSession(s.id, s.classSubjectId);
+                          },
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 180),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 9),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? AppColors.skyBlue600
+                                  : s.isUrgent
+                                      ? AppColors.accentRose
+                                          .withValues(alpha: 0.10)
+                                      : AppColors.skyBlue50,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: isSelected
+                                    ? AppColors.skyBlue600
+                                    : s.isUrgent
+                                        ? AppColors.accentRose
+                                            .withValues(alpha: 0.35)
+                                        : AppColors.border,
+                              ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  s.title,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w800,
+                                    color: isSelected
+                                        ? AppColors.white
+                                        : s.isUrgent
+                                            ? AppColors.accentRose
+                                            : AppColors.textPrimary,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  s.timeLabel,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: isSelected
+                                        ? AppColors.white
+                                            .withValues(alpha: 0.80)
+                                        : AppColors.textMuted,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ],
             ),
           ),
-          ...students.map(
-            (student) => TeacherCard(
-              child: Row(
-                children: [
-                  KSAvatar(name: student.name, size: 40),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      student.name,
-                      style: const TextStyle(fontWeight: FontWeight.w800),
-                    ),
-                  ),
-                  for (final status in TeacherAttendanceStatus.values)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 4),
-                      child: _AttendanceStatusButton(
-                        status: status,
-                        selected: state[student.id] == status,
-                        onTap: () => ref
-                            .read(teacherAttendanceControllerProvider.notifier)
-                            .setStatus(selected.id, student.id, status),
+          // ── Stats row ─────────────────────────────────────────────────
+          Row(
+            children: [
+              _AttendanceStat(
+                  label: 'Present',
+                  count: presentCount,
+                  color: AppColors.accentEmerald),
+              const SizedBox(width: 8),
+              _AttendanceStat(
+                  label: 'Absent',
+                  count: absentCount,
+                  color: AppColors.accentRose),
+              const SizedBox(width: 8),
+              _AttendanceStat(
+                  label: 'Late',
+                  count: lateCount,
+                  color: AppColors.accentAmber),
+              const SizedBox(width: 8),
+              _AttendanceStat(
+                  label: 'Excused',
+                  count: excusedCount,
+                  color: AppColors.accentIndigo),
+            ],
+          ),
+          // ── Progress bar + quick action ───────────────────────────────
+          TeacherCard(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '$marked of ${students.length} students marked',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                        ),
                       ),
                     ),
-                ],
-              ),
+                    TextButton.icon(
+                      onPressed: () {
+                        for (final student in students) {
+                          ref
+                              .read(
+                                  teacherAttendanceControllerProvider.notifier)
+                              .setStatus(
+                                session.id,
+                                student.id,
+                                TeacherAttendanceStatus.present,
+                              );
+                        }
+                      },
+                      icon: const Icon(Icons.check_circle_outline_rounded,
+                          size: 16),
+                      label: const Text('All Present'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppColors.accentEmerald,
+                        textStyle: const TextStyle(
+                            fontWeight: FontWeight.w800, fontSize: 12),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(999),
+                  child: LinearProgressIndicator(
+                    value: students.isEmpty
+                        ? 0
+                        : marked / students.length,
+                    minHeight: 8,
+                    color: allMarked
+                        ? AppColors.accentEmerald
+                        : AppColors.skyBlue500,
+                    backgroundColor: AppColors.border,
+                  ),
+                ),
+              ],
             ),
           ),
+          // ── Student list ──────────────────────────────────────────────
+          ...students.map(
+            (student) {
+              final status = state[student.id];
+              return TeacherCard(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                child: Row(
+                  children: [
+                    KSAvatar(name: student.name, size: 40),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            student.name,
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w800, fontSize: 14),
+                          ),
+                          Text(
+                            student.registrationNumber,
+                            style: const TextStyle(
+                                fontSize: 12,
+                                color: AppColors.textSecondary),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: TeacherAttendanceStatus.values
+                          .map(
+                            (s) => Padding(
+                              padding: const EdgeInsets.only(left: 5),
+                              child: _AttendanceStatusButton(
+                                status: s,
+                                selected: status == s,
+                                onTap: () => ref
+                                    .read(teacherAttendanceControllerProvider
+                                        .notifier)
+                                    .setStatus(session.id, student.id, s),
+                              ),
+                            ),
+                          )
+                          .toList(),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+          // ── Save button ───────────────────────────────────────────────
           KSButton(
-            label: 'Save Attendance',
-            onPressed: marked == students.length
+            label: allMarked
+                ? 'Save Attendance — ${session.title}'
+                : 'Mark all students to save ($marked / ${students.length})',
+            onPressed: allMarked
                 ? () => ref
-                      .read(snackbarProvider.notifier)
-                      .show('Attendance saved for ${selected.title}.')
+                    .read(snackbarProvider.notifier)
+                    .show('Attendance saved for ${session.title}.')
                 : null,
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _AttendanceStat extends StatelessWidget {
+  const _AttendanceStat({
+    required this.label,
+    required this.count,
+    required this.color,
+  });
+
+  final String label;
+  final int count;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.09),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: color.withValues(alpha: 0.22)),
+        ),
+        child: Column(
+          children: [
+            Text(
+              '$count',
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w900,
+                color: color,
+                height: 1.0,
+              ),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: color,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -882,7 +1172,10 @@ class AlertDetailScreen extends ConsumerWidget {
           KSButton(
             label: 'Log Intervention',
             secondary: true,
-            onPressed: () => context.push('/teacher/interventions/create'),
+            onPressed: () => context.push(
+              '/teacher/interventions/create'
+              '?studentId=${alert.studentId}',
+            ),
           ),
         ],
       ),
@@ -1003,7 +1296,10 @@ class StudentPerformanceProfileScreen extends ConsumerWidget {
           KSButton(
             label: 'Log Intervention',
             secondary: true,
-            onPressed: () => context.push('/teacher/interventions/create'),
+            onPressed: () => context.push(
+              '/teacher/interventions/create'
+              '?studentId=${student.id}',
+            ),
           ),
         ],
       ),
@@ -1163,15 +1459,28 @@ class _CreateAnnouncementScreenState extends State<CreateAnnouncementScreen> {
   }
 }
 
-class CreateInterventionScreen extends StatefulWidget {
-  const CreateInterventionScreen({super.key});
+class CreateInterventionScreen extends ConsumerStatefulWidget {
+  const CreateInterventionScreen({
+    super.key,
+    this.studentId,
+    this.classSubjectId,
+  });
+
+  final String? studentId;
+  final String? classSubjectId;
+
   @override
-  State<CreateInterventionScreen> createState() =>
+  ConsumerState<CreateInterventionScreen> createState() =>
       _CreateInterventionScreenState();
 }
 
-class _CreateInterventionScreenState extends State<CreateInterventionScreen> {
+class _CreateInterventionScreenState
+    extends ConsumerState<CreateInterventionScreen> {
   final _notes = TextEditingController();
+  InterventionType _type = InterventionType.supportGiven;
+  String? _selectedPeerId;
+  bool _addFollowUp = false;
+
   @override
   void dispose() {
     _notes.dispose();
@@ -1180,43 +1489,486 @@ class _CreateInterventionScreenState extends State<CreateInterventionScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final student = widget.studentId != null
+        ? ref.watch(teacherStudentByIdProvider(widget.studentId!))
+        : null;
+
+    // Resolve class: prefer widget param, else resolve from student.
+    final classId = widget.classSubjectId ??
+        (student != null
+            ? ref
+                .watch(teacherClassesProvider)
+                .where((c) => c.classLabel == student.classLabel)
+                .map((c) => c.id)
+                .firstOrNull
+            : null);
+
+    final highPerformers = classId != null
+        ? ref.watch(teacherHighPerformersProvider(classId))
+        : const <TeacherStudent>[];
+
+    final peers = highPerformers
+        .where((s) => s.averageScore >= 75 && s.id != widget.studentId)
+        .toList();
+
     return Scaffold(
       appBar: const KSAppBar(
-        title: 'Intervention Record',
-        subtitle: 'Document support given, parent meetings, or follow-up plans.',
+        title: 'Log Intervention',
+        subtitle: 'Document support, meetings, peer pairings, and follow-ups.',
         variant: KSAppBarVariant.hero,
       ),
       body: TeacherSurface(
         children: [
+          // ── Student context header ────────────────────────────────────
+          if (student != null)
+            TeacherCard(
+              padding: const EdgeInsets.all(14),
+              child: Row(
+                children: [
+                  KSAvatar(name: student.name, size: 46),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          student.name,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w900, fontSize: 15),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          '${student.registrationNumber} · ${student.classLabel}',
+                          style: const TextStyle(
+                              fontSize: 12,
+                              color: AppColors.textSecondary),
+                        ),
+                      ],
+                    ),
+                  ),
+                  _ScorePill(score: student.averageScore),
+                ],
+              ),
+            ),
+          // ── Intervention type ─────────────────────────────────────────
           TeacherCard(
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: const [
-                TeacherStatusPill(
-                  label: 'SUPPORT GIVEN',
-                  color: AppColors.skyBlue600,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'INTERVENTION TYPE',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                    color: AppColors.textMuted,
+                    letterSpacing: 1.1,
+                  ),
                 ),
-                TeacherStatusPill(
-                  label: 'PARENT MEETING',
-                  color: AppColors.accentIndigo,
-                ),
-                TeacherStatusPill(
-                  label: 'FOLLOW-UP',
-                  color: AppColors.accentAmber,
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: InterventionType.values
+                      .map((t) => _InterventionTypeChip(
+                            type: t,
+                            selected: _type == t,
+                            onTap: () => setState(() {
+                              _type = t;
+                              if (t != InterventionType.peerPairing) {
+                                _selectedPeerId = null;
+                              }
+                            }),
+                          ))
+                      .toList(),
                 ),
               ],
             ),
           ),
+          // ── Peer recommendation ───────────────────────────────────────
+          if (_type == InterventionType.peerPairing && peers.isNotEmpty)
+            TeacherCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'RECOMMEND A PEER MENTOR',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w900,
+                                color: AppColors.textMuted,
+                                letterSpacing: 1.1,
+                              ),
+                            ),
+                            SizedBox(height: 2),
+                            Text(
+                              'Select a high-performing classmate.',
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.textSecondary),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AppColors.accentEmerald.withValues(alpha: 0.10),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          '${peers.length} available',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.accentEmerald,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  ...peers.map((peer) {
+                    final isSelected = _selectedPeerId == peer.id;
+                    return GestureDetector(
+                      onTap: () => setState(() {
+                        _selectedPeerId =
+                            isSelected ? null : peer.id;
+                      }),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 180),
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? AppColors.accentEmerald.withValues(alpha: 0.09)
+                              : AppColors.offWhite,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: isSelected
+                                ? AppColors.accentEmerald
+                                : AppColors.border,
+                            width: isSelected ? 1.5 : 1,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            KSAvatar(name: peer.name, size: 36),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment:
+                                    CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    peer.name,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 13),
+                                  ),
+                                  Text(
+                                    peer.registrationNumber,
+                                    style: const TextStyle(
+                                        fontSize: 11,
+                                        color: AppColors.textSecondary),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            _ScorePill(score: peer.averageScore),
+                            const SizedBox(width: 8),
+                            AnimatedContainer(
+                              duration: const Duration(milliseconds: 180),
+                              width: 24,
+                              height: 24,
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? AppColors.accentEmerald
+                                    : Colors.transparent,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: isSelected
+                                      ? AppColors.accentEmerald
+                                      : AppColors.border,
+                                ),
+                              ),
+                              child: isSelected
+                                  ? const Icon(Icons.check_rounded,
+                                      color: AppColors.white, size: 14)
+                                  : null,
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            ),
+          // ── Notes ─────────────────────────────────────────────────────
           TeacherCard(
-            child: KSTextField(
-              controller: _notes,
-              label: 'Notes',
-              iconAsset: 'assets/icons/hand-raised.svg',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'NOTES',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                    color: AppColors.textMuted,
+                    letterSpacing: 1.1,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextFormField(
+                  controller: _notes,
+                  minLines: 3,
+                  maxLines: 6,
+                  decoration: const InputDecoration(
+                    hintText:
+                        'Describe the support given or action taken…',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.all(Radius.circular(12)),
+                    ),
+                    contentPadding: EdgeInsets.all(14),
+                  ),
+                ),
+              ],
             ),
           ),
-          KSButton(label: 'Save Intervention', onPressed: () => context.pop()),
+          // ── Follow-up toggle ──────────────────────────────────────────
+          TeacherCard(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            child: Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: AppColors.accentAmber.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.calendar_today_rounded,
+                      color: AppColors.accentAmber, size: 20),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Schedule a follow-up',
+                        style: TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                      Text(
+                        'Set a reminder to check back on progress.',
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondary),
+                      ),
+                    ],
+                  ),
+                ),
+                Switch.adaptive(
+                  value: _addFollowUp,
+                  activeThumbColor: AppColors.accentAmber,
+                  activeTrackColor: AppColors.accentAmber.withValues(alpha: 0.4),
+                  onChanged: (v) => setState(() => _addFollowUp = v),
+                ),
+              ],
+            ),
+          ),
+          if (_addFollowUp)
+            TeacherCard(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'FOLLOW-UP DATE',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w900,
+                      color: AppColors.textMuted,
+                      letterSpacing: 1.1,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: ['In 3 days', 'In 1 week', 'In 2 weeks', 'Custom']
+                        .map((label) => _FollowUpChip(label: label))
+                        .toList(),
+                  ),
+                ],
+              ),
+            ),
+          // ── Save ──────────────────────────────────────────────────────
+          KSButton(
+            label: 'Save Intervention Record',
+            onPressed: () {
+              ref.read(snackbarProvider.notifier).show(
+                    _type == InterventionType.peerPairing &&
+                            _selectedPeerId != null
+                        ? 'Peer pairing recorded and suggested.'
+                        : 'Intervention logged successfully.',
+                  );
+              context.pop();
+            },
+          ),
         ],
+      ),
+    );
+  }
+}
+
+// ── Intervention type chip ───────────────────────────────────────────────────
+
+class _InterventionTypeChip extends StatelessWidget {
+  const _InterventionTypeChip({
+    required this.type,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final InterventionType type;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _color;
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+        decoration: BoxDecoration(
+          color: selected ? color : color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: selected ? color : color.withValues(alpha: 0.28),
+            width: selected ? 1.5 : 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(_icon, size: 14, color: selected ? AppColors.white : color),
+            const SizedBox(width: 6),
+            Text(
+              _label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+                color: selected ? AppColors.white : color,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Color get _color => switch (type) {
+        InterventionType.supportGiven => AppColors.skyBlue600,
+        InterventionType.parentMeeting => AppColors.accentIndigo,
+        InterventionType.followUp => AppColors.accentAmber,
+        InterventionType.peerPairing => AppColors.accentEmerald,
+        InterventionType.other => AppColors.textSecondary,
+      };
+
+  IconData get _icon => switch (type) {
+        InterventionType.supportGiven => Icons.support_agent_rounded,
+        InterventionType.parentMeeting => Icons.people_alt_rounded,
+        InterventionType.followUp => Icons.calendar_today_rounded,
+        InterventionType.peerPairing => Icons.handshake_rounded,
+        InterventionType.other => Icons.more_horiz_rounded,
+      };
+
+  String get _label => switch (type) {
+        InterventionType.supportGiven => 'Support Given',
+        InterventionType.parentMeeting => 'Parent Meeting',
+        InterventionType.followUp => 'Follow-up',
+        InterventionType.peerPairing => 'Peer Pairing',
+        InterventionType.other => 'Other',
+      };
+}
+
+class _ScorePill extends StatelessWidget {
+  const _ScorePill({required this.score});
+  final double score;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = score >= 75
+        ? AppColors.accentEmerald
+        : score >= 50
+            ? AppColors.accentAmber
+            : AppColors.accentRose;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
+      ),
+      child: Text(
+        '${score.toStringAsFixed(0)}%',
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w900,
+          color: color,
+        ),
+      ),
+    );
+  }
+}
+
+class _FollowUpChip extends StatefulWidget {
+  const _FollowUpChip({required this.label});
+  final String label;
+
+  @override
+  State<_FollowUpChip> createState() => _FollowUpChipState();
+}
+
+class _FollowUpChipState extends State<_FollowUpChip> {
+  bool _selected = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => setState(() => _selected = !_selected),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: _selected
+              ? AppColors.accentAmber
+              : AppColors.accentAmber.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: AppColors.accentAmber.withValues(alpha: 0.35),
+          ),
+        ),
+        child: Text(
+          widget.label,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w800,
+            color: _selected ? AppColors.white : AppColors.accentAmber,
+          ),
+        ),
       ),
     );
   }

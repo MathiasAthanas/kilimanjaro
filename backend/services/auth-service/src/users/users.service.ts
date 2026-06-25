@@ -4,6 +4,7 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { AuditAction, Prisma, Role, User } from '../../generated/prisma';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import * as argon2 from 'argon2';
@@ -22,7 +23,16 @@ export class UsersService {
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
     private readonly rabbitmqService: RabbitMQService,
+    private readonly configService: ConfigService,
   ) {}
+
+  static normalisePhone(phone: string): string {
+    const digits = phone.replace(/[^\d]/g, '');
+    if (digits.startsWith('255')) return `+${digits}`;
+    if (digits.startsWith('0')) return `+255${digits.slice(1)}`;
+    if (digits.length === 9) return `+255${digits}`;
+    return `+${digits}`;
+  }
 
   async findByEmail(email: string): Promise<User | null> {
     return this.prisma.user.findUnique({ where: { email } });
@@ -30,6 +40,13 @@ export class UsersService {
 
   async findByRegistrationNumber(registrationNumber: string): Promise<User | null> {
     return this.prisma.user.findUnique({ where: { registrationNumber } });
+  }
+
+  async findByPhoneNumber(phone: string): Promise<User | null> {
+    const normalised = UsersService.normalisePhone(phone);
+    return this.prisma.user.findFirst({
+      where: { phoneNumber: { in: [normalised, phone.trim()] } },
+    });
   }
 
   async findById(id: string): Promise<User> {
@@ -41,8 +58,12 @@ export class UsersService {
   }
 
   async createUser(dto: CreateUserDto, createdBy: string) {
-    if (dto.role !== Role.STUDENT && !dto.email) {
-      throw new BadRequestException('email is required for non-STUDENT roles');
+    const phoneLoginableRoles: Role[] = [Role.STUDENT, Role.PARENT];
+    if (!phoneLoginableRoles.includes(dto.role) && !dto.email) {
+      throw new BadRequestException('email is required for this role');
+    }
+    if (dto.role === Role.PARENT && !dto.email && !dto.phoneNumber) {
+      throw new BadRequestException('email or phoneNumber is required for PARENT role');
     }
 
     if (dto.email) {
@@ -72,7 +93,7 @@ export class UsersService {
           firstName: dto.firstName,
           lastName: dto.lastName,
           department: dto.department,
-          phoneNumber: dto.phoneNumber,
+          phoneNumber: dto.phoneNumber ? UsersService.normalisePhone(dto.phoneNumber) : undefined,
           isActive: dto.isActive ?? true,
           mustChangePassword: true,
           createdBy,
@@ -316,6 +337,7 @@ export class UsersService {
     const where: Prisma.UserWhereInput = {
       role: query.role,
       isActive: query.isActive,
+      ...(query.phoneNumber ? { phoneNumber: UsersService.normalisePhone(query.phoneNumber) } : {}),
     };
 
     const [items, total] = await this.prisma.$transaction([
@@ -340,8 +362,10 @@ export class UsersService {
   async registerFailedLogin(userId: string): Promise<{ failedLoginAttempts: number; locked: boolean; lockedUntil: Date | null }> {
     const user = await this.findById(userId);
     const attempts = user.failedLoginAttempts + 1;
-    const shouldLock = attempts >= 5;
-    const lockedUntil = shouldLock ? new Date(Date.now() + 15 * 60 * 1000) : null;
+    const maxAttempts = Number(this.configService.get('LOGIN_MAX_ATTEMPTS', '100'));
+    const lockMinutes = Number(this.configService.get('LOGIN_LOCK_MINUTES', '15'));
+    const shouldLock = attempts >= maxAttempts;
+    const lockedUntil = shouldLock ? new Date(Date.now() + lockMinutes * 60 * 1000) : null;
 
     await this.prisma.user.update({
       where: { id: userId },
@@ -395,11 +419,8 @@ export class UsersService {
   }
 
   private generateNamePassword(_firstName: string, lastName: string): string {
-    // Generate a memorable but secure temp password: Name@Kili + 4-digit random
     const base = lastName.charAt(0).toUpperCase() + lastName.slice(1).toLowerCase().replace(/[^a-z]/g, '');
     const digits = Math.floor(1000 + Math.random() * 9000);
     return `${base}@Kili${digits}`;
-  }
-    return firstName.replace(/[^a-z0-9]/gi, '').toUpperCase() || 'KILIMANJARO';
   }
 }

@@ -1,38 +1,77 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/hod_models.dart';
+import '../config/app_config.dart';
+import '../services/api/api_hod_service.dart';
+import '../services/interfaces/hod_service_interface.dart';
+import 'auth_provider.dart';
 
-final hodApprovalsControllerProvider =
-    StateNotifierProvider<HodApprovalsController, List<HodApproval>>(
-      (ref) => HodApprovalsController(),
-    );
+// ─── Service ──────────────────────────────────────────────────────────────────
+
+final hodServiceProvider = Provider<IHodService?>((ref) {
+  if (AppConfig.useMockData) return null;
+  return ApiHodService(ref.watch(secureStorageProvider));
+});
+
+// ─── Internal async loaders (subjects + teachers + approval history) ──────────
+
+final _hodApprovalHistoryLoader = FutureProvider<List<HodApproval>>((ref) async {
+  final svc = ref.watch(hodServiceProvider);
+  if (svc == null) return _approvalHistory;
+  return svc.getApprovalHistory();
+});
+
+final _hodSubjectsLoader = FutureProvider<List<HodSubjectAnalytics>>((ref) async {
+  final svc = ref.watch(hodServiceProvider);
+  if (svc == null) return _subjects;
+  return svc.getDepartmentSubjects();
+});
+
+final _hodTeachersLoader = FutureProvider<List<HodTeacherSummary>>((ref) async {
+  final svc = ref.watch(hodServiceProvider);
+  if (svc == null) return _teachers;
+  return svc.getDepartmentTeachers();
+});
+
+// ─── Approvals controller ─────────────────────────────────────────────────────
 
 class HodApprovalsController extends StateNotifier<List<HodApproval>> {
-  HodApprovalsController() : super(_pendingApprovals);
+  HodApprovalsController(this._service)
+      : super(AppConfig.useMockData ? _pendingApprovals : const []) {
+    if (!AppConfig.useMockData) _loadFromApi();
+  }
+
+  final IHodService? _service;
+
+  Future<void> _loadFromApi() async {
+    final items = await _service?.getPendingApprovals() ?? [];
+    state = items;
+  }
 
   void approve(String id) {
     state = [
       for (final item in state)
-        if (item.id == id)
-          item.copyWith(status: HodApprovalStatus.approved)
-        else
-          item,
+        if (item.id == id) item.copyWith(status: HodApprovalStatus.approved) else item,
     ];
+    _service?.approveAssessment(id);
   }
 
   void reject(String id, String reason) {
     state = [
       for (final item in state)
         if (item.id == id)
-          item.copyWith(
-            status: HodApprovalStatus.rejected,
-            rejectionReason: reason,
-          )
+          item.copyWith(status: HodApprovalStatus.rejected, rejectionReason: reason)
         else
           item,
     ];
+    _service?.rejectAssessment(id, reason);
   }
 }
+
+final hodApprovalsControllerProvider =
+    StateNotifierProvider<HodApprovalsController, List<HodApproval>>(
+  (ref) => HodApprovalsController(ref.watch(hodServiceProvider)),
+);
 
 final hodPendingApprovalsProvider = Provider<List<HodApproval>>((ref) {
   return ref
@@ -42,93 +81,121 @@ final hodPendingApprovalsProvider = Provider<List<HodApproval>>((ref) {
 });
 
 final hodApprovalHistoryProvider = Provider<List<HodApproval>>((ref) {
-  return [
-    ...ref
-        .watch(hodApprovalsControllerProvider)
-        .where((item) => item.status != HodApprovalStatus.pending),
-    ..._approvalHistory,
-  ];
-});
-
-final hodApprovalByIdProvider = Provider.family<HodApproval?, String>((
-  ref,
-  id,
-) {
-  return ref
+  final actioned = ref
       .watch(hodApprovalsControllerProvider)
-      .where((item) => item.id == id)
-      .firstOrNull;
+      .where((item) => item.status != HodApprovalStatus.pending)
+      .toList();
+  final serverHistory = ref.watch(_hodApprovalHistoryLoader).value
+      ?? (AppConfig.useMockData ? _approvalHistory : const []);
+  return [...actioned, ...serverHistory];
 });
 
-final hodSubjectsProvider = Provider<List<HodSubjectAnalytics>>(
-  (ref) => _subjects,
-);
-
-final hodSubjectByIdProvider = Provider.family<HodSubjectAnalytics?, String>((
-  ref,
-  id,
-) {
-  return _subjects.where((item) => item.id == id).firstOrNull;
+final hodApprovalByIdProvider = Provider.family<HodApproval?, String>((ref, id) {
+  return ref.watch(hodApprovalsControllerProvider).where((item) => item.id == id).firstOrNull;
 });
 
-final hodTeachersProvider = Provider<List<HodTeacherSummary>>(
-  (ref) => _teachers,
-);
+// ─── Subjects & teachers ──────────────────────────────────────────────────────
 
-final hodTeacherByIdProvider = Provider.family<HodTeacherSummary?, String>((
-  ref,
-  id,
-) {
-  return _teachers.where((item) => item.id == id).firstOrNull;
+final hodSubjectsProvider = Provider<List<HodSubjectAnalytics>>((ref) {
+  return ref.watch(_hodSubjectsLoader).value
+      ?? (AppConfig.useMockData ? _subjects : const []);
 });
 
-final hodAlertsControllerProvider =
-    StateNotifierProvider<HodAlertsController, List<HodDepartmentAlert>>(
-      (ref) => HodAlertsController(),
-    );
+final hodSubjectByIdProvider = Provider.family<HodSubjectAnalytics?, String>((ref, id) {
+  return ref.watch(hodSubjectsProvider).where((s) => s.id == id).firstOrNull;
+});
+
+final hodTeachersProvider = Provider<List<HodTeacherSummary>>((ref) {
+  return ref.watch(_hodTeachersLoader).value
+      ?? (AppConfig.useMockData ? _teachers : const []);
+});
+
+final hodTeacherByIdProvider = Provider.family<HodTeacherSummary?, String>((ref, id) {
+  return ref.watch(hodTeachersProvider).where((t) => t.id == id).firstOrNull;
+});
+
+// ─── Alerts controller ────────────────────────────────────────────────────────
 
 class HodAlertsController extends StateNotifier<List<HodDepartmentAlert>> {
-  HodAlertsController() : super(_alerts);
+  HodAlertsController(this._service)
+      : super(AppConfig.useMockData ? _alerts : const []) {
+    if (!AppConfig.useMockData) _loadFromApi();
+  }
+
+  final IHodService? _service;
+
+  Future<void> _loadFromApi() async {
+    final items = await _service?.getDepartmentAlerts() ?? [];
+    state = items;
+  }
 
   void escalate(String id) {
     state = [
       for (final item in state)
         if (item.id == id) item.copyWith(isEscalated: true) else item,
     ];
+    _service?.escalateAlert(id, '');
   }
 }
+
+final hodAlertsControllerProvider =
+    StateNotifierProvider<HodAlertsController, List<HodDepartmentAlert>>(
+  (ref) => HodAlertsController(ref.watch(hodServiceProvider)),
+);
 
 final hodAlertsProvider = Provider<List<HodDepartmentAlert>>(
   (ref) => ref.watch(hodAlertsControllerProvider),
 );
 
-final hodPairingsControllerProvider =
-    StateNotifierProvider<HodPairingsController, List<HodPairingSummary>>(
-      (ref) => HodPairingsController(),
-    );
+// ─── Pairings controller ──────────────────────────────────────────────────────
 
 class HodPairingsController extends StateNotifier<List<HodPairingSummary>> {
-  HodPairingsController() : super(_pairings);
+  HodPairingsController(this._service)
+      : super(AppConfig.useMockData ? _pairings : const []) {
+    if (!AppConfig.useMockData) _loadFromApi();
+  }
+
+  final IHodService? _service;
+
+  Future<void> _loadFromApi() async {
+    final items = await _service?.getPairings() ?? [];
+    state = items;
+  }
 
   void activatePairings(List<String> ids) {
     state = [
       for (final item in state)
         if (ids.contains(item.id)) item.copyWith(status: 'ACTIVE') else item,
     ];
+    for (final id in ids) {
+      _service?.activatePairing(id);
+    }
   }
 }
+
+final hodPairingsControllerProvider =
+    StateNotifierProvider<HodPairingsController, List<HodPairingSummary>>(
+  (ref) => HodPairingsController(ref.watch(hodServiceProvider)),
+);
 
 final hodPairingsProvider = Provider<List<HodPairingSummary>>(
   (ref) => ref.watch(hodPairingsControllerProvider),
 );
 
-final hodInterventionsControllerProvider =
-    StateNotifierProvider<HodInterventionsController, List<HodIntervention>>(
-      (ref) => HodInterventionsController(),
-    );
+// ─── Interventions controller ──────────────────────────────────────────────────
 
 class HodInterventionsController extends StateNotifier<List<HodIntervention>> {
-  HodInterventionsController() : super(_interventions);
+  HodInterventionsController(this._service)
+      : super(AppConfig.useMockData ? _interventions : const []) {
+    if (!AppConfig.useMockData) _loadFromApi();
+  }
+
+  final IHodService? _service;
+
+  Future<void> _loadFromApi() async {
+    final items = await _service?.getInterventions() ?? [];
+    state = items;
+  }
 
   void markFollowedUp(String id) {
     state = [
@@ -138,9 +205,16 @@ class HodInterventionsController extends StateNotifier<List<HodIntervention>> {
   }
 }
 
+final hodInterventionsControllerProvider =
+    StateNotifierProvider<HodInterventionsController, List<HodIntervention>>(
+  (ref) => HodInterventionsController(ref.watch(hodServiceProvider)),
+);
+
 final hodInterventionsProvider = Provider<List<HodIntervention>>(
   (ref) => ref.watch(hodInterventionsControllerProvider),
 );
+
+// ─── Mock data ────────────────────────────────────────────────────────────────
 
 const _pendingApprovals = <HodApproval>[
   HodApproval(
@@ -217,8 +291,7 @@ const _approvalHistory = <HodApproval>[
     lowest: 4,
     distribution: {'A': 2, 'B': 5, 'C': 10, 'D': 11, 'F': 8},
     status: HodApprovalStatus.rejected,
-    rejectionReason:
-        'Several outlier scores need verification. Please recheck.',
+    rejectionReason: 'Several outlier scores need verification. Please recheck.',
   ),
 ];
 
@@ -230,24 +303,9 @@ const _subjects = <HodSubjectAnalytics>[
     syllabusCompletion: 71,
     atRiskStudents: 24,
     classes: [
-      HodClassAnalytics(
-        classLabel: 'Form 1A',
-        teacherName: 'Grace Ndosi',
-        average: 68,
-        studentCount: 38,
-      ),
-      HodClassAnalytics(
-        classLabel: 'Form 2A',
-        teacherName: 'Grace Ndosi',
-        average: 61,
-        studentCount: 36,
-      ),
-      HodClassAnalytics(
-        classLabel: 'Form 3A',
-        teacherName: 'Hassan Ally',
-        average: 65,
-        studentCount: 42,
-      ),
+      HodClassAnalytics(classLabel: 'Form 1A', teacherName: 'Grace Ndosi', average: 68, studentCount: 38),
+      HodClassAnalytics(classLabel: 'Form 2A', teacherName: 'Grace Ndosi', average: 61, studentCount: 36),
+      HodClassAnalytics(classLabel: 'Form 3A', teacherName: 'Hassan Ally', average: 65, studentCount: 42),
     ],
   ),
   HodSubjectAnalytics(
@@ -257,24 +315,9 @@ const _subjects = <HodSubjectAnalytics>[
     syllabusCompletion: 64,
     atRiskStudents: 41,
     classes: [
-      HodClassAnalytics(
-        classLabel: 'Form 1A',
-        teacherName: 'Amina Rashidi',
-        average: 62,
-        studentCount: 38,
-      ),
-      HodClassAnalytics(
-        classLabel: 'Form 2A',
-        teacherName: 'Amina Rashidi',
-        average: 55,
-        studentCount: 36,
-      ),
-      HodClassAnalytics(
-        classLabel: 'Form 3B',
-        teacherName: 'Amina Rashidi',
-        average: 45,
-        studentCount: 40,
-      ),
+      HodClassAnalytics(classLabel: 'Form 1A', teacherName: 'Amina Rashidi', average: 62, studentCount: 38),
+      HodClassAnalytics(classLabel: 'Form 2A', teacherName: 'Amina Rashidi', average: 55, studentCount: 36),
+      HodClassAnalytics(classLabel: 'Form 3B', teacherName: 'Amina Rashidi', average: 45, studentCount: 40),
     ],
   ),
   HodSubjectAnalytics(
@@ -284,69 +327,19 @@ const _subjects = <HodSubjectAnalytics>[
     syllabusCompletion: 68,
     atRiskStudents: 18,
     classes: [
-      HodClassAnalytics(
-        classLabel: 'Form 3A',
-        teacherName: 'Rose Mhina',
-        average: 67,
-        studentCount: 42,
-      ),
-      HodClassAnalytics(
-        classLabel: 'Form 3B',
-        teacherName: 'Rose Mhina',
-        average: 65,
-        studentCount: 40,
-      ),
-      HodClassAnalytics(
-        classLabel: 'Form 4A',
-        teacherName: 'Peter Kimani',
-        average: 69,
-        studentCount: 38,
-      ),
+      HodClassAnalytics(classLabel: 'Form 3A', teacherName: 'Rose Mhina', average: 67, studentCount: 42),
+      HodClassAnalytics(classLabel: 'Form 3B', teacherName: 'Rose Mhina', average: 65, studentCount: 40),
+      HodClassAnalytics(classLabel: 'Form 4A', teacherName: 'Peter Kimani', average: 69, studentCount: 38),
     ],
   ),
 ];
 
 const _teachers = <HodTeacherSummary>[
-  HodTeacherSummary(
-    id: 'grace',
-    name: 'Mwalimu Grace Ndosi',
-    subjects: 'Biology Form 1-2',
-    onTimeRate: 100,
-    averageScore: 64.2,
-    syllabusCompletion: 74,
-  ),
-  HodTeacherSummary(
-    id: 'hassan',
-    name: 'Mr. Hassan Ally',
-    subjects: 'Biology Form 3-4',
-    onTimeRate: 87,
-    averageScore: 62.1,
-    syllabusCompletion: 68,
-  ),
-  HodTeacherSummary(
-    id: 'amina',
-    name: 'Ms. Amina Rashidi',
-    subjects: 'Chemistry',
-    onTimeRate: 93,
-    averageScore: 54.8,
-    syllabusCompletion: 63,
-  ),
-  HodTeacherSummary(
-    id: 'rose',
-    name: 'Mwalimu Rose Mhina',
-    subjects: 'Physics Form 2-3',
-    onTimeRate: 95,
-    averageScore: 66.8,
-    syllabusCompletion: 68,
-  ),
-  HodTeacherSummary(
-    id: 'peter',
-    name: 'Mr. Peter Kimani',
-    subjects: 'Physics Form 4-5',
-    onTimeRate: 80,
-    averageScore: 67.2,
-    syllabusCompletion: 72,
-  ),
+  HodTeacherSummary(id: 'grace', name: 'Mwalimu Grace Ndosi', subjects: 'Biology Form 1-2', onTimeRate: 100, averageScore: 64.2, syllabusCompletion: 74),
+  HodTeacherSummary(id: 'hassan', name: 'Mr. Hassan Ally', subjects: 'Biology Form 3-4', onTimeRate: 87, averageScore: 62.1, syllabusCompletion: 68),
+  HodTeacherSummary(id: 'amina', name: 'Ms. Amina Rashidi', subjects: 'Chemistry', onTimeRate: 93, averageScore: 54.8, syllabusCompletion: 63),
+  HodTeacherSummary(id: 'rose', name: 'Mwalimu Rose Mhina', subjects: 'Physics Form 2-3', onTimeRate: 95, averageScore: 66.8, syllabusCompletion: 68),
+  HodTeacherSummary(id: 'peter', name: 'Mr. Peter Kimani', subjects: 'Physics Form 4-5', onTimeRate: 80, averageScore: 67.2, syllabusCompletion: 72),
 ];
 
 const _alerts = <HodDepartmentAlert>[
@@ -355,8 +348,7 @@ const _alerts = <HodDepartmentAlert>[
     title: 'CHRONIC_UNDERPERFORMER',
     subject: 'Chemistry',
     classLabel: 'Form 3B',
-    message:
-        '6 students are below threshold for three consecutive assessments.',
+    message: '6 students are below threshold for three consecutive assessments.',
     severity: HodAlertSeverity.high,
   ),
   HodDepartmentAlert(
@@ -388,27 +380,9 @@ const _alerts = <HodDepartmentAlert>[
 ];
 
 const _pairings = <HodPairingSummary>[
-  HodPairingSummary(
-    id: 'chem-f3b',
-    subject: 'Chemistry',
-    classLabel: 'Form 3B',
-    count: 3,
-    status: 'SUGGESTED',
-  ),
-  HodPairingSummary(
-    id: 'bio-f3a',
-    subject: 'Biology',
-    classLabel: 'Form 3A',
-    count: 1,
-    status: 'ACTIVE',
-  ),
-  HodPairingSummary(
-    id: 'physics-f3b',
-    subject: 'Physics',
-    classLabel: 'Form 3B',
-    count: 1,
-    status: 'SUGGESTED',
-  ),
+  HodPairingSummary(id: 'chem-f3b', subject: 'Chemistry', classLabel: 'Form 3B', count: 3, status: 'SUGGESTED'),
+  HodPairingSummary(id: 'bio-f3a', subject: 'Biology', classLabel: 'Form 3A', count: 1, status: 'ACTIVE'),
+  HodPairingSummary(id: 'physics-f3b', subject: 'Physics', classLabel: 'Form 3B', count: 1, status: 'SUGGESTED'),
 ];
 
 const _interventions = <HodIntervention>[

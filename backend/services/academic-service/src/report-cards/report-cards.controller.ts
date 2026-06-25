@@ -26,6 +26,20 @@ export class ReportCardsController {
     return this.reportCardsService.generate(dto, user!);
   }
 
+  @Get('report-cards/student/:studentId')
+  @Roles(
+    ROLES.SYSTEM_ADMIN,
+    ROLES.PRINCIPAL,
+    ROLES.ACADEMIC_QA,
+    ROLES.HEAD_OF_DEPARTMENT,
+    ROLES.TEACHER,
+    ROLES.PARENT,
+    ROLES.STUDENT,
+  )
+  listForStudent(@Param('studentId') studentId: string, @CurrentUser() user?: RequestUser) {
+    return this.reportCardsService.listForStudent(studentId, user!);
+  }
+
   @Get('report-cards/:studentId/term/:termId')
   @Roles(
     ROLES.SYSTEM_ADMIN,

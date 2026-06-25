@@ -4,6 +4,7 @@ import {
   BarChart3,
   Bell,
   BookOpen,
+  Building2,
   CalendarCheck,
   Banknote,
   Boxes,
@@ -26,9 +27,11 @@ import {
   Search,
   Settings,
   Shield,
+  Table2,
   Target,
   TrendingUp,
   User,
+  UserPlus,
   Users,
   Video,
   WalletCards,
@@ -80,6 +83,12 @@ const teacherSections: SidebarSection[] = [
     ],
   },
   {
+    title: 'Analytics',
+    items: [
+      { to: '/teacher/analytics', icon: BarChart3, label: 'My Analytics', end: true },
+    ],
+  },
+  {
     title: 'Communication',
     items: [
       { to: '/teacher/announcements',        icon: Megaphone,        label: 'Announcements',      end: true },
@@ -113,10 +122,8 @@ const hodSections: SidebarSection[] = [
   {
     title: 'E-Learning',
     items: [
-      { to: '/hod/elearning',                                          icon: GraduationCap, label: 'Dept. Overview',    end: true },
-      { to: '/hod/elearning/courses/course-form3a-math',               icon: BookOpen,      label: 'Mathematics F3A'             },
-      { to: '/hod/elearning/courses/course-form2a-physics',            icon: Video,         label: 'Physics F2A'                 },
-      { to: '/hod/elearning/courses/course-form3b-math',               icon: FileText,      label: 'Mathematics F3B'             },
+      { to: '/hod/elearning', icon: GraduationCap, label: 'Dept. Overview', end: true },
+      { to: '/hod/elearning', icon: BookOpen,       label: 'Course Browser'            },
     ],
   },
   {
@@ -126,6 +133,12 @@ const hodSections: SidebarSection[] = [
       { to: '/hod/performance/pairings',  icon: Users,            label: 'Peer Pairings'            },
       { to: '/hod/students/stu-jabir',    icon: User,             label: 'Student Profile'          },
       { to: '/hod/interventions',         icon: MessageSquarePlus,label: 'Interventions'            },
+    ],
+  },
+  {
+    title: 'Analytics',
+    items: [
+      { to: '/hod/analytics', icon: TrendingUp, label: 'Dept Analytics', end: true },
     ],
   },
   {
@@ -162,8 +175,9 @@ const aqaSections: SidebarSection[] = [
     items: [
       { to: '/aqa/performance/engine',        icon: FileSpreadsheet, label: 'Engine Control', end: true },
       { to: '/aqa/performance/engine/config', icon: Settings,        label: 'Engine Config'             },
-      { to: '/aqa/analytics',                 icon: BarChart3,       label: 'Academic Radar', end: true },
-      { to: '/aqa/analytics/classes/form-3b', icon: Target,          label: 'Class Analytics'           },
+      { to: '/aqa/analytics',                 icon: BarChart3,       label: 'Academic Radar',       end: true },
+      { to: '/aqa/analytics/overview',        icon: TrendingUp,      label: 'Analytics Intelligence', end: true },
+      { to: '/aqa/analytics/classes/form-3b', icon: Target,          label: 'Class Analytics'               },
     ],
   },
   {
@@ -310,10 +324,12 @@ const adminSections: SidebarSection[] = [
     items: [
       { to: '/admin',               icon: Shield,       label: 'System Center',  end: true },
       { to: '/admin/users',         icon: Users,        label: 'Users',          end: true },
+      { to: '/admin/users/create',  icon: UserPlus,     label: 'Register User'             },
       { to: '/admin/students',      icon: GraduationCap,label: 'Students',       end: true },
       { to: '/admin/academic/setup',icon: BookOpen,     label: 'Academic Setup'            },
       { to: '/admin/classes',       icon: Landmark,     label: 'Classes',        end: true },
       { to: '/admin/subjects',      icon: Target,       label: 'Subjects',       end: true },
+      { to: '/admin/departments',   icon: Building2,    label: 'Departments',    end: true },
     ],
   },
   {
@@ -347,6 +363,16 @@ const adminSections: SidebarSection[] = [
     ],
   },
   {
+    title: 'Timetable',
+    items: [
+      { to: '/admin/timetable',            icon: Table2,       label: 'Timetable Hub',    end: true },
+      { to: '/admin/timetable/sheets',     icon: CalendarCheck,label: 'All Sheets',       end: true },
+      { to: '/admin/timetable/sheets/new', icon: CalendarCheck,label: 'New Sheet'                   },
+      { to: '/admin/timetable/venues',     icon: Landmark,     label: 'Venues',           end: true },
+      { to: '/admin/timetable/activities', icon: Target,       label: 'Activity Types',   end: true },
+    ],
+  },
+  {
     title: 'Reports & Audit',
     items: [
       { to: '/admin/analytics',    icon: BarChart3,   label: 'Full Analytics'  },
@@ -354,7 +380,6 @@ const adminSections: SidebarSection[] = [
       { to: '/admin/audit/finance',icon: WalletCards, label: 'Finance Audit'   },
       { to: '/admin/audit/system', icon: Shield,      label: 'System Audit'    },
       { to: '/reports',            icon: Download,    label: 'Shared Reports'  },
-      { to: '/timetables',         icon: CalendarCheck,label: 'Timetables'     },
     ],
   },
 ];
@@ -369,7 +394,7 @@ const genericSections: SidebarSection[] = [
       { to: '/teacher',     icon: User,            label: 'Teacher Dashboard'   },
       { to: '/hod',         icon: Landmark,        label: 'Academic Affairs'    },
       { to: '/finance',     icon: WalletCards,     label: 'Finance Hub'         },
-      { to: '/principal',   icon: Shield,          label: 'Principal Command'   },
+      { to: '/principal',   icon: Shield,          label: 'Headmaster Command'  },
       { to: '/admin',       icon: Settings,        label: 'Admin Settings'      },
       { to: '/reports',     icon: BarChart3,       label: 'Reports'             },
     ],

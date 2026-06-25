@@ -4,6 +4,7 @@ import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
+import { DepartmentsService } from './departments/departments.service';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 
@@ -42,6 +43,9 @@ async function bootstrap() {
     const document = SwaggerModule.createDocument(app, swagger);
     SwaggerModule.setup('students/docs', app, document);
   }
+
+  const deptService = app.get(DepartmentsService);
+  await deptService.seedSystemDefaults();
 
   const port = Number(config.get<string>('PORT', '3002'));
   await app.listen(port);

@@ -6,12 +6,12 @@ import { arrayFromApi, dedupeById, payloadOf } from '../../../lib/api/response';
 
 export const elKeys = {
   all: ['elearning'] as const,
-  courses: () => [...elKeys.all, 'courses'] as const,
-  course: (id: string) => [...elKeys.courses(), id] as const,
-  teacherAnalytics: () => [...elKeys.all, 'analytics', 'teacher'] as const,
-  hodOverview: () => [...elKeys.all, 'analytics', 'hod'] as const,
-  principalOverview: () => [...elKeys.all, 'analytics', 'principal'] as const,
-  aqaOverview: () => [...elKeys.all, 'analytics', 'aqa'] as const,
+  courses: (params?: Record<string, string>) => [...elKeys.all, 'courses', params ?? {}] as const,
+  course: (id: string) => [...elKeys.all, 'courses', id] as const,
+  teacherAnalytics: (params?: Record<string, string>) => [...elKeys.all, 'analytics', 'teacher', params ?? {}] as const,
+  hodOverview: (params?: Record<string, string>) => [...elKeys.all, 'analytics', 'hod', params ?? {}] as const,
+  principalOverview: (params?: Record<string, string>) => [...elKeys.all, 'analytics', 'principal', params ?? {}] as const,
+  aqaOverview: (params?: Record<string, string>) => [...elKeys.all, 'analytics', 'aqa', params ?? {}] as const,
   lessons: (courseId: string) => [...elKeys.course(courseId), 'lessons'] as const,
   materials: (courseId: string, lessonId: string) => [...elKeys.lessons(courseId), lessonId, 'materials'] as const,
   assignments: (courseId: string) => [...elKeys.course(courseId), 'assignments'] as const,
@@ -330,13 +330,22 @@ function normaliseCourse(raw: Record<string, unknown>): ElearningCourse {
   } as ElearningCourse;
 }
 
-export function useElearningCourses() {
+export function useElearningCourses(params?: Record<string, string>) {
   return useQuery({
-    queryKey: elKeys.courses(),
+    queryKey: elKeys.courses(params),
     queryFn: () =>
-      api.get('/elearning/courses').then((r) =>
+      api.get('/elearning/courses', { params }).then((r) =>
         dedupeById(arrayFromApi(payloadOf(r), ['courses']).map((raw) => normaliseCourse(raw as Record<string, unknown>))),
       ),
+  });
+}
+
+export function useCloneCourseMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, targetTermId, targetAcademicYearId }: { id: string; targetTermId: string; targetAcademicYearId: string }) =>
+      api.post(`/elearning/courses/${id}/copy`, { targetTermId, targetAcademicYearId }).then((r) => r.data?.data ?? r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: elKeys.all }),
   });
 }
 
@@ -352,31 +361,31 @@ export function useElearningCourse(courseId: string | undefined) {
   });
 }
 
-export function useTeacherAnalytics() {
+export function useTeacherAnalytics(params?: Record<string, string>) {
   return useQuery({
-    queryKey: elKeys.teacherAnalytics(),
-    queryFn: () => api.get('/elearning/analytics/teacher/courses').then(payloadOf) as Promise<TeacherAnalytics>,
+    queryKey: elKeys.teacherAnalytics(params),
+    queryFn: () => api.get('/elearning/analytics/teacher/courses', { params }).then(payloadOf) as Promise<TeacherAnalytics>,
   });
 }
 
-export function useHodOverview() {
+export function useHodOverview(params?: Record<string, string>) {
   return useQuery({
-    queryKey: elKeys.hodOverview(),
-    queryFn: () => api.get('/elearning/analytics/hod/overview').then(payloadOf) as Promise<RoleOverview>,
+    queryKey: elKeys.hodOverview(params),
+    queryFn: () => api.get('/elearning/analytics/hod/overview', { params }).then(payloadOf) as Promise<RoleOverview>,
   });
 }
 
-export function usePrincipalOverview() {
+export function usePrincipalOverview(params?: Record<string, string>) {
   return useQuery({
-    queryKey: elKeys.principalOverview(),
-    queryFn: () => api.get('/elearning/analytics/principal/overview').then(payloadOf) as Promise<RoleOverview>,
+    queryKey: elKeys.principalOverview(params),
+    queryFn: () => api.get('/elearning/analytics/principal/overview', { params }).then(payloadOf) as Promise<RoleOverview>,
   });
 }
 
-export function useAqaOverview() {
+export function useAqaOverview(params?: Record<string, string>) {
   return useQuery({
-    queryKey: elKeys.aqaOverview(),
-    queryFn: () => api.get('/elearning/analytics/aqa/courses').then(payloadOf) as Promise<{ courses: ElearningCourse[] }>,
+    queryKey: elKeys.aqaOverview(params),
+    queryFn: () => api.get('/elearning/analytics/aqa/courses', { params }).then(payloadOf) as Promise<RoleOverview>,
   });
 }
 
@@ -821,5 +830,174 @@ export function useAddQuizQuestion() {
       api.post<ElearningQuizQuestion>(`/elearning/quizzes/${quizId}/questions`, body).then((r) => r.data),
     onSuccess: (_d, { courseId, quizId }) =>
       qc.invalidateQueries({ queryKey: elKeys.quiz(courseId, quizId) }),
+  });
+}
+
+export function useCreateCourseMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { classSubjectId: string; termId?: string; academicYearId?: string }) =>
+      api.post('/elearning/courses', body).then((r) => r.data?.data ?? r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: elKeys.courses() }),
+  });
+}
+
+export function useUpdateCourse() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ courseId, body }: { courseId: string; body: Record<string, unknown> }) =>
+      api.patch(`/elearning/courses/${courseId}`, body).then((r) => r.data?.data ?? r.data),
+    onSuccess: (_d, { courseId }) => {
+      qc.invalidateQueries({ queryKey: elKeys.course(courseId) });
+      qc.invalidateQueries({ queryKey: elKeys.courses() });
+    },
+  });
+}
+
+export function useArchiveCourse() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (courseId: string) =>
+      api.patch(`/elearning/courses/${courseId}/archive`).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: elKeys.courses() }),
+  });
+}
+
+export function useUpdateLesson() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ courseId, lessonId, body }: { courseId: string; lessonId: string; body: Record<string, unknown> }) =>
+      api.patch(`/elearning/courses/${courseId}/lessons/${lessonId}`, body).then((r) => r.data?.data ?? r.data),
+    onSuccess: (_d, { courseId }) => qc.invalidateQueries({ queryKey: elKeys.lessons(courseId) }),
+  });
+}
+
+export function useUpdateQuiz() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ courseId, quizId, body }: { courseId: string; quizId: string; body: Record<string, unknown> }) =>
+      api.patch(`/elearning/courses/${courseId}/quizzes/${quizId}`, body).then((r) => r.data?.data ?? r.data),
+    onSuccess: (_d, { courseId, quizId }) => qc.invalidateQueries({ queryKey: elKeys.quiz(courseId, quizId) }),
+  });
+}
+
+export function useCreateAnnouncement() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ courseId, body }: { courseId: string; body: Record<string, unknown> }) =>
+      api.post(`/elearning/courses/${courseId}/announcements`, body).then((r) => r.data?.data ?? r.data),
+    onSuccess: (_d, { courseId }) => qc.invalidateQueries({ queryKey: elKeys.announcements(courseId) }),
+  });
+}
+
+// ─── Material mutations ───────────────────────────────────────────────────────
+
+export function useCreateMaterial() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ courseId, lessonId, body }: { courseId: string; lessonId: string; body: Record<string, unknown> }) =>
+      api.post(`/elearning/courses/${courseId}/lessons/${lessonId}/materials`, body).then((r) => r.data?.data ?? r.data),
+    onSuccess: (_d, { courseId, lessonId }) => qc.invalidateQueries({ queryKey: elKeys.materials(courseId, lessonId) }),
+  });
+}
+
+export function useUpdateMaterial() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ courseId, lessonId, materialId, body }: { courseId: string; lessonId: string; materialId: string; body: Record<string, unknown> }) =>
+      api.patch(`/elearning/courses/${courseId}/lessons/${lessonId}/materials/${materialId}`, body).then((r) => r.data?.data ?? r.data),
+    onSuccess: (_d, { courseId, lessonId }) => qc.invalidateQueries({ queryKey: elKeys.materials(courseId, lessonId) }),
+  });
+}
+
+// ─── Assignment mutations ─────────────────────────────────────────────────────
+
+export function useUpdateAssignment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ courseId, assignmentId, body }: { courseId: string; assignmentId: string; body: Record<string, unknown> }) =>
+      api.patch(`/elearning/courses/${courseId}/assignments/${assignmentId}`, body).then((r) => r.data?.data ?? r.data),
+    onSuccess: (_d, { courseId, assignmentId }) => {
+      qc.invalidateQueries({ queryKey: elKeys.assignment(courseId, assignmentId) });
+      qc.invalidateQueries({ queryKey: elKeys.assignments(courseId) });
+    },
+  });
+}
+
+export function useCloseAssignment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ courseId, assignmentId }: { courseId: string; assignmentId: string }) =>
+      api.patch(`/elearning/courses/${courseId}/assignments/${assignmentId}/close`).then((r) => r.data),
+    onSuccess: (_d, { courseId, assignmentId }) => {
+      qc.invalidateQueries({ queryKey: elKeys.assignment(courseId, assignmentId) });
+      qc.invalidateQueries({ queryKey: elKeys.assignments(courseId) });
+    },
+  });
+}
+
+// ─── Quiz mutations ───────────────────────────────────────────────────────────
+
+export function useCloseQuiz() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ courseId, quizId }: { courseId: string; quizId: string }) =>
+      api.patch(`/elearning/courses/${courseId}/quizzes/${quizId}/close`).then((r) => r.data),
+    onSuccess: (_d, { courseId, quizId }) => qc.invalidateQueries({ queryKey: elKeys.quiz(courseId, quizId) }),
+  });
+}
+
+export function useDeleteQuestion() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ quizId, questionId, courseId }: { quizId: string; questionId: string; courseId: string }) =>
+      api.delete(`/elearning/quizzes/${quizId}/questions/${questionId}`).then((r) => r.data),
+    onSuccess: (_d, { courseId, quizId }) => qc.invalidateQueries({ queryKey: elKeys.quiz(courseId, quizId) }),
+  });
+}
+
+// ─── Attempt detail (for manual marking) ─────────────────────────────────────
+
+export interface ElearningAttemptAnswer {
+  id: string;
+  questionId: string;
+  prompt?: string;
+  questionType?: string;
+  textAnswer?: string;
+  selectedOptionId?: string;
+  score?: number;
+  maxScore?: number;
+  feedback?: string;
+  isCorrect?: boolean;
+}
+
+export interface ElearningAttemptDetail extends ElearningQuizAttempt {
+  answers?: ElearningAttemptAnswer[];
+}
+
+export function useAttemptDetail(attemptId: string | undefined) {
+  return useQuery({
+    queryKey: [...elKeys.all, 'attempts', attemptId ?? ''] as const,
+    queryFn: () =>
+      api.get(`/elearning/attempts/${attemptId}`).then((r) => {
+        const raw = payloadOf(r) as Record<string, unknown>;
+        const answers = (raw.answers as Record<string, unknown>[] | undefined) ?? [];
+        return {
+          ...(raw as ElearningQuizAttempt),
+          answers: answers.map((a) => ({
+            id: String(a.id ?? ''),
+            questionId: String(a.questionId ?? a.question_id ?? ''),
+            prompt: a.prompt != null ? String(a.prompt) : a.question != null ? String((a.question as Record<string, unknown>).prompt ?? '') : undefined,
+            questionType: a.questionType != null ? String(a.questionType) : a.type != null ? String(a.type) : undefined,
+            textAnswer: a.textAnswer != null ? String(a.textAnswer) : undefined,
+            selectedOptionId: a.selectedOptionId != null ? String(a.selectedOptionId) : undefined,
+            score: a.score != null ? Number(a.score) : undefined,
+            maxScore: a.maxScore != null ? Number(a.maxScore) : undefined,
+            feedback: a.feedback != null ? String(a.feedback) : undefined,
+            isCorrect: a.isCorrect != null ? Boolean(a.isCorrect) : undefined,
+          })) as ElearningAttemptAnswer[],
+        } as ElearningAttemptDetail;
+      }),
+    enabled: Boolean(attemptId),
   });
 }

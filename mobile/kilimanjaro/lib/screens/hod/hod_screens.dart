@@ -507,12 +507,41 @@ class HodTeacherDetailScreen extends ConsumerWidget {
   }
 }
 
-class DepartmentAlertsScreen extends ConsumerWidget {
+class DepartmentAlertsScreen extends ConsumerStatefulWidget {
   const DepartmentAlertsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DepartmentAlertsScreen> createState() =>
+      _DepartmentAlertsScreenState();
+}
+
+class _DepartmentAlertsScreenState
+    extends ConsumerState<DepartmentAlertsScreen> {
+  String _filter = 'All';
+
+  List<HodDepartmentAlert> _apply(List<HodDepartmentAlert> all) =>
+      switch (_filter) {
+        'High' => all
+            .where(
+              (a) =>
+                  a.severity == HodAlertSeverity.high ||
+                  a.severity == HodAlertSeverity.critical,
+            )
+            .toList(),
+        'Medium' => all
+            .where((a) => a.severity == HodAlertSeverity.medium)
+            .toList(),
+        'Biology' => all.where((a) => a.subject == 'Biology').toList(),
+        'Chemistry' => all.where((a) => a.subject == 'Chemistry').toList(),
+        'Physics' => all.where((a) => a.subject == 'Physics').toList(),
+        _ => all,
+      };
+
+  @override
+  Widget build(BuildContext context) {
     final alerts = ref.watch(hodAlertsProvider);
+    final visible = _apply(alerts);
+
     return Scaffold(
       appBar: KSAppBar(
         title: 'Performance Alerts',
@@ -532,7 +561,8 @@ class DepartmentAlertsScreen extends ConsumerWidget {
               'Chemistry',
               'Physics',
             ],
-            selected: 'All',
+            selected: _filter,
+            onSelected: (label) => setState(() => _filter = label),
           ),
           HodGlassBand(
             children: [
@@ -548,7 +578,8 @@ class DepartmentAlertsScreen extends ConsumerWidget {
                   Expanded(
                     child: _CompactStat(
                       label: 'Escalated',
-                      value: '${alerts.where((a) => a.isEscalated).length}',
+                      value:
+                          '${alerts.where((a) => a.isEscalated).length}',
                       color: AppColors.accentAmber,
                     ),
                   ),
@@ -570,6 +601,7 @@ class DepartmentAlertsScreen extends ConsumerWidget {
             onAction: () => context.push('/hod/performance/pairings'),
           ),
           HodCard(
+            onTap: () => context.push('/hod/performance/pairings'),
             child: _IconTextRow(
               icon: Icons.handshake_rounded,
               color: AppColors.accentTeal,
@@ -577,32 +609,66 @@ class DepartmentAlertsScreen extends ConsumerWidget {
               subtitle:
                   'Review mentor pairings for underperforming learners by subject.',
             ),
-            onTap: () => context.push('/hod/performance/pairings'),
           ),
-          const HodSectionTitle(title: 'Active Alerts'),
-          ...alerts.map((alert) => _AlertCard(alert: alert)),
-          HodInsightCard(
-            title: 'Good news: Biology rapid improvement',
-            subtitle:
-                'Four Biology students improved by more than 10 points over the last two assessments.',
-            icon: Icons.trending_up_rounded,
-            color: AppColors.accentEmerald,
+          HodSectionTitle(
+            title: visible.isEmpty
+                ? 'No alerts match "$_filter"'
+                : 'Alerts${_filter == 'All' ? '' : ' · $_filter'} (${visible.length})',
           ),
+          if (visible.isEmpty)
+            HodCard(
+              child: _IconTextRow(
+                icon: Icons.check_circle_outline_rounded,
+                color: AppColors.accentEmerald,
+                title: 'No alerts in this filter',
+                subtitle:
+                    'Select a different filter above to see other alerts.',
+              ),
+            )
+          else
+            ...visible.map((alert) => _AlertCard(alert: alert)),
+          if (_filter == 'All')
+            HodInsightCard(
+              title: 'Good news: Biology rapid improvement',
+              subtitle:
+                  'Four Biology students improved by more than 10 points over the last two assessments.',
+              icon: Icons.trending_up_rounded,
+              color: AppColors.accentEmerald,
+            ),
         ],
       ),
     );
   }
 }
 
-class DepartmentPairingsScreen extends ConsumerWidget {
+class DepartmentPairingsScreen extends ConsumerStatefulWidget {
   const DepartmentPairingsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DepartmentPairingsScreen> createState() =>
+      _DepartmentPairingsScreenState();
+}
+
+class _DepartmentPairingsScreenState
+    extends ConsumerState<DepartmentPairingsScreen> {
+  String _filter = 'All';
+
+  List<HodPairingSummary> _apply(List<HodPairingSummary> all) =>
+      switch (_filter) {
+        'Suggested' => all.where((p) => p.status == 'SUGGESTED').toList(),
+        'Active' => all.where((p) => p.status == 'ACTIVE').toList(),
+        'Chemistry' => all.where((p) => p.subject == 'Chemistry').toList(),
+        'Biology' => all.where((p) => p.subject == 'Biology').toList(),
+        _ => all,
+      };
+
+  @override
+  Widget build(BuildContext context) {
     final items = ref.watch(hodPairingsProvider);
-    final suggested = items
-        .where((item) => item.status == 'SUGGESTED')
-        .toList();
+    final visible = _apply(items);
+    final suggested = items.where((p) => p.status == 'SUGGESTED').toList();
+    final totalPairs = items.fold<int>(0, (sum, p) => sum + p.count);
+
     return Scaffold(
       appBar: const KSAppBar(
         title: 'Department Pairings',
@@ -619,34 +685,42 @@ class DepartmentPairingsScreen extends ConsumerWidget {
               'Chemistry',
               'Biology',
             ],
-            selected: 'All',
+            selected: _filter,
+            onSelected: (label) => setState(() => _filter = label),
           ),
           HodInsightCard(
-            title:
-                '${items.fold<int>(0, (sum, item) => sum + item.count)} pairings across Sciences',
+            title: '$totalPairs pairings across Sciences',
             subtitle:
-                '${suggested.length} groups are awaiting activation and ${items.length - suggested.length} are active.',
+                '${suggested.length} groups awaiting activation · '
+                '${items.length - suggested.length} already active.',
             icon: Icons.diversity_3_rounded,
             color: AppColors.accentIndigo,
           ),
-          ...items.map((item) => _PairingCard(item: item)),
+          if (visible.isEmpty)
+            HodCard(
+              child: _IconTextRow(
+                icon: Icons.check_circle_outline_rounded,
+                color: AppColors.accentEmerald,
+                title: 'No pairings match "$_filter"',
+                subtitle: 'Select a different filter above.',
+              ),
+            )
+          else
+            ...visible.map((item) => _PairingCard(item: item)),
           KSButton(
-            label: 'Activate Suggested Pairings',
-            icon: const Icon(
-              Icons.check_circle_rounded,
-              color: AppColors.white,
-            ),
+            label: suggested.isEmpty
+                ? 'All Pairings Activated'
+                : 'Activate ${suggested.length} Suggested Pairing${suggested.length == 1 ? '' : 's'}',
+            icon: const Icon(Icons.check_circle_rounded, color: AppColors.white),
             onPressed: suggested.isEmpty
                 ? null
                 : () {
                     ref
                         .read(hodPairingsControllerProvider.notifier)
                         .activatePairings(
-                          suggested.map((item) => item.id).toList(),
+                          suggested.map((p) => p.id).toList(),
                         );
-                    ref
-                        .read(snackbarProvider.notifier)
-                        .show(
+                    ref.read(snackbarProvider.notifier).show(
                           'Suggested pairings activated for the department.',
                         );
                   },
@@ -677,7 +751,9 @@ class HodStudentPerformanceScreen extends StatelessWidget {
         actions: [
           const _HeroCount(label: 'Risk', count: 3),
           IconButton(
-            onPressed: () => context.push('/teacher/interventions/create'),
+            onPressed: () => context.push(
+              '/teacher/interventions/create?studentId=$studentId',
+            ),
             icon: const Icon(Icons.edit_note_rounded),
           ),
         ],
@@ -710,12 +786,31 @@ class HodStudentPerformanceScreen extends StatelessWidget {
   }
 }
 
-class HodInterventionsScreen extends ConsumerWidget {
+class HodInterventionsScreen extends ConsumerStatefulWidget {
   const HodInterventionsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HodInterventionsScreen> createState() =>
+      _HodInterventionsScreenState();
+}
+
+class _HodInterventionsScreenState
+    extends ConsumerState<HodInterventionsScreen> {
+  String _filter = 'All';
+
+  List<HodIntervention> _apply(List<HodIntervention> all) => switch (_filter) {
+        'Pending Follow-Up' => all.where((i) => !i.followedUp).toList(),
+        'Completed' => all.where((i) => i.followedUp).toList(),
+        _ => all,
+      };
+
+  @override
+  Widget build(BuildContext context) {
     final items = ref.watch(hodInterventionsProvider);
+    final visible = _apply(items);
+    final pending = items.where((i) => !i.followedUp).length;
+    final completed = items.where((i) => i.followedUp).length;
+
     return Scaffold(
       appBar: const KSAppBar(
         title: 'Intervention Log',
@@ -726,7 +821,8 @@ class HodInterventionsScreen extends ConsumerWidget {
         children: [
           _FilterChips(
             labels: const ['All', 'Pending Follow-Up', 'Completed'],
-            selected: 'All',
+            selected: _filter,
+            onSelected: (label) => setState(() => _filter = label),
           ),
           HodGlassBand(
             children: [
@@ -734,7 +830,7 @@ class HodInterventionsScreen extends ConsumerWidget {
                 children: [
                   Expanded(
                     child: _CompactStat(
-                      label: 'Logged',
+                      label: 'Total Logged',
                       value: '${items.length}',
                       color: AppColors.skyBlue600,
                     ),
@@ -742,16 +838,34 @@ class HodInterventionsScreen extends ConsumerWidget {
                   Expanded(
                     child: _CompactStat(
                       label: 'Pending',
-                      value:
-                          '${items.where((item) => !item.followedUp).length}',
+                      value: '$pending',
                       color: AppColors.accentAmber,
+                    ),
+                  ),
+                  Expanded(
+                    child: _CompactStat(
+                      label: 'Completed',
+                      value: '$completed',
+                      color: AppColors.accentEmerald,
                     ),
                   ),
                 ],
               ),
             ],
           ),
-          ...items.map((item) => _InterventionCard(item: item)),
+          if (visible.isEmpty)
+            HodCard(
+              child: _IconTextRow(
+                icon: Icons.check_circle_outline_rounded,
+                color: AppColors.accentEmerald,
+                title: _filter == 'Pending Follow-Up'
+                    ? 'No pending interventions'
+                    : 'No completed interventions yet',
+                subtitle: 'Change the filter above to see all records.',
+              ),
+            )
+          else
+            ...visible.map((item) => _InterventionCard(item: item)),
         ],
       ),
       floatingActionButton: FloatingActionButton(
@@ -1067,10 +1181,15 @@ class _DepartmentSubjectTabsState extends State<_DepartmentSubjectTabs> {
 }
 
 class _FilterChips extends StatelessWidget {
-  const _FilterChips({required this.labels, required this.selected});
+  const _FilterChips({
+    required this.labels,
+    required this.selected,
+    required this.onSelected,
+  });
 
   final List<String> labels;
   final String selected;
+  final ValueChanged<String> onSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -1086,10 +1205,14 @@ class _FilterChips extends StatelessWidget {
           return FilterChip(
             selected: active,
             label: Text(label),
-            onSelected: (_) {},
+            onSelected: (_) => onSelected(label),
             selectedColor: AppColors.skyBlue600.withValues(alpha: 0.16),
             side: BorderSide(
               color: active ? AppColors.skyBlue600 : AppColors.border,
+            ),
+            labelStyle: TextStyle(
+              fontWeight: active ? FontWeight.w800 : FontWeight.w500,
+              color: active ? AppColors.skyBlue600 : null,
             ),
           );
         },
@@ -1626,63 +1749,142 @@ class _InterventionCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final color = item.followedUp
-        ? AppColors.accentEmerald
-        : AppColors.accentAmber;
+    final color =
+        item.followedUp ? AppColors.accentEmerald : AppColors.accentAmber;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeOutCubic,
+      margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
-        border: Border(left: BorderSide(color: color, width: 4)),
-        borderRadius: BorderRadius.circular(24),
+        color: isDark ? AppColors.darkSurface : Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(
+          color: isDark
+              ? AppColors.darkBorder
+              : AppColors.border.withValues(alpha: 0.75),
+        ),
       ),
-      child: HodCard(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                _IconBadge(icon: Icons.health_and_safety_rounded, color: color),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    item.title,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w900,
-                    ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(22),
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Left accent bar — properly clipped by ClipRRect above
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                width: 5,
+                color: color,
+              ),
+              // Card content
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          _IconBadge(
+                            icon: Icons.health_and_safety_rounded,
+                            color: color,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              item.title,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.w900),
+                            ),
+                          ),
+                          HodPill(
+                            label: item.followedUp ? 'FOLLOWED' : 'PENDING',
+                            color: color,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        item.type,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                          color: color,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        item.teacherName,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(item.note, style: const TextStyle(height: 1.4)),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.access_time_rounded,
+                            size: 12,
+                            color: AppColors.textMuted,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            item.timeAgo,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
+                      if (!item.followedUp) ...[
+                        const SizedBox(height: 12),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: FilledButton.icon(
+                            onPressed: () {
+                              ref
+                                  .read(
+                                    hodInterventionsControllerProvider.notifier,
+                                  )
+                                  .markFollowedUp(item.id);
+                              ref
+                                  .read(snackbarProvider.notifier)
+                                  .show(
+                                    '${item.title} marked as followed up.',
+                                  );
+                            },
+                            icon: const Icon(
+                              Icons.check_circle_rounded,
+                              size: 16,
+                            ),
+                            label: const Text('Mark Followed Up'),
+                            style: FilledButton.styleFrom(
+                              backgroundColor:
+                                  AppColors.accentEmerald.withValues(alpha: 0.12),
+                              foregroundColor: AppColors.accentEmerald,
+                              textStyle: const TextStyle(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 12,
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 8,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
-                ),
-                HodPill(
-                  label: item.followedUp ? 'FOLLOWED' : 'PENDING',
-                  color: color,
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Text('${item.type} - ${item.teacherName}'),
-            const SizedBox(height: 4),
-            Text(item.note),
-            const SizedBox(height: 8),
-            Text(item.timeAgo, style: Theme.of(context).textTheme.bodySmall),
-            if (!item.followedUp) ...[
-              const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton.icon(
-                  onPressed: () {
-                    ref
-                        .read(hodInterventionsControllerProvider.notifier)
-                        .markFollowedUp(item.id);
-                    ref
-                        .read(snackbarProvider.notifier)
-                        .show('${item.title} marked as followed up.');
-                  },
-                  icon: const Icon(Icons.check_circle_rounded),
-                  label: const Text('Mark as Followed Up'),
                 ),
               ),
             ],
-          ],
+          ),
         ),
       ),
     );

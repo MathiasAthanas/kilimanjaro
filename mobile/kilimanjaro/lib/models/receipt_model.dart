@@ -16,4 +16,16 @@ class ReceiptModel {
   final String reference;
   final DateTime date;
   final String issuedBy;
+
+  factory ReceiptModel.fromJson(Map<String, dynamic> json) {
+    return ReceiptModel(
+      id: json['id'] as String? ?? '',
+      invoiceId: json['invoiceId'] as String? ?? '',
+      amount: double.tryParse((json['amount'] ?? '0').toString()) ?? 0.0,
+      method: json['method'] as String? ?? '',
+      reference: json['referenceNumber'] as String? ?? json['reference'] as String? ?? '',
+      date: DateTime.parse(json['paidAt'] as String? ?? json['issuedAt'] as String? ?? DateTime.now().toIso8601String()),
+      issuedBy: json['studentName'] as String? ?? json['issuedById'] as String? ?? '',
+    );
+  }
 }

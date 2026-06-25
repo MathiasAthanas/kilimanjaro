@@ -193,38 +193,66 @@ export function MarksGrid({ rows, maxScore }: { rows: MarkRow[]; maxScore: numbe
   );
 }
 
-export function AttendanceGrid({ students }: { students: Student[] }) {
+const ATTENDANCE_STATUS_MAP: Record<string, string> = { P: 'PRESENT', A: 'ABSENT', L: 'LATE', E: 'EXCUSED' };
+const ATTENDANCE_ACTIVE_STYLES: Record<string, string> = {
+  PRESENT: 'border-ks-emerald bg-ks-emerald text-white shadow-sm',
+  ABSENT:  'border-ks-rose bg-ks-rose text-white shadow-sm',
+  LATE:    'border-ks-amber bg-ks-amber text-white shadow-sm',
+  EXCUSED: 'border-ks-sky bg-ks-sky text-white shadow-sm',
+};
+
+export function AttendanceGrid({
+  students,
+  statuses,
+  onStatusChange,
+}: {
+  students: Student[];
+  statuses: Record<string, string>;
+  onStatusChange: (studentId: string, status: string) => void;
+}) {
+  if (students.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-ks-line bg-ks-paper py-16 text-center">
+        <p className="text-sm font-bold text-ks-muted">No students found for this class.</p>
+        <p className="mt-1 text-xs text-ks-muted">Students will appear here once they are enrolled.</p>
+      </div>
+    );
+  }
   return (
     <TeacherTable columns={['Roll', 'Student', 'Present', 'Absent', 'Late', 'Excused', 'Note']}>
-      {students.map((student, index) => (
-        <tr key={student.id} className="hover:bg-ks-paper">
-          <td className="px-4 py-3 font-mono text-xs text-ks-muted">{student.roll}</td>
-          <td className="px-4 py-3">
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-ks-mist text-xs font-black text-ks-blue">
-                {student.name.split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase()}
+      {students.map((student) => {
+        const current = statuses[student.id] ?? '';
+        return (
+          <tr key={student.id} className="hover:bg-ks-paper">
+            <td className="px-4 py-3 font-mono text-xs text-ks-muted">{student.roll}</td>
+            <td className="px-4 py-3">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-ks-mist text-xs font-black text-ks-blue">
+                  {student.name.split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase()}
+                </div>
+                <span className="font-bold text-ks-slate">{student.name}</span>
               </div>
-              <span className="font-bold text-ks-slate">{student.name}</span>
-            </div>
-          </td>
-          {['P', 'A', 'L', 'E'].map((status) => (
-            <td key={status} className="px-4 py-3">
-              <button
-                className={`h-8 w-8 rounded-md border text-xs font-black transition active:scale-95 ${
-                  index % 5 === 0 && status === 'A'
-                    ? 'border-ks-rose bg-ks-rose text-white shadow-sm'
-                    : status === 'P'
-                    ? 'border-ks-emerald bg-ks-emerald/10 text-ks-emerald'
-                    : 'border-ks-line text-ks-muted hover:bg-ks-mist/40'
-                }`}
-              >
-                {status}
-              </button>
             </td>
-          ))}
-          <td className="px-4 py-3 text-ks-muted">—</td>
-        </tr>
-      ))}
+            {(['P', 'A', 'L', 'E'] as const).map((label) => {
+              const value = ATTENDANCE_STATUS_MAP[label];
+              const isActive = current === value;
+              return (
+                <td key={label} className="px-4 py-3">
+                  <button
+                    onClick={() => onStatusChange(student.id, isActive ? '' : value)}
+                    className={`h-8 w-8 rounded-md border text-xs font-black transition active:scale-95 ${
+                      isActive ? ATTENDANCE_ACTIVE_STYLES[value] : 'border-ks-line text-ks-muted hover:bg-ks-mist/40'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                </td>
+              );
+            })}
+            <td className="px-4 py-3 text-ks-muted">—</td>
+          </tr>
+        );
+      })}
     </TeacherTable>
   );
 }

@@ -31,15 +31,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       _identifierController.text.trim().isNotEmpty &&
       _passwordController.text.isNotEmpty;
 
-  String get _detectedRole {
-    final v = _identifierController.text.trim();
-    if (v.startsWith('KS-')) return 'Student';
-    if (v.contains('@parent')) return 'Parent';
-    if (v.toLowerCase().contains('admin')) return 'Administrator';
-    if (v.contains('@')) return 'Staff';
-    return '';
-  }
-
   @override
   void initState() {
     super.initState();
@@ -109,7 +100,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final loading = authState is AuthLoading;
     final error = authState is AuthError ? authState.message : null;
     final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
-    final role = _detectedRole;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light,
@@ -186,17 +176,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         hint: 'KS-2024-00142 or staff@ks.ac.tz',
                         iconAsset: 'assets/icons/mail.svg',
                         textInputAction: TextInputAction.next,
-                      ),
-                      // Role detection chip (appears as user types)
-                      AnimatedSize(
-                        duration: const Duration(milliseconds: 180),
-                        curve: Curves.easeOut,
-                        child: role.isNotEmpty
-                            ? Padding(
-                                padding: const EdgeInsets.only(top: 8),
-                                child: _RoleDetectedLabel(role: role),
-                              )
-                            : const SizedBox.shrink(),
                       ),
                       const SizedBox(height: 14),
                       // ── Password ──────────────────────────────────────────
@@ -421,54 +400,6 @@ class _GlowOrb extends StatelessWidget {
         gradient: RadialGradient(
           colors: [color, color.withValues(alpha: 0)],
         ),
-      ),
-    );
-  }
-}
-
-// ── Role detection inline label ───────────────────────────────────────────────
-
-class _RoleDetectedLabel extends StatelessWidget {
-  const _RoleDetectedLabel({required this.role});
-
-  final String role;
-
-  Color get _color => switch (role) {
-    'Student' => AppColors.skyBlue600,
-    'Parent' => AppColors.accentEmerald,
-    'Administrator' => AppColors.accentViolet,
-    _ => AppColors.accentTeal,
-  };
-
-  IconData get _icon => switch (role) {
-    'Student' => Icons.school_rounded,
-    'Parent' => Icons.family_restroom_rounded,
-    'Administrator' => Icons.admin_panel_settings_rounded,
-    _ => Icons.badge_rounded,
-  };
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: _color.withValues(alpha: 0.09),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: _color.withValues(alpha: 0.18)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(_icon, size: 13, color: _color),
-          const SizedBox(width: 6),
-          Text(
-            '$role account detected',
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: _color,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
       ),
     );
   }

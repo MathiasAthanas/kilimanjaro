@@ -11,11 +11,15 @@ import '../../models/receipt_model.dart';
 import '../../models/report_card_model.dart';
 import '../../models/subject_result_model.dart';
 import '../../models/term_result_model.dart';
+import '../config/app_config.dart';
+import '../services/api/api_student_data_service.dart';
 import '../services/interfaces/student_service_interface.dart';
 import '../services/mock/mock_student_data_service.dart';
+import 'auth_provider.dart';
 
 final studentServiceProvider = Provider<IStudentService>((ref) {
-  return MockStudentDataService();
+  if (AppConfig.useMockData) return MockStudentDataService();
+  return ApiStudentDataService(ref.watch(secureStorageProvider));
 });
 
 final studentTermsProvider = FutureProvider<List<TermResultModel>>((ref) async {

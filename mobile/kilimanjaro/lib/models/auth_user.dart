@@ -62,4 +62,21 @@ class AuthUser {
   final DateTime? joinedAt;
   final DateTime? lastLoginAt;
   final String? bio;
+
+  factory AuthUser.fromJson(Map<String, dynamic> json) {
+    final joinedRaw = json['joinedAt'] as String? ?? json['createdAt'] as String?;
+    final lastLoginRaw = json['lastLoginAt'] as String?;
+    return AuthUser(
+      id: json['id'] as String? ?? '',
+      name: json['name'] as String? ?? json['fullName'] as String? ?? '',
+      role: UserRole.fromValue(json['role'] as String? ?? 'STUDENT'),
+      email: json['email'] as String?,
+      registrationNumber: json['registrationNumber'] as String?,
+      phone: json['phone'] as String?,
+      profilePhotoUrl: json['profilePhotoUrl'] as String? ?? json['avatarUrl'] as String?,
+      joinedAt: joinedRaw != null ? DateTime.parse(joinedRaw) : null,
+      lastLoginAt: lastLoginRaw != null ? DateTime.parse(lastLoginRaw) : null,
+      bio: json['bio'] as String?,
+    );
+  }
 }

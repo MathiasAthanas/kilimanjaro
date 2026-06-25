@@ -1,4 +1,4 @@
-import { ArrowRight, CheckCircle2, ClipboardCheck, Download, Filter, MessageSquarePlus, Save, Search, Send, ShieldCheck, UserPlus } from 'lucide-react';
+import { ArrowRight, CheckCircle2, ClipboardCheck, Download, Edit2, Filter, MessageSquarePlus, Plus, Save, Search, Send, ShieldCheck, UserPlus, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import React, { useMemo, useState } from 'react';
 import { NavLink, useNavigate, useParams } from 'react-router-dom';
@@ -26,6 +26,9 @@ import {
   useCreateAnnouncementMutation,
   useCreateInterventionMutation,
   useResolveAlertMutation,
+  useUpdateSyllabusMutation,
+  useCreatePairingMutation,
+  useTeacherSyllabus,
 } from '../api/teacher.hooks';
 import { downloadReportWhenReady, useGenerateReportMutation } from '../../operations/api/operations.hooks';
 import {
@@ -42,7 +45,7 @@ import {
   TeacherWorkspaceShell,
   TimetableBoard,
 } from '../components/TeacherWorkspaceShell';
-import { canSubmitMarks, validateSyllabusProgress } from '../utils/marks';
+import { canSubmitMarks } from '../utils/marks';
 import { DataError } from '../../../components/feedback/DataError';
 import { EmptyState } from '../../../components/feedback/EmptyState';
 import { SkeletonTable } from '../../../components/common/SkeletonTable';
@@ -470,20 +473,31 @@ export function MarksReviewPage() {
 
 export function AttendancePage() {
   const { data: apiClasses = [] as typeof teacherClasses } = useTeacherClasses() as { data: typeof teacherClasses };
-  const { data: apiStudents = [] as typeof students } = useClassStudents(apiClasses[0]?.id ?? '') as { data: typeof students };
+  const [selectedClassId, setSelectedClassId] = useState('');
+  const activeClassId = selectedClassId || apiClasses[0]?.id || '';
+  const { data: apiStudents = [] as typeof students } = useClassStudents(activeClassId) as { data: typeof students };
   const attendanceMutation = useMarkAttendanceMutation();
   const [submitted, setSubmitted] = useState(false);
-  const currentClass = apiClasses[0];
+  const [statuses, setStatuses] = useState<Record<string, string>>({});
+  const currentClass = apiClasses.find((c) => c.id === activeClassId) ?? apiClasses[0];
 
-  const presentCount = apiStudents.length > 0 ? Math.round(apiStudents.length * 0.89) : 34;
-  const absentCount = apiStudents.length > 0 ? apiStudents.length - presentCount - 1 : 2;
-  const totalCount = apiStudents.length || 38;
+  const handleStatusChange = (studentId: string, status: string) => {
+    setStatuses((prev) => ({ ...prev, [studentId]: status }));
+  };
+
+  const statusValues = Object.values(statuses);
+  const presentCount = statusValues.filter((s) => s === 'PRESENT').length;
+  const absentCount  = statusValues.filter((s) => s === 'ABSENT').length;
+  const lateCount    = statusValues.filter((s) => s === 'LATE').length;
+  const markedCount  = statusValues.filter(Boolean).length;
+  const unmarkedCount = apiStudents.length - markedCount;
+  const totalCount = apiStudents.length;
 
   const handleSubmit = () => {
     attendanceMutation.mutate({
       classId: currentClass?.id ?? '',
       date: new Date().toISOString().split('T')[0],
-      records: apiStudents.map((s, i) => ({ studentId: s.id, status: i < presentCount ? 'PRESENT' : 'ABSENT' })),
+      records: apiStudents.map((s) => ({ studentId: s.id, status: statuses[s.id] || 'ABSENT' })),
     }, {
       onSuccess: () => { setSubmitted(true); toast('Attendance submitted successfully', 'success'); },
       onError: () => toast('Failed to submit attendance. Please try again.', 'error'),
@@ -492,22 +506,45 @@ export function AttendancePage() {
 
   return (
     <TeacherWorkspaceShell title="Attendance Marking" eyebrow="Today sessions">
+      {/* Class selector */}
+      {apiClasses.length > 1 && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-ks-line bg-ks-paper p-3">
+          <span className="text-xs font-black uppercase tracking-wider text-ks-muted">Select class:</span>
+          {apiClasses.map((c) => (
+            <button
+              key={c.id}
+              onClick={() => { setSelectedClassId(c.id); setStatuses({}); setSubmitted(false); }}
+              className={`rounded-lg px-3 py-1.5 text-sm font-black transition ${
+                c.id === activeClassId ? 'bg-ks-navy text-white shadow-sm' : 'border border-ks-line bg-white text-ks-muted hover:border-ks-blue hover:text-ks-blue'
+              }`}
+            >
+              {c.className} · {c.subject}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_320px]">
-        <AttendanceGrid students={apiStudents} />
+        <AttendanceGrid students={apiStudents} statuses={statuses} onStatusChange={handleStatusChange} />
         <div className="sticky top-24 space-y-gutter">
           <Card className="overflow-hidden rounded-xl border-l-4 border-l-ks-emerald p-5">
             <p className="text-[11px] font-black uppercase tracking-[0.22em] text-ks-muted">Session summary</p>
-            <h3 className="mt-2 font-display text-2xl font-black text-ks-slate">{currentClass?.className ?? 'Form 2A'} · {currentClass?.subject ?? 'Physics'}</h3>
+            <h3 className="mt-2 font-display text-2xl font-black text-ks-slate">
+              {currentClass ? `${currentClass.className} · ${currentClass.subject}` : '—'}
+            </h3>
             <div className="mt-4 grid grid-cols-2 gap-2">
-              <AttendanceStat label="Present" value={String(presentCount)} color="text-ks-emerald" bg="bg-ks-emerald/10" />
-              <AttendanceStat label="Absent" value={String(absentCount)} color="text-ks-rose" bg="bg-ks-rose/10" />
-              <AttendanceStat label="Late" value="1" color="text-ks-amber" bg="bg-ks-amber/10" />
-              <AttendanceStat label="Unmarked" value={String(totalCount - presentCount - absentCount - 1)} color="text-ks-muted" bg="bg-ks-paper" />
+              <AttendanceStat label="Present"  value={String(presentCount)}  color="text-ks-emerald" bg="bg-ks-emerald/10" />
+              <AttendanceStat label="Absent"   value={String(absentCount)}   color="text-ks-rose"    bg="bg-ks-rose/10" />
+              <AttendanceStat label="Late"     value={String(lateCount)}     color="text-ks-amber"   bg="bg-ks-amber/10" />
+              <AttendanceStat label="Unmarked" value={String(unmarkedCount)} color="text-ks-muted"   bg="bg-ks-paper" />
             </div>
-            <div className="mt-4">
-              <ProgressBar value={(presentCount / totalCount) * 100} tone="bg-ks-emerald" />
-              <p className="mt-1 text-center text-xs font-bold text-ks-muted">{Math.round((presentCount / totalCount) * 100)}% present rate</p>
-            </div>
+            {totalCount > 0 && (
+              <div className="mt-4">
+                <ProgressBar value={(presentCount / totalCount) * 100} tone="bg-ks-emerald" />
+                <p className="mt-1 text-center text-xs font-bold text-ks-muted">
+                  {Math.round((presentCount / totalCount) * 100)}% present rate
+                </p>
+              </div>
+            )}
             {submitted ? (
               <div className="mt-4 flex items-center justify-center gap-2 rounded-xl bg-ks-emerald/10 p-3 text-sm font-bold text-ks-emerald">
                 <CheckCircle2 className="h-4 w-4" /> Attendance submitted
@@ -556,11 +593,17 @@ export function AttendanceHistoryPage() {
 }
 
 export function PerformanceAlertsPage() {
-  const { data: apiPairings = [] as typeof pairings } = usePerfPairings() as { data: typeof pairings };
+  const navigate = useNavigate();
+  const { data: apiClasses = [], isLoading: classesLoading } = useTeacherClasses();
+  const classIds = classesLoading
+    ? undefined
+    : (apiClasses as { classId: string }[]).map((c) => c.classId).filter((id): id is string => Boolean(id));
+  const { data: apiPairings = [] as typeof pairings } = usePerfPairings(classIds) as { data: typeof pairings };
   const { data: apiAlerts = [] as typeof alerts } = usePerformanceAlerts() as unknown as { data: typeof alerts };
   const criticalCount = apiAlerts.filter((a) => a.severity === 'CRITICAL').length;
   const atRiskCount = apiAlerts.filter((a) => a.severity === 'AT_RISK').length;
   const suggestedPairings = apiPairings.filter((p) => p.status === 'SUGGESTED').length;
+  const noClasses = !classesLoading && classIds?.length === 0;
   return (
     <TeacherWorkspaceShell title="Performance Alerts" eyebrow="Actionable student risks">
       <TeacherMetricStrip items={[
@@ -577,18 +620,27 @@ export function PerformanceAlertsPage() {
         <section className="col-span-12 space-y-stack-lg xl:col-span-4">
           <div className="flex items-center justify-between">
             <h2 className="font-display text-2xl font-black text-ks-navy">Peer Pairings</h2>
-            <span className="rounded-full bg-ks-sky px-2.5 py-1 text-[10px] font-black text-white">2 PENDING</span>
+            <span className="rounded-full bg-ks-sky px-2.5 py-1 text-[10px] font-black text-white">{suggestedPairings} PENDING</span>
           </div>
-          {apiPairings.map((pairing) => (
-            <NavLink key={pairing.id} to={`/teacher/performance/pairings/${pairing.id}`} className="block">
-              <PairingCard pairing={pairing} />
-            </NavLink>
-          ))}
+          {noClasses ? (
+            <p className="py-4 text-sm font-semibold text-ks-muted">No classes assigned yet. Pairings will appear once you are assigned to a class.</p>
+          ) : apiPairings.length === 0 ? (
+            <p className="py-4 text-sm font-semibold text-ks-muted">No peer pairings for your classes yet.</p>
+          ) : (
+            apiPairings.map((pairing) => (
+              <NavLink key={pairing.id} to={`/teacher/performance/pairings/${pairing.id}`} className="block">
+                <PairingCard pairing={pairing} />
+              </NavLink>
+            ))
+          )}
           <AcademicSpotlight />
         </section>
       </div>
       {/* FAB for manual pairing */}
-      <button className="fixed bottom-8 right-8 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-ks-gold shadow-2xl shadow-ks-gold/30 transition-all hover:scale-110 hover:shadow-ks-gold/40 active:scale-95 group">
+      <button
+        onClick={() => navigate('/teacher/performance/pairings/create')}
+        className="fixed bottom-8 right-8 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-ks-gold shadow-2xl shadow-ks-gold/30 transition-all hover:scale-110 hover:shadow-ks-gold/40 active:scale-95 group"
+      >
         <UserPlus className="h-6 w-6 text-ks-slate" />
         <span className="absolute right-full mr-3 whitespace-nowrap rounded-lg bg-ks-navy px-3 py-1.5 text-xs font-bold text-white opacity-0 transition-opacity group-hover:opacity-100">
           Manual Pair
@@ -620,7 +672,12 @@ export function AlertDetailPage() {
 }
 
 export function PeerPairingsPage() {
-  const { data: apiPairings = [] as typeof pairings } = usePerfPairings() as { data: typeof pairings };
+  const { data: apiClasses = [], isLoading: classesLoading } = useTeacherClasses();
+  const classIds = classesLoading
+    ? undefined
+    : (apiClasses as { classId: string }[]).map((c) => c.classId).filter((id): id is string => Boolean(id));
+  const { data: apiPairings = [] as typeof pairings } = usePerfPairings(classIds) as { data: typeof pairings };
+  const noClasses = !classesLoading && classIds?.length === 0;
   const suggested = apiPairings.filter((p) => p.status === 'SUGGESTED').length;
   const active = apiPairings.filter((p) => p.status === 'ACTIVE').length;
   const completed = apiPairings.filter((p) => p.status === 'COMPLETED').length;
@@ -634,11 +691,17 @@ export function PeerPairingsPage() {
       ]} />
       <div className="grid gap-gutter xl:grid-cols-[1fr_360px]">
         <div className="grid gap-gutter">
-          {apiPairings.map((pairing) => (
-            <NavLink key={pairing.id} to={`/teacher/performance/pairings/${pairing.id}`}>
-              <PairingCard pairing={pairing} />
-            </NavLink>
-          ))}
+          {noClasses ? (
+            <p className="py-4 text-sm font-semibold text-ks-muted">No classes assigned yet. Pairings will appear once you are assigned to a class.</p>
+          ) : apiPairings.length === 0 ? (
+            <p className="py-4 text-sm font-semibold text-ks-muted">No peer pairings for your classes yet.</p>
+          ) : (
+            apiPairings.map((pairing) => (
+              <NavLink key={pairing.id} to={`/teacher/performance/pairings/${pairing.id}`}>
+                <PairingCard pairing={pairing} />
+              </NavLink>
+            ))
+          )}
         </div>
         <AcademicSpotlight />
       </div>
@@ -711,37 +774,112 @@ export function TimetablePage() {
 
 export function SyllabusPage() {
   const { data: apiClasses = [] as typeof teacherClasses } = useTeacherClasses() as { data: typeof teacherClasses };
-  const valid = validateSyllabusProgress(17, 24);
+  const { data: syllabusItems = [] } = useTeacherSyllabus() as { data: Array<{ id: string; classSubjectId: string; totalTopics: number; coveredTopics: number; completion: number; notes: string }> };
+  const updateMutation = useUpdateSyllabusMutation();
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValues, setEditValues] = useState<{ covered: string; total: string; notes: string }>({ covered: '', total: '', notes: '' });
+
+  const openEdit = (klass: typeof apiClasses[number]) => {
+    const syl = syllabusItems.find((s) => s.classSubjectId === klass.id);
+    const covered = syl ? syl.coveredTopics : Math.round((klass.syllabus / 100) * 24);
+    const total = syl ? syl.totalTopics : 24;
+    setEditValues({ covered: String(covered), total: String(total), notes: syl?.notes ?? '' });
+    setEditingId(klass.id);
+  };
+
+  const handleSave = (klass: typeof apiClasses[number]) => {
+    const syl = syllabusItems.find((s) => s.classSubjectId === klass.id);
+    const sylId = syl?.id ?? klass.id;
+    const covered = Math.max(0, Number(editValues.covered) || 0);
+    const total = Math.max(1, Number(editValues.total) || 24);
+    if (covered > total) { toast('Covered topics cannot exceed total topics', 'warning'); return; }
+    updateMutation.mutate({ id: sylId, coveredTopics: covered, notes: editValues.notes }, {
+      onSuccess: () => { toast('Syllabus updated', 'success'); setEditingId(null); },
+      onError: () => toast('Failed to update syllabus', 'error'),
+    });
+  };
+
   return (
     <TeacherWorkspaceShell title="Syllabus Tracker" eyebrow="Coverage editor">
       <TeacherTable columns={['Class', 'Subject', 'Covered', 'Total', 'Progress', 'Risk', 'Action']}>
         {apiClasses.map((klass) => {
-          const covered = Math.round((klass.syllabus / 100) * 24);
+          const syl = syllabusItems.find((s) => s.classSubjectId === klass.id);
+          const covered = syl ? syl.coveredTopics : Math.round((klass.syllabus / 100) * 24);
+          const total = syl ? syl.totalTopics : 24;
+          const pct = total > 0 ? Math.round((covered / total) * 100) : klass.syllabus;
           const barTone = klass.risk === 'HIGH' ? 'bg-ks-rose' : klass.risk === 'MEDIUM' ? 'bg-ks-amber' : 'bg-ks-emerald';
+          const isEditing = editingId === klass.id;
           return (
-            <tr key={klass.id} className="hover:bg-ks-paper">
-              <Td>{klass.className}</Td>
-              <Td>{klass.subject}</Td>
-              <Td><span className="font-black text-ks-slate">{covered}</span></Td>
-              <Td>24</Td>
-              <Td>
-                <div className="flex items-center gap-2">
-                  <ProgressBar value={klass.syllabus} tone={barTone} className="w-24" />
-                  <span className="text-xs font-bold text-ks-muted">{klass.syllabus}%</span>
-                </div>
-              </Td>
-              <Td><Badge tone={klass.risk === 'HIGH' ? 'rose' : klass.risk === 'MEDIUM' ? 'amber' : 'emerald'}>{klass.risk}</Badge></Td>
-              <Td><Button variant="secondary" className="py-1.5 text-xs">Update</Button></Td>
-            </tr>
+            <React.Fragment key={klass.id}>
+              <tr className="hover:bg-ks-paper">
+                <Td>{klass.className}</Td>
+                <Td>{klass.subject}</Td>
+                <Td><span className="font-black text-ks-slate">{covered}</span></Td>
+                <Td>{total}</Td>
+                <Td>
+                  <div className="flex items-center gap-2">
+                    <ProgressBar value={pct} tone={barTone} className="w-24" />
+                    <span className="text-xs font-bold text-ks-muted">{pct}%</span>
+                  </div>
+                </Td>
+                <Td><Badge tone={klass.risk === 'HIGH' ? 'rose' : klass.risk === 'MEDIUM' ? 'amber' : 'emerald'}>{klass.risk}</Badge></Td>
+                <Td>
+                  {isEditing ? (
+                    <button onClick={() => setEditingId(null)} className="p-1 text-ks-muted hover:text-ks-rose"><X className="h-4 w-4" /></button>
+                  ) : (
+                    <Button variant="secondary" className="py-1.5 text-xs" onClick={() => openEdit(klass)}>
+                      <Edit2 className="h-3.5 w-3.5" /> Update
+                    </Button>
+                  )}
+                </Td>
+              </tr>
+              {isEditing && (
+                <tr className="bg-ks-paper/70">
+                  <td colSpan={7} className="px-4 py-4">
+                    <div className="flex flex-wrap items-end gap-4">
+                      <label className="block">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-ks-muted">Topics Covered</span>
+                        <input
+                          type="number" min={0} max={editValues.total}
+                          value={editValues.covered}
+                          onChange={(e) => setEditValues((v) => ({ ...v, covered: e.target.value }))}
+                          className="mt-1 h-9 w-24 rounded-lg border border-ks-line px-2 font-black text-ks-slate outline-none focus:border-ks-blue"
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-ks-muted">Total Topics</span>
+                        <input
+                          type="number" min={1}
+                          value={editValues.total}
+                          onChange={(e) => setEditValues((v) => ({ ...v, total: e.target.value }))}
+                          className="mt-1 h-9 w-24 rounded-lg border border-ks-line px-2 font-black text-ks-slate outline-none focus:border-ks-blue"
+                        />
+                      </label>
+                      <label className="block flex-1 min-w-[160px]">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-ks-muted">Notes</span>
+                        <input
+                          value={editValues.notes}
+                          onChange={(e) => setEditValues((v) => ({ ...v, notes: e.target.value }))}
+                          placeholder="Optional progress note…"
+                          className="mt-1 h-9 w-full rounded-lg border border-ks-line px-2 font-semibold text-ks-slate outline-none focus:border-ks-blue"
+                        />
+                      </label>
+                      <Button className="mb-0.5" disabled={updateMutation.isPending} onClick={() => handleSave(klass)}>
+                        {updateMutation.isPending ? 'Saving…' : 'Save'}
+                      </Button>
+                      <Button variant="secondary" className="mb-0.5" onClick={() => setEditingId(null)}>Cancel</Button>
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </React.Fragment>
           );
         })}
       </TeacherTable>
       <Card className="rounded-xl p-4">
         <div className="flex items-center gap-3">
-          <CheckCircle2 className={`h-5 w-5 ${valid ? 'text-ks-emerald' : 'text-ks-rose'}`} />
-          <p className="font-bold text-ks-slate">
-            Validation: {valid ? 'All covered topics are within total topic counts.' : 'Invalid progress detected — review entries.'}
-          </p>
+          <CheckCircle2 className="h-5 w-5 text-ks-emerald" />
+          <p className="font-bold text-ks-slate">All covered topic counts are validated against totals on save.</p>
         </div>
       </Card>
     </TeacherWorkspaceShell>
@@ -863,14 +1001,20 @@ export function CreateInterventionPage() {
   const navigate = useNavigate();
   const { data: apiClasses = [] as typeof teacherClasses } = useTeacherClasses() as { data: typeof teacherClasses };
   const createMutation = useCreateInterventionMutation();
-  const [form, setForm] = useState({ studentName: '', subject: '', type: 'ACADEMIC_SUPPORT', notes: '', followUpDate: '', relatedAlert: '' });
+  const [form, setForm] = useState({ classId: '', studentId: '', subject: '', type: 'ACADEMIC_SUPPORT', notes: '', followUpDate: '', relatedAlert: '' });
+  const { data: classStudents = [] as typeof students } = useClassStudents(form.classId) as { data: typeof students };
+
+  const selectedStudent = classStudents.find((s) => s.id === form.studentId);
+  const selectedClass = apiClasses.find((c) => c.id === form.classId);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.studentName.trim() || !form.notes.trim()) { toast('Student name and notes are required', 'error'); return; }
+    if (!form.studentId || !form.notes.trim()) { toast('Select a student and enter notes', 'error'); return; }
     createMutation.mutate({
-      student: form.studentName,
-      subject: form.subject,
+      studentId: form.studentId,
+      student: selectedStudent?.name ?? '',
+      classId: form.classId,
+      subject: form.subject || selectedClass?.subject || '',
       type: form.type,
       note: form.notes,
       followUpDate: form.followUpDate || undefined,
@@ -895,14 +1039,27 @@ export function CreateInterventionPage() {
             </div>
             <div className="mt-5 grid gap-4 md:grid-cols-2">
               <label className="block">
-                <span className="text-[11px] font-black uppercase tracking-[0.22em] text-ks-muted">Student name *</span>
-                <input required value={form.studentName} onChange={set('studentName')} className="mt-2 h-11 w-full rounded-xl border border-ks-line px-3 font-semibold outline-none transition focus:border-ks-blue focus:ring-2 focus:ring-ks-blue/10" placeholder="e.g. Baraka Mollel" />
+                <span className="text-[11px] font-black uppercase tracking-[0.22em] text-ks-muted">Class *</span>
+                <select
+                  value={form.classId}
+                  onChange={(e) => setForm((p) => ({ ...p, classId: e.target.value, studentId: '', subject: apiClasses.find((c) => c.id === e.target.value)?.subject ?? '' }))}
+                  className="mt-2 h-11 w-full rounded-xl border border-ks-line px-3 font-semibold outline-none focus:border-ks-blue"
+                >
+                  <option value="">Select class…</option>
+                  {apiClasses.map((c) => <option key={c.id} value={c.id}>{c.className} · {c.subject}</option>)}
+                </select>
               </label>
               <label className="block">
-                <span className="text-[11px] font-black uppercase tracking-[0.22em] text-ks-muted">Subject</span>
-                <select value={form.subject} onChange={set('subject')} className="mt-2 h-11 w-full rounded-xl border border-ks-line px-3 font-semibold outline-none focus:border-ks-blue">
-                  <option value="">Select subject…</option>
-                  {apiClasses.map((c) => <option key={c.id} value={c.subject}>{c.subject}</option>)}
+                <span className="text-[11px] font-black uppercase tracking-[0.22em] text-ks-muted">Student *</span>
+                <select
+                  required
+                  value={form.studentId}
+                  onChange={(e) => setForm((p) => ({ ...p, studentId: e.target.value }))}
+                  disabled={!form.classId}
+                  className="mt-2 h-11 w-full rounded-xl border border-ks-line px-3 font-semibold outline-none focus:border-ks-blue disabled:opacity-50"
+                >
+                  <option value="">{form.classId ? 'Select student…' : 'Select class first'}</option>
+                  {classStudents.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.registration})</option>)}
                 </select>
               </label>
               <label className="block">
@@ -934,7 +1091,7 @@ export function CreateInterventionPage() {
           <Card className="sticky top-24 h-fit rounded-xl p-5">
             <p className="text-[11px] font-black uppercase tracking-[0.22em] text-ks-muted">Preview</p>
             <div className="mt-3 space-y-3 rounded-xl bg-ks-paper p-4">
-              <div><p className="text-[10px] font-black text-ks-muted">STUDENT</p><p className="font-bold text-ks-slate">{form.studentName || '—'}</p></div>
+              <div><p className="text-[10px] font-black text-ks-muted">STUDENT</p><p className="font-bold text-ks-slate">{selectedStudent?.name || '—'}</p></div>
               <div><p className="text-[10px] font-black text-ks-muted">TYPE</p><p className="font-bold text-ks-slate">{form.type.replace(/_/g, ' ')}</p></div>
               <div><p className="text-[10px] font-black text-ks-muted">NOTES</p><p className="text-sm font-semibold leading-relaxed text-ks-slate">{form.notes || '—'}</p></div>
               {form.followUpDate && <div><p className="text-[10px] font-black text-ks-muted">FOLLOW-UP</p><p className="font-bold text-ks-slate">{form.followUpDate}</p></div>}
@@ -994,6 +1151,135 @@ export function TeacherExportsPage() {
           </Card>
         ))}
       </div>
+    </TeacherWorkspaceShell>
+  );
+}
+
+export function CreatePairingPage() {
+  const navigate = useNavigate();
+  const { data: apiClasses = [] as typeof teacherClasses } = useTeacherClasses() as { data: typeof teacherClasses };
+  const createMutation = useCreatePairingMutation();
+  const [classId, setClassId] = useState('');
+  const [mentorId, setMentorId] = useState('');
+  const [supportId, setSupportId] = useState('');
+  const [reason, setReason] = useState('');
+  const { data: classStudents = [] as typeof students } = useClassStudents(classId) as { data: typeof students };
+
+  const mentorOptions = classStudents.filter((s) => s.id !== supportId);
+  const supportOptions = classStudents.filter((s) => s.id !== mentorId);
+  const mentor = classStudents.find((s) => s.id === mentorId);
+  const support = classStudents.find((s) => s.id === supportId);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!mentorId || !supportId || !reason.trim()) { toast('Select both students and provide a reason', 'warning'); return; }
+    if (mentorId === supportId) { toast('Mentor and student to support cannot be the same person', 'error'); return; }
+    createMutation.mutate({
+      classId,
+      peerId: mentorId,
+      studentId: supportId,
+      subject: apiClasses.find((c) => c.id === classId)?.subject ?? '',
+      reason,
+    }, {
+      onSuccess: () => { toast('Peer pairing created', 'success'); navigate('/teacher/performance/pairings'); },
+      onError: () => toast('Failed to create pairing', 'error'),
+    });
+  };
+
+  return (
+    <TeacherWorkspaceShell title="Create Peer Pairing" eyebrow="Manual student support">
+      <form onSubmit={handleSubmit}>
+        <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_360px]">
+          <Card className="rounded-xl p-5">
+            <div className="flex items-center gap-3">
+              <UserPlus className="h-5 w-5 text-ks-blue" />
+              <SectionTitle title="New Peer Pairing" />
+            </div>
+            <div className="mt-5 space-y-4">
+              <label className="block">
+                <span className="text-[11px] font-black uppercase tracking-[0.22em] text-ks-muted">Class</span>
+                <select
+                  value={classId}
+                  onChange={(e) => { setClassId(e.target.value); setMentorId(''); setSupportId(''); }}
+                  className="mt-2 h-11 w-full rounded-xl border border-ks-line px-3 font-semibold outline-none focus:border-ks-blue"
+                >
+                  <option value="">Select class…</option>
+                  {apiClasses.map((c) => <option key={c.id} value={c.id}>{c.className} · {c.subject}</option>)}
+                </select>
+              </label>
+              <div className="grid gap-4 md:grid-cols-2">
+                <label className="block">
+                  <span className="text-[11px] font-black uppercase tracking-[0.22em] text-ks-muted">Mentor (high performer) *</span>
+                  <select
+                    required
+                    value={mentorId}
+                    onChange={(e) => setMentorId(e.target.value)}
+                    disabled={!classId}
+                    className="mt-2 h-11 w-full rounded-xl border border-ks-line px-3 font-semibold outline-none focus:border-ks-blue disabled:opacity-50"
+                  >
+                    <option value="">{classId ? 'Select mentor…' : 'Select class first'}</option>
+                    {mentorOptions.map((s) => <option key={s.id} value={s.id}>{s.name} — {s.average}%</option>)}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="text-[11px] font-black uppercase tracking-[0.22em] text-ks-muted">Student needing support *</span>
+                  <select
+                    required
+                    value={supportId}
+                    onChange={(e) => setSupportId(e.target.value)}
+                    disabled={!classId}
+                    className="mt-2 h-11 w-full rounded-xl border border-ks-line px-3 font-semibold outline-none focus:border-ks-blue disabled:opacity-50"
+                  >
+                    <option value="">{classId ? 'Select student…' : 'Select class first'}</option>
+                    {supportOptions.map((s) => <option key={s.id} value={s.id}>{s.name} — {s.average}%</option>)}
+                  </select>
+                </label>
+              </div>
+              <label className="block">
+                <span className="text-[11px] font-black uppercase tracking-[0.22em] text-ks-muted">Reason for pairing *</span>
+                <textarea
+                  required
+                  rows={3}
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  placeholder="Describe why this pairing is recommended…"
+                  className="mt-2 w-full resize-none rounded-xl border border-ks-line p-3 font-semibold outline-none transition focus:border-ks-blue focus:ring-2 focus:ring-ks-blue/10"
+                />
+              </label>
+            </div>
+            <div className="mt-5 flex gap-3">
+              <Button type="submit" disabled={createMutation.isPending}>
+                <Plus className="h-4 w-4" /> {createMutation.isPending ? 'Creating…' : 'Create Pairing'}
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => navigate('/teacher/performance/pairings')}>Cancel</Button>
+            </div>
+          </Card>
+
+          {/* Preview */}
+          <Card className="sticky top-24 h-fit rounded-xl p-5">
+            <p className="text-[11px] font-black uppercase tracking-[0.22em] text-ks-muted">Pairing Preview</p>
+            <div className="mt-4 space-y-4">
+              <div className="rounded-xl border border-ks-emerald/30 bg-ks-emerald/5 p-4 text-center">
+                <p className="text-[10px] font-black uppercase tracking-widest text-ks-muted">Mentor</p>
+                <p className="mt-1 font-display text-lg font-black text-ks-slate">{mentor?.name || '—'}</p>
+                {mentor && <p className="text-xs font-semibold text-ks-emerald">{mentor.average}% average</p>}
+              </div>
+              <div className="flex justify-center text-ks-muted text-2xl font-black">↓</div>
+              <div className="rounded-xl border border-ks-rose/30 bg-ks-rose/5 p-4 text-center">
+                <p className="text-[10px] font-black uppercase tracking-widest text-ks-muted">Needs Support</p>
+                <p className="mt-1 font-display text-lg font-black text-ks-slate">{support?.name || '—'}</p>
+                {support && <p className="text-xs font-semibold text-ks-rose">{support.average}% average</p>}
+              </div>
+              {mentor && support && (
+                <div className="rounded-xl bg-ks-mist p-3 text-center">
+                  <p className="text-xs font-semibold text-ks-muted">Score gap</p>
+                  <p className="font-display text-2xl font-black text-ks-navy">{Math.abs(mentor.average - support.average)}pts</p>
+                </div>
+              )}
+            </div>
+          </Card>
+        </div>
+      </form>
     </TeacherWorkspaceShell>
   );
 }

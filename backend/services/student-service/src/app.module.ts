@@ -14,6 +14,7 @@ import { DisciplineModule } from './discipline/discipline.module';
 import { PerformanceModule } from './performance/performance.module';
 import { InternalModule } from './internal/internal.module';
 import { HealthModule } from './health/health.module';
+import { DepartmentsModule } from './departments/departments.module';
 import { RolesGuard } from './common/guards/roles.guard';
 import { IdentityMiddleware } from './common/middleware/identity.middleware';
 import { validateEnv } from './config/env.validation';
@@ -41,6 +42,7 @@ import { validateEnv } from './config/env.validation';
     PerformanceModule,
     InternalModule,
     HealthModule,
+    DepartmentsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

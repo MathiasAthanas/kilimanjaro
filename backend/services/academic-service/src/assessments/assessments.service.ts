@@ -424,24 +424,49 @@ export class AssessmentsService {
 
   async pendingApproval(filters: { classId?: string; subjectId?: string }, user: RequestUser) {
     const status = user.role === ROLES.PRINCIPAL ? AssessmentStatus.HOD_APPROVED : AssessmentStatus.SUBMITTED;
-    const hodSubjectIds =
-      user.role === ROLES.HEAD_OF_DEPARTMENT
-        ? (
-            await this.prisma.classSubject.findMany({
-              where: { teacherId: user.id },
-              select: { subjectId: true },
-            })
-          ).map((item) => item.subjectId)
-        : [];
+
+    let hodSubjectFilter: { in: string[] } | string | undefined;
+
+    if (user.role === ROLES.HEAD_OF_DEPARTMENT) {
+      // Try department-based scoping first
+      let departmentSubjectIds: string[] = [];
+      try {
+        const dept = await this.studentClient.get<any>(
+          `/students/internal/departments/by-user/${user.id}`,
+          {},
+          { 'X-User-Id': user.id, 'X-User-Role': user.role },
+        );
+        if (dept?.id) {
+          const subjects = await this.prisma.subject.findMany({
+            where: { departmentId: dept.id },
+            select: { id: true },
+          });
+          departmentSubjectIds = subjects.map((s) => s.id);
+        }
+      } catch {
+        // cross-service unavailable — fall through
+      }
+
+      if (departmentSubjectIds.length > 0) {
+        hodSubjectFilter = filters.subjectId ? filters.subjectId : { in: departmentSubjectIds };
+      } else {
+        // Fallback: subjects the HOD is listed as teacher on
+        const classSubjects = await this.prisma.classSubject.findMany({
+          where: { teacherId: user.id },
+          select: { subjectId: true },
+        });
+        const fallbackIds = classSubjects.map((cs) => cs.subjectId);
+        hodSubjectFilter = filters.subjectId ? filters.subjectId : { in: fallbackIds };
+      }
+    } else {
+      hodSubjectFilter = filters.subjectId;
+    }
 
     const list = await this.prisma.assessment.findMany({
       where: {
         status,
         classId: filters.classId,
-        subjectId:
-          user.role === ROLES.HEAD_OF_DEPARTMENT
-            ? { in: filters.subjectId ? [filters.subjectId] : hodSubjectIds }
-            : filters.subjectId,
+        subjectId: hodSubjectFilter as any,
       },
       include: {
         classSubject: { include: { subject: true } },
@@ -665,5 +690,53 @@ export class AssessmentsService {
     });
 
     return updated;
+  }
+
+  async listApprovalHistory(user: RequestUser) {
+    const where: Record<string, unknown> = {
+      status: {
+        in: [
+          AssessmentStatus.HOD_APPROVED,
+          AssessmentStatus.REJECTED,
+          AssessmentStatus.LOCKED,
+        ],
+      },
+    };
+
+    if (user.role === ROLES.HEAD_OF_DEPARTMENT) {
+      where['OR'] = [{ approvedById: user.id }, { rejectedById: user.id }];
+    }
+
+    const assessments = await this.prisma.assessment.findMany({
+      where: where as any,
+      include: {
+        classSubject: { include: { subject: true } },
+        assessmentType: true,
+      },
+      orderBy: [{ updatedAt: 'desc' }],
+      take: 200,
+    });
+
+    return assessments.map((a) => ({
+      id: a.id,
+      assessment: a.name,
+      subject: a.classSubject?.subject?.name ?? '',
+      subjectId: a.subjectId ?? '',
+      className: '',
+      teacher: '',
+      type: a.assessmentType?.name ?? '',
+      status: a.status,
+      decision:
+        a.status === AssessmentStatus.REJECTED
+          ? 'REJECTED'
+          : 'APPROVED',
+      decidedAt:
+        a.status === AssessmentStatus.REJECTED
+          ? (a as any).rejectedAt
+          : (a as any).approvedAt ?? (a as any).lockedAt,
+      rejectionReason: (a as any).rejectionReason ?? null,
+      average: 0,
+      submittedAt: (a as any).submittedAt ?? a.createdAt,
+    }));
   }
 }

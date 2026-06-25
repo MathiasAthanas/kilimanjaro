@@ -23,6 +23,7 @@ import { ReportsModule } from './reports/reports.module';
 import { SchedulerAnalyticsModule } from './scheduler/scheduler.module';
 import { SnapshotsModule } from './snapshots/snapshots.module';
 import { StudentsModule } from './students/students.module';
+import { TeacherAnalyticsModule } from './teacher/teacher.module';
 import { validateEnv } from './config/env.validation';
 
 @Module({
@@ -40,6 +41,7 @@ import { validateEnv } from './config/env.validation';
     FinanceAnalyticsModule,
     AttendanceModule,
     StudentsModule,
+    TeacherAnalyticsModule,
     DepartmentModule,
     ExecutiveModule,
     ReportsModule,

@@ -4,7 +4,7 @@ import 'package:table_calendar/table_calendar.dart';
 import '../../core/theme/app_colors.dart';
 import '../../models/attendance_record_model.dart';
 
-class KSAttendanceCalendar extends StatelessWidget {
+class KSAttendanceCalendar extends StatefulWidget {
   const KSAttendanceCalendar({
     super.key,
     required this.records,
@@ -21,75 +21,84 @@ class KSAttendanceCalendar extends StatelessWidget {
   final ValueChanged<DateTime>? onDaySelected;
 
   @override
+  State<KSAttendanceCalendar> createState() => _KSAttendanceCalendarState();
+}
+
+class _KSAttendanceCalendarState extends State<KSAttendanceCalendar> {
+  late DateTime _focusedDay;
+
+  @override
+  void initState() {
+    super.initState();
+    _focusedDay = widget.currentMonth;
+  }
+
+  @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 280),
-      transitionBuilder: (child, animation) {
-        final slide = Tween<Offset>(
-          begin: const Offset(0.08, 0),
-          end: Offset.zero,
-        ).animate(CurvedAnimation(parent: animation, curve: Curves.easeInOutCubic));
-        return FadeTransition(
-          opacity: animation,
-          child: SlideTransition(position: slide, child: child),
-        );
-      },
-      child: TableCalendar<AttendanceStatus>(
-        key: ValueKey('${currentMonth.year}-${currentMonth.month}'),
-        firstDay: DateTime(2025, 1, 1),
-        lastDay: DateTime(2026, 12, 31),
-        focusedDay: currentMonth,
-        headerVisible: false,
-        selectedDayPredicate: (day) => selectedDay != null && isSameDay(selectedDay, day),
-        daysOfWeekStyle: DaysOfWeekStyle(
-          weekdayStyle: TextStyle(
-            fontSize: 11,
-            color: isDark ? AppColors.darkMuted : AppColors.textMuted,
-          ),
-          weekendStyle: TextStyle(
-            fontSize: 11,
-            color: AppColors.accentRose.withValues(alpha: isDark ? 0.5 : 0.6),
-          ),
+    return TableCalendar<AttendanceStatus>(
+      firstDay: DateTime(2025, 1, 1),
+      lastDay: DateTime(2026, 12, 31),
+      focusedDay: _focusedDay,
+      headerVisible: false,
+      selectedDayPredicate: (day) =>
+          widget.selectedDay != null && isSameDay(widget.selectedDay, day),
+      daysOfWeekStyle: DaysOfWeekStyle(
+        weekdayStyle: TextStyle(
+          fontSize: 11,
+          color: isDark ? AppColors.darkMuted : AppColors.textMuted,
         ),
-        calendarStyle: CalendarStyle(
-          outsideDaysVisible: false,
-          cellMargin: const EdgeInsets.all(4),
-          defaultTextStyle: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: isDark ? AppColors.darkText : AppColors.textPrimary,
-          ),
-          weekendTextStyle: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: isDark ? AppColors.darkMuted : AppColors.textMuted,
-          ),
-          todayDecoration: const BoxDecoration(
-            color: AppColors.skyBlue500,
-            shape: BoxShape.circle,
-          ),
-          selectedDecoration: BoxDecoration(
-            color: AppColors.skyBlue500.withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: AppColors.skyBlue500, width: 1.5),
-          ),
+        weekendStyle: TextStyle(
+          fontSize: 11,
+          color: AppColors.accentRose.withValues(alpha: isDark ? 0.5 : 0.6),
         ),
-        calendarBuilders: CalendarBuilders(
-          defaultBuilder: (context, day, focusedDay) => _dayCell(context, day, false, false),
-          todayBuilder: (context, day, focusedDay) => _dayCell(context, day, true, false),
-          selectedBuilder: (context, day, focusedDay) => _dayCell(context, day, false, true),
-        ),
-        onDaySelected: (selected, focused) => onDaySelected?.call(selected),
-        onPageChanged: onMonthChanged,
       ),
+      calendarStyle: CalendarStyle(
+        outsideDaysVisible: false,
+        cellMargin: const EdgeInsets.all(4),
+        defaultTextStyle: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          color: isDark ? AppColors.darkText : AppColors.textPrimary,
+        ),
+        weekendTextStyle: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          color: isDark ? AppColors.darkMuted : AppColors.textMuted,
+        ),
+        todayDecoration: const BoxDecoration(
+          color: AppColors.skyBlue500,
+          shape: BoxShape.circle,
+        ),
+        selectedDecoration: BoxDecoration(
+          color: AppColors.skyBlue500.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppColors.skyBlue500, width: 1.5),
+        ),
+      ),
+      calendarBuilders: CalendarBuilders(
+        defaultBuilder: (context, day, focusedDay) =>
+            _dayCell(context, day, false, false),
+        todayBuilder: (context, day, focusedDay) =>
+            _dayCell(context, day, true, false),
+        selectedBuilder: (context, day, focusedDay) =>
+            _dayCell(context, day, false, true),
+      ),
+      onDaySelected: (selected, focused) {
+        setState(() => _focusedDay = focused);
+        widget.onDaySelected?.call(selected);
+      },
+      onPageChanged: (focusedDay) {
+        setState(() => _focusedDay = focusedDay);
+        widget.onMonthChanged(focusedDay);
+      },
     );
   }
 
   Widget _dayCell(BuildContext context, DateTime day, bool isToday, bool isSelected) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final normalized = DateTime(day.year, day.month, day.day);
-    final status = records[normalized];
+    final status = widget.records[normalized];
     Color textColor = isDark ? AppColors.darkText : AppColors.textPrimary;
     Color? dotColor;
     switch (status) {

@@ -97,6 +97,20 @@ export class GradingService {
     return result;
   }
 
+  async deleteGradingScale(id: string): Promise<void> {
+    const existing = await this.prisma.gradingScale.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Grading scale not found');
+
+    if (existing.isActive) {
+      throw new BadRequestException(
+        `Cannot delete "${existing.name}" — it is the active grading scale. Activate a different scale first, then delete this one.`,
+      );
+    }
+
+    await this.prisma.gradingScale.delete({ where: { id } });
+    await this.redis.delByPattern(`grading-scale:active:${existing.academicYearId}:*`);
+  }
+
   async createAssessmentType(dto: CreateAssessmentTypeDto) {
     const currentTotal = await this.prisma.assessmentType.aggregate({
       _sum: { weightPercentage: true },

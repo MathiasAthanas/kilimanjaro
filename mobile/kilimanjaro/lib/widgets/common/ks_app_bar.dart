@@ -74,10 +74,10 @@ class KSAppBar extends StatelessWidget implements PreferredSizeWidget {
                               child: Text(title),
                             ),
                             if (subtitle != null) ...[
-                              const SizedBox(height: 8),
+                              const SizedBox(height: 6),
                               Text(
                                 subtitle!,
-                                maxLines: 2,
+                                maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: GoogleFonts.plusJakartaSans(
                                   fontSize: 13,
@@ -146,5 +146,5 @@ class KSAppBar extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Size get preferredSize =>
-      Size.fromHeight(variant == KSAppBarVariant.hero ? 132 : 64);
+      Size.fromHeight(variant == KSAppBarVariant.hero ? 152 : 64);
 }

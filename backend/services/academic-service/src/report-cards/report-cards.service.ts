@@ -385,6 +385,23 @@ export class ReportCardsService {
     return reportCard;
   }
 
+  async listForStudent(studentId: string, user: RequestUser) {
+    if (user.role === ROLES.PARENT) {
+      await this.accessControl.assertParentOwnsStudent(user.id, studentId);
+    }
+    if (user.role === ROLES.STUDENT) {
+      await this.accessControl.assertStudentOwnsRecord(user.id, studentId);
+    }
+
+    return this.prisma.reportCard.findMany({
+      where: {
+        studentId,
+        ...(([ROLES.PARENT, ROLES.STUDENT] as string[]).includes(user.role) ? { isPublished: true } : {}),
+      },
+      orderBy: [{ academicYearId: 'desc' }, { termId: 'asc' }],
+    });
+  }
+
   async getReportPdfPath(studentId: string, termId: string, user: RequestUser) {
     const reportCard = await this.getReportCard(studentId, termId, user);
     if (!reportCard.pdfUrl) {

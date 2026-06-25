@@ -13,6 +13,13 @@ class AnnouncementAttachment {
 
   final String name;
   final String sizeLabel;
+
+  factory AnnouncementAttachment.fromJson(Map<String, dynamic> json) {
+    return AnnouncementAttachment(
+      name: json['name'] as String? ?? json['fileName'] as String? ?? '',
+      sizeLabel: json['sizeLabel'] as String? ?? json['size'] as String? ?? '',
+    );
+  }
 }
 
 class AnnouncementModel {
@@ -35,4 +42,31 @@ class AnnouncementModel {
   final String authorRole;
   final DateTime publishedAt;
   final AnnouncementAttachment? attachment;
+
+  factory AnnouncementModel.fromJson(Map<String, dynamic> json) {
+    final rawAttachment = json['attachment'] as Map<String, dynamic>?;
+    return AnnouncementModel(
+      id: json['id'] as String? ?? '',
+      title: json['title'] as String? ?? '',
+      body: json['body'] as String? ?? json['content'] as String? ?? '',
+      priority: _parsePriority(json['priority'] as String? ?? 'NORMAL'),
+      authorName: json['authorName'] as String? ?? (json['author'] as Map<String, dynamic>?)?['name'] as String? ?? '',
+      authorRole: json['authorRole'] as String? ?? (json['author'] as Map<String, dynamic>?)?['role'] as String? ?? '',
+      publishedAt: DateTime.parse(json['publishedAt'] as String? ?? json['createdAt'] as String? ?? DateTime.now().toIso8601String()),
+      attachment: rawAttachment != null ? AnnouncementAttachment.fromJson(rawAttachment) : null,
+    );
+  }
+
+  static AnnouncementPriority _parsePriority(String raw) {
+    switch (raw.toUpperCase()) {
+      case 'URGENT':
+        return AnnouncementPriority.urgent;
+      case 'HIGH':
+        return AnnouncementPriority.high;
+      case 'LOW':
+        return AnnouncementPriority.low;
+      default:
+        return AnnouncementPriority.normal;
+    }
+  }
 }

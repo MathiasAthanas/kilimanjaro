@@ -58,6 +58,29 @@ export class SubjectsService {
     return subject;
   }
 
+  async deleteSubject(id: string): Promise<void> {
+    const existing = await this.prisma.subject.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Subject not found');
+
+    const [classSubjectCount, combinationCount] = await Promise.all([
+      this.prisma.classSubject.count({ where: { subjectId: id } }),
+      this.prisma.subjectCombinationSubject.count({ where: { subjectId: id } }),
+    ]);
+
+    const blockers: string[] = [];
+    if (classSubjectCount > 0) blockers.push(`${classSubjectCount} class assignment${classSubjectCount > 1 ? 's' : ''}`);
+    if (combinationCount > 0) blockers.push(`${combinationCount} A-Level combination${combinationCount > 1 ? 's' : ''}`);
+
+    if (blockers.length > 0) {
+      throw new BadRequestException(
+        `Cannot delete "${existing.name}" — it is used in ${blockers.join(' and ')}. Remove those first.`,
+      );
+    }
+
+    await this.prisma.subject.delete({ where: { id } });
+    await this.redis.del('subjects:all');
+  }
+
   async createClassSubject(dto: CreateClassSubjectDto) {
     return this.prisma.classSubject.create({
       data: {

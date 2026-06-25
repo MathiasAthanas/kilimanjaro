@@ -36,7 +36,7 @@ class HodCoursesOverviewScreen extends ConsumerWidget {
                       color: AppColors.eLearningPrimary,
                     ),
                     title: Text(
-                      '${c.subjectName} · ${c.className}',
+                      '${c.subjectName} · ${c.className} · ${c.stageLabel}',
                       style: const TextStyle(fontWeight: FontWeight.w900),
                     ),
                     subtitle: Text(

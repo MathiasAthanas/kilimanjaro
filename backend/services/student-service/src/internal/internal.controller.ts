@@ -1,8 +1,9 @@
-import { Controller, Get, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { InternalApiGuard } from '../common/guards/internal-api.guard';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
+import { DepartmentsService } from '../departments/departments.service';
 
 @ApiTags('Internal')
 @Controller('students/internal')
@@ -11,6 +12,7 @@ export class InternalController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
+    private readonly departments: DepartmentsService,
   ) {}
 
   @Get('by-auth/:authUserId')
@@ -60,6 +62,15 @@ export class InternalController {
       guardianId: guardian.id,
       studentIds: guardian.studentLinks.map((link) => link.studentId),
     };
+  }
+
+  @Get('departments/by-user/:userId')
+  @ApiOperation({ summary: 'Get department assigned to a HOD user' })
+  async departmentByUser(
+    @Param('userId') userId: string,
+    @Query('academicYearId') academicYearId?: string,
+  ) {
+    return this.departments.getDepartmentByUserId(userId, academicYearId);
   }
 
   @Get('class/:classId/student-ids')

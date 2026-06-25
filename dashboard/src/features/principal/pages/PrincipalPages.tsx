@@ -99,7 +99,7 @@ export function PrincipalHomePage() {
   const collectionRate = fin?.collectionRate ?? 0;
 
   return (
-    <PrincipalWorkspaceShell title="Executive Decision Room" eyebrow="Principal command center">
+    <PrincipalWorkspaceShell title="Executive Decision Room" eyebrow="Headmaster command center">
       {/* Critical alert banner — only shown when there are pending decisions */}
       {totalPending > 0 && (
         <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-ks-rose/30 bg-ks-rose/8 p-4">
@@ -414,7 +414,7 @@ export function PrincipalReportCardDetailPage() {
   };
 
   return (
-    <PrincipalWorkspaceShell title={`Report Cards · ${classLabel}`} eyebrow="Principal sign-off">
+    <PrincipalWorkspaceShell title={`Report Cards · ${classLabel}`} eyebrow="Headmaster sign-off">
       <PrincipalBreadcrumb crumbs={[
         { label: 'Executive', to: '/principal' },
         { label: 'Report Cards', to: '/principal/report-cards' },
@@ -1069,7 +1069,7 @@ export function PrincipalAnnouncementsPage() {
   return (
     <PrincipalWorkspaceShell
       title="Announcements"
-      eyebrow="Principal communication authority"
+      eyebrow="Headmaster communication authority"
       action={
         <NavLink to="/principal/announcements/create">
           <Button className="rounded-xl bg-[#f4c96b] py-2 text-xs text-[#061f33]">
@@ -1747,7 +1747,7 @@ export function PrincipalAuditPage() {
   const filtered = filter === 'All' ? apiAudit : apiAudit.filter((e) => e.decision.toLowerCase().includes(filter.toLowerCase()));
 
   return (
-    <PrincipalWorkspaceShell title="Principal Decision Audit Trail" eyebrow="Audited executive decisions">
+    <PrincipalWorkspaceShell title="Headmaster Decision Audit Trail" eyebrow="Audited executive decisions">
       <PrincipalBreadcrumb crumbs={[{ label: 'Executive', to: '/principal' }, { label: 'Audit Trail' }]} />
 
       {/* Immutable banner */}

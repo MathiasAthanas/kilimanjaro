@@ -38,7 +38,7 @@ export const teacherKeys = {
   classStudents: (classId: string) => [...teacherKeys.students(), classId] as const,
   attendance: () => [...teacherKeys.all, 'attendance'] as const,
   performanceAlerts: () => [...teacherKeys.all, 'performance', 'alerts'] as const,
-  perfPairings: () => [...teacherKeys.all, 'performance', 'pairings'] as const,
+  perfPairings: (classIds?: string[]) => [...teacherKeys.all, 'performance', 'pairings', classIds?.length ? classIds.slice().sort().join(',') : ''] as const,
   studentPerformance: (studentId: string) => [...teacherKeys.all, 'performance', studentId] as const,
   timetable: () => [...teacherKeys.all, 'timetable'] as const,
   syllabus: () => [...teacherKeys.all, 'syllabus'] as const,
@@ -253,12 +253,17 @@ export function usePerformanceAlerts() {
   });
 }
 
-export function usePerfPairings() {
+export function usePerfPairings(classIds?: string[]) {
   return useQuery({
-    queryKey: teacherKeys.perfPairings(),
+    queryKey: teacherKeys.perfPairings(classIds),
+    // Only fetch once we know which classes the teacher owns. An explicit empty
+    // array means "loaded, but teacher has no classes" — don't fetch.
+    enabled: classIds !== undefined && classIds.length > 0,
     queryFn: () =>
       api
-        .get('/students/performance/pairings')
+        .get('/students/performance/pairings', {
+          params: { classIds: classIds!.join(',') },
+        })
         .then((r) =>
           arrayFromApi(payloadOf(r), ['items', 'pairings']).map((raw) => {
             const p = raw as Record<string, unknown>;
@@ -417,6 +422,31 @@ export function useCreateInterventionMutation() {
         .post('/academics/interventions', payload)
         .then((r) => r.data?.data ?? r.data),
     onSuccess: () => qc.invalidateQueries({ queryKey: teacherKeys.all }),
+  });
+}
+
+export function useUpdateSyllabusMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, coveredTopics, notes }: { id: string; coveredTopics: number; notes?: string }) =>
+      api
+        .patch(`/academics/syllabus/${id}`, { coveredTopics, notes })
+        .then((r) => r.data?.data ?? r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: teacherKeys.syllabus() });
+      qc.invalidateQueries({ queryKey: teacherKeys.classes() });
+    },
+  });
+}
+
+export function useCreatePairingMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: Record<string, unknown>) =>
+      api
+        .post('/students/performance/pairings', payload)
+        .then((r) => r.data?.data ?? r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [...teacherKeys.all, 'performance', 'pairings'] }),
   });
 }
 

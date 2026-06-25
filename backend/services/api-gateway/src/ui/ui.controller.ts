@@ -48,6 +48,29 @@ export class UiController {
     }, [...this.warning(student), ...warnings]);
   }
 
+  @Get('mobile/student/terms-overview')
+  @Roles(...STUDENT_ROLES)
+  async mobileStudentTermsOverview(@CurrentUser() user: GatewayUser): Promise<UiEnvelope> {
+    const studentId = await this.resolveStudentId(user);
+    const { data, warnings } = await this.ui.collect({
+      terms: { service: 'student', path: '/students/terms', fallback: [] },
+      results: { service: 'academic', path: '/academics/results', fallback: [] },
+      reportCards: { service: 'academic', path: `/academics/report-cards/student/${studentId}`, fallback: [] },
+    }, user);
+    return this.ui.envelope({ studentId, ...data }, warnings);
+  }
+
+  @Get('mobile/parent/children/:childId/terms-overview')
+  @Roles(...PARENT_ROLES)
+  async mobileParentChildTermsOverview(@CurrentUser() user: GatewayUser, @Param('childId') childId: string): Promise<UiEnvelope> {
+    const { data, warnings } = await this.ui.collect({
+      terms: { service: 'student', path: '/students/terms', fallback: [] },
+      results: { service: 'academic', path: '/academics/results', params: { studentId: childId }, fallback: [] },
+      reportCards: { service: 'academic', path: `/academics/report-cards/student/${childId}`, fallback: [] },
+    }, user);
+    return this.ui.envelope({ childId, ...data }, warnings);
+  }
+
   @Get('mobile/student/results/terms/:termId')
   @Roles(...STUDENT_ROLES)
   async mobileStudentTermResults(@CurrentUser() user: GatewayUser, @Param('termId') termId: string): Promise<UiEnvelope> {

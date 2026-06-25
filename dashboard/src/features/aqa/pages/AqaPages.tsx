@@ -654,6 +654,122 @@ export function CreateAqaAnnouncementPage() {
   );
 }
 
+// ─── Create intervention ──────────────────────────────────────────────────────
+
+export function CreateAqaInterventionPage() {
+  const navigate = useNavigate();
+  const createMutation = useCreateAqaInterventionMutation();
+  const [form, setForm] = useState({
+    type: 'ACADEMIC',
+    priority: 'MEDIUM',
+    studentIdentifier: '',
+    subject: '',
+    note: '',
+    assignedTo: '',
+  });
+
+  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
+    setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.studentIdentifier.trim() || !form.note.trim()) {
+      toast('Student identifier and notes are required', 'warning');
+      return;
+    }
+    createMutation.mutate(
+      { type: form.type, priority: form.priority, studentIdentifier: form.studentIdentifier, subject: form.subject || undefined, note: form.note, assignedTo: form.assignedTo || undefined },
+      {
+        onSuccess: () => { toast('Intervention created', 'success'); navigate('/aqa/interventions'); },
+        onError: () => toast('Failed to create intervention', 'error'),
+      },
+    );
+  };
+
+  return (
+    <AqaWorkspaceShell title="Create Intervention" eyebrow="Academic support action">
+      <form onSubmit={handleSubmit}>
+        <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_360px]">
+          <Card className="rounded-xl p-6">
+            <div className="flex items-center gap-3">
+              <Plus className="h-5 w-5 text-ks-blue" />
+              <h2 className="font-display text-xl font-black text-ks-navy">New Academic Intervention</h2>
+            </div>
+            <div className="mt-5 grid gap-4 md:grid-cols-2">
+              <label className="block md:col-span-2">
+                <span className="text-xs font-black uppercase tracking-wider text-ks-muted">Student name or ID *</span>
+                <input value={form.studentIdentifier} onChange={set('studentIdentifier')} required
+                  className="mt-2 h-11 w-full rounded-xl border border-ks-line px-4 font-semibold outline-none transition focus:border-ks-blue focus:ring-2 focus:ring-ks-blue/10"
+                  placeholder="e.g. Amina Juma or REG-2026-001" />
+              </label>
+              <label className="block">
+                <span className="text-xs font-black uppercase tracking-wider text-ks-muted">Intervention type</span>
+                <select value={form.type} onChange={set('type')} className="mt-2 h-11 w-full rounded-xl border border-ks-line px-4 font-semibold outline-none transition focus:border-ks-blue">
+                  <option value="ACADEMIC">Academic</option>
+                  <option value="ATTENDANCE">Attendance</option>
+                  <option value="BEHAVIOURAL">Behavioural</option>
+                  <option value="PASTORAL">Pastoral</option>
+                </select>
+              </label>
+              <label className="block">
+                <span className="text-xs font-black uppercase tracking-wider text-ks-muted">Priority</span>
+                <select value={form.priority} onChange={set('priority')} className="mt-2 h-11 w-full rounded-xl border border-ks-line px-4 font-semibold outline-none transition focus:border-ks-blue">
+                  <option value="LOW">Low</option>
+                  <option value="MEDIUM">Medium</option>
+                  <option value="HIGH">High</option>
+                  <option value="CRITICAL">Critical</option>
+                </select>
+              </label>
+              <label className="block">
+                <span className="text-xs font-black uppercase tracking-wider text-ks-muted">Subject (optional)</span>
+                <input value={form.subject} onChange={set('subject')}
+                  className="mt-2 h-11 w-full rounded-xl border border-ks-line px-4 font-semibold outline-none transition focus:border-ks-blue focus:ring-2 focus:ring-ks-blue/10"
+                  placeholder="e.g. Chemistry" />
+              </label>
+              <label className="block">
+                <span className="text-xs font-black uppercase tracking-wider text-ks-muted">Assign to (optional)</span>
+                <input value={form.assignedTo} onChange={set('assignedTo')}
+                  className="mt-2 h-11 w-full rounded-xl border border-ks-line px-4 font-semibold outline-none transition focus:border-ks-blue focus:ring-2 focus:ring-ks-blue/10"
+                  placeholder="e.g. Mr. Baraka Lema" />
+              </label>
+              <label className="block md:col-span-2">
+                <span className="text-xs font-black uppercase tracking-wider text-ks-muted">Intervention notes *</span>
+                <textarea value={form.note} onChange={set('note')} required rows={5}
+                  className="mt-2 w-full resize-none rounded-xl border border-ks-line px-4 py-3 font-semibold outline-none transition focus:border-ks-blue focus:ring-2 focus:ring-ks-blue/10"
+                  placeholder="Describe the academic concern and planned action…" />
+              </label>
+            </div>
+            <div className="mt-5 flex gap-3">
+              <Button type="submit" className="rounded-xl" disabled={createMutation.isPending}>
+                <Save className="h-4 w-4" />
+                {createMutation.isPending ? 'Creating…' : 'Create intervention'}
+              </Button>
+              <Button type="button" variant="secondary" className="rounded-xl" onClick={() => navigate('/aqa/interventions')}>
+                Cancel
+              </Button>
+            </div>
+          </Card>
+          <Card className="sticky top-24 h-fit rounded-xl p-5">
+            <p className="text-xs font-black uppercase tracking-wider text-ks-muted">Preview</p>
+            <div className="mt-3 space-y-2 rounded-xl border border-ks-line bg-ks-paper p-4">
+              <div className="flex items-center gap-2">
+                <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-black ${form.priority === 'CRITICAL' ? 'bg-ks-rose/10 text-ks-rose' : form.priority === 'HIGH' ? 'bg-ks-amber/10 text-ks-amber' : 'bg-ks-blue/10 text-ks-blue'}`}>
+                  {form.priority}
+                </span>
+                <span className="text-[11px] font-semibold text-ks-muted">{form.type}</span>
+              </div>
+              {form.studentIdentifier && <p className="font-display font-black text-ks-navy">{form.studentIdentifier}</p>}
+              {form.subject && <p className="text-xs font-semibold text-ks-muted">Subject: {form.subject}</p>}
+              {form.note && <p className="text-sm font-semibold leading-relaxed text-ks-slate">{form.note}</p>}
+              {form.assignedTo && <p className="text-[11px] font-semibold text-ks-muted">Assigned to: {form.assignedTo}</p>}
+            </div>
+          </Card>
+        </div>
+      </form>
+    </AqaWorkspaceShell>
+  );
+}
+
 // ─── Exports ──────────────────────────────────────────────────────────────────
 
 export function AqaExportsPage() {

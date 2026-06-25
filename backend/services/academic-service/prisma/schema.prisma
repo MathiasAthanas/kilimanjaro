@@ -45,6 +45,41 @@ enum DayOfWeek {
   @@schema("academics")
 }
 
+enum VenueType {
+  CLASSROOM
+  HALL
+  SPORTS_GROUND
+  LABORATORY
+  LIBRARY
+  MUSIC_ROOM
+  COMPUTER_LAB
+  OTHER
+
+  @@schema("academics")
+}
+
+enum TimetableType {
+  CLASS
+  EXTRACURRICULAR
+  CUSTOM
+
+  @@schema("academics")
+}
+
+enum SlotActivityType {
+  LESSON
+  BREAK
+  ASSEMBLY
+  SPORTS
+  CLUB
+  ARTS
+  MUSIC
+  EXAM
+  CUSTOM
+
+  @@schema("academics")
+}
+
 enum InterventionType {
   ALERT_RESOLVED
   ALERT_ESCALATED
@@ -79,20 +114,22 @@ enum SubjectRole {
 }
 
 model Subject {
-  id            String         @id @default(uuid())
-  name          String
-  code          String         @unique
-  description   String?
+  id             String         @id @default(uuid())
+  name           String
+  code           String         @unique
+  description    String?
   educationStage EducationStage?
-  isCompulsory  Boolean        @default(true)
-  isActive      Boolean        @default(true)
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  classSubjects ClassSubject[]
+  isCompulsory   Boolean        @default(true)
+  isActive       Boolean        @default(true)
+  departmentId   String?
+  department     String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  classSubjects  ClassSubject[]
   combinationSubjects SubjectCombinationSubject[]
   studentEnrollments StudentSubjectEnrollment[]
-  assessments   Assessment[]
-  timetable     Timetable[]
+  assessments    Assessment[]
+  timetable      Timetable[]
 
   @@schema("academics")
 }
@@ -449,5 +486,92 @@ model AcademicAuditLog {
   createdAt     DateTime @default(now())
 
   @@index([performedById])
+  @@schema("academics")
+}
+
+// ─── Timetable System ─────────────────────────────────────────────────────────
+
+model Venue {
+  id          String      @id @default(uuid())
+  name        String
+  type        VenueType   @default(CLASSROOM)
+  capacity    Int         @default(40)
+  /// Stage filter: empty array = available to all stages. e.g. ["PRIMARY","O_LEVEL"]
+  stageFilter String[]
+  description String?
+  isActive    Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  slots       TimetableSlot[]
+
+  @@schema("academics")
+}
+
+model TimetableActivity {
+  id              String           @id @default(uuid())
+  name            String
+  activityType    SlotActivityType @default(LESSON)
+  defaultDuration Int              @default(40)
+  /// Stages this activity applies to; empty = all
+  stageFilter     String[]
+  description     String?
+  colorCode       String?          @default("#4338CA")
+  isActive        Boolean          @default(true)
+  createdAt       DateTime         @default(now())
+  slots           TimetableSlot[]
+
+  @@schema("academics")
+}
+
+model TimetableSheet {
+  id             String        @id @default(uuid())
+  name           String
+  timetableType  TimetableType @default(CLASS)
+  /// Stage scope: NURSERY | PRE_UNIT | PRIMARY | O_LEVEL | A_LEVEL | null = ALL
+  stage          String?
+  classId        String?
+  className      String?
+  academicYearId String
+  termId         String?
+  isPublished    Boolean       @default(false)
+  note           String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  slots          TimetableSlot[]
+
+  @@index([academicYearId, timetableType])
+  @@schema("academics")
+}
+
+model TimetableSlot {
+  id            String            @id @default(uuid())
+  sheetId       String
+  sheet         TimetableSheet    @relation(fields: [sheetId], references: [id], onDelete: Cascade)
+  dayOfWeek     DayOfWeek
+  startTime     String            // "08:00"
+  endTime       String            // "08:40"
+  activityType  SlotActivityType  @default(LESSON)
+  label         String?           // display label — subject name, "Assembly", "Break", etc.
+  activityId    String?
+  activity      TimetableActivity? @relation(fields: [activityId], references: [id])
+  subjectId     String?
+  subjectName   String?
+  teacherId     String?
+  teacherName   String?
+  classId       String?
+  className     String?
+  venueId       String?
+  venue         Venue?            @relation(fields: [venueId], references: [id])
+  combinationId String?
+  /// Extra-curricular: participant class IDs, student group IDs, etc.
+  attendeeIds   String[]
+  /// Staff IDs responsible for this slot
+  staffIds      String[]
+  staffNames    String[]
+  notes         String?
+  colorCode     String?
+
+  createdAt     DateTime          @default(now())
+
+  @@index([sheetId, dayOfWeek])
   @@schema("academics")
 }

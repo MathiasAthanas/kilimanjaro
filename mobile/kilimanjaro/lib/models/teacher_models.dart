@@ -6,6 +6,8 @@ enum TeacherAlertSeverity { medium, high, critical }
 
 enum TeacherPairingStatus { suggested, active, rejected }
 
+enum InterventionType { supportGiven, parentMeeting, followUp, peerPairing, other }
+
 class TeacherClassSubject {
   const TeacherClassSubject({
     required this.id,

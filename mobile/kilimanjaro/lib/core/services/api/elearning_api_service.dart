@@ -30,11 +30,21 @@ class ElearningApiService {
 
   // ─── Courses ─────────────────────────────────────────────────────────────
 
-  Future<List<ElearningCourseModel>> listCourses({String? status}) async {
+  Future<List<ElearningCourseModel>> listCourses({
+    String? status,
+    String? educationStage,
+    int? classLevel,
+    String? combinationId,
+  }) async {
     final opts = await _authOptions();
     final resp = await _dio.get<dynamic>(
       '/courses',
-      queryParameters: {if (status != null) 'status': status},
+      queryParameters: {
+        if (status != null) 'status': status,
+        if (educationStage != null) 'educationStage': educationStage,
+        if (classLevel != null) 'classLevel': classLevel,
+        if (combinationId != null) 'combinationId': combinationId,
+      },
       options: opts,
     );
     final list = resp.data as List<dynamic>? ?? [];
@@ -170,6 +180,13 @@ class ElearningApiService {
       '/courses/$courseId/quizzes/$quizId',
       options: opts,
     );
+    return ElearningQuizModel.fromJson(resp.data as Map<String, dynamic>);
+  }
+
+  /// Fetch a quiz directly by its ID (no courseId needed).
+  Future<ElearningQuizModel> getQuizById(String quizId) async {
+    final opts = await _authOptions();
+    final resp = await _dio.get<dynamic>('/quizzes/$quizId', options: opts);
     return ElearningQuizModel.fromJson(resp.data as Map<String, dynamic>);
   }
 

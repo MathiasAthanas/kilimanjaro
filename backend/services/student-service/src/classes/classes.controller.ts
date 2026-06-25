@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ClassesService } from './classes.service';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -99,12 +99,36 @@ export class ClassesController {
   }
 
   @Get('terms')
-  @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'ACADEMIC_QA', 'FINANCE', 'HEAD_OF_DEPARTMENT', 'TEACHER')
+  @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'ACADEMIC_QA', 'FINANCE', 'HEAD_OF_DEPARTMENT', 'TEACHER', 'STUDENT', 'PARENT', 'GUARDIAN')
   @ApiOperation({ summary: 'List terms by academic year/current flag' })
   async listTerms(@Query('academicYearId') academicYearId?: string, @Query('isCurrent') isCurrent?: string) {
     return this.classesService.listTerms({
       academicYearId,
       isCurrent: isCurrent === undefined ? undefined : isCurrent === 'true',
     });
+  }
+
+  @Delete('classes/:id')
+  @Roles('SYSTEM_ADMIN', 'PRINCIPAL')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Delete class — blocked if any enrolments (active or historical) exist' })
+  async deleteClass(@Param('id') id: string) {
+    await this.classesService.deleteClass(id);
+  }
+
+  @Delete('academic-years/:id')
+  @Roles('SYSTEM_ADMIN')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Delete academic year — blocked if it is current or has linked terms, classes, or enrolments' })
+  async deleteAcademicYear(@Param('id') id: string) {
+    await this.classesService.deleteAcademicYear(id);
+  }
+
+  @Delete('terms/:id')
+  @Roles('SYSTEM_ADMIN')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Delete term — blocked if it is current or has linked enrolments or attendance records' })
+  async deleteTerm(@Param('id') id: string) {
+    await this.classesService.deleteTerm(id);
   }
 }

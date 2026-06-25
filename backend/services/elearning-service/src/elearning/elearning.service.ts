@@ -32,6 +32,8 @@ export class ElearningService {
     if (query.educationStage) where.educationStage = query.educationStage.toUpperCase() as never;
     if (query.classLevel) where.classLevel = Number(query.classLevel);
     if (query.combinationId) where.combinationId = query.combinationId;
+    if (query.termId) where.termId = query.termId;
+    if (query.academicYearId) where.academicYearId = query.academicYearId;
     if (user.role === 'TEACHER') where.teacherId = user.id;
     if (user.role === 'STUDENT') where.enrollments = { some: { studentId: this.studentId(user), status: 'ACTIVE' } };
     return this.prisma.courseSpace.findMany({
@@ -115,6 +117,128 @@ export class ElearningService {
     });
     await this.audit(user, 'COURSE_ARCHIVED', 'CourseSpace', id, updated);
     return updated;
+  }
+
+  async copyCourse(user: RequestUser, sourceId: string, body: Record<string, unknown>) {
+    const source = await this.getCourse(user, sourceId);
+    this.assertTeacherOwner(user, source.teacherId);
+    const targetTermId = this.required(body.targetTermId, 'targetTermId');
+    const targetAcademicYearId = this.required(body.targetAcademicYearId, 'targetAcademicYearId');
+
+    const existing = await this.prisma.courseSpace.findFirst({ where: { classSubjectId: source.classSubjectId, termId: targetTermId } });
+    if (existing) throw new BadRequestException('A course for this subject already exists in the target term');
+
+    const lessons = await this.prisma.lesson.findMany({
+      where: { courseSpaceId: sourceId, status: { not: 'ARCHIVED' } },
+      include: {
+        materials: { where: { status: { not: 'ARCHIVED' } } },
+        assignments: { where: { status: { not: 'ARCHIVED' } } },
+        quizzes: { where: { status: { not: 'ARCHIVED' } }, include: { questions: { include: { options: true }, orderBy: { orderIndex: 'asc' } } } },
+      },
+      orderBy: { orderIndex: 'asc' },
+    });
+
+    const newCourse = await this.prisma.courseSpace.create({
+      data: {
+        classSubjectId: source.classSubjectId,
+        teacherId: source.teacherId,
+        termId: targetTermId,
+        academicYearId: targetAcademicYearId,
+        subjectName: source.subjectName,
+        className: source.className,
+        educationStage: source.educationStage,
+        classLevel: source.classLevel,
+        combinationId: source.combinationId,
+        description: source.description,
+        coverColor: source.coverColor,
+        coverEmoji: source.coverEmoji,
+      },
+      include: this.courseIncludes(),
+    });
+
+    for (const lesson of lessons) {
+      const newLesson = await this.prisma.lesson.create({
+        data: {
+          courseSpaceId: newCourse.id,
+          title: lesson.title,
+          description: lesson.description,
+          weekNumber: lesson.weekNumber,
+          orderIndex: lesson.orderIndex,
+          estimatedMinutes: lesson.estimatedMinutes,
+        },
+      });
+
+      for (const m of lesson.materials) {
+        await this.prisma.material.create({
+          data: {
+            courseSpaceId: newCourse.id,
+            lessonId: newLesson.id,
+            title: m.title,
+            type: m.type,
+            orderIndex: m.orderIndex,
+            body: m.body,
+            fileKey: m.fileKey,
+            fileOriginalName: m.fileOriginalName,
+            fileMimeType: m.fileMimeType,
+            externalUrl: m.externalUrl,
+            downloadable: m.downloadable,
+          },
+        });
+      }
+
+      for (const a of lesson.assignments) {
+        await this.prisma.assignment.create({
+          data: {
+            courseSpaceId: newCourse.id,
+            lessonId: newLesson.id,
+            title: a.title,
+            instructions: a.instructions,
+            type: a.type,
+            maxScore: a.maxScore,
+            allowLateSubmission: a.allowLateSubmission,
+            latePenaltyPercent: a.latePenaltyPercent,
+          },
+        });
+      }
+
+      for (const q of lesson.quizzes) {
+        const newQuiz = await this.prisma.quiz.create({
+          data: {
+            courseSpaceId: newCourse.id,
+            lessonId: newLesson.id,
+            title: q.title,
+            instructions: q.instructions,
+            timeLimitMinutes: q.timeLimitMinutes,
+            maxAttempts: q.maxAttempts,
+            shuffleQuestions: q.shuffleQuestions,
+            shuffleOptions: q.shuffleOptions,
+            showCorrectAfter: q.showCorrectAfter,
+            passingScore: q.passingScore,
+          },
+        });
+        for (const question of q.questions) {
+          const newQuestion = await this.prisma.quizQuestion.create({
+            data: {
+              quizId: newQuiz.id,
+              type: question.type,
+              prompt: question.prompt,
+              points: question.points,
+              orderIndex: question.orderIndex,
+              explanation: question.explanation,
+              correctAnswer: question.correctAnswer,
+            },
+          });
+          for (const opt of question.options) {
+            await this.prisma.quizOption.create({
+              data: { questionId: newQuestion.id, text: opt.text, isCorrect: opt.isCorrect, orderIndex: opt.orderIndex },
+            });
+          }
+        }
+      }
+    }
+
+    await this.audit(user, 'COURSE_COPIED', 'CourseSpace', newCourse.id, { sourceId, targetTermId, targetAcademicYearId });
+    return newCourse;
   }
 
   async courseOverview(user: RequestUser, courseId: string) {
@@ -812,10 +936,13 @@ export class ElearningService {
     return this.prisma.discussionThread.update({ where: { id: threadId }, data: { deletedAt: new Date() } });
   }
 
-  async teacherAnalytics(user: RequestUser) {
+  async teacherAnalytics(user: RequestUser, query: Record<string, string> = {}) {
     this.assertRole(user, ['TEACHER', 'SYSTEM_ADMIN']);
-    const courses = await this.prisma.courseSpace.findMany({ where: { teacherId: user.role === 'TEACHER' ? user.id : undefined }, include: this.courseIncludes() });
-    const pending = await this.prisma.submission.count({ where: { courseSpace: { teacherId: user.role === 'TEACHER' ? user.id : undefined }, status: 'SUBMITTED' } });
+    const filter: Prisma.CourseSpaceWhereInput = { teacherId: user.role === 'TEACHER' ? user.id : undefined };
+    if (query.academicYearId) filter.academicYearId = query.academicYearId;
+    if (query.termId) filter.termId = query.termId;
+    const courses = await this.prisma.courseSpace.findMany({ where: filter, include: this.courseIncludes() });
+    const pending = await this.prisma.submission.count({ where: { courseSpace: filter, status: 'SUBMITTED' } });
     return { courses, activeCourses: courses.filter((c) => c.status === 'ACTIVE').length, submissionsPending: pending };
   }
 
@@ -872,14 +999,19 @@ export class ElearningService {
     return progress.filter((item) => item.completionPercent < 50);
   }
 
-  async roleOverview(role: 'hod' | 'principal' | 'aqa') {
+  async roleOverview(role: 'hod' | 'principal' | 'aqa', query: Record<string, string> = {}) {
+    const spaceFilter: Prisma.CourseSpaceWhereInput = {};
+    if (query.academicYearId) spaceFilter.academicYearId = query.academicYearId;
+    if (query.termId) spaceFilter.termId = query.termId;
+    const hasFilter = Boolean(query.academicYearId || query.termId);
+    const childFilter = hasFilter ? { courseSpace: spaceFilter } : undefined;
     const [courses, active, materials, assignments, quizzes, attempts] = await Promise.all([
-      this.prisma.courseSpace.count(),
-      this.prisma.courseSpace.count({ where: { status: 'ACTIVE' } }),
-      this.prisma.material.count(),
-      this.prisma.assignment.count(),
-      this.prisma.quiz.count(),
-      this.prisma.quizAttempt.count(),
+      this.prisma.courseSpace.count({ where: spaceFilter }),
+      this.prisma.courseSpace.count({ where: { ...spaceFilter, status: 'ACTIVE' } }),
+      this.prisma.material.count({ where: childFilter }),
+      this.prisma.assignment.count({ where: childFilter }),
+      this.prisma.quiz.count({ where: childFilter }),
+      this.prisma.quizAttempt.count({ where: hasFilter ? { quiz: { courseSpace: spaceFilter } } : undefined }),
     ]);
     return { role, courses, active, materials, assignments, quizzes, attempts };
   }

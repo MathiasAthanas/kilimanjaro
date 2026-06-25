@@ -254,37 +254,37 @@ type ImportLookup = {
 
 const CSV_TEMPLATES: Record<string, { comments: string[]; headers: string[]; sample: string[] }> = {
   'staff user': {
-    comments: [
-      '# Staff User Import Template — Kilimanjaro Schools',
-      '# role values: SYSTEM_ADMIN | BOARD_DIRECTOR | MANAGING_DIRECTOR | PRINCIPAL | ACADEMIC_QA | FINANCE | HEAD_OF_DEPARTMENT | TEACHER | PARENT',
-      '# phone_number: include country code e.g. +255712345678',
-      '# password is created automatically from LAST_NAME in uppercase',
-      '# registration_number is optional and normally only used for student accounts',
-    ],
-    headers: ['first_name', 'last_name', 'email', 'phone_number', 'role', 'department', 'registration_number'],
-    sample: ['John', 'Doe', 'john.doe@school.ac.tz', '+255712345678', 'TEACHER', 'Science', ''],
+    comments: [],
+    headers: ['first_name', 'last_name', 'email', 'role', 'phone_number'],
+    sample: ['John', 'Doe', 'john.doe@school.ac.tz', 'TEACHER', '+255712345678'],
   },
   student: {
-    comments: [
-      '# Student Import Template — Kilimanjaro Schools',
-      '# gender: MALE | FEMALE',
-      '# guardian_relationship: FATHER | MOTHER | GUARDIAN | SIBLING | OTHER',
-      '# date_of_birth and admission_date format: YYYY-MM-DD  e.g. 2010-03-15',
-      '# class_name: must match an existing class name exactly  e.g. "Form 2 A"',
-      '# academic_year: optional; uses current academic year when blank',
-      '# password is created automatically from LAST_NAME in uppercase',
-    ],
+    comments: [],
     headers: [
-      'first_name', 'middle_name', 'last_name', 'date_of_birth', 'gender', 'nationality',
-      'class_name', 'academic_year', 'admission_date',
-      'guardian_first_name', 'guardian_last_name', 'guardian_relationship', 'guardian_phone', 'guardian_email',
+      'first_name', 'last_name', 'date_of_birth', 'gender',
+      'class_name', 'guardian_first_name', 'guardian_phone',
     ],
-    sample: [
-      'Amina', 'Juma', 'Mwanga', '2010-03-15', 'FEMALE', 'Tanzanian',
-      'Form 2 A', '', '2024-01-15',
-      'Juma', 'Mwanga', 'FATHER', '+255712345678', 'juma.mwanga@email.com',
-    ],
+    sample: ['Amina', 'Mwanga', '2010-03-15', 'FEMALE', 'Form 2 A', 'Juma', '+255712345678'],
   },
+};
+
+const CSV_GUIDE: Record<string, Array<{ col: string; note: string }>> = {
+  'staff user': [
+    { col: 'first_name',   note: 'First name only' },
+    { col: 'last_name',    note: 'Last name — also used as the initial password' },
+    { col: 'email',        note: 'Work email address' },
+    { col: 'role',         note: 'TEACHER · FINANCE · PRINCIPAL · HEAD_OF_DEPARTMENT · ACADEMIC_QA · SYSTEM_ADMIN' },
+    { col: 'phone_number', note: 'Optional. Include country code e.g. +255712345678' },
+  ],
+  student: [
+    { col: 'first_name',        note: 'First name only' },
+    { col: 'last_name',         note: 'Last name — also used as the initial password' },
+    { col: 'date_of_birth',     note: 'Format: YYYY-MM-DD e.g. 2010-03-15' },
+    { col: 'gender',            note: 'MALE or FEMALE' },
+    { col: 'class_name',        note: 'Must match exactly e.g. Form 2 A' },
+    { col: 'guardian_first_name', note: 'Parent or guardian first name' },
+    { col: 'guardian_phone',    note: 'Guardian phone with country code' },
+  ],
 };
 
 const STAFF_ROLES = new Set([
@@ -344,7 +344,7 @@ function validateCsvRows(entity: string, headers: string[], rows: Record<string,
   const errors: string[] = [];
   if (rows.length > 500) errors.push('CSV limit is 500 rows.');
   for (const header of requiredHeaders(entity)) {
-    if (!headers.includes(header)) errors.push(`Missing required column: ${header}`);
+    if (!headers.includes(header)) errors.push(`Column "${header}" is missing. Make sure the first row has the exact column names shown in the guide.`);
   }
   const seenEmails = new Set<string>();
   const seenRegistrationNumbers = new Set<string>();
@@ -359,13 +359,13 @@ function validateCsvRows(entity: string, headers: string[], rows: Record<string,
     if (entity === 'student') {
       if (row.date_of_birth && !isIsoDate(row.date_of_birth)) errors.push(`Row ${line}: date_of_birth must be YYYY-MM-DD.`);
       if (row.admission_date && !isIsoDate(row.admission_date)) errors.push(`Row ${line}: admission_date must be YYYY-MM-DD.`);
-      if (row.gender && !STUDENT_GENDERS.has(row.gender.toUpperCase())) errors.push(`Row ${line}: gender must be MALE or FEMALE.`);
+      if (row.gender && !STUDENT_GENDERS.has(row.gender.toUpperCase())) errors.push(`Row ${line}: gender "${row.gender}" is invalid — must be MALE or FEMALE.`);
       if (row.guardian_relationship && !GUARDIAN_RELATIONSHIPS.has(row.guardian_relationship.toUpperCase())) {
-        errors.push(`Row ${line}: guardian_relationship is invalid.`);
+        errors.push(`Row ${line}: guardian_relationship "${row.guardian_relationship}" is invalid — valid values: FATHER · MOTHER · GUARDIAN · SIBLING · OTHER`);
       }
     } else {
       const role = String(row.role ?? '').toUpperCase();
-      if (role && !STAFF_ROLES.has(role)) errors.push(`Row ${line}: role is invalid.`);
+      if (role && !STAFF_ROLES.has(role)) errors.push(`Row ${line}: role "${role}" is invalid — valid roles: TEACHER · FINANCE · PRINCIPAL · HEAD_OF_DEPARTMENT · ACADEMIC_QA · SYSTEM_ADMIN · BOARD_DIRECTOR · MANAGING_DIRECTOR`);
       const email = String(row.email ?? '').trim().toLowerCase();
       if (email) {
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.push(`Row ${line}: email is invalid.`);
@@ -417,6 +417,19 @@ async function importStaffUsers(rows: Record<string, string>[]) {
   return created;
 }
 
+function normalisePhone(phone: string): string {
+  const digits = phone.replace(/[^\d]/g, '');
+  if (digits.startsWith('255')) return `+${digits}`;
+  if (digits.startsWith('0')) return `+255${digits.slice(1)}`;
+  if (digits.length === 9) return `+255${digits}`;
+  return `+${digits}`;
+}
+
+function parentDefaultPassword(phone: string): string {
+  const last4 = normalisePhone(phone).replace(/[^\d]/g, '').slice(-4);
+  return `Parent@${last4}`;
+}
+
 async function importStudents(rows: Record<string, string>[]) {
   const lookup = await loadImportLookup();
   const currentYear = lookup.academicYears.find((year) => Boolean(year.isCurrent)) ?? lookup.academicYears[0];
@@ -427,13 +440,44 @@ async function importStudents(rows: Record<string, string>[]) {
   const resolvedRows = rows.map((row, index) => {
     const line = index + 2;
     const cls = findByName(lookup.classes, row.class_name);
-    if (!cls) throw new Error(`Row ${line}: class_name "${row.class_name}" does not match an existing class.`);
+    if (!cls) throw new Error(`Row ${line}: class_name "${row.class_name}" does not match any class in the system — go to Academic → Classes to see exact names.`);
     const academicYear = row.academic_year?.trim()
       ? findByName(lookup.academicYears, row.academic_year)
       : currentYear;
     if (!academicYear) throw new Error(`Row ${line}: academic_year "${row.academic_year}" does not match an existing year.`);
     return { row, cls, academicYear };
   });
+
+  // Cache: normalised phone → parent auth user id (deduplicates within this batch and against DB)
+  const parentCache = new Map<string, string>();
+
+  async function resolveParentAuthId(row: Record<string, string>): Promise<string> {
+    const phone = normalisePhone(row.guardian_phone.trim());
+
+    if (parentCache.has(phone)) return parentCache.get(phone)!;
+
+    // Check if this parent already has an auth account
+    const existing = await api.get('/auth/users', { params: { role: 'PARENT', phoneNumber: phone, limit: 1 } })
+      .then((r) => r.data?.data ?? r.data);
+    const items: { id: string }[] = Array.isArray(existing) ? existing : (existing?.items ?? []);
+    if (items.length > 0) {
+      parentCache.set(phone, items[0].id);
+      return items[0].id;
+    }
+
+    // Create a new PARENT auth account
+    const newParent = await api.post('/auth/users', {
+      firstName: row.guardian_first_name.trim(),
+      lastName: row.guardian_last_name?.trim() || row.last_name.trim(),
+      role: 'PARENT',
+      phoneNumber: phone,
+      password: parentDefaultPassword(row.guardian_phone.trim()),
+      isActive: true,
+    }).then((r) => r.data?.data ?? r.data);
+
+    parentCache.set(phone, newParent.id);
+    return newParent.id;
+  }
 
   const created = [];
   for (const { row, cls, academicYear } of resolvedRows) {
@@ -444,6 +488,8 @@ async function importStudents(rows: Record<string, string>[]) {
       password: upperLastNamePassword(row),
       isActive: true,
     }).then((r) => r.data?.data ?? r.data);
+
+    const parentAuthId = await resolveParentAuthId(row);
 
     const student = await api.post('/students', {
       authUserId: authUser.id,
@@ -457,10 +503,11 @@ async function importStudents(rows: Record<string, string>[]) {
       classId: cls.id,
       academicYearId: academicYear.id,
       guardians: [{
+        authUserId: parentAuthId,
         firstName: row.guardian_first_name.trim(),
         lastName: row.guardian_last_name?.trim() || row.last_name.trim(),
         relationship: (row.guardian_relationship?.trim() || 'GUARDIAN').toUpperCase(),
-        phoneNumber: row.guardian_phone.trim(),
+        phoneNumber: normalisePhone(row.guardian_phone.trim()),
         email: row.guardian_email?.trim() || undefined,
         isPrimary: true,
       }],
@@ -479,7 +526,7 @@ export function CsvImportZone({ entity }: { entity: string }) {
   const [dragging, setDragging] = useState(false);
   const [preview, setPreview] = useState<CsvPreviewState | null>(null);
   const [importing, setImporting] = useState(false);
-  const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [result, setResult] = useState<{ ok: true; message: string } | { ok: false; errors: string[] } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const tpl = CSV_TEMPLATES[entity] ?? CSV_TEMPLATES['staff user'];
@@ -502,13 +549,13 @@ export function CsvImportZone({ entity }: { entity: string }) {
     reader.onload = (e) => {
       const { headers, rows } = parseCsvContent(e.target?.result as string);
       if (!headers.length || !rows.length) {
-        setResult({ ok: false, message: 'No data rows found. Check the file format.' });
+        setResult({ ok: false, errors: ['No data rows found. Check the file format.'] });
         return;
       }
       const errors = validateCsvRows(entity, headers, rows);
       if (errors.length) {
         setPreview(null);
-        setResult({ ok: false, message: errors.slice(0, 6).join(' ') + (errors.length > 6 ? ` ${errors.length - 6} more error(s).` : '') });
+        setResult({ ok: false, errors });
         return;
       }
       setPreview({ headers, previewRows: rows.slice(0, 3), allRows: rows });
@@ -523,7 +570,7 @@ export function CsvImportZone({ entity }: { entity: string }) {
     try {
       const errors = validateCsvRows(entity, preview.headers, preview.allRows);
       if (errors.length) {
-        setResult({ ok: false, message: errors.slice(0, 6).join(' ') + (errors.length > 6 ? ` ${errors.length - 6} more error(s).` : '') });
+        setResult({ ok: false, errors });
         return;
       }
       if (entity === 'student') {
@@ -551,14 +598,38 @@ export function CsvImportZone({ entity }: { entity: string }) {
           : err instanceof Error
           ? err.message
           : 'Import failed. Check the file format and try again.';
-      setResult({ ok: false, message });
+      setResult({ ok: false, errors: [message] });
     } finally {
       setImporting(false);
     }
   }
 
+  const guide = CSV_GUIDE[entity] ?? CSV_GUIDE['staff user'];
+
   return (
     <div className="space-y-3">
+      {/* Column guide */}
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-5 py-3">
+          <p className="text-xs font-black uppercase tracking-widest text-slate-500">What to put in your spreadsheet</p>
+          <Button variant="secondary" className="rounded-xl py-1.5 text-xs" onClick={handleDownload}>
+            <Download className="h-3.5 w-3.5" /> Download ready-made template
+          </Button>
+        </div>
+        <div className="divide-y divide-slate-100">
+          {guide.map((row) => (
+            <div key={row.col} className="flex items-baseline gap-4 px-5 py-2.5">
+              <span className="w-44 shrink-0 font-mono text-xs font-black text-[#4338CA]">{row.col}</span>
+              <span className="text-xs font-semibold text-slate-600">{row.note}</span>
+            </div>
+          ))}
+        </div>
+        <div className="border-t border-slate-100 bg-slate-50 px-5 py-2.5">
+          <p className="text-[11px] font-semibold text-slate-400">The first row must be the column names exactly as shown above. Up to 500 rows.</p>
+        </div>
+      </div>
+
+      {/* Drop zone */}
       <div
         onClick={() => fileRef.current?.click()}
         onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
@@ -569,34 +640,21 @@ export function CsvImportZone({ entity }: { entity: string }) {
           const file = e.dataTransfer.files[0];
           if (file) handleFile(file);
         }}
-        className={`cursor-pointer rounded-2xl border-2 border-dashed p-8 text-center transition-all ${
+        className={`cursor-pointer rounded-2xl border-2 border-dashed p-6 text-center transition-all ${
           dragging
             ? 'border-[#4338CA] bg-indigo-50'
             : 'border-slate-200 bg-slate-50/60 hover:border-[#4338CA]/40 hover:bg-indigo-50/20'
         }`}
       >
-        <Upload className="mx-auto h-8 w-8 text-slate-400" />
-        <p className="mt-3 text-sm font-black text-slate-700">
-          Drop {entity} CSV here for bulk import
-        </p>
-        <p className="mt-1 text-xs font-semibold text-slate-400">
-          Up to 500 rows · all fields validated before commit
-        </p>
-        <div className="mt-5 flex justify-center gap-3">
-          <Button
-            variant="secondary"
-            className="rounded-xl py-2 text-xs"
-            onClick={(e) => { e.stopPropagation(); handleDownload(); }}
-          >
-            <Download className="h-3.5 w-3.5" /> Download Template
-          </Button>
-          <Button
-            className="rounded-xl bg-[#4338CA] py-2 text-xs"
-            onClick={(e) => { e.stopPropagation(); fileRef.current?.click(); }}
-          >
-            <Upload className="h-3.5 w-3.5" /> Choose CSV File
-          </Button>
-        </div>
+        <Upload className="mx-auto h-7 w-7 text-slate-400" />
+        <p className="mt-2 text-sm font-black text-slate-700">Drop your CSV here, or click to browse</p>
+        <p className="mt-1 text-xs font-semibold text-slate-400">Saved as .csv from Excel or Google Sheets</p>
+        <Button
+          className="mt-4 rounded-xl bg-[#4338CA] py-2 text-xs"
+          onClick={(e) => { e.stopPropagation(); fileRef.current?.click(); }}
+        >
+          <Upload className="h-3.5 w-3.5" /> Choose File
+        </Button>
         <input
           ref={fileRef}
           type="file"
@@ -659,16 +717,29 @@ export function CsvImportZone({ entity }: { entity: string }) {
       )}
 
       {result && (
-        <div className={`flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-semibold ${
+        <div className={`rounded-xl border px-4 py-3.5 ${
           result.ok
-            ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-            : 'border-rose-200 bg-rose-50 text-rose-600'
+            ? 'border-emerald-200 bg-emerald-50'
+            : 'border-rose-200 bg-rose-50'
         }`}>
-          {result.ok
-            ? <CheckCircle2 className="h-4 w-4 shrink-0" />
-            : <XCircle className="h-4 w-4 shrink-0" />
-          }
-          {result.message}
+          {result.ok ? (
+            <div className="flex items-center gap-2 text-sm font-semibold text-emerald-700">
+              <CheckCircle2 className="h-4 w-4 shrink-0" />
+              {result.message}
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center gap-1.5 text-sm font-black text-rose-700">
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                {result.errors.length} issue{result.errors.length !== 1 ? 's' : ''} found — fix your file and re-upload
+              </div>
+              <ul className="mt-2 space-y-1 pl-5">
+                {result.errors.map((e, i) => (
+                  <li key={i} className="list-disc text-xs font-semibold text-rose-600">{e}</li>
+                ))}
+              </ul>
+            </>
+          )}
         </div>
       )}
     </div>
@@ -1041,7 +1112,7 @@ export function JsonInspector({ value }: { value: unknown }) {
 
 // ─── Notification template editor ────────────────────────────────────────────
 
-export function NotificationTemplateEditor({ template }: { template: { name: string; channel: string; eventType: string; body: string } }) {
+export function NotificationTemplateEditor({ template, onSave }: { template: { id?: string; name: string; channel: string; eventType: string; body: string }; onSave?: (body: string) => void }) {
   const [body, setBody] = useState(template.body);
   const valid = handlebarsIsValid(body) && body.trim().length > 0;
   return (
@@ -1083,7 +1154,7 @@ export function NotificationTemplateEditor({ template }: { template: { name: str
             .replaceAll('{{finance.balance}}', 'TZS 400,000')
           }
         </div>
-        <Button disabled={!valid} className="mt-4 w-full rounded-xl bg-[#4338CA]">Save Template</Button>
+        <Button disabled={!valid} onClick={() => onSave?.(body)} className="mt-4 w-full rounded-xl bg-[#4338CA]">Save Template</Button>
       </div>
     </div>
   );

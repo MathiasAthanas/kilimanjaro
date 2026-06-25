@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Roles } from '../common/decorators/roles.decorator';
 import { ROLES } from '../common/constants/roles';
@@ -42,6 +42,13 @@ export class SubjectsController {
   @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA)
   updateSubject(@Param('id') id: string, @Body() dto: UpdateSubjectDto) {
     return this.subjectsService.updateSubject(id, dto);
+  }
+
+  @Delete('subjects/:id')
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  deleteSubject(@Param('id') id: string) {
+    return this.subjectsService.deleteSubject(id);
   }
 
   @Post('class-subjects')

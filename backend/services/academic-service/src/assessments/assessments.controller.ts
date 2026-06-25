@@ -60,6 +60,12 @@ export class AssessmentsController {
     return this.assessmentsService.pendingApproval({ classId, subjectId }, user!);
   }
 
+  @Get('assessments/approval-history')
+  @Roles(ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA)
+  approvalHistory(@CurrentUser() user?: RequestUser) {
+    return this.assessmentsService.listApprovalHistory(user!);
+  }
+
   @Get('assessments/:id')
   @Roles(
     ROLES.SYSTEM_ADMIN,

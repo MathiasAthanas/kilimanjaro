@@ -67,7 +67,7 @@ export function PrincipalWorkspaceShell({
           <div>
             <p className="text-[11px] font-black uppercase tracking-[0.32em] text-[#f4c96b]">{eyebrow}</p>
             <h1 className="mt-2 font-display text-[44px] font-black leading-tight tracking-[-0.04em] text-white">{title}</h1>
-            <p className="mt-1.5 text-sm font-semibold text-white/60">{userName} · Principal · Executive decision authority</p>
+            <p className="mt-1.5 text-sm font-semibold text-white/60">{userName} · Head master / Head of School · Executive decision authority</p>
           </div>
           <div className="flex shrink-0 items-start gap-3 xl:pt-2">
             <HeaderPill label="Health"   value={`${health?.score ?? '—'} / 100`}        tone="green" />

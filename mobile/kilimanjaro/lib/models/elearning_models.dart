@@ -9,6 +9,9 @@ class ElearningCourseModel {
     required this.academicYearId,
     required this.subjectName,
     required this.className,
+    this.educationStage,
+    this.classLevel,
+    this.combinationId,
     this.description,
     this.coverColor,
     this.coverEmoji,
@@ -27,6 +30,9 @@ class ElearningCourseModel {
   final String academicYearId;
   final String subjectName;
   final String className;
+  final String? educationStage;
+  final int? classLevel;
+  final String? combinationId;
   final String? description;
   final String? coverColor;
   final String? coverEmoji;
@@ -46,6 +52,9 @@ class ElearningCourseModel {
         academicYearId: json['academicYearId'] as String? ?? '',
         subjectName: json['subjectName'] as String? ?? '',
         className: json['className'] as String? ?? '',
+        educationStage: json['educationStage'] as String?,
+        classLevel: (json['classLevel'] as num?)?.toInt(),
+        combinationId: json['combinationId'] as String?,
         description: json['description'] as String?,
         coverColor: json['coverColor'] as String?,
         coverEmoji: json['coverEmoji'] as String?,
@@ -64,6 +73,18 @@ class ElearningCourseModel {
       );
 
   bool get isActive => status == 'ACTIVE';
+  String get stageLabel {
+    switch (educationStage) {
+      case 'PRIMARY':
+        return 'Primary';
+      case 'A_LEVEL':
+        return combinationId == null ? 'A-Level' : 'A-Level combination';
+      case 'O_LEVEL':
+        return 'O-Level';
+      default:
+        return className;
+    }
+  }
   String get emoji => coverEmoji ?? '📘';
 }
 

@@ -49,6 +49,12 @@ export class ElearningController {
     return this.service.archiveCourse(user, id);
   }
 
+  @Post('courses/:id/copy')
+  @Roles('TEACHER', 'SYSTEM_ADMIN')
+  copyCourse(@CurrentUser() user: RequestUser, @Param('id') id: string, @Body() body: Record<string, unknown>) {
+    return this.service.copyCourse(user, id, body);
+  }
+
   @Get('courses/:id/overview')
   @Roles('TEACHER', 'SYSTEM_ADMIN')
   courseOverview(@CurrentUser() user: RequestUser, @Param('id') id: string) {
@@ -479,8 +485,8 @@ export class ElearningController {
 
   @Get('analytics/teacher/courses')
   @Roles('TEACHER', 'SYSTEM_ADMIN')
-  teacherAnalytics(@CurrentUser() user: RequestUser) {
-    return this.service.teacherAnalytics(user);
+  teacherAnalytics(@CurrentUser() user: RequestUser, @Query() query: Record<string, string>) {
+    return this.service.teacherAnalytics(user, query);
   }
 
   @Get('analytics/teacher/courses/:courseId/engagement')
@@ -515,20 +521,20 @@ export class ElearningController {
 
   @Get('analytics/hod/overview')
   @Roles('HEAD_OF_DEPARTMENT', 'SYSTEM_ADMIN')
-  hodOverview() {
-    return this.service.roleOverview('hod');
+  hodOverview(@Query() query: Record<string, string>) {
+    return this.service.roleOverview('hod', query);
   }
 
   @Get('analytics/principal/overview')
   @Roles('PRINCIPAL', 'SYSTEM_ADMIN')
-  principalOverview() {
-    return this.service.roleOverview('principal');
+  principalOverview(@Query() query: Record<string, string>) {
+    return this.service.roleOverview('principal', query);
   }
 
   @Get('analytics/aqa/courses')
   @Roles('ACADEMIC_QA', 'SYSTEM_ADMIN')
-  aqaOverview() {
-    return this.service.roleOverview('aqa');
+  aqaOverview(@Query() query: Record<string, string>) {
+    return this.service.roleOverview('aqa', query);
   }
 
   @Get('analytics/student/summary')

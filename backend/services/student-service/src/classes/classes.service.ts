@@ -203,4 +203,79 @@ export class ClassesService {
       orderBy: [{ academicYear: { startDate: 'desc' } }, { startDate: 'asc' }],
     });
   }
+
+  async deleteClass(id: string): Promise<void> {
+    const cls = await this.prisma.class.findUnique({ where: { id } });
+    if (!cls) throw new NotFoundException('Class not found');
+
+    const [activeEnrolments, totalEnrolments] = await Promise.all([
+      this.prisma.enrolment.count({ where: { classId: id, isActive: true } }),
+      this.prisma.enrolment.count({ where: { classId: id } }),
+    ]);
+
+    if (activeEnrolments > 0) {
+      throw new BadRequestException(
+        `Cannot delete "${cls.name}" — ${activeEnrolments} student${activeEnrolments > 1 ? 's are' : ' is'} currently enrolled. Unenrol them first.`,
+      );
+    }
+    if (totalEnrolments > 0) {
+      throw new BadRequestException(
+        `Cannot delete "${cls.name}" — it has ${totalEnrolments} historical enrolment record${totalEnrolments > 1 ? 's' : ''} linked to it.`,
+      );
+    }
+
+    await this.prisma.class.delete({ where: { id } });
+  }
+
+  async deleteAcademicYear(id: string): Promise<void> {
+    const year = await this.prisma.academicYear.findUnique({ where: { id } });
+    if (!year) throw new NotFoundException('Academic year not found');
+    if (year.isCurrent) {
+      throw new BadRequestException('Cannot delete the current academic year — set another year as current first.');
+    }
+
+    const [termCount, classCount, enrolmentCount] = await Promise.all([
+      this.prisma.term.count({ where: { academicYearId: id } }),
+      this.prisma.class.count({ where: { academicYearId: id } }),
+      this.prisma.enrolment.count({ where: { academicYearId: id } }),
+    ]);
+
+    const blockers: string[] = [];
+    if (termCount > 0) blockers.push(`${termCount} term${termCount > 1 ? 's' : ''}`);
+    if (classCount > 0) blockers.push(`${classCount} class${classCount > 1 ? 'es' : ''}`);
+    if (enrolmentCount > 0) blockers.push(`${enrolmentCount} enrolment${enrolmentCount > 1 ? 's' : ''}`);
+
+    if (blockers.length > 0) {
+      throw new BadRequestException(
+        `Cannot delete "${year.name}" — it has ${blockers.join(', ')} linked to it. Remove them first.`,
+      );
+    }
+
+    await this.prisma.academicYear.delete({ where: { id } });
+  }
+
+  async deleteTerm(id: string): Promise<void> {
+    const term = await this.prisma.term.findUnique({ where: { id }, include: { academicYear: true } });
+    if (!term) throw new NotFoundException('Term not found');
+    if (term.isCurrent) {
+      throw new BadRequestException('Cannot delete the current term — set another term as current first.');
+    }
+
+    const [enrolmentCount, attendanceCount] = await Promise.all([
+      this.prisma.enrolment.count({ where: { termId: id } }),
+      this.prisma.attendanceRecord.count({ where: { termId: id } }),
+    ]);
+
+    const blockers: string[] = [];
+    if (enrolmentCount > 0) blockers.push(`${enrolmentCount} enrolment${enrolmentCount > 1 ? 's' : ''}`);
+    if (attendanceCount > 0) blockers.push(`${attendanceCount} attendance record${attendanceCount > 1 ? 's' : ''}`);
+
+    if (blockers.length > 0) {
+      throw new BadRequestException(
+        `Cannot delete "${term.name}" — it has ${blockers.join(', ')} linked to it.`,
+      );
+    }
+
+    await this.prisma.term.delete({ where: { id } });
+  }
 }

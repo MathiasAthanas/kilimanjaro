@@ -88,7 +88,7 @@ class StudentCourseSpaceScreen extends ConsumerWidget {
       error: (e, _) => _ErrorScaffold(message: e.toString()),
       data: (course) => _LearnScaffold(
         title: course.subjectName,
-        kicker: course.className,
+        kicker: '${course.className} · ${course.stageLabel}',
         subtitle: '${course.enrolledCount} students · ${course.status}',
         children: [
           progressAsync.when(
@@ -280,6 +280,8 @@ class StudentMaterialViewerScreen extends ConsumerStatefulWidget {
 class _StudentMaterialViewerScreenState
     extends ConsumerState<StudentMaterialViewerScreen> {
   File? _cachedFile;
+  String? _noteBody;   // set when the material is a plain text NOTE
+  String? _noteTitle;
   bool _loading = true;
   String? _error;
   VideoPlayerController? _videoController;
@@ -299,16 +301,25 @@ class _StudentMaterialViewerScreenState
   Future<void> _loadMaterial() async {
     final service = ref.read(elearningApiServiceProvider);
     try {
-      // Mark as viewed
       await service.viewMaterial(widget.materialId);
-      // Get download info
       final info = await service.downloadMaterial(widget.materialId);
+
+      // Handle NOTE type — show body inline without a file download.
+      if (info['type'] == 'NOTE') {
+        if (mounted) {
+          setState(() {
+            _noteBody  = (info['body']  as String?) ?? '';
+            _noteTitle = (info['title'] as String?);
+            _loading   = false;
+          });
+        }
+        return;
+      }
+
       final downloadInfo = info['download'] as Map<String, dynamic>?;
       final url = downloadInfo?['url'] as String?;
       if (url != null && url.isNotEmpty) {
-        final fullUrl = url.startsWith('http')
-            ? url
-            : '${_baseUrl()}$url';
+        final fullUrl = url.startsWith('http') ? url : '${_baseUrl()}$url';
         final file = await DefaultCacheManager().getSingleFile(fullUrl);
         if (mounted) setState(() { _cachedFile = file; _loading = false; });
       } else {
@@ -319,13 +330,10 @@ class _StudentMaterialViewerScreenState
     }
   }
 
-  String _baseUrl() {
-    return 'http://localhost:3000'; // replaced by env in prod
-  }
+  String _baseUrl() => 'http://localhost:3000';
 
   @override
   Widget build(BuildContext context) {
-    // Find material from any cached lesson data
     return Scaffold(
       backgroundColor:
           Theme.of(context).brightness == Brightness.dark ? Colors.black : Colors.white,
@@ -357,18 +365,24 @@ class _StudentMaterialViewerScreenState
                       ),
                     ),
                   )
-                : _cachedFile != null
-                    ? _FileViewer(file: _cachedFile!)
-                    : Column(
-                        children: [
-                          _BackBar(onBack: () => context.pop()),
-                          const Expanded(
-                            child: Center(
-                              child: Text('No file available for this material.'),
-                            ),
+                : _noteBody != null
+                    ? _NoteViewer(
+                        title: _noteTitle,
+                        body: _noteBody!,
+                        onBack: () => context.pop(),
+                      )
+                    : _cachedFile != null
+                        ? _FileViewer(file: _cachedFile!)
+                        : Column(
+                            children: [
+                              _BackBar(onBack: () => context.pop()),
+                              const Expanded(
+                                child: Center(
+                                  child: Text('No file available for this material.'),
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
       ),
     );
   }
@@ -519,6 +533,150 @@ class _BackBar extends StatelessWidget {
               ?.copyWith(fontWeight: FontWeight.w700)),
     ],
   );
+}
+
+// ─── Note Viewer ─────────────────────────────────────────────────────────────
+
+class _NoteViewer extends StatelessWidget {
+  const _NoteViewer({required this.body, this.title, required this.onBack});
+  final String body;
+  final String? title;
+  final VoidCallback onBack;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Header bar
+        Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [AppColors.eLearningDark, AppColors.eLearningPrimary],
+            ),
+          ),
+          child: SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(4, 4, 16, 16),
+              child: Row(children: [
+                IconButton(
+                  icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                      color: Colors.white70, size: 18),
+                  onPressed: onBack,
+                ),
+                Expanded(
+                  child: Text(
+                    title ?? 'Study Note',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 17,
+                    ),
+                  ),
+                ),
+                const Icon(Icons.article_rounded, color: Colors.white54, size: 20),
+              ]),
+            ),
+          ),
+        ),
+        // Note body
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: _parseNoteBody(context, body, isDark),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  List<Widget> _parseNoteBody(
+      BuildContext context, String raw, bool isDark) {
+    final lines = raw.split('\n');
+    final widgets = <Widget>[];
+    for (final line in lines) {
+      final trimmed = line.trim();
+      if (trimmed.isEmpty) {
+        widgets.add(const SizedBox(height: 12));
+      } else if (trimmed.startsWith('# ')) {
+        widgets.add(Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Text(trimmed.substring(2),
+              style: Theme.of(context)
+                  .textTheme
+                  .titleLarge
+                  ?.copyWith(fontWeight: FontWeight.w900,
+                      color: AppColors.eLearningPrimary)),
+        ));
+      } else if (trimmed.startsWith('- ') ||
+          trimmed.startsWith('• ') ||
+          RegExp(r'^\d+\.').hasMatch(trimmed)) {
+        // Bullet / numbered point
+        widgets.add(Padding(
+          padding: const EdgeInsets.only(left: 8, bottom: 6),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 6, height: 6,
+                margin: const EdgeInsets.only(top: 7, right: 10),
+                decoration: BoxDecoration(
+                  color: AppColors.eLearningPrimary,
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  trimmed.replaceFirst(RegExp(r'^[-•]\s+'), ''),
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      height: 1.6,
+                      color: isDark ? Colors.white : Colors.black87),
+                ),
+              ),
+            ],
+          ),
+        ));
+      } else if (trimmed.contains(':') && trimmed.length < 80) {
+        // Key: value line — render as highlighted term
+        final idx = trimmed.indexOf(':');
+        final key = trimmed.substring(0, idx).trim();
+        final val = trimmed.substring(idx + 1).trim();
+        widgets.add(Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: RichText(
+            text: TextSpan(
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                  height: 1.6,
+                  color: isDark ? Colors.white : Colors.black87),
+              children: [
+                TextSpan(
+                  text: '$key: ',
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w900,
+                      color: AppColors.eLearningPrimary),
+                ),
+                TextSpan(text: val),
+              ],
+            ),
+          ),
+        ));
+      } else {
+        widgets.add(Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Text(trimmed,
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                  height: 1.7,
+                  color: isDark ? Colors.white : Colors.black87)),
+        ));
+      }
+    }
+    return widgets;
+  }
 }
 
 // ─── Assignment Screen ───────────────────────────────────────────────────────
@@ -711,51 +869,151 @@ class StudentQuizLobbyScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final attemptAsync =
-        ref.watch(quizAttemptNotifierProvider(quizId));
+    final attemptAsync = ref.watch(quizAttemptNotifierProvider(quizId));
+    final quizAsync    = ref.watch(elearningQuizByIdProvider(quizId));
 
-    return _LearnScaffold(
-      title: 'Ready?',
-      kicker: 'QUIZ LOBBY',
-      subtitle: 'Read the instructions, then start when ready',
-      children: [
-        attemptAsync.when(
-          data: (attempt) {
-            if (attempt?.isInProgress == true) {
-              return _PrimaryAction(
-                label: 'Continue Quiz',
-                onTap: () =>
-                    context.push('/student/learn/quizzes/$quizId/attempt'),
-              );
-            }
-            return _PrimaryAction(
-              label: 'Start Quiz',
-              onTap: () async {
-                try {
-                  await ref
-                      .read(quizAttemptNotifierProvider(quizId).notifier)
-                      .start();
-                  if (context.mounted) {
-                    context.push('/student/learn/quizzes/$quizId/attempt');
-                  }
-                } catch (e) {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Error: $e')));
-                  }
-                }
-              },
-            );
-          },
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => _ErrorCard(message: e.toString()),
-        ),
-      ],
+    return quizAsync.when(
+      loading: () => const _LoadingScaffold(),
+      error: (_, __) => _LearnScaffold(
+        title: 'Quiz',
+        kicker: 'QUIZ LOBBY',
+        subtitle: 'Read the instructions, then start when ready',
+        children: [_QuizStartButton(quizId: quizId, attemptAsync: attemptAsync)],
+      ),
+      data: (quiz) => _LearnScaffold(
+        title: quiz.title,
+        kicker: 'QUIZ LOBBY',
+        subtitle: quiz.instructions ?? 'Read the instructions, then start when ready.',
+        children: [
+          // Quiz info strip
+          _TapCard(
+            child: Column(children: [
+              Row(children: [
+                _QuizInfoChip(
+                  icon: Icons.quiz_rounded,
+                  label: '${quiz.questionCount} questions',
+                ),
+                const SizedBox(width: 8),
+                if (quiz.timeLimitMinutes != null)
+                  _QuizInfoChip(
+                    icon: Icons.timer_rounded,
+                    label: '${quiz.timeLimitMinutes} min',
+                  ),
+                const SizedBox(width: 8),
+                if (quiz.passingScore != null)
+                  _QuizInfoChip(
+                    icon: Icons.check_circle_rounded,
+                    label: 'Pass: ${quiz.passingScore!.toStringAsFixed(0)}%',
+                  ),
+              ]),
+              const SizedBox(height: 12),
+              Row(children: [
+                _QuizInfoChip(
+                  icon: Icons.repeat_rounded,
+                  label: 'Max ${quiz.maxAttempts} attempt${quiz.maxAttempts == 1 ? "" : "s"}',
+                ),
+                const SizedBox(width: 8),
+                _QuizInfoChip(
+                  icon: Icons.star_rounded,
+                  label: '${quiz.totalPoints.toStringAsFixed(0)} points',
+                ),
+              ]),
+            ]),
+          ),
+          // Question type overview
+          _TapCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Question types',
+                    style: Theme.of(context).textTheme.titleSmall
+                        ?.copyWith(fontWeight: FontWeight.w900)),
+                const SizedBox(height: 10),
+                Wrap(spacing: 8, runSpacing: 8, children: [
+                  for (final type in {for (final q in quiz.questions) q.type})
+                    _QuizInfoChip(
+                      icon: type == 'MULTIPLE_CHOICE'
+                          ? Icons.radio_button_checked_rounded
+                          : type == 'TRUE_FALSE'
+                              ? Icons.check_box_rounded
+                              : Icons.short_text_rounded,
+                      label: type == 'MULTIPLE_CHOICE'
+                          ? 'Multiple choice'
+                          : type == 'TRUE_FALSE'
+                              ? 'True / False'
+                              : 'Short answer',
+                    ),
+                ]),
+              ],
+            ),
+          ),
+          _QuizStartButton(quizId: quizId, attemptAsync: attemptAsync),
+        ],
+      ),
     );
   }
 }
 
-// ─── Quiz Attempt ────────────────────────────────────────────────────────────
+class _QuizInfoChip extends StatelessWidget {
+  const _QuizInfoChip({required this.icon, required this.label});
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+    decoration: BoxDecoration(
+      color: AppColors.eLearningLight,
+      borderRadius: BorderRadius.circular(999),
+    ),
+    child: Row(mainAxisSize: MainAxisSize.min, children: [
+      Icon(icon, size: 14, color: AppColors.eLearningPrimary),
+      const SizedBox(width: 5),
+      Text(label, style: const TextStyle(
+        fontSize: 12, fontWeight: FontWeight.w800,
+        color: AppColors.eLearningPrimary,
+      )),
+    ]),
+  );
+}
+
+class _QuizStartButton extends ConsumerWidget {
+  const _QuizStartButton({required this.quizId, required this.attemptAsync});
+  final String quizId;
+  final AsyncValue<ElearningQuizAttemptModel?> attemptAsync;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => attemptAsync.when(
+    data: (attempt) {
+      if (attempt?.isInProgress == true) {
+        return _PrimaryAction(
+          label: 'Continue Quiz',
+          onTap: () => context.push('/student/learn/quizzes/$quizId/attempt'),
+        );
+      }
+      return _PrimaryAction(
+        label: 'Start Quiz',
+        onTap: () async {
+          try {
+            await ref.read(quizAttemptNotifierProvider(quizId).notifier).start();
+            if (context.mounted) {
+              context.push('/student/learn/quizzes/$quizId/attempt');
+            }
+          } catch (e) {
+            if (context.mounted) {
+              ScaffoldMessenger.of(context)
+                  .showSnackBar(SnackBar(content: Text('Error: $e')));
+            }
+          }
+        },
+      );
+    },
+    loading: () => const Center(child: CircularProgressIndicator()),
+    error: (e, _) => _ErrorCard(message: e.toString()),
+  );
+}
+
+// ─── Quiz Attempt ─────────────────────────────────────────────────────────────
 
 class StudentQuizAttemptScreen extends ConsumerStatefulWidget {
   const StudentQuizAttemptScreen({super.key, required this.quizId});
@@ -768,17 +1026,31 @@ class StudentQuizAttemptScreen extends ConsumerStatefulWidget {
 
 class _StudentQuizAttemptScreenState
     extends ConsumerState<StudentQuizAttemptScreen> {
-  // ignore: unused_field — wired when per-question UI is added
-  final int _currentIndex = 0;
-  // ignore: unused_field
-  final Map<String, String> _selectedOptions = {};
-  // ignore: unused_field
-  final Map<String, String> _textAnswers = {};
+  int _currentIndex = 0;
+  final Map<String, String> _selectedOptions = {}; // questionId → optionId / 'true' / 'false'
+  final Map<String, TextEditingController> _textControllers = {};
   bool _submitting = false;
+
+  @override
+  void dispose() {
+    for (final c in _textControllers.values) { c.dispose(); }
+    super.dispose();
+  }
+
+  TextEditingController _controllerFor(String qId) =>
+      _textControllers.putIfAbsent(qId, TextEditingController.new);
 
   Future<void> _submitQuiz() async {
     setState(() => _submitting = true);
     try {
+      // Save any open short-answer text as answers (fire-and-forget, best-effort).
+      for (final entry in _textControllers.entries) {
+        if (entry.value.text.isNotEmpty) {
+          await ref
+              .read(quizAttemptNotifierProvider(widget.quizId).notifier)
+              .answer(entry.key, {'textAnswer': entry.value.text.trim()});
+        }
+      }
       final result = await ref
           .read(quizAttemptNotifierProvider(widget.quizId).notifier)
           .submit();
@@ -799,53 +1071,432 @@ class _StudentQuizAttemptScreenState
   @override
   Widget build(BuildContext context) {
     final attemptAsync = ref.watch(quizAttemptNotifierProvider(widget.quizId));
+    final quizAsync    = ref.watch(elearningQuizByIdProvider(widget.quizId));
 
     return attemptAsync.when(
       loading: () => const _LoadingScaffold(),
       error: (e, _) => _ErrorScaffold(message: e.toString()),
       data: (attempt) {
         if (attempt == null) {
-          return _ErrorScaffold(message: 'No active attempt. Go back and start the quiz.');
+          return _ErrorScaffold(
+              message: 'No active attempt. Go back and tap Start Quiz.');
         }
-        return Scaffold(
-          backgroundColor:
-              Theme.of(context).brightness == Brightness.dark ? null : Colors.white,
-          appBar: AppBar(
-            title: const Text('Quiz'),
-            backgroundColor: AppColors.eLearningPrimary,
-            foregroundColor: Colors.white,
-          ),
-          body: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Attempt #${attempt.attemptNumber}',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w900,
-                          color: AppColors.eLearningPrimary,
-                        )),
-                const SizedBox(height: 8),
-                Text('In progress — answer each question and submit when done.',
-                    style: Theme.of(context).textTheme.bodyMedium),
-                const Spacer(),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
-                    style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.eLearningPrimary,
-                        padding: const EdgeInsets.symmetric(vertical: 16)),
-                    onPressed: _submitting ? null : _submitQuiz,
-                    child: Text(_submitting ? 'Submitting…' : 'Submit Quiz'),
+        return quizAsync.when(
+          loading: () => const _LoadingScaffold(),
+          error: (e, _) => _ErrorScaffold(message: e.toString()),
+          data: (quiz) {
+            final questions = [...quiz.questions]
+              ..sort((a, b) => a.orderIndex.compareTo(b.orderIndex));
+            if (questions.isEmpty) {
+              return Scaffold(
+                appBar: AppBar(
+                  title: Text(quiz.title),
+                  backgroundColor: AppColors.eLearningPrimary,
+                  foregroundColor: Colors.white,
+                ),
+                body: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text('No questions found.'),
+                      const SizedBox(height: 24),
+                      FilledButton(
+                        style: FilledButton.styleFrom(
+                            backgroundColor: AppColors.eLearningPrimary),
+                        onPressed: _submitting ? null : _submitQuiz,
+                        child: Text(_submitting ? 'Submitting…' : 'Submit Quiz'),
+                      ),
+                    ],
                   ),
                 ),
-              ],
-            ),
-          ),
+              );
+            }
+
+            final q      = questions[_currentIndex];
+            final isLast = _currentIndex == questions.length - 1;
+            final isDark = Theme.of(context).brightness == Brightness.dark;
+
+            return Scaffold(
+              backgroundColor: isDark ? null : AppColors.offWhite,
+              appBar: AppBar(
+                title: Text(quiz.title),
+                backgroundColor: AppColors.eLearningPrimary,
+                foregroundColor: Colors.white,
+                bottom: PreferredSize(
+                  preferredSize: const Size.fromHeight(4),
+                  child: LinearProgressIndicator(
+                    value: (_currentIndex + 1) / questions.length,
+                    backgroundColor: AppColors.eLearningPrimary,
+                    valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                    minHeight: 4,
+                  ),
+                ),
+              ),
+              body: Column(
+                children: [
+                  // Question counter header
+                  Container(
+                    width: double.infinity,
+                    color: AppColors.eLearningPrimary.withValues(alpha: 0.08),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 10),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Question ${_currentIndex + 1} of ${questions.length}',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w900,
+                            color: AppColors.eLearningPrimary,
+                            fontSize: 13,
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: AppColors.eLearningPrimary,
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            '${q.points.toStringAsFixed(0)} pt${q.points == 1 ? "" : "s"}',
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w900),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Scrollable question + answer area
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Question prompt card
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(20),
+                            decoration: BoxDecoration(
+                              color: isDark ? Colors.grey[900] : Colors.white,
+                              borderRadius: BorderRadius.circular(24),
+                              border: Border.all(color: AppColors.border),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(children: [
+                                  _TypeBadge(type: q.type),
+                                ]),
+                                const SizedBox(height: 12),
+                                Text(
+                                  q.prompt,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .titleMedium
+                                      ?.copyWith(
+                                          fontWeight: FontWeight.w700,
+                                          height: 1.5),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+
+                          // Answer section
+                          if (q.type == 'MULTIPLE_CHOICE')
+                            _McqOptions(
+                              options: q.options,
+                              selectedId: _selectedOptions[q.id],
+                              onSelect: (optId) async {
+                                setState(() => _selectedOptions[q.id] = optId);
+                                await ref
+                                    .read(quizAttemptNotifierProvider(
+                                            widget.quizId)
+                                        .notifier)
+                                    .answer(q.id,
+                                        {'selectedOptionId': optId});
+                              },
+                            )
+                          else if (q.type == 'TRUE_FALSE')
+                            _TrueFalseOptions(
+                              selected: _selectedOptions[q.id],
+                              onSelect: (val) async {
+                                setState(() => _selectedOptions[q.id] = val);
+                                await ref
+                                    .read(quizAttemptNotifierProvider(
+                                            widget.quizId)
+                                        .notifier)
+                                    .answer(q.id,
+                                        {'selectedOptionId': val});
+                              },
+                            )
+                          else
+                            _ShortAnswerField(
+                              controller: _controllerFor(q.id),
+                            ),
+
+                          const SizedBox(height: 32),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  // Navigation row
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                    decoration: BoxDecoration(
+                      color: isDark ? null : Colors.white,
+                      border: const Border(
+                          top: BorderSide(color: AppColors.border)),
+                    ),
+                    child: Row(children: [
+                      if (_currentIndex > 0) ...[
+                        Expanded(
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppColors.eLearningPrimary,
+                              side: const BorderSide(
+                                  color: AppColors.eLearningPrimary),
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16)),
+                            ),
+                            onPressed: () =>
+                                setState(() => _currentIndex--),
+                            child: const Text('← Previous'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                      ],
+                      Expanded(
+                        flex: isLast ? 1 : 2,
+                        child: FilledButton(
+                          style: FilledButton.styleFrom(
+                            backgroundColor: isLast
+                                ? Colors.green.shade600
+                                : AppColors.eLearningPrimary,
+                            padding:
+                                const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16)),
+                          ),
+                          onPressed: isLast
+                              ? (_submitting ? null : _submitQuiz)
+                              : () => setState(() => _currentIndex++),
+                          child: Text(
+                            isLast
+                                ? (_submitting
+                                    ? 'Submitting…'
+                                    : 'Submit Quiz ✓')
+                                : 'Next →',
+                            style: const TextStyle(fontWeight: FontWeight.w900),
+                          ),
+                        ),
+                      ),
+                    ]),
+                  ),
+                ],
+              ),
+            );
+          },
         );
       },
     );
   }
+}
+
+// ─── Quiz answer widgets ──────────────────────────────────────────────────────
+
+class _TypeBadge extends StatelessWidget {
+  const _TypeBadge({required this.type});
+  final String type;
+
+  @override
+  Widget build(BuildContext context) {
+    final (label, icon) = switch (type) {
+      'MULTIPLE_CHOICE' => ('Multiple Choice', Icons.radio_button_checked_rounded),
+      'TRUE_FALSE'      => ('True / False',    Icons.check_box_rounded),
+      _                 => ('Short Answer',    Icons.short_text_rounded),
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppColors.eLearningLight,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, size: 13, color: AppColors.eLearningPrimary),
+        const SizedBox(width: 5),
+        Text(label,
+            style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w900,
+                color: AppColors.eLearningPrimary)),
+      ]),
+    );
+  }
+}
+
+class _McqOptions extends StatelessWidget {
+  const _McqOptions({
+    required this.options,
+    required this.selectedId,
+    required this.onSelect,
+  });
+  final List<ElearningQuizOptionModel> options;
+  final String? selectedId;
+  final void Function(String) onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    final sorted = [...options]
+      ..sort((a, b) => a.orderIndex.compareTo(b.orderIndex));
+    final labels = ['A', 'B', 'C', 'D', 'E'];
+    return Column(
+      children: sorted.asMap().entries.map((e) {
+        final idx      = e.key;
+        final opt      = e.value;
+        final selected = selectedId == opt.id;
+        final isDark   = Theme.of(context).brightness == Brightness.dark;
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: GestureDetector(
+            onTap: () => onSelect(opt.id),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: selected
+                    ? AppColors.eLearningPrimary
+                    : (isDark ? Colors.grey[900] : Colors.white),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: selected
+                      ? AppColors.eLearningPrimary
+                      : AppColors.border,
+                  width: selected ? 2 : 1,
+                ),
+              ),
+              child: Row(children: [
+                // Letter bubble
+                Container(
+                  width: 30, height: 30,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: selected
+                        ? Colors.white.withValues(alpha: 0.25)
+                        : AppColors.eLearningLight,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    idx < labels.length ? labels[idx] : '${idx + 1}',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 13,
+                      color: selected
+                          ? Colors.white
+                          : AppColors.eLearningPrimary,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    opt.text,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 15,
+                      color: selected ? Colors.white : null,
+                    ),
+                  ),
+                ),
+                if (selected)
+                  const Icon(Icons.check_circle_rounded,
+                      color: Colors.white, size: 20),
+              ]),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+}
+
+class _TrueFalseOptions extends StatelessWidget {
+  const _TrueFalseOptions({required this.selected, required this.onSelect});
+  final String? selected;
+  final void Function(String) onSelect;
+
+  Widget _btn(BuildContext context, String val, IconData icon, Color accent) {
+    final active = selected == val;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => onSelect(val),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(vertical: 22),
+          decoration: BoxDecoration(
+            color: active ? accent : Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: active ? accent : AppColors.border,
+              width: active ? 2 : 1,
+            ),
+          ),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Icon(icon, size: 32,
+                color: active ? Colors.white : accent),
+            const SizedBox(height: 8),
+            Text(val,
+                style: TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 16,
+                  color: active ? Colors.white : accent,
+                )),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => Row(children: [
+    _btn(context, 'True',  Icons.check_circle_rounded, Colors.green.shade600),
+    const SizedBox(width: 12),
+    _btn(context, 'False', Icons.cancel_rounded,        Colors.red.shade500),
+  ]);
+}
+
+class _ShortAnswerField extends StatelessWidget {
+  const _ShortAnswerField({required this.controller});
+  final TextEditingController controller;
+
+  @override
+  Widget build(BuildContext context) => TextField(
+    controller: controller,
+    minLines: 3,
+    maxLines: 6,
+    textCapitalization: TextCapitalization.sentences,
+    decoration: InputDecoration(
+      hintText: 'Write your answer here…',
+      filled: true,
+      fillColor: Theme.of(context).brightness == Brightness.dark
+          ? Colors.grey[900]
+          : Colors.white,
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: const BorderSide(
+            color: AppColors.eLearningPrimary, width: 2),
+      ),
+    ),
+  );
 }
 
 // ─── Quiz Result ─────────────────────────────────────────────────────────────
@@ -1212,7 +1863,7 @@ class _CourseCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(course.subjectName, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900)),
-          Text(course.className, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
+          Text('${course.className} · ${course.stageLabel}', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
           const SizedBox(height: 8),
           LinearProgressIndicator(
             value: course.enrolledCount > 0 ? 0.5 : 0,
