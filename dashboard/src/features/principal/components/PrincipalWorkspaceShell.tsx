@@ -165,6 +165,15 @@ export function PrincipalActionCard({
 // ─── School health score ──────────────────────────────────────────────────────
 
 export function SchoolHealthScore({ health }: { health: SchoolHealth }) {
+  const weakAreas = [
+    health.academic < 60 ? 'academic performance' : '',
+    health.finance < 60 ? 'finance collection' : '',
+    health.operations < 60 ? 'operations' : '',
+  ].filter(Boolean);
+  const advisory = weakAreas.length
+    ? `${weakAreas.join(', ')} require executive attention.`
+    : 'No critical school health areas are currently flagged by the backend aggregates.';
+
   return (
     <div className="rounded-2xl border border-ks-navy/10 bg-white p-8 shadow-sm">
       <div className="grid gap-8 lg:grid-cols-[280px_minmax(0,1fr)]">
@@ -185,7 +194,7 @@ export function SchoolHealthScore({ health }: { health: SchoolHealth }) {
             <HealthBar label="Operations" value={health.operations}  tone="bg-ks-emerald" />
           </div>
           <div className="mt-6 rounded-xl border border-ks-navy/10 bg-ks-paper p-5 text-sm font-semibold leading-relaxed text-ks-muted">
-            <span className="font-black text-ks-navy">Advisory:</span> School health is stable, but Chemistry Form 3B and outstanding finance balances require executive attention this week.
+            <span className="font-black text-ks-navy">Advisory:</span> {advisory}
           </div>
         </div>
       </div>
@@ -743,7 +752,7 @@ export function DisciplineSeverityBar({ incidents }: { incidents: DisciplineInci
 // ─── Charts ───────────────────────────────────────────────────────────────────
 
 export function ExecutiveBarChart({ title, subtitle, values }: { title: string; subtitle?: string; values: Array<{ label: string; value: number; tone: string }> }) {
-  const max = Math.max(...values.map((v) => v.value));
+  const max = Math.max(...values.map((v) => v.value), 1);
   const total = values.reduce((s, v) => s + v.value, 0);
   const [hov, setHov] = useState<number | null>(null);
   return (
@@ -751,6 +760,11 @@ export function ExecutiveBarChart({ title, subtitle, values }: { title: string; 
       <h2 className="font-display text-xl font-black text-ks-navy">{title}</h2>
       {subtitle && <p className="mt-1 text-xs font-semibold text-ks-muted">{subtitle}</p>}
       <div className="mt-6 space-y-5">
+        {values.length === 0 && (
+          <p className="rounded-xl border border-dashed border-ks-line bg-ks-paper px-4 py-6 text-center text-sm font-semibold text-ks-muted">
+            No data available yet.
+          </p>
+        )}
         {values.map((item, i) => {
           const pct = Math.round((item.value / max) * 100);
           const share = total > 0 ? Math.round((item.value / total) * 100) : 0;
@@ -807,12 +821,13 @@ export function ExecutiveBarChart({ title, subtitle, values }: { title: string; 
 
 export function ExecutiveLineChart({ title, subtitle, values }: { title: string; subtitle?: string; values: number[] }) {
   const w = 560; const h = 220; const pad = 28;
-  const max = Math.max(...values); const min = Math.min(...values);
-  const current = values[values.length - 1];
+  const series = values.length >= 2 ? values : values.length === 1 ? [values[0], values[0]] : [0, 0];
+  const max = Math.max(...series); const min = Math.min(...series);
+  const current = series[series.length - 1];
   const prev    = values[values.length - 2] ?? current;
   const delta   = current - prev;
-  const points = values.map((v, i) => {
-    const x = pad + (i / (values.length - 1)) * (w - pad * 2);
+  const points = series.map((v, i) => {
+    const x = pad + (i / (series.length - 1)) * (w - pad * 2);
     const y = h - pad - ((v - min) / Math.max(max - min, 1)) * (h - pad * 2);
     return [x, y] as const;
   });
@@ -847,7 +862,7 @@ export function ExecutiveLineChart({ title, subtitle, values }: { title: string;
             animate={{ color: hovIdx !== null ? '#d9b75e' : '#061f33' }}
             transition={{ duration: 0.2 }}
           >
-            {hovIdx !== null ? values[hovIdx] : current}
+            {hovIdx !== null ? series[hovIdx] : current}
           </motion.p>
           <p className={`text-[10px] font-black uppercase tracking-widest ${delta >= 0 ? 'text-ks-emerald' : 'text-ks-rose'}`}>
             {delta >= 0 ? '▲' : '▼'} {Math.abs(delta)} vs prev
@@ -918,11 +933,11 @@ export function ExecutiveLineChart({ title, subtitle, values }: { title: string;
               className="pointer-events-none absolute z-50 -translate-x-1/2 rounded-xl bg-ks-navy px-4 py-3 shadow-2xl"
               style={{ left: `${(hp[0] / w) * 100}%`, top: `${(hp[1] / h) * 100}%`, marginTop: '-60px' }}
             >
-              <p className="font-display text-2xl font-black text-ks-gold">{values[hovIdx]}</p>
+              <p className="font-display text-2xl font-black text-ks-gold">{series[hovIdx]}</p>
               <p className="text-[9px] font-bold uppercase tracking-wider text-white/60">
-                Point {hovIdx + 1} / {values.length}
+                Point {hovIdx + 1} / {series.length}
                 {hovIdx > 0 && (
-                  <> &nbsp;·&nbsp; {values[hovIdx] > values[hovIdx - 1] ? '▲' : '▼'} {Math.abs(values[hovIdx] - values[hovIdx - 1])}</>
+                  <> &nbsp;·&nbsp; {series[hovIdx] > series[hovIdx - 1] ? '▲' : '▼'} {Math.abs(series[hovIdx] - series[hovIdx - 1])}</>
                 )}
               </p>
               <div className="absolute left-1/2 top-full -translate-x-1/2 border-[5px] border-transparent border-t-ks-navy" />

@@ -8,6 +8,11 @@ export class CreateFeeCategoryDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(40)
+  code?: string;
+
+  @IsOptional()
+  @IsString()
   @MaxLength(300)
   description?: string;
 

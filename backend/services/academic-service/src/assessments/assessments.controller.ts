@@ -85,7 +85,7 @@ export class AssessmentsController {
   }
 
   @Post('assessments/:id/marks/bulk')
-  @Roles(ROLES.TEACHER)
+  @Roles(ROLES.TEACHER, ROLES.HEAD_OF_DEPARTMENT)
   bulkMarks(@Param('id') id: string, @Body() dto: BulkMarksDto, @CurrentUser() user?: RequestUser) {
     return this.assessmentsService.bulkUpsertMarks(id, dto, user!);
   }
@@ -102,7 +102,7 @@ export class AssessmentsController {
   }
 
   @Post('assessments/:id/submit')
-  @Roles(ROLES.TEACHER)
+  @Roles(ROLES.TEACHER, ROLES.HEAD_OF_DEPARTMENT)
   submit(@Param('id') id: string, @Body() dto: SubmitAssessmentDto, @CurrentUser() user?: RequestUser) {
     return this.assessmentsService.submitAssessment(id, dto, user!);
   }

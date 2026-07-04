@@ -63,9 +63,10 @@ const teacherSections: SidebarSection[] = [
   {
     title: 'Academic Work',
     items: [
-      { to: '/teacher/assessments', icon: FileSpreadsheet, label: 'Marks Entry',      end: true },
-      { to: '/teacher/syllabus',    icon: Target,          label: 'Syllabus Tracker', end: true },
-      { to: '/teacher/timetable',   icon: CalendarCheck,   label: 'Timetable',        end: true },
+      { to: '/teacher/assessments',    icon: FileSpreadsheet,   label: 'Marks Entry',         end: true },
+      { to: '/teacher/syllabus',       icon: Target,            label: 'Syllabus Tracker',    end: true },
+      { to: '/teacher/timetable',      icon: CalendarCheck,     label: 'Timetable',           end: true },
+      { to: '/teacher/report-remarks', icon: MessageSquarePlus, label: 'Report Card Remarks', end: true },
     ],
   },
   {
@@ -111,9 +112,18 @@ const hodSections: SidebarSection[] = [
     ],
   },
   {
+    title: 'Teaching',
+    items: [
+      { to: '/teacher',            icon: LayoutDashboard, label: 'Teacher Dashboard', end: true },
+      { to: '/teacher/classes',    icon: Users,           label: 'My Classes',        end: true },
+      { to: '/teacher/assessments',icon: BookOpen,        label: 'My Assessments',    end: true },
+    ],
+  },
+  {
     title: 'Department',
     items: [
       { to: '/hod/department',                      icon: Target, label: 'Department Overview', end: true },
+      { to: '/hod/assignments',                     icon: BookOpen, label: 'Subject Assignments', end: true },
       { to: '/hod/department/subjects/chemistry',   icon: Shield, label: 'Chemistry Risk'                 },
       { to: '/hod/teachers',                        icon: Users,  label: 'Teacher Matrix',      end: true },
       { to: '/hod/teachers/teacher-amina',          icon: User,   label: 'Teacher Detail'                 },

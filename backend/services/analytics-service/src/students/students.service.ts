@@ -582,36 +582,42 @@ export class StudentsService {
   }
 
   async topPerformers(classId?: string, subjectId?: string, termId?: string, limit = 10) {
-    const rows = await this.prisma.termResult.findMany({
-      where: { termId: termId || undefined, subjectId: subjectId || undefined, isPublished: true },
-      orderBy: [{ weightedTotal: 'desc' }],
-      take: 500,
-    });
+    try {
+      const rows = await this.prisma.termResult.findMany({
+        where: { termId: termId || undefined, subjectId: subjectId || undefined, isPublished: true },
+        orderBy: { weightedTotal: 'desc' },
+        take: 500,
+      });
 
-    const studentIds = [...new Set(rows.map((row) => row.studentId))];
-    const [students, enrolments, classes, trends] = await Promise.all([
-      this.prisma.student.findMany({ where: { id: { in: studentIds } } }),
-      this.prisma.enrolment.findMany({ where: { studentId: { in: studentIds }, isActive: true } }),
-      this.prisma.class.findMany(),
-      this.prisma.performanceTrend.findMany({ where: { studentId: { in: studentIds }, subjectId: subjectId || undefined } }),
-    ]);
+      if (!rows.length) return [];
 
-    return rows
-      .map((row, index) => {
-        const student = students.find((x) => x.id === row.studentId);
-        const enrolment = enrolments.find((x) => x.studentId === row.studentId);
-        const klass = classes.find((x) => x.id === enrolment?.classId);
-        return {
-          rank: index + 1,
-          studentName: student ? `${student.firstName} ${student.lastName}` : 'Unknown',
-          className: klass?.name || 'Unknown',
-          average: row.weightedTotal,
-          grade: row.grade,
-          improvementDelta: trends.find((x) => x.studentId === row.studentId)?.trendSlope || 0,
-        };
-      })
-      .filter((row) => !classId || row.className === classId)
-      .slice(0, limit);
+      const studentIds = [...new Set(rows.map((row) => row.studentId))];
+      const [students, enrolments, classes, trends] = await Promise.all([
+        this.prisma.student.findMany({ where: { id: { in: studentIds } } }),
+        this.prisma.enrolment.findMany({ where: { studentId: { in: studentIds }, isActive: true } }),
+        this.prisma.class.findMany(),
+        this.prisma.performanceTrend.findMany({ where: { studentId: { in: studentIds }, subjectId: subjectId || undefined } }),
+      ]);
+
+      return rows
+        .map((row, index) => {
+          const student = students.find((x) => x.id === row.studentId);
+          const enrolment = enrolments.find((x) => x.studentId === row.studentId);
+          const klass = classes.find((x) => x.id === enrolment?.classId);
+          return {
+            rank: index + 1,
+            studentName: student ? `${student.firstName} ${student.lastName}` : 'Unknown',
+            className: klass?.name || 'Unknown',
+            average: row.weightedTotal,
+            grade: row.grade,
+            improvementDelta: trends.find((x) => x.studentId === row.studentId)?.trendSlope || 0,
+          };
+        })
+        .filter((row) => !classId || row.className === classId)
+        .slice(0, limit);
+    } catch {
+      return [];
+    }
   }
 
   async mostImproved(classId?: string, subjectId?: string, _termId?: string) {

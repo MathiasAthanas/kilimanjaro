@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { mkdirSync, createWriteStream } from 'fs';
 import { dirname, join } from 'path';
-import PDFDocument from 'pdfkit';
+import PDFDocument = require('pdfkit');
 
 @Injectable()
 export class InvoicePdfService {

@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Teacher Performance | Kilimanjaro Teachers</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-container": "#eaedff",
+                        "on-tertiary-fixed": "#07006c",
+                        "inverse-primary": "#89ceff",
+                        "on-primary-container": "#003751",
+                        "on-tertiary-container": "#1407ad",
+                        "surface-dim": "#d2d9f4",
+                        "tertiary-container": "#8d90ff",
+                        "error-container": "#ffdad6",
+                        "surface-variant": "#dae2fd",
+                        "on-secondary-fixed": "#001f26",
+                        "outline": "#6e7881",
+                        "surface-container-highest": "#dae2fd",
+                        "primary-fixed": "#c9e6ff",
+                        "tertiary": "#494bd6",
+                        "on-surface-variant": "#3e4850",
+                        "on-error-container": "#93000a",
+                        "error": "#ba1a1a",
+                        "surface-tint": "#006591",
+                        "secondary": "#00687a",
+                        "tertiary-fixed": "#e1e0ff",
+                        "on-tertiary-fixed-variant": "#2f2ebe",
+                        "surface-container-high": "#e2e7ff",
+                        "on-tertiary": "#ffffff",
+                        "on-primary-fixed": "#001e2f",
+                        "on-secondary-fixed-variant": "#004e5c",
+                        "on-secondary": "#ffffff",
+                        "secondary-fixed": "#acedff",
+                        "inverse-on-surface": "#eef0ff",
+                        "inverse-surface": "#283044",
+                        "background": "#faf8ff",
+                        "secondary-fixed-dim": "#4cd7f6",
+                        "on-primary": "#ffffff",
+                        "outline-variant": "#bec8d2",
+                        "on-error": "#ffffff",
+                        "surface": "#faf8ff",
+                        "primary-fixed-dim": "#89ceff",
+                        "tertiary-fixed-dim": "#c0c1ff",
+                        "on-background": "#131b2e",
+                        "on-surface": "#131b2e",
+                        "primary-container": "#0ea5e9",
+                        "primary": "#006591",
+                        "surface-container-lowest": "#ffffff",
+                        "on-secondary-container": "#006172",
+                        "surface-bright": "#faf8ff",
+                        "surface-container-low": "#f2f3ff",
+                        "secondary-container": "#57dffe",
+                        "on-primary-fixed-variant": "#004c6e"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "lg": "24px",
+                        "base": "4px",
+                        "container-padding": "20px",
+                        "xs": "8px",
+                        "xl": "32px",
+                        "sm": "12px",
+                        "md": "16px"
+                    },
+                    "fontFamily": {
+                        "label-md": ["Plus Jakarta Sans"],
+                        "display-lg": ["Space Grotesk"],
+                        "headline-lg": ["Space Grotesk"],
+                        "body-md": ["Plus Jakarta Sans"],
+                        "body-lg": ["Plus Jakarta Sans"],
+                        "headline-md": ["Space Grotesk"],
+                        "headline-sm": ["Space Grotesk"],
+                        "body-sm": ["Plus Jakarta Sans"],
+                        "label-lg": ["Plus Jakarta Sans"]
+                    },
+                    "fontSize": {
+                        "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.04em", "fontWeight": "600"}],
+                        "display-lg": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "headline-lg": ["30px", {"lineHeight": "36px", "fontWeight": "600"}],
+                        "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                        "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                        "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                        "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "500"}],
+                        "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                        "label-lg": ["14px", {"lineHeight": "20px", "letterSpacing": "0.01em", "fontWeight": "600"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background font-body-md min-h-screen pb-24">
+<!-- TopAppBar -->
+<header class="flex justify-between items-center px-container-padding h-16 w-full fixed top-0 z-50 bg-surface dark:bg-inverse-surface border-b border-outline-variant dark:border-outline/30 shadow-sm dark:shadow-none">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full overflow-hidden border-2 border-primary-fixed">
+<img alt="Teacher profile photo" class="w-full h-full object-cover" data-alt="A professional headshot of a senior African male educator in his late 50s, wearing a crisp white shirt and scholarly spectacles. He is set against a blurred background of a modern academic library with soft blue and white highlights. The lighting is high-key and optimistic, embodying the Kilimanjaro Schools' corporate modern aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDJRqwjTHDMtulcBu3kQZiwLFllOHcZqfCXHQ1SGILHxJ_fqJO6r2NhGPpB44w08jQMIHyyldipaRdH8U232X8gLIK2ZMQhi0xJmGSz2Q9KpGWk3-ern4fKolqMNu1CRToFKbkDNye3QD5L40Y9TmaZSqdG7p9QZsTC1T9xx-NrpK-rMhDPHxRAKMCfM-0Sos1jrqh_QTjz6luTY6J59l82DuAKwV6VHTgQdsXbKP1xMFZZPnJoQVlgjwswanLKORyIQBoQoBpccw"/>
+</div>
+<h1 class="font-headline-sm text-headline-sm-mobile md:text-headline-sm font-bold tracking-tight text-primary dark:text-primary-fixed-dim">Kilimanjaro Teachers</h1>
+</div>
+<button class="material-symbols-outlined text-on-surface-variant dark:text-surface-variant p-2 hover:bg-surface-container-high dark:hover:bg-surface-variant transition-colors rounded-full">
+            notifications
+        </button>
+</header>
+<main class="pt-20 px-container-padding max-w-5xl mx-auto">
+<!-- Summary Header Bento Section -->
+<section class="mb-lg">
+<div class="grid grid-cols-1 md:grid-cols-3 gap-md">
+<div class="md:col-span-2 p-xl rounded-xl bg-primary-container text-on-primary-container shadow-md flex flex-col justify-center relative overflow-hidden">
+<div class="absolute -right-8 -bottom-8 opacity-10">
+<span class="material-symbols-outlined !text-[120px]">science</span>
+</div>
+<p class="font-label-lg text-label-lg uppercase tracking-wider mb-xs opacity-80">Department View</p>
+<h2 class="font-display-lg text-display-lg mb-xs">Sciences Performance</h2>
+<p class="font-body-md text-body-md max-w-md">Real-time performance tracking for 5 senior educators. Overall syllabus completion is at <span class="font-bold">84%</span> for the current term.</p>
+</div>
+<div class="p-md rounded-xl bg-surface-container border border-outline-variant shadow-sm flex flex-col justify-between">
+<div>
+<p class="font-label-md text-label-md text-on-surface-variant">Top Performer</p>
+<p class="font-headline-sm text-headline-sm text-primary font-bold">Hassan Ally</p>
+</div>
+<div class="flex items-end justify-between">
+<div>
+<p class="font-label-md text-label-md text-on-surface-variant">Avg. Score</p>
+<p class="font-headline-md text-headline-md text-secondary">92%</p>
+</div>
+<span class="material-symbols-outlined text-secondary text-4xl" data-weight="fill">trending_up</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Filter/Sort Chips -->
+<div class="flex gap-xs mb-lg overflow-x-auto pb-2 no-scrollbar">
+<button class="px-md py-xs rounded-full bg-primary text-on-primary font-label-lg flex items-center gap-xs">
+<span class="material-symbols-outlined text-[18px]">sort</span>
+                All Teachers
+            </button>
+<button class="px-md py-xs rounded-full bg-surface-container text-on-surface-variant font-label-lg hover:bg-surface-container-high transition-colors">Average Score</button>
+<button class="px-md py-xs rounded-full bg-surface-container text-on-surface-variant font-label-lg hover:bg-surface-container-high transition-colors">On-Time Submissions</button>
+<button class="px-md py-xs rounded-full bg-surface-container text-on-surface-variant font-label-lg hover:bg-surface-container-high transition-colors">Syllabus Progress</button>
+</div>
+<!-- Teacher Cards List -->
+<div class="flex flex-col gap-md">
+<!-- Teacher Card: Grace Ndosi -->
+<div class="p-md rounded-xl bg-surface border border-outline-variant shadow-sm hover:shadow-md transition-shadow group">
+<div class="flex items-start justify-between mb-md">
+<div class="flex gap-md items-center">
+<div class="w-14 h-14 rounded-xl overflow-hidden shadow-sm">
+<img alt="Grace Ndosi" class="w-full h-full object-cover" data-alt="A professional portrait of a female teacher of African descent, mid-30s, with a warm and confident expression. She is wearing a modern teal blazer and is photographed in a bright, sunlit classroom with educational posters softly blurred in the background. The aesthetic is clean, professional, and corporate modern." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDK_WmTrU3EVA5OV2lo6bxF7C3ibiUbcX5_A3L8aoTZRvJMbF9I1ReYdyCSkPW3AZgfGKxfT3-qgMURDKj_uVAezxA_icJNPv71Ib83PH9NHzapZ4CTDAKbKpVvzkaqK5iQuOlw2ZqdJu8ayFNPSy6gODp1ZHLa34Z5QcR8E6MVn-aYUSJRGAS61lRj6tYsQAMM_0n9G90xhGbDGGbJeFAhoLkhBcHunHxlSWV0p5w34R1uJbTzgV1jXWBoGs4Fo5M-1OftoARfBg"/>
+</div>
+<div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface font-bold group-hover:text-primary transition-colors">Grace Ndosi</h3>
+<div class="flex items-center gap-xs">
+<span class="px-2 py-0.5 rounded-md bg-secondary/10 text-secondary text-[10px] font-bold uppercase tracking-tighter">Physics</span>
+<span class="font-label-md text-on-surface-variant">Grade 11 &amp; 12</span>
+</div>
+</div>
+</div>
+<button class="material-symbols-outlined text-outline hover:text-primary transition-colors">chevron_right</button>
+</div>
+<div class="grid grid-cols-2 md:grid-cols-4 gap-sm">
+<div class="bg-surface-container-low p-sm rounded-lg border border-outline/10">
+<p class="font-label-md text-label-md text-on-surface-variant mb-1">Avg. Score</p>
+<p class="font-headline-sm text-headline-sm text-on-surface">88%</p>
+</div>
+<div class="bg-surface-container-low p-sm rounded-lg border border-outline/10">
+<p class="font-label-md text-label-md text-on-surface-variant mb-1">On-Time</p>
+<p class="font-headline-sm text-headline-sm text-on-surface">95%</p>
+</div>
+<div class="bg-surface-container-low p-sm rounded-lg border border-outline/10">
+<p class="font-label-md text-label-md text-on-surface-variant mb-1">Syllabus</p>
+<p class="font-headline-sm text-headline-sm text-primary">78%</p>
+</div>
+<div class="bg-error-container p-sm rounded-lg border border-error/20">
+<p class="font-label-md text-label-md text-on-error-container mb-1">At-Risk</p>
+<p class="font-headline-sm text-headline-sm text-error">4 Students</p>
+</div>
+</div>
+</div>
+<!-- Teacher Card: Hassan Ally -->
+<div class="p-md rounded-xl bg-surface border border-outline-variant shadow-sm hover:shadow-md transition-shadow group">
+<div class="flex items-start justify-between mb-md">
+<div class="flex gap-md items-center">
+<div class="w-14 h-14 rounded-xl overflow-hidden shadow-sm">
+<img alt="Hassan Ally" class="w-full h-full object-cover" data-alt="A portrait of a male teacher in his 40s, showing focus and dedication. He is dressed in a light blue button-up shirt and is standing in a high-tech science laboratory with glass apparatus and digital screens in the background. The lighting is crisp and cool, reflecting a professional high-contrast tech edge." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCKAyQ8MPf_6kicMYNGGcdha65CW6Wvjp8HIM-x7AEsbalk38l1IKZF9wIzEp-COVMy_2HkD_XgJpvYMzzMcT5M_SNiDhBo8kFtApz80Cq4R7S23UtJFawOqzKAR03W8Ou_u8p4-ULG8biZxFZBtvVv72xMf8yNflggL7Q_j3OvDttftPq6gN_6kgLjO9ZHK9WEbxgDpEDjJYyLOzpxgomZVucB5S-c9HEiFntT9uKRmNJMv1FpM2wZ5vUrGuh8mQo-6lIkJooFPA"/>
+</div>
+<div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface font-bold group-hover:text-primary transition-colors">Hassan Ally</h3>
+<div class="flex items-center gap-xs">
+<span class="px-2 py-0.5 rounded-md bg-secondary/10 text-secondary text-[10px] font-bold uppercase tracking-tighter">Chemistry</span>
+<span class="font-label-md text-on-surface-variant">Grade 10 &amp; 12</span>
+</div>
+</div>
+</div>
+<button class="material-symbols-outlined text-outline hover:text-primary transition-colors">chevron_right</button>
+</div>
+<div class="grid grid-cols-2 md:grid-cols-4 gap-sm">
+<div class="bg-surface-container-low p-sm rounded-lg border border-outline/10">
+<p class="font-label-md text-label-md text-on-surface-variant mb-1">Avg. Score</p>
+<p class="font-headline-sm text-headline-sm text-on-surface">92%</p>
+</div>
+<div class="bg-surface-container-low p-sm rounded-lg border border-outline/10">
+<p class="font-label-md text-label-md text-on-surface-variant mb-1">On-Time</p>
+<p class="font-headline-sm text-headline-sm text-on-surface">100%</p>
+</div>
+<div class="bg-surface-container-low p-sm rounded-lg border border-outline/10">
+<p class="font-label-md text-label-md text-on-surface-variant mb-1">Syllabus</p>
+<p class="font-headline-sm text-headline-sm text-primary">91%</p>
+</div>
+<div class="bg-surface-container-low p-sm rounded-lg border border-outline/10">
+<p class="font-label-md text-label-md text-on-surface-variant mb-1">At-Risk</p>
+<p class="font-headline-sm text-headline-sm text-on-surface">0 Students</p>
+</div>
+</div>
+</div>
+<!-- Teacher Card: Amina Rashidi -->
+<div class="p-md rounded-xl bg-surface border border-outline-variant shadow-sm hover:shadow-md transition-shadow group">
+<div class="flex items-start justify-between mb-md">
+<div class="flex gap-md items-center">
+<div class="w-14 h-14 rounded-xl overflow-hidden shadow-sm">
+<img alt="Amina Rashidi" class="w-full h-full object-cover" data-alt="A portrait of a young, vibrant female teacher wearing a colorful headscarf and a professional blazer. She is smiling broadly in a modern library setting with rows of books and comfortable seating behind her. The image is bright and airy, with soft shadows and a high-key academic aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBOneWUesvO-WKCBqeoMpdN7dmOzGIDl9tZhRwIp7AAHQ7fhTLRMvZVTt6e6Gh-XYblzJYuHp2R16xpg9YY2jpOla_cXNs4JZFpXD7lcuMQKDW47MazQ7C4IfAwQnR9iczzauU-S20vU0Ru0ZHSO3Cw-fVIwCfGiKHl3cnIHVi3mlNB6_t-VIPlUXDF8mNLX99WoObtFH1g30K1J2Yl0WDMNZINg_3shaJaUk7xCNYFZnt4Wlol4oLiZPufIlYE_jXICYJKUkrMXA"/>
+</div>
+<div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface font-bold group-hover:text-primary transition-colors">Amina Rashidi</h3>
+<div class="flex items-center gap-xs">
+<span class="px-2 py-0.5 rounded-md bg-secondary/10 text-secondary text-[10px] font-bold uppercase tracking-tighter">Biology</span>
+<span class="font-label-md text-on-surface-variant">Grade 10-12</span>
+</div>
+</div>
+</div>
+<button class="material-symbols-outlined text-outline hover:text-primary transition-colors">chevron_right</button>
+</div>
+<div class="grid grid-cols-2 md:grid-cols-4 gap-sm">
+<div class="bg-surface-container-low p-sm rounded-lg border border-outline/10">
+<p class="font-label-md text-label-md text-on-surface-variant mb-1">Avg. Score</p>
+<p class="font-headline-sm text-headline-sm text-on-surface">85%</p>
+</div>
+<div class="bg-surface-container-low p-sm rounded-lg border border-outline/10">
+<p class="font-label-md text-label-md text-on-surface-variant mb-1">On-Time</p>
+<p class="font-headline-sm text-headline-sm text-on-surface">88%</p>
+</div>
+<div class="bg-surface-container-low p-sm rounded-lg border border-outline/10">
+<p class="font-label-md text-label-md text-on-surface-variant mb-1">Syllabus</p>
+<p class="font-headline-sm text-headline-sm text-primary">82%</p>
+</div>
+<div class="bg-error-container p-sm rounded-lg border border-error/20">
+<p class="font-label-md text-label-md text-on-error-container mb-1">At-Risk</p>
+<p class="font-headline-sm text-headline-sm text-error">2 Students</p>
+</div>
+</div>
+</div>
+<!-- Teacher Card: Rose Mhina -->
+<div class="p-md rounded-xl bg-surface border border-outline-variant shadow-sm hover:shadow-md transition-shadow group">
+<div class="flex items-start justify-between mb-md">
+<div class="flex gap-md items-center">
+<div class="w-14 h-14 rounded-xl overflow-hidden shadow-sm">
+<img alt="Rose Mhina" class="w-full h-full object-cover" data-alt="A portrait of a mature female teacher in her 50s, with a kind and experienced face. She is wearing traditional Tanzanian-inspired professional attire and is standing in a sun-drenched courtyard of a modern school. The lighting is warm and natural, creating an atmosphere of reliability and institutional excellence." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCO-MC-aUVxPKf_ENDbtoOug0u04v80gp_b58ZpNxeYsSJDvOzCrQxv47gKYKY15QFe8iV6f-4_kBKXax1AQxtXMLVqUqcdNsJFZJA-IznQsL6o44Bcc8SCCO3r6mmBAuadkelZcMTBtc3Xzp3XFhHZ3IC2jqwWaSkCqt_FS_9SuwvSeDkjsAUZIZjn58xzHhkcx6OXphnAlblR0Pd_h6Xa0UJiAa5CXSLfBkOMvD0-0QAMX46KJv7b0HccmE73TePJT4o0IWWbrQ"/>
+</div>
+<div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface font-bold group-hover:text-primary transition-colors">Rose Mhina</h3>
+<div class="flex items-center gap-xs">
+<span class="px-2 py-0.5 rounded-md bg-secondary/10 text-secondary text-[10px] font-bold uppercase tracking-tighter">Geography</span>
+<span class="font-label-md text-on-surface-variant">Grade 11</span>
+</div>
+</div>
+</div>
+<button class="material-symbols-outlined text-outline hover:text-primary transition-colors">chevron_right</button>
+</div>
+<div class="grid grid-cols-2 md:grid-cols-4 gap-sm">
+<div class="bg-surface-container-low p-sm rounded-lg border border-outline/10">
+<p class="font-label-md text-label-md text-on-surface-variant mb-1">Avg. Score</p>
+<p class="font-headline-sm text-headline-sm text-on-surface">81%</p>
+</div>
+<div class="bg-surface-container-low p-sm rounded-lg border border-outline/10">
+<p class="font-label-md text-label-md text-on-surface-variant mb-1">On-Time</p>
+<p class="font-headline-sm text-headline-sm text-on-surface">92%</p>
+</div>
+<div class="bg-surface-container-low p-sm rounded-lg border border-outline/10">
+<p class="font-label-md text-label-md text-on-surface-variant mb-1">Syllabus</p>
+<p class="font-headline-sm text-headline-sm text-primary">89%</p>
+</div>
+<div class="bg-surface-container-low p-sm rounded-lg border border-outline/10">
+<p class="font-label-md text-label-md text-on-surface-variant mb-1">At-Risk</p>
+<p class="font-headline-sm text-headline-sm text-on-surface">1 Student</p>
+</div>
+</div>
+</div>
+<!-- Teacher Card: Peter Kimani -->
+<div class="p-md rounded-xl bg-surface border border-outline-variant shadow-sm hover:shadow-md transition-shadow group">
+<div class="flex items-start justify-between mb-md">
+<div class="flex gap-md items-center">
+<div class="w-14 h-14 rounded-xl overflow-hidden shadow-sm">
+<img alt="Peter Kimani" class="w-full h-full object-cover" data-alt="A portrait of a male teacher in his late 20s with a modern haircut and a focused expression. He is wearing a slim-fit dark polo shirt and is working on a digital tablet in a minimalist faculty lounge. The lighting is soft and professional with sky-blue accents in the decor." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBYls2GyupyFrOb0KVqxzGBWNV9mc9Bal8LAwHrHarcfFWJUqpJWX-etn6o0hvL9ql3w9GFBIjY88E_Ak0djexbMftSyjs7c5m8YyZCVudv-mk1nhxwLI9Ej6Gtrkusqge7pXE5-Zs7HIm0oE5Kt6O3U4ndVBWmGBmc7QxRuhYIMJz_aiL8st5L4GWPEcLdiRpiI78wBkl1t1a9JdT-e0VFALwAu6wffIsIx6VBI5FD2ITxDyTUI_mWhTdtEJeLFgRnILBHibxY4Q"/>
+</div>
+<div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface font-bold group-hover:text-primary transition-colors">Peter Kimani</h3>
+<div class="flex items-center gap-xs">
+<span class="px-2 py-0.5 rounded-md bg-secondary/10 text-secondary text-[10px] font-bold uppercase tracking-tighter">Physics</span>
+<span class="font-label-md text-on-surface-variant">Grade 10</span>
+</div>
+</div>
+</div>
+<button class="material-symbols-outlined text-outline hover:text-primary transition-colors">chevron_right</button>
+</div>
+<div class="grid grid-cols-2 md:grid-cols-4 gap-sm">
+<div class="bg-surface-container-low p-sm rounded-lg border border-outline/10">
+<p class="font-label-md text-label-md text-on-surface-variant mb-1">Avg. Score</p>
+<p class="font-headline-sm text-headline-sm text-on-surface">76%</p>
+</div>
+<div class="bg-error-container p-sm rounded-lg border border-error/20">
+<p class="font-label-md text-label-md text-on-error-container mb-1">On-Time</p>
+<p class="font-headline-sm text-headline-sm text-error">65%</p>
+</div>
+<div class="bg-surface-container-low p-sm rounded-lg border border-outline/10">
+<p class="font-label-md text-label-md text-on-surface-variant mb-1">Syllabus</p>
+<p class="font-headline-sm text-headline-sm text-primary">68%</p>
+</div>
+<div class="bg-error-container p-sm rounded-lg border border-error/20">
+<p class="font-label-md text-label-md text-on-error-container mb-1">At-Risk</p>
+<p class="font-headline-sm text-headline-sm text-error">9 Students</p>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-2 py-3 bg-surface dark:bg-inverse-surface shadow-lg rounded-t-xl dark:border-t dark:border-outline/20">
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant group" href="#">
+<span class="material-symbols-outlined group-active:scale-90 duration-150 transition-all">dashboard</span>
+<span class="font-label-md text-label-md">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center bg-primary-container dark:bg-primary-fixed text-on-primary-container dark:text-on-primary-fixed-variant rounded-full px-4 py-1" href="#">
+<span class="material-symbols-outlined scale-90 duration-150 transition-all" style="font-variation-settings: 'FILL' 1;">how_to_reg</span>
+<span class="font-label-md text-label-md">Attendance</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant group" href="#">
+<span class="material-symbols-outlined group-active:scale-90 duration-150 transition-all">edit_note</span>
+<span class="font-label-md text-label-md">Marks</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant group" href="#">
+<span class="material-symbols-outlined group-active:scale-90 duration-150 transition-all">calendar_month</span>
+<span class="font-label-md text-label-md">Schedule</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant group" href="#">
+<span class="material-symbols-outlined group-active:scale-90 duration-150 transition-all">menu</span>
+<span class="font-label-md text-label-md">Menu</span>
+</a>
+</nav>
+<script>
+        // Simple Micro-interactions
+        document.querySelectorAll('button, a').forEach(el => {
+            el.addEventListener('mousedown', () => {
+                el.style.transform = 'scale(0.95)';
+            });
+            el.addEventListener('mouseup', () => {
+                el.style.transform = 'scale(1)';
+            });
+            el.addEventListener('mouseleave', () => {
+                el.style.transform = 'scale(1)';
+            });
+        });
+
+        // Dynamic background effect for cards
+        const cards = document.querySelectorAll('.group');
+        cards.forEach(card => {
+            card.addEventListener('mousemove', (e) => {
+                const rect = card.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                card.style.setProperty('--mouse-x', `${x}px`);
+                card.style.setProperty('--mouse-y', `${y}px`);
+            });
+        });
+    </script>
+</body></html>

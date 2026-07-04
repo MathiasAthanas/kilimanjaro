@@ -9,3 +9,21 @@ coverage/
 docs/
 .qoder/
 backend/_invalid_scaffold/
+
+# Local agent/editor state
+.claude/
+.qoder/
+
+# Archives & binary dumps
+*.rar
+*.zip
+dump.rdb
+
+# Generated runtime artifacts (report PDFs, uploads)
+backend/services/*/storage/
+
+# Flutter / Gradle build outputs
+mobile/kilimanjaro/build/
+mobile/kilimanjaro/android/build/
+mobile/kilimanjaro/**/.gradle/
+mobile/kilimanjaro/.dart_tool/

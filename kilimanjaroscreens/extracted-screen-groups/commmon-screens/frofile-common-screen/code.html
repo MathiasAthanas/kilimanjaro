@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>My Profile - Kilimanjaro Schools</title>
+<!-- Fonts -->
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<!-- Icons -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-secondary-fixed-variant": "#004e5c",
+                    "surface-variant": "#dae2fd",
+                    "tertiary-fixed-dim": "#c0c1ff",
+                    "background": "#faf8ff",
+                    "tertiary": "#494bd6",
+                    "outline-variant": "#bec8d2",
+                    "surface-container-highest": "#dae2fd",
+                    "on-primary-fixed-variant": "#004c6e",
+                    "primary-fixed-dim": "#89ceff",
+                    "on-secondary": "#ffffff",
+                    "tertiary-fixed": "#e1e0ff",
+                    "on-error-container": "#93000a",
+                    "primary-container": "#0ea5e9",
+                    "secondary-fixed-dim": "#4cd7f6",
+                    "error-container": "#ffdad6",
+                    "surface-container-high": "#e2e7ff",
+                    "inverse-on-surface": "#eef0ff",
+                    "on-tertiary": "#ffffff",
+                    "on-secondary-container": "#006172",
+                    "surface": "#faf8ff",
+                    "on-tertiary-fixed": "#07006c",
+                    "on-surface": "#131b2e",
+                    "primary-fixed": "#c9e6ff",
+                    "primary": "#006591",
+                    "inverse-primary": "#89ceff",
+                    "surface-container": "#eaedff",
+                    "tertiary-container": "#8d90ff",
+                    "inverse-surface": "#283044",
+                    "on-surface-variant": "#3e4850",
+                    "secondary-fixed": "#acedff",
+                    "surface-container-lowest": "#ffffff",
+                    "secondary": "#00687a",
+                    "outline": "#6e7881",
+                    "on-tertiary-container": "#1407ad",
+                    "surface-tint": "#006591",
+                    "on-primary-container": "#003751",
+                    "on-background": "#131b2e",
+                    "secondary-container": "#57dffe",
+                    "surface-container-low": "#f2f3ff",
+                    "on-primary-fixed": "#001e2f",
+                    "error": "#ba1a1a",
+                    "surface-bright": "#faf8ff"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "xl": "32px",
+                    "sm": "12px",
+                    "base": "4px",
+                    "md": "16px",
+                    "xs": "8px",
+                    "lg": "24px",
+                    "container-padding": "20px"
+            },
+            "fontFamily": {
+                    "body-md": ["Plus Jakarta Sans"],
+                    "display-lg": ["Space Grotesk"],
+                    "label-lg": ["Plus Jakarta Sans"],
+                    "headline-lg": ["Space Grotesk"],
+                    "headline-sm": ["Space Grotesk"],
+                    "headline-md": ["Space Grotesk"],
+                    "body-lg": ["Plus Jakarta Sans"],
+                    "label-md": ["Plus Jakarta Sans"],
+                    "body-sm": ["Plus Jakarta Sans"]
+            },
+            "fontSize": {
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "display-lg": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "label-lg": ["14px", {"lineHeight": "20px", "letterSpacing": "0.01em", "fontWeight": "600"}],
+                    "headline-lg": ["30px", {"lineHeight": "36px", "fontWeight": "600"}],
+                    "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "500"}],
+                    "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                    "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                    "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.04em", "fontWeight": "600"}],
+                    "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            display: inline-block;
+            line-height: 1;
+            text-transform: none;
+            letter-spacing: normal;
+            word-wrap: normal;
+            white-space: nowrap;
+            direction: ltr;
+        }
+        .hero-gradient {
+            background: linear-gradient(135deg, #006591 0%, #0ea5e9 100%);
+        }
+        .wave-container {
+            position: relative;
+            height: 220px;
+            overflow: hidden;
+        }
+        .wave-path {
+            position: absolute;
+            bottom: -1px;
+            left: 0;
+            width: 100%;
+            height: 40px;
+            fill: #faf8ff;
+        }
+        .shadow-sky {
+            box-shadow: 0 4px 6px rgba(14, 165, 233, 0.05);
+        }
+        .card-border {
+            border: 1px solid #eaedff;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background font-body-md text-on-background selection:bg-primary-container selection:text-on-primary-container">
+<!-- Top AppBar (Mobile/Desktop Hybrid) -->
+<header class="bg-background z-50 flex items-center justify-between px-container-padding w-full h-16 fixed top-0 left-0">
+<div class="flex items-center gap-md">
+<button class="material-symbols-outlined text-primary hover:bg-surface-container-high transition-colors duration-200 p-base rounded-full">arrow_back</button>
+<h1 class="font-headline-sm text-headline-sm-mobile font-bold text-on-surface">Kilimanjaro Schools</h1>
+</div>
+<button class="material-symbols-outlined text-on-surface-variant hover:bg-surface-container-high transition-colors duration-200 p-base rounded-full">menu</button>
+</header>
+<main class="pt-16 pb-24">
+<!-- Profile Hero Section (SliverAppBar equivalent) -->
+<div class="hero-gradient wave-container flex flex-col items-center justify-center pt-8">
+<div class="relative">
+<div class="w-[72px] h-[72px] rounded-full border-4 border-on-primary shadow-xl overflow-hidden bg-surface-container" data-hero="avatar_user_123">
+<img alt="Alex Mountain Profile" class="w-full h-full object-cover" data-alt="A professional high-key portrait of a clean-cut young man with short dark hair, wearing a crisp modern uniform, set against a blurred, bright educational background. The lighting is soft and even, typical of a corporate modern headshot, with a palette of whites and subtle sky blues that matches a clean school dashboard aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCtAya4MiMENTWfKFZa5slCsjt_-udJE9EFgzIn4FxyjLIBwnFxR66WDWTI_RprL0ewq4GIht6djtHAsakk2sK0IJCHLkHh9IaUTIeP4TuLc2WJCWUwW8OhMiirBWweLBeEqRxpz-DYqEaojhdrQ8Uwhuj8UgThcOl5F_YAzPyCU5-O1vG2_vefz5ypAy-ojWXoIKnV4xJCSC2bLUfpKUoRQAfguN0yO3Ql2SHwiFvbNRvQ4IsbXTtL6tgjxd31IaghWawRJEXcGg"/>
+</div>
+</div>
+<h2 class="mt-xs font-headline-md text-on-primary">Alex Mountain</h2>
+<div class="mt-xs px-md py-base bg-white/20 backdrop-blur-md rounded-full">
+<span class="font-label-lg text-white tracking-widest">STUDENT</span>
+</div>
+<!-- Wave Transition -->
+<svg class="wave-path" preserveaspectratio="none" viewbox="0 0 1440 320">
+<path d="M0,192L48,197.3C96,203,192,213,288,192C384,171,480,117,576,112C672,107,768,149,864,165.3C960,181,1056,171,1152,144C1248,117,1344,75,1392,53.3L1440,32L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z"></path>
+</svg>
+</div>
+<div class="px-container-padding space-y-lg -mt-4 relative z-10">
+<!-- Quick Overview Section (Bento-lite) -->
+<section class="grid grid-cols-3 gap-xs">
+<!-- Current Average -->
+<div class="bg-surface-container-lowest p-sm rounded-xl card-border shadow-sky text-center flex flex-col items-center justify-center min-h-[100px]">
+<span class="font-label-md text-on-surface-variant uppercase">Average</span>
+<p class="font-headline-md text-primary mt-base">B+</p>
+</div>
+<!-- Attendance -->
+<div class="bg-surface-container-lowest p-sm rounded-xl card-border shadow-sky text-center flex flex-col items-center justify-center min-h-[100px]">
+<span class="font-label-md text-on-surface-variant uppercase">Attend.</span>
+<p class="font-headline-md text-secondary mt-base">94%</p>
+</div>
+<!-- Balance -->
+<div class="bg-surface-container-lowest p-sm rounded-xl card-border shadow-sky text-center flex flex-col items-center justify-center min-h-[100px]">
+<span class="font-label-md text-on-surface-variant uppercase">Balance</span>
+<p class="font-headline-md text-error mt-base">$0</p>
+</div>
+</section>
+<!-- Personal Details Card -->
+<section class="bg-surface-container-lowest rounded-xl card-border shadow-sky overflow-hidden">
+<div class="px-md py-sm border-b border-outline-variant bg-surface-container-low">
+<h3 class="font-label-lg text-on-surface">Personal Details</h3>
+</div>
+<div class="divide-y divide-outline-variant/30">
+<!-- Email Item -->
+<div class="flex items-center gap-md px-md py-md hover:bg-surface-container-high transition-colors">
+<span class="material-symbols-outlined text-primary">mail</span>
+<div class="flex flex-col">
+<span class="font-label-md text-on-surface-variant">Email</span>
+<span class="font-body-md text-on-surface">alex.mountain@kilischools.edu</span>
+</div>
+</div>
+<!-- Phone Item -->
+<div class="flex items-center gap-md px-md py-md hover:bg-surface-container-high transition-colors">
+<span class="material-symbols-outlined text-primary">phone_iphone</span>
+<div class="flex flex-col">
+<span class="font-label-md text-on-surface-variant">Phone</span>
+<span class="font-body-md text-on-surface">+255 784 123 456</span>
+</div>
+</div>
+<!-- Joined Item -->
+<div class="flex items-center gap-md px-md py-md hover:bg-surface-container-high transition-colors">
+<span class="material-symbols-outlined text-primary">calendar_today</span>
+<div class="flex flex-col">
+<span class="font-label-md text-on-surface-variant">Joined Date</span>
+<span class="font-body-md text-on-surface">January 15, 2023</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Account Actions Card -->
+<section class="bg-surface-container-lowest rounded-xl card-border shadow-sky overflow-hidden">
+<div class="px-md py-sm border-b border-outline-variant bg-surface-container-low">
+<h3 class="font-label-lg text-on-surface">Account Settings</h3>
+</div>
+<div class="divide-y divide-outline-variant/30">
+<a class="flex items-center justify-between px-md py-md hover:bg-surface-container-high transition-colors" href="#">
+<div class="flex items-center gap-md">
+<span class="material-symbols-outlined text-outline">edit</span>
+<span class="font-body-md text-on-surface">Edit Profile</span>
+</div>
+<span class="material-symbols-outlined text-outline-variant">chevron_right</span>
+</a>
+<a class="flex items-center justify-between px-md py-md hover:bg-surface-container-high transition-colors" href="#">
+<div class="flex items-center gap-md">
+<span class="material-symbols-outlined text-outline">lock_reset</span>
+<span class="font-body-md text-on-surface">Change Password</span>
+</div>
+<span class="material-symbols-outlined text-outline-variant">chevron_right</span>
+</a>
+<a class="flex items-center justify-between px-md py-md hover:bg-surface-container-high transition-colors text-error" href="#">
+<div class="flex items-center gap-md">
+<span class="material-symbols-outlined">logout</span>
+<span class="font-body-md">Sign Out</span>
+</div>
+</a>
+</div>
+</section>
+</div>
+</main>
+<!-- Bottom Navigation Bar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center h-20 pb-safe px-lg bg-surface-container-lowest rounded-t-xl shadow-5 border-t border-outline-variant">
+<a class="flex flex-col items-center justify-center text-on-surface-variant opacity-70 hover:opacity-100" href="#">
+<span class="material-symbols-outlined" data-icon="home">home</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant opacity-70 hover:opacity-100" href="#">
+<span class="material-symbols-outlined" data-icon="school">school</span>
+</a>
+<a class="flex flex-col items-center justify-center bg-primary-container text-on-primary-container rounded-full w-12 h-12 active:scale-90 transition-transform" href="#">
+<span class="material-symbols-outlined" data-icon="person" style="font-variation-settings: 'FILL' 1;">person</span>
+</a>
+</nav>
+</body></html>

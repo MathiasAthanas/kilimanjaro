@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Interventions | Kilimanjaro Teachers</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-container": "#eaedff",
+                        "on-tertiary-fixed": "#07006c",
+                        "inverse-primary": "#89ceff",
+                        "on-primary-container": "#003751",
+                        "on-tertiary-container": "#1407ad",
+                        "surface-dim": "#d2d9f4",
+                        "tertiary-container": "#8d90ff",
+                        "error-container": "#ffdad6",
+                        "surface-variant": "#dae2fd",
+                        "on-secondary-fixed": "#001f26",
+                        "outline": "#6e7881",
+                        "surface-container-highest": "#dae2fd",
+                        "primary-fixed": "#c9e6ff",
+                        "tertiary": "#494bd6",
+                        "on-surface-variant": "#3e4850",
+                        "on-error-container": "#93000a",
+                        "error": "#ba1a1a",
+                        "surface-tint": "#006591",
+                        "secondary": "#00687a",
+                        "tertiary-fixed": "#e1e0ff",
+                        "on-tertiary-fixed-variant": "#2f2ebe",
+                        "surface-container-high": "#e2e7ff",
+                        "on-tertiary": "#ffffff",
+                        "on-primary-fixed": "#001e2f",
+                        "on-secondary-fixed-variant": "#004e5c",
+                        "on-secondary": "#ffffff",
+                        "secondary-fixed": "#acedff",
+                        "inverse-on-surface": "#eef0ff",
+                        "inverse-surface": "#283044",
+                        "background": "#faf8ff",
+                        "secondary-fixed-dim": "#4cd7f6",
+                        "on-primary": "#ffffff",
+                        "outline-variant": "#bec8d2",
+                        "on-error": "#ffffff",
+                        "surface": "#faf8ff",
+                        "primary-fixed-dim": "#89ceff",
+                        "tertiary-fixed-dim": "#c0c1ff",
+                        "on-background": "#131b2e",
+                        "on-surface": "#131b2e",
+                        "primary-container": "#0ea5e9",
+                        "primary": "#006591",
+                        "surface-container-lowest": "#ffffff",
+                        "on-secondary-container": "#006172",
+                        "surface-bright": "#faf8ff",
+                        "surface-container-low": "#f2f3ff",
+                        "secondary-container": "#57dffe",
+                        "on-primary-fixed-variant": "#004c6e"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "lg": "24px",
+                        "base": "4px",
+                        "container-padding": "20px",
+                        "xs": "8px",
+                        "xl": "32px",
+                        "sm": "12px",
+                        "md": "16px"
+                    },
+                    "fontFamily": {
+                        "label-md": ["Plus Jakarta Sans"],
+                        "display-lg": ["Space Grotesk"],
+                        "headline-lg": ["Space Grotesk"],
+                        "body-md": ["Plus Jakarta Sans"],
+                        "body-lg": ["Plus Jakarta Sans"],
+                        "headline-md": ["Space Grotesk"],
+                        "headline-sm": ["Space Grotesk"],
+                        "body-sm": ["Plus Jakarta Sans"],
+                        "label-lg": ["Plus Jakarta Sans"]
+                    },
+                    "fontSize": {
+                        "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.04em", "fontWeight": "600"}],
+                        "display-lg": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "headline-lg": ["30px", {"lineHeight": "36px", "fontWeight": "600"}],
+                        "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                        "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                        "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                        "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "500"}],
+                        "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                        "label-lg": ["14px", {"lineHeight": "20px", "letterSpacing": "0.01em", "fontWeight": "600"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        body { -webkit-tap-highlight-color: transparent; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        .intervention-card-shadow { box-shadow: 0 2px 4px rgba(14, 165, 233, 0.05); }
+        .primary-gradient { background: linear-gradient(135deg, #0ea5e9 0%, #006591 100%); }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #bec8d2; border-radius: 10px; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background font-body-md min-h-screen pb-24 md:pb-0">
+<!-- TopAppBar Shell -->
+<header class="flex justify-between items-center px-container-padding h-16 w-full fixed top-0 z-50 bg-surface shadow-sm dark:bg-inverse-surface border-b border-outline-variant dark:border-outline/30">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full overflow-hidden border-2 border-primary-container">
+<img alt="Teacher profile photo" class="w-full h-full object-cover" data-alt="A professional headshot of a middle-aged male educator with a kind expression, wearing a crisp white shirt and a blue blazer. The background is a brightly lit, modern office with soft-focus bookshelves. The lighting is natural and high-key, maintaining a clean corporate educational aesthetic consistent with a light-mode UI." src="https://lh3.googleusercontent.com/aida-public/AB6AXuA9Ppf4oo4NZBR-R-GiEii9CGYvrhxAml-f4dVLDu8nJKchQM5Mi5UHzZSI8P9ph-eKM5I5z5m4hZydteJN9E-5RKo1Li3iX2iI4UP5guO3ctO7blwNuaBSlrcSl9CyaMRrxsEVCaDIc23Ji3Go_y_GlKtu_rvsvVehjscDchdDZHujRepbpvlTSsyzE32vwgbBCyfAKrPkHRmAiigRB9BOs0-XQL74l6ZXfwx7gcR2auJH1XdYGA_MJ6pVeCnDpP3SVHnARe6HJA"/>
+</div>
+<h1 class="font-headline-sm text-headline-sm-mobile md:text-headline-sm text-primary dark:text-primary-fixed-dim font-bold tracking-tight">Kilimanjaro Teachers</h1>
+</div>
+<button class="material-symbols-outlined text-primary dark:text-inverse-primary hover:bg-surface-container-high dark:hover:bg-surface-variant transition-colors p-2 rounded-full">
+            notifications
+        </button>
+</header>
+<!-- Main Content Canvas -->
+<main class="pt-20 px-container-padding max-w-5xl mx-auto flex flex-col gap-lg">
+<!-- Header Section with Filter/Search -->
+<section class="flex flex-col gap-base mt-4">
+<div class="flex justify-between items-end">
+<div>
+<span class="font-label-lg text-label-lg text-secondary uppercase tracking-widest">Student Support</span>
+<h2 class="font-headline-md text-headline-md text-on-surface">Intervention History</h2>
+</div>
+<div class="hidden md:flex gap-2">
+<button class="bg-surface-container-low border border-outline-variant px-4 py-2 rounded-lg text-label-lg flex items-center gap-2 hover:bg-surface-container transition-all">
+<span class="material-symbols-outlined text-[20px]">filter_list</span>
+                        Filter
+                    </button>
+</div>
+</div>
+<!-- Mobile Search Bar -->
+<div class="mt-2 flex items-center bg-surface-container-low border border-outline-variant rounded-xl px-4 h-12">
+<span class="material-symbols-outlined text-outline">search</span>
+<input class="bg-transparent border-none focus:ring-0 w-full text-body-md placeholder:text-outline/60" placeholder="Search student or intervention type..." type="text"/>
+</div>
+</section>
+<!-- Bento Layout for Grouped Sections -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-lg">
+<!-- Pending Follow-Up Column -->
+<section class="lg:col-span-7 flex flex-col gap-md">
+<div class="flex items-center gap-2 mb-2">
+<span class="w-2 h-2 rounded-full bg-error animate-pulse"></span>
+<h3 class="font-headline-sm text-on-surface-variant">Pending Follow-Up</h3>
+<span class="ml-auto bg-error-container text-on-error-container px-2 py-0.5 rounded-full font-label-md text-label-md">3 Active</span>
+</div>
+<!-- KSInterventionCard 1 -->
+<div class="bg-surface-container-lowest rounded-xl p-md border border-outline-variant intervention-card-shadow flex flex-col gap-sm hover:border-primary transition-all group">
+<div class="flex justify-between items-start">
+<div class="flex items-center gap-3">
+<div class="w-12 h-12 rounded-lg bg-primary-container/20 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">groups</span>
+</div>
+<div>
+<h4 class="font-headline-sm text-headline-sm text-on-surface">Parent-Teacher Meeting</h4>
+<p class="font-body-sm text-body-sm text-outline">Student: Juma Kapuya • Grade 10B</p>
+</div>
+</div>
+<span class="bg-error/10 text-error px-3 py-1 rounded-full font-label-md text-label-md">Urgent</span>
+</div>
+<p class="font-body-md text-body-md text-on-surface-variant line-clamp-2">Discussed consistent tardiness and drop in Physics performance. Parent agreed to a home study schedule. Follow-up required next Monday.</p>
+<div class="flex items-center justify-between mt-2 pt-3 border-t border-outline-variant/30">
+<div class="flex items-center gap-2 text-outline">
+<span class="material-symbols-outlined text-[18px]">calendar_today</span>
+<span class="font-label-md text-label-md">Oct 24, 2023</span>
+</div>
+<button class="text-primary font-label-lg flex items-center gap-1 group-hover:underline">
+                            Log Follow-up <span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+</button>
+</div>
+</div>
+<!-- KSInterventionCard 2 -->
+<div class="bg-surface-container-lowest rounded-xl p-md border border-outline-variant intervention-card-shadow flex flex-col gap-sm hover:border-primary transition-all group">
+<div class="flex justify-between items-start">
+<div class="flex items-center gap-3">
+<div class="w-12 h-12 rounded-lg bg-tertiary-container/20 flex items-center justify-center text-tertiary">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">psychology</span>
+</div>
+<div>
+<h4 class="font-headline-sm text-headline-sm text-on-surface">Counseling Referral</h4>
+<p class="font-body-sm text-body-sm text-outline">Student: Sarah Mende • Grade 11A</p>
+</div>
+</div>
+<span class="bg-primary/10 text-primary px-3 py-1 rounded-full font-label-md text-label-md">Routine</span>
+</div>
+<p class="font-body-md text-body-md text-on-surface-variant line-clamp-2">Student expressing anxiety regarding upcoming mock exams. Referred to school counselor for stress management sessions.</p>
+<div class="flex items-center justify-between mt-2 pt-3 border-t border-outline-variant/30">
+<div class="flex items-center gap-2 text-outline">
+<span class="material-symbols-outlined text-[18px]">calendar_today</span>
+<span class="font-label-md text-label-md">Oct 23, 2023</span>
+</div>
+<button class="text-primary font-label-lg flex items-center gap-1 group-hover:underline">
+                            View Referral <span class="material-symbols-outlined text-[18px]">open_in_new</span>
+</button>
+</div>
+</div>
+</section>
+<!-- Completed Column -->
+<section class="lg:col-span-5 flex flex-col gap-md">
+<div class="flex items-center gap-2 mb-2">
+<span class="w-2 h-2 rounded-full bg-secondary"></span>
+<h3 class="font-headline-sm text-on-surface-variant">Recently Completed</h3>
+<span class="ml-auto text-outline font-label-md text-label-md">History</span>
+</div>
+<!-- Completed Cards (Slightly smaller aesthetic) -->
+<div class="flex flex-col gap-4">
+<div class="bg-surface-container-low rounded-xl p-4 border border-outline-variant/50 opacity-80 hover:opacity-100 transition-all cursor-pointer">
+<div class="flex items-center gap-3 mb-2">
+<div class="w-10 h-10 rounded-full bg-secondary/10 flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+<div class="flex-1">
+<h4 class="font-label-lg text-label-lg text-on-surface">Academic Support Given</h4>
+<p class="font-body-sm text-[12px] text-outline">Student: Kevin T. • Math Extra Help</p>
+</div>
+</div>
+<p class="font-body-sm text-on-surface-variant text-[13px] italic">"Completed 1-hour session on Trigonometry. Student demonstrated mastery of Sine Rule."</p>
+<div class="mt-3 text-right">
+<span class="font-label-md text-[11px] uppercase text-outline tracking-wider">Closed Oct 20</span>
+</div>
+</div>
+<div class="bg-surface-container-low rounded-xl p-4 border border-outline-variant/50 opacity-80 hover:opacity-100 transition-all cursor-pointer">
+<div class="flex items-center gap-3 mb-2">
+<div class="w-10 h-10 rounded-full bg-secondary/10 flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+<div class="flex-1">
+<h4 class="font-label-lg text-label-lg text-on-surface">Behavioral Warning</h4>
+<p class="font-body-sm text-[12px] text-outline">Student: Maria L. • Minor Violation</p>
+</div>
+</div>
+<p class="font-body-sm text-on-surface-variant text-[13px] italic">"Official verbal warning issued for dress code violation. Student acknowledged policy."</p>
+<div class="mt-3 text-right">
+<span class="font-label-md text-[11px] uppercase text-outline tracking-wider">Closed Oct 19</span>
+</div>
+</div>
+<!-- Visual Divider for load more -->
+<button class="w-full py-3 border-2 border-dashed border-outline-variant rounded-xl text-outline font-label-lg hover:bg-surface-container transition-all">
+                        View Older Records
+                    </button>
+</div>
+</section>
+</div>
+</main>
+<!-- Floating Action Button (FAB) -->
+<button class="fixed bottom-24 right-6 md:bottom-12 md:right-12 w-16 h-16 rounded-[14px] primary-gradient text-white shadow-lg flex items-center justify-center z-[70] hover:scale-105 active:scale-95 transition-all" onclick="toggleModal('interventionModal')">
+<span class="material-symbols-outlined text-[32px]">add</span>
+</button>
+<!-- BottomNavBar Shell -->
+<nav class="md:hidden fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-2 py-3 bg-surface dark:bg-inverse-surface rounded-t-xl shadow-[0_-2px_10px_rgba(14,165,233,0.08)]">
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant hover:bg-surface-variant rounded-lg px-2" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-label-md text-label-md">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant hover:bg-surface-variant rounded-lg px-2" href="#">
+<span class="material-symbols-outlined">how_to_reg</span>
+<span class="font-label-md text-label-md">Attendance</span>
+</a>
+<a class="flex flex-col items-center justify-center bg-primary-container dark:bg-primary-fixed text-on-primary-container dark:text-on-primary-fixed-variant rounded-full px-4 py-1 scale-90" href="#">
+<span class="material-symbols-outlined">edit_note</span>
+<span class="font-label-md text-label-md">Interventions</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant hover:bg-surface-variant rounded-lg px-2" href="#">
+<span class="material-symbols-outlined">calendar_month</span>
+<span class="font-label-md text-label-md">Schedule</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant hover:bg-surface-variant rounded-lg px-2" href="#">
+<span class="material-symbols-outlined">menu</span>
+<span class="font-label-md text-label-md">Menu</span>
+</a>
+</nav>
+<!-- Modal for Logging New Intervention (Simulated) -->
+<div class="fixed inset-0 z-[100] hidden flex items-center justify-center px-4" id="interventionModal">
+<div class="absolute inset-0 bg-on-background/40 backdrop-blur-sm" onclick="toggleModal('interventionModal')"></div>
+<div class="relative bg-surface w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300">
+<div class="px-6 py-4 border-b border-outline-variant flex justify-between items-center">
+<h3 class="font-headline-sm text-on-surface">Log New Intervention</h3>
+<button class="material-symbols-outlined text-outline" onclick="toggleModal('interventionModal')">close</button>
+</div>
+<div class="p-6 flex flex-col gap-4">
+<div class="flex flex-col gap-1">
+<label class="font-label-lg text-on-surface-variant">Student Name</label>
+<input class="h-[56px] rounded-[14px] bg-surface-container-low border-outline-variant focus:border-primary focus:ring-primary w-full" placeholder="Start typing name..." type="text"/>
+</div>
+<div class="flex flex-col gap-1">
+<label class="font-label-lg text-on-surface-variant">Intervention Type</label>
+<select class="h-[56px] rounded-[14px] bg-surface-container-low border-outline-variant focus:border-primary focus:ring-primary w-full">
+<option>Support Given</option>
+<option>Parent Meeting</option>
+<option>Behavioral Warning</option>
+<option>Counseling Referral</option>
+</select>
+</div>
+<div class="flex flex-col gap-1">
+<label class="font-label-lg text-on-surface-variant">Detailed Notes</label>
+<textarea class="rounded-[14px] bg-surface-container-low border-outline-variant focus:border-primary focus:ring-primary w-full p-3" placeholder="Describe the action taken..." rows="3"></textarea>
+</div>
+<button class="w-full h-[54px] primary-gradient text-white font-bold rounded-[14px] mt-4 shadow-lg active:scale-[0.98] transition-all">
+                    Submit Record
+                </button>
+</div>
+</div>
+</div>
+<script>
+        function toggleModal(id) {
+            const modal = document.getElementById(id);
+            if (modal.classList.contains('hidden')) {
+                modal.classList.remove('hidden');
+                document.body.style.overflow = 'hidden';
+            } else {
+                modal.classList.add('hidden');
+                document.body.style.overflow = 'auto';
+            }
+        }
+
+        // Simple scroll observer for header elevation
+        window.addEventListener('scroll', () => {
+            const header = document.querySelector('header');
+            if (window.scrollY > 20) {
+                header.classList.add('shadow-md');
+                header.classList.remove('shadow-sm');
+            } else {
+                header.classList.add('shadow-sm');
+                header.classList.remove('shadow-md');
+            }
+        });
+    </script>
+</body></html>

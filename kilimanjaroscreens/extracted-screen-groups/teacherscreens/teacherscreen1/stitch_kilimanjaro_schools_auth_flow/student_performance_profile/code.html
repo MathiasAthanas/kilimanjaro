@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Amina Juma - Student Performance Profile</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                "tertiary-container": "#8d90ff",
+                "surface": "#faf8ff",
+                "secondary-fixed": "#acedff",
+                "primary": "#006591",
+                "surface-container-lowest": "#ffffff",
+                "primary-fixed-dim": "#89ceff",
+                "surface-container-highest": "#dae2fd",
+                "surface-bright": "#faf8ff",
+                "on-secondary-container": "#006172",
+                "on-background": "#131b2e",
+                "primary-fixed": "#c9e6ff",
+                "outline-variant": "#bec8d2",
+                "on-primary-container": "#003751",
+                "surface-variant": "#dae2fd",
+                "background": "#faf8ff",
+                "on-primary-fixed": "#001e2f",
+                "on-primary": "#ffffff",
+                "surface-tint": "#006591",
+                "outline": "#6e7881",
+                "on-secondary-fixed": "#001f26",
+                "tertiary-fixed-dim": "#c0c1ff",
+                "inverse-on-surface": "#eef0ff",
+                "error-container": "#ffdad6",
+                "tertiary": "#494bd6",
+                "on-primary-fixed-variant": "#004c6e",
+                "on-secondary": "#ffffff",
+                "primary-container": "#0ea5e9",
+                "surface-container": "#eaedff",
+                "secondary-container": "#57dffe",
+                "error": "#ba1a1a",
+                "surface-dim": "#d2d9f4",
+                "on-error": "#ffffff",
+                "on-tertiary-container": "#1407ad",
+                "surface-container-high": "#e2e7ff",
+                "secondary": "#00687a",
+                "inverse-surface": "#283044",
+                "inverse-primary": "#89ceff",
+                "tertiary-fixed": "#e1e0ff",
+                "on-secondary-fixed-variant": "#004e5c",
+                "on-tertiary-fixed-variant": "#2f2ebe",
+                "on-tertiary-fixed": "#07006c",
+                "on-tertiary": "#ffffff",
+                "surface-container-low": "#f2f3ff",
+                "secondary-fixed-dim": "#4cd7f6",
+                "on-surface": "#131b2e",
+                "on-error-container": "#93000a",
+                "on-surface-variant": "#3e4850"
+            },
+            "borderRadius": {
+                "DEFAULT": "0.25rem",
+                "lg": "0.5rem",
+                "xl": "0.75rem",
+                "full": "9999px"
+            },
+            "spacing": {
+                "xl": "32px",
+                "lg": "24px",
+                "container-padding": "20px",
+                "xs": "8px",
+                "md": "16px",
+                "base": "4px",
+                "sm": "12px"
+            },
+            "fontFamily": {
+                "headline-md": ["Space Grotesk"],
+                "label-lg": ["Plus Jakarta Sans"],
+                "body-md": ["Plus Jakarta Sans"],
+                "display-lg": ["Space Grotesk"],
+                "headline-sm": ["Space Grotesk"],
+                "headline-lg": ["Space Grotesk"],
+                "label-md": ["Plus Jakarta Sans"],
+                "body-lg": ["Plus Jakarta Sans"],
+                "body-sm": ["Plus Jakarta Sans"]
+            },
+            "fontSize": {
+                "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                "label-lg": ["14px", {"lineHeight": "20px", "letterSpacing": "0.01em", "fontWeight": "600"}],
+                "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                "display-lg": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "500"}],
+                "headline-lg": ["30px", {"lineHeight": "36px", "fontWeight": "600"}],
+                "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.04em", "fontWeight": "600"}],
+                "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .glass-card {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.4);
+        }
+        .sky-gradient-bg {
+            background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+        }
+        .shadow-1 { box-shadow: 0 2px 4px rgba(14, 165, 233, 0.05); }
+        .shadow-3 { box-shadow: 0 10px 15px rgba(14, 165, 233, 0.12); }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .intervention-button {
+            background: linear-gradient(90deg, #006591 0%, #0ea5e9 100%);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .intervention-button:active {
+            transform: scale(0.96);
+        }
+        /* Chart Simulation Styles */
+        .chart-path-physics { stroke-dasharray: 1000; stroke-dashoffset: 1000; animation: dash 2s ease-out forwards; }
+        .chart-path-math { stroke-dasharray: 1000; stroke-dashoffset: 1000; animation: dash 2.5s ease-out forwards; }
+        @keyframes dash { to { stroke-dashoffset: 0; } }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background font-body-md min-h-screen pb-24 lg:pb-0">
+<!-- TopAppBar -->
+<header class="flex justify-between items-center px-container-padding h-16 w-full fixed top-0 z-50 bg-surface dark:bg-inverse-surface shadow-sm dark:shadow-none border-b border-outline-variant dark:border-outline/30">
+<div class="flex items-center gap-3">
+<button class="material-symbols-outlined text-on-surface-variant">arrow_back</button>
+<h1 class="font-headline-sm text-primary dark:text-primary-fixed-dim font-bold tracking-tight">Kilimanjaro Teachers</h1>
+</div>
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-on-surface-variant hover:bg-surface-container-high p-2 rounded-full cursor-pointer transition-colors">notifications</span>
+<div class="w-8 h-8 rounded-full overflow-hidden border-2 border-primary-container">
+<img alt="Teacher profile photo" class="w-full h-full object-cover" data-alt="A professional portrait of a senior high school teacher, a woman in her 40s with a warm and intellectual expression, wearing professional attire. The lighting is soft and academic, set against a blurred background of a modern school library. The aesthetic is clean, professional, and corporate modern, aligned with the Kilimanjaro Schools brand colors of blues and whites." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDqadStp7ipmNwq4HCgqrzzXdSKaGRQvdOhUf5Dc5jfkJZ7sUDuKXa5pLAQpCY5Y5JthpNo1VVo74_hIEOuPW9_1gsCBwGyQl2oeyjlGEUsK0WqMwETwDvR30zpNDEtRJxnM86UymlmJjS0HqRzvKec2droSKMLM_cIuiTmV03OdUUobxQY8RRyV1YF5Jqjgm45lL8a5krtcYcImXf1-lJIJrMtdxlpB3t8OEhhRPCSyq7cOT5c1P8bOhl8PocSGLkuwpAZlfOEgA"/>
+</div>
+</div>
+</header>
+<div class="flex pt-16 h-[calc(100vh-64px)]">
+<!-- Desktop Sidebar (NavigationDrawer) -->
+<aside class="hidden lg:flex fixed left-0 top-16 h-[calc(100vh-64px)] w-80 bg-surface border-r border-outline-variant z-40 flex-col py-6 gap-4">
+<div class="px-6 mb-4">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-full bg-primary-container flex items-center justify-center text-on-primary-container font-bold text-headline-sm">S</div>
+<div>
+<p class="font-headline-sm text-on-surface font-semibold">S. Kilimanjaro</p>
+<p class="font-label-md text-on-surface-variant">Senior Educator • Grade 10</p>
+</div>
+</div>
+</div>
+<nav class="flex-1 px-2 space-y-1">
+<a class="flex items-center gap-3 p-4 text-on-surface-variant hover:bg-surface-container-low rounded-lg transition-all mx-2" href="#">
+<span class="material-symbols-outlined">home</span>
+<span class="font-label-lg">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 p-4 bg-primary-container text-on-primary-container font-bold rounded-lg transition-all mx-2" href="#">
+<span class="material-symbols-outlined">fact_check</span>
+<span class="font-label-lg">Attendance Log</span>
+</a>
+<a class="flex items-center gap-3 p-4 text-on-surface-variant hover:bg-surface-container-low rounded-lg transition-all mx-2" href="#">
+<span class="material-symbols-outlined">app_registration</span>
+<span class="font-label-lg">Marks Entry</span>
+</a>
+<a class="flex items-center gap-3 p-4 text-on-surface-variant hover:bg-surface-container-low rounded-lg transition-all mx-2" href="#">
+<span class="material-symbols-outlined">analytics</span>
+<span class="font-label-lg">Syllabus Progress</span>
+</a>
+<a class="flex items-center gap-3 p-4 text-on-surface-variant hover:bg-surface-container-low rounded-lg transition-all mx-2" href="#">
+<span class="material-symbols-outlined">grid_view</span>
+<span class="font-label-lg">Weekly Timetable</span>
+</a>
+<a class="flex items-center gap-3 p-4 text-on-surface-variant hover:bg-surface-container-low rounded-lg transition-all mx-2" href="#">
+<span class="material-symbols-outlined">event_note</span>
+<span class="font-label-lg">Academic Calendar</span>
+</a>
+<a class="flex items-center gap-3 p-4 text-on-surface-variant hover:bg-surface-container-low rounded-lg transition-all mx-2" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-label-lg">Portal Settings</span>
+</a>
+</nav>
+</aside>
+<!-- Main Content Canvas -->
+<main class="flex-1 lg:ml-80 px-container-padding py-xl overflow-y-auto">
+<!-- Student Header Section -->
+<section class="mb-lg flex flex-col md:flex-row md:items-center justify-between gap-md">
+<div class="flex items-center gap-md">
+<div class="relative">
+<img alt="Amina Juma" class="w-20 h-20 md:w-24 md:h-24 rounded-full border-4 border-white shadow-3 object-cover" data-alt="A detailed, candid close-up portrait of a high school student named Amina Juma, a young Tanzanian girl with a bright, focused expression. She is in a brightly lit modern classroom with blue and white accents. The lighting is natural and high-contrast, highlighting her determination. The overall style is clean, sharp, and optimistic, embodying a tech-edge educational theme." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAr9qNC827oo66mcyqYnVoZlgYvngzXFyZ0215vkPOAoKui7VrJKFl7J-SAgzBiCanqp0PFbvitZJcV02gRGVxj8mF8SzTbiqFCR2U7X2a0bSSLtLHImY3A4pNEpmeCdaY4_AiubrcjputulrUPn9BgpHDazqHAk9CpNeh2VUMpkls4JAgMiSlY6gi18tV4YYXEKai2ptL3Iy1k6ydiAkqBKq2nvGeEr4vz110ARnMoAYsTSm4iBc6FSh25o42EJwcWSquLNbMzgQ"/>
+<span class="absolute bottom-1 right-1 w-6 h-6 bg-green-500 border-2 border-white rounded-full"></span>
+</div>
+<div>
+<div class="flex items-center gap-xs">
+<h2 class="font-headline-lg text-on-background">Amina Juma</h2>
+<span class="bg-primary/10 text-primary px-3 py-1 rounded-full font-label-md">Grade 10-A</span>
+</div>
+<p class="text-on-surface-variant font-body-md mt-1">Student ID: KJS-2024-0892 • 98% Attendance</p>
+</div>
+</div>
+<button class="intervention-button text-white font-label-lg px-xl py-md rounded-xl shadow-3 flex items-center justify-center gap-2 group">
+<span class="material-symbols-outlined">assignment_turned_in</span>
+                    Log Intervention
+                </button>
+</section>
+<!-- Bento Grid Layout -->
+<div class="grid grid-cols-1 md:grid-cols-12 gap-lg">
+<!-- Performance Analytics Chart (Large Bento Item) -->
+<div class="md:col-span-8 glass-card rounded-xl p-lg shadow-1">
+<div class="flex justify-between items-center mb-lg">
+<h3 class="font-headline-sm text-on-background">Performance Analytics</h3>
+<div class="flex gap-md">
+<div class="flex items-center gap-xs">
+<span class="w-3 h-3 rounded-full bg-primary"></span>
+<span class="font-label-md text-on-surface-variant">Mathematics</span>
+</div>
+<div class="flex items-center gap-xs">
+<span class="w-3 h-3 rounded-full bg-secondary"></span>
+<span class="font-label-md text-on-surface-variant">Physics</span>
+</div>
+</div>
+</div>
+<!-- Simplified SVG Line Chart Simulation -->
+<div class="h-64 w-full relative">
+<svg class="w-full h-full" preserveaspectratio="none" viewbox="0 0 400 100">
+<!-- Grid Lines -->
+<line stroke="#E2E8F0" stroke-width="0.5" x1="0" x2="400" y1="25" y2="25"></line>
+<line stroke="#E2E8F0" stroke-width="0.5" x1="0" x2="400" y1="50" y2="50"></line>
+<line stroke="#E2E8F0" stroke-width="0.5" x1="0" x2="400" y1="75" y2="75"></line>
+<!-- Math Line -->
+<path class="chart-path-math" d="M0,80 Q50,70 100,75 T200,45 T300,55 T400,30" fill="none" stroke="#006591" stroke-linecap="round" stroke-width="3"></path>
+<!-- Physics Line -->
+<path class="chart-path-physics" d="M0,85 Q50,90 100,80 T200,60 T300,40 T400,20" fill="none" stroke="#00687a" stroke-dasharray="4 2" stroke-linecap="round" stroke-width="3"></path>
+</svg>
+<div class="absolute bottom-0 left-0 w-full flex justify-between px-2 text-on-surface-variant font-label-md pt-2">
+<span>Week 1</span><span>Week 4</span><span>Week 8</span><span>Week 12</span>
+</div>
+</div>
+<div class="mt-lg grid grid-cols-2 gap-md pt-lg border-t border-outline-variant/30">
+<div>
+<p class="font-label-md text-on-surface-variant uppercase">Current Avg (Math)</p>
+<p class="font-headline-md text-primary">82% <span class="text-label-md text-green-600">↑ 4.2%</span></p>
+</div>
+<div>
+<p class="font-label-md text-on-surface-variant uppercase">Current Avg (Physics)</p>
+<p class="font-headline-md text-secondary">78% <span class="text-label-md text-green-600">↑ 8.1%</span></p>
+</div>
+</div>
+</div>
+<!-- Active Alerts (Tall Bento Item) -->
+<div class="md:col-span-4 flex flex-col gap-lg">
+<div class="bg-error-container rounded-xl p-lg border-l-4 border-error shadow-1">
+<div class="flex items-center gap-sm mb-sm text-on-error-container">
+<span class="material-symbols-outlined">warning</span>
+<h3 class="font-label-lg">Active Academic Alert</h3>
+</div>
+<p class="font-body-md text-on-error-container/80 mb-sm">Low participation in Physics lab sessions noted during Week 10.</p>
+<button class="w-full bg-on-error-container text-white font-label-md py-xs rounded-lg">Dismiss Alert</button>
+</div>
+<div class="bg-surface-container rounded-xl p-lg border border-outline-variant/50 shadow-1 flex-1">
+<h3 class="font-label-lg text-on-surface mb-md">Peer Pairing Status</h3>
+<div class="flex items-center gap-md p-md bg-white rounded-xl border border-outline-variant/20 mb-md">
+<div class="relative flex">
+<img alt="Amina" class="w-10 h-10 rounded-full border-2 border-white object-cover" data-alt="Avatar of student Amina Juma in a small circular frame for a UI element showing peer pairing." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAeHzTEqPcPpmMvVSjeJQ1o2l9ONrkI7xB6i_qsMkpj9WotcHgXZDwVIIzU6ULuIy--NlhUc6rzJEeK7uSZpyRwasx763cXnGocolrUe_xMbZxirr9NGQQ_2cGszrMskDeHp9lzN0GsjLrrPQ0XXYtyfnx_rLcf6nQ3Gucx2YX4CmoQ4pzYOJkOFDHvLUzfXuPb91D5gQxzSiAEIj6xuha4qbJdZmgVIr9gi00oFfzlNhmVgTLbcNbkwMJ4-navorxeL_XwuYMTTg"/>
+<img alt="Partner" class="w-10 h-10 rounded-full border-2 border-white -ml-4 object-cover" data-alt="A portrait of a male high school student with a friendly, helpful expression, African descent, wearing a school uniform. High key lighting, modern minimalist background, vibrant blue tones." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDsNhqM_Zv4Jr0eycTXjPUQR44wLDJN3U-co-PW96Frmr8c6HvjoAHYS-pxXyfsH13VYfxI3B9YEVoWbDEfzSKqlRLunrpnYJounbYEJP0aeIn-u-K2bqMkH_Ncs4q54NN5lx5xE5ZY5awGyvddMHz9MZw0Xk3Yci-olHdKe4HZkUsD6EFUMNAunP3rApHKTYYycs-BVUNHLzD1DfQQNPxYmBRoNL_nORnQi_NGcELxlYSX3-c2n4cViahDM_Ow8Z1vIXbsuwQGEg"/>
+</div>
+<div>
+<p class="font-label-md text-on-surface">Assigned Mentor</p>
+<p class="font-body-sm text-primary">Baraka M.</p>
+</div>
+<span class="material-symbols-outlined ml-auto text-on-surface-variant">chat_bubble</span>
+</div>
+<div class="space-y-sm">
+<div class="flex justify-between text-label-md">
+<span class="text-on-surface-variant">Session Progress</span>
+<span class="text-on-surface">4/6 Complete</span>
+</div>
+<div class="w-full bg-outline-variant/20 h-2 rounded-full overflow-hidden">
+<div class="bg-primary h-full w-[66%]"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Subject Insight Cards -->
+<div class="md:col-span-6 glass-card rounded-xl p-lg border-t-4 border-primary">
+<div class="flex items-center gap-sm mb-lg">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">functions</span>
+<h3 class="font-headline-sm">Mathematics Focus</h3>
+</div>
+<div class="space-y-md">
+<div class="flex items-center justify-between p-sm bg-surface-container-low rounded-lg">
+<span class="font-body-md text-on-surface-variant">Calculus Mastery</span>
+<span class="font-label-lg text-primary bg-primary/10 px-2 py-1 rounded">Advanced</span>
+</div>
+<div class="flex items-center justify-between p-sm bg-surface-container-low rounded-lg">
+<span class="font-body-md text-on-surface-variant">Statistics Accuracy</span>
+<span class="font-label-lg text-secondary bg-secondary/10 px-2 py-1 rounded">Improving</span>
+</div>
+<div class="p-sm">
+<p class="font-label-md text-on-surface-variant mb-xs">Teacher's Note:</p>
+<p class="font-body-sm italic text-on-surface">"Amina shows strong logical reasoning but needs more practice in complex integration."</p>
+</div>
+</div>
+</div>
+<div class="md:col-span-6 glass-card rounded-xl p-lg border-t-4 border-secondary">
+<div class="flex items-center gap-sm mb-lg">
+<span class="material-symbols-outlined text-secondary" style="font-variation-settings: 'FILL' 1;">science</span>
+<h3 class="font-headline-sm">Physics Insights</h3>
+</div>
+<div class="space-y-md">
+<div class="flex items-center justify-between p-sm bg-surface-container-low rounded-lg">
+<span class="font-body-md text-on-surface-variant">Thermodynamics</span>
+<div class="flex gap-1">
+<div class="w-2 h-2 rounded-full bg-secondary"></div>
+<div class="w-2 h-2 rounded-full bg-secondary"></div>
+<div class="w-2 h-2 rounded-full bg-outline-variant"></div>
+</div>
+</div>
+<div class="flex items-center justify-between p-sm bg-surface-container-low rounded-lg">
+<span class="font-body-md text-on-surface-variant">Quantum Mechanics</span>
+<div class="flex gap-1">
+<div class="w-2 h-2 rounded-full bg-secondary"></div>
+<div class="w-2 h-2 rounded-full bg-outline-variant"></div>
+<div class="w-2 h-2 rounded-full bg-outline-variant"></div>
+</div>
+</div>
+<div class="p-sm">
+<p class="font-label-md text-on-surface-variant mb-xs">Engagement Level:</p>
+<div class="flex items-center gap-md">
+<div class="flex-1 bg-outline-variant/30 h-1.5 rounded-full overflow-hidden">
+<div class="bg-secondary h-full w-[45%]"></div>
+</div>
+<span class="font-label-lg text-secondary">Moderate</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+<!-- Mobile Bottom Navigation Shell -->
+<nav class="md:hidden fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-2 py-3 bg-surface border-t border-outline-variant/20 shadow-lg">
+<a class="flex flex-col items-center justify-center text-on-surface-variant" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-label-md">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center bg-primary-container text-on-primary-container rounded-full px-4 py-1 active:scale-90 duration-150" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">how_to_reg</span>
+<span class="font-label-md">Attendance</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant" href="#">
+<span class="material-symbols-outlined">edit_note</span>
+<span class="font-label-md">Marks</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant" href="#">
+<span class="material-symbols-outlined">calendar_month</span>
+<span class="font-label-md">Schedule</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant" href="#">
+<span class="material-symbols-outlined">menu</span>
+<span class="font-label-md">Menu</span>
+</a>
+</nav>
+<!-- FAB (Suppressed on details pages as per guidance, but providing container for layout integrity) -->
+<script>
+        // Micro-interactions and simple UI logic
+        document.addEventListener('DOMContentLoaded', () => {
+            const buttons = document.querySelectorAll('button, a');
+            buttons.forEach(btn => {
+                btn.addEventListener('click', function(e) {
+                    let ripple = document.createElement('span');
+                    ripple.classList.add('ripple');
+                    this.appendChild(ripple);
+                    setTimeout(() => ripple.remove(), 600);
+                });
+            });
+        });
+    </script>
+</body></html>

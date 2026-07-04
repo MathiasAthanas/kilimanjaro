@@ -1,7 +1,7 @@
 /**
  * Timetable management pages — Hub, Venues, Activities, Sheets, Builder, Print
  */
-import React, { useRef, useState } from 'react';
+import React, { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   AlertTriangle, Building2, Activity, Calendar, CheckCircle2,
@@ -1258,12 +1258,232 @@ export function TimetableBuilderPage() {
   );
 }
 
+// ─── PDF generator ────────────────────────────────────────────────────────────
+
+function hexToRgb(hex: string): [number, number, number] {
+  const c = hex.replace('#', '');
+  const n = parseInt(c.length === 3 ? c.split('').map((x) => x + x).join('') : c, 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+async function generateTimetablePdf(sheet: TimetableSheet, slots: TimetableSlot[]) {
+  const { jsPDF } = await import('jspdf');
+
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const PW = 297;  // page width  (landscape A4)
+  const PH = 210;  // page height
+  const M  = 12;   // margin
+
+  // ── palette ──────────────────────────────────────────────────────────────
+  const DARK   : [number,number,number] = [30, 27, 75];   // #1E1B4B
+  const MID    : [number,number,number] = [49, 46, 129];  // #312E81
+  const ACCENT : [number,number,number] = [67, 56, 202];  // #4338CA
+  const SKY    : [number,number,number] = [125, 211, 252]; // sky-300
+  const SLATE50: [number,number,number] = [248, 250, 252];
+  const SLATE2 : [number,number,number] = [226, 232, 240];
+  const SLATE9 : [number,number,number] = [15, 23, 42];
+  const WHITE  : [number,number,number] = [255, 255, 255];
+
+  // ── HEADER BAND ───────────────────────────────────────────────────────────
+  doc.setFillColor(...DARK);
+  doc.rect(0, 0, PW, 36, 'F');
+
+  // accent bar left
+  doc.setFillColor(...ACCENT);
+  doc.rect(0, 0, 4, 36, 'F');
+
+  // Logo circle
+  doc.setFillColor(...MID);
+  doc.circle(M + 12, 18, 11, 'F');
+  doc.setFillColor(...SKY);
+  doc.circle(M + 12, 18, 9, 'F');
+  doc.setFillColor(...DARK);
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...DARK);
+  doc.text('KEMS', M + 12, 16.5, { align: 'center' });
+  doc.setFontSize(5.5);
+  doc.text('SCHOOL', M + 12, 20, { align: 'center' });
+
+  // School name
+  doc.setTextColor(...WHITE);
+  doc.setFontSize(16);
+  doc.setFont('helvetica', 'bold');
+  doc.text('KILIMANJARO EDUCATION MANAGEMENT', M + 28, 14);
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(...SKY);
+  doc.text('Excellence in Education  ·  Discipline  ·  Knowledge  ·  Service', M + 28, 20);
+
+  // Right side: OFFICIAL TIMETABLE
+  doc.setFontSize(13);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...SKY);
+  doc.text('OFFICIAL TIMETABLE', PW - M, 14, { align: 'right' });
+  doc.setFontSize(7);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(200, 200, 220);
+  doc.text(
+    `Generated: ${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}`,
+    PW - M, 21, { align: 'right' },
+  );
+
+  // ── META BAND ─────────────────────────────────────────────────────────────
+  doc.setFillColor(...SLATE50);
+  doc.rect(0, 36, PW, 16, 'F');
+  doc.setDrawColor(...SLATE2);
+  doc.setLineWidth(0.2);
+  doc.line(0, 52, PW, 52);
+
+  const metaItems = [
+    { label: 'TIMETABLE', value: sheet.name },
+    ...(sheet.className ? [{ label: 'CLASS', value: sheet.className }] : []),
+    ...(sheet.stage     ? [{ label: 'STAGE', value: fmtLabel(sheet.stage) }] : []),
+    { label: 'TYPE', value: fmtLabel(sheet.timetableType) },
+    { label: 'LESSONS', value: `${slots.filter((s) => s.activityType === 'LESSON').length} periods` },
+    { label: 'STATUS', value: sheet.isPublished ? 'Published' : 'Draft' },
+  ];
+
+  const metaX = M + 4;
+  const colW = (PW - M * 2 - 8) / metaItems.length;
+  metaItems.forEach((item, i) => {
+    const x = metaX + i * colW;
+    doc.setFontSize(6);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...ACCENT);
+    doc.text(item.label, x, 42);
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...SLATE9);
+    doc.text(item.value, x, 49);
+  });
+
+  // ── TIMETABLE GRID ────────────────────────────────────────────────────────
+  const tableTop = 56;
+  const tableH   = PH - tableTop - 18;  // leave room for footer
+  const colWidth = (PW - M * 2) / 5;
+
+  // Time column header placeholder (no time col — just day headers)
+  DAYS.forEach((day, di) => {
+    const cx = M + di * colWidth;
+    doc.setFillColor(...MID);
+    doc.rect(cx, tableTop, colWidth, 10, 'F');
+    doc.setDrawColor(...DARK);
+    doc.setLineWidth(0.3);
+    doc.rect(cx, tableTop, colWidth, 10, 'S');
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...WHITE);
+    doc.text(fmtLabel(day).toUpperCase(), cx + colWidth / 2, tableTop + 6.5, { align: 'center' });
+  });
+
+  // Slot rows
+  const slotsByDayFn = (day: string) =>
+    slots.filter((s) => s.dayOfWeek === day).sort((a, b) => a.startTime.localeCompare(b.startTime));
+
+  const maxRows = Math.max(...DAYS.map((d) => slotsByDayFn(d).length), 1);
+  const rowH    = Math.min((tableH - 10) / maxRows, 22);
+
+  Array.from({ length: maxRows }).forEach((_, ri) => {
+    const rowY = tableTop + 10 + ri * rowH;
+    const bg   = ri % 2 === 0 ? WHITE : SLATE50;
+
+    DAYS.forEach((day, di) => {
+      const cx   = M + di * colWidth;
+      const slot = slotsByDayFn(day)[ri];
+
+      doc.setFillColor(...bg);
+      doc.rect(cx, rowY, colWidth, rowH, 'F');
+      doc.setDrawColor(...SLATE2);
+      doc.setLineWidth(0.15);
+      doc.rect(cx, rowY, colWidth, rowH, 'S');
+
+      if (!slot) return;
+
+      const color = slot.colorCode ?? ACTIVITY_COLORS[slot.activityType] ?? '#4338CA';
+      const [cr, cg, cb] = hexToRgb(color);
+
+      // Colour accent bar
+      doc.setFillColor(cr, cg, cb);
+      doc.rect(cx, rowY, 2.5, rowH, 'F');
+
+      // Tinted background
+      doc.setFillColor(cr, cg, cb);
+      doc.setGState(doc.GState({ opacity: 0.07 }));
+      doc.rect(cx + 2.5, rowY, colWidth - 2.5, rowH, 'F');
+      doc.setGState(doc.GState({ opacity: 1 }));
+
+      // Slot label
+      const label = slot.label || slot.subjectName || fmtLabel(slot.activityType);
+      doc.setFontSize(7.5);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(...SLATE9);
+      const lines = doc.splitTextToSize(label, colWidth - 8);
+      doc.text(lines[0] as string, cx + 5, rowY + 5.5);
+
+      // Time
+      doc.setFontSize(6);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(100, 116, 139);
+      doc.text(`${slot.startTime} – ${slot.endTime}`, cx + 5, rowY + 10);
+
+      // Teacher
+      if (slot.teacherName && rowH > 14) {
+        doc.setFontSize(5.5);
+        doc.setTextColor(148, 163, 184);
+        const tLines = doc.splitTextToSize(slot.teacherName, colWidth - 8);
+        doc.text(tLines[0] as string, cx + 5, rowY + 14.5);
+      }
+
+      // Venue
+      if (slot.venue?.name && rowH > 18) {
+        doc.setFontSize(5);
+        doc.setTextColor(203, 213, 225);
+        doc.text(slot.venue.name, cx + 5, rowY + 18.5);
+      }
+    });
+  });
+
+  // ── LEGEND ────────────────────────────────────────────────────────────────
+  const usedTypes = ACTIVITY_TYPES.filter((t) => slots.some((s) => s.activityType === t));
+  const legendY   = PH - 13;
+  doc.setFillColor(...SLATE50);
+  doc.rect(0, legendY - 3, PW, 16, 'F');
+  doc.setDrawColor(...SLATE2);
+  doc.line(0, legendY - 3, PW, legendY - 3);
+
+  let lx = M;
+  usedTypes.forEach((t) => {
+    const [cr, cg, cb] = hexToRgb(ACTIVITY_COLORS[t] ?? '#4338CA');
+    doc.setFillColor(cr, cg, cb);
+    doc.circle(lx + 2, legendY + 1.5, 2, 'F');
+    doc.setFontSize(6.5);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...SLATE9);
+    doc.text(fmtLabel(t), lx + 6, legendY + 3);
+    lx += doc.getTextWidth(fmtLabel(t)) + 14;
+  });
+
+  // Footer right
+  doc.setFontSize(6);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(148, 163, 184);
+  doc.text('Kilimanjaro Education Management System · Timetable Office', PW - M, legendY + 3, { align: 'right' });
+
+  // ── Bottom accent line ────────────────────────────────────────────────────
+  doc.setFillColor(...ACCENT);
+  doc.rect(0, PH - 2, PW, 2, 'F');
+
+  const filename = `Timetable_${sheet.name.replace(/[^a-z0-9]/gi, '_')}_${new Date().toISOString().slice(0, 10)}.pdf`;
+  doc.save(filename);
+}
+
 // ─── Print Page ───────────────────────────────────────────────────────────────
 
 export function TimetablePrintPage() {
   const { id: sheetId } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const printRef = useRef<HTMLDivElement>(null);
+  const [generating, setGenerating] = React.useState(false);
 
   const { data: sheetData, isLoading } = useTimetableSheet(sheetId);
   const sheet = sheetData as TimetableSheet | undefined;
@@ -1277,6 +1497,16 @@ export function TimetablePrintPage() {
     return slot.colorCode ?? ACTIVITY_COLORS[slot.activityType] ?? '#4338CA';
   }
 
+  async function handleDownloadPdf() {
+    if (!sheet) return;
+    setGenerating(true);
+    try {
+      await generateTimetablePdf(sheet, slots);
+    } finally {
+      setGenerating(false);
+    }
+  }
+
   if (isLoading) return (
     <div className="flex h-60 items-center justify-center font-semibold text-slate-400">Loading…</div>
   );
@@ -1284,135 +1514,149 @@ export function TimetablePrintPage() {
     <div className="flex h-60 items-center justify-center font-semibold text-rose-500">Sheet not found.</div>
   );
 
-  return (
-    <>
-      <style>{`
-        @media print {
-          body { margin: 0; font-family: sans-serif; }
-          @page { size: A4 landscape; margin: 12mm; }
-          .print-hidden { display: none !important; }
-        }
-      `}</style>
+  const maxRows = Math.max(...DAYS.map((d) => slotsByDay(d).length), 1);
 
-      <div className="mb-6 flex items-center gap-3 print-hidden">
-        <Button onClick={() => window.print()}><Printer className="mr-1.5 h-4 w-4" />Print Timetable</Button>
-        <Button variant="ghost" onClick={() => navigate(`/admin/timetable/builder/${sheetId}`)}>Back to Builder</Button>
+  return (
+    <div className="space-y-6">
+      {/* Toolbar */}
+      <div className="flex flex-wrap items-center gap-3">
+        <Button onClick={handleDownloadPdf} disabled={generating}>
+          <Printer className="mr-1.5 h-4 w-4" />
+          {generating ? 'Generating PDF…' : 'Download PDF'}
+        </Button>
+        <Button variant="ghost" onClick={() => navigate(`/admin/timetable/builder/${sheetId}`)}>
+          ← Back to Builder
+        </Button>
+        <span className="ml-auto text-xs font-semibold text-slate-400">
+          {slots.length} slot{slots.length !== 1 ? 's' : ''} · {slots.filter((s) => s.activityType === 'LESSON').length} lessons
+        </span>
       </div>
 
-      <div ref={printRef} className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+      {/* Preview card */}
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg">
+
         {/* Branded header */}
-        <div className="rounded-t-2xl bg-[#1E1B4B] px-8 py-6 text-white">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="font-display text-2xl font-black tracking-tight">KILIMANJARO SCHOOLS</h1>
-              <p className="mt-0.5 text-sm font-semibold text-white/60">
+        <div className="relative overflow-hidden bg-[#1E1B4B] px-8 py-7">
+          <div className="absolute left-0 top-0 h-full w-1.5 bg-[#4338CA]" />
+          <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-[#312E81] opacity-40" />
+          <div className="absolute -bottom-6 right-20 h-24 w-24 rounded-full bg-[#4338CA] opacity-20" />
+
+          <div className="relative flex items-center gap-6">
+            {/* Logo badge */}
+            <div className="flex h-16 w-16 shrink-0 flex-col items-center justify-center rounded-2xl bg-gradient-to-br from-sky-400 to-indigo-600 shadow-lg">
+              <span className="font-display text-xs font-black leading-none text-white">KEMS</span>
+              <span className="mt-0.5 text-[8px] font-bold uppercase tracking-widest text-white/80">SCHOOL</span>
+            </div>
+
+            <div className="flex-1">
+              <h1 className="font-display text-2xl font-black tracking-tight text-white">
+                KILIMANJARO EDUCATION MANAGEMENT
+              </h1>
+              <p className="mt-1 text-sm font-semibold text-sky-300">
                 Excellence in Education · Discipline · Knowledge · Service
               </p>
             </div>
-            <div className="text-right">
+
+            <div className="shrink-0 text-right">
               <p className="font-display text-lg font-black text-sky-300">OFFICIAL TIMETABLE</p>
-              <p className="mt-0.5 text-xs font-semibold text-white/50">
-                Generated: {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}
+              <p className="mt-1 text-xs font-semibold text-white/50">
+                {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}
               </p>
             </div>
           </div>
         </div>
 
-        {/* Sheet meta */}
-        <div className="border-b border-slate-200 bg-slate-50 px-8 py-4">
-          <div className="flex flex-wrap gap-6">
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Sheet</p>
-              <p className="font-bold text-slate-900">{sheet.name}</p>
+        {/* Meta strip */}
+        <div className="grid grid-cols-3 gap-px bg-slate-200 sm:grid-cols-6">
+          {[
+            { label: 'Timetable', value: sheet.name },
+            { label: 'Class',     value: sheet.className ?? '—' },
+            { label: 'Stage',     value: sheet.stage ? fmtLabel(sheet.stage) : '—' },
+            { label: 'Type',      value: fmtLabel(sheet.timetableType) },
+            { label: 'Lessons',   value: `${slots.filter((s) => s.activityType === 'LESSON').length} periods` },
+            { label: 'Status',    value: sheet.isPublished ? 'Published' : 'Draft' },
+          ].map((m) => (
+            <div key={m.label} className="bg-slate-50 px-4 py-3">
+              <p className="text-[9px] font-black uppercase tracking-widest text-indigo-500">{m.label}</p>
+              <p className="mt-0.5 text-sm font-black text-slate-900">{m.value}</p>
             </div>
-            {sheet.className && (
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Class</p>
-                <p className="font-bold text-slate-900">{sheet.className}</p>
-              </div>
-            )}
-            {sheet.stage && (
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Stage</p>
-                <p className="font-bold text-slate-900">{fmtLabel(sheet.stage)}</p>
-              </div>
-            )}
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Type</p>
-              <p className="font-bold text-slate-900">{fmtLabel(sheet.timetableType)}</p>
-            </div>
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Lessons</p>
-              <p className="font-bold text-slate-900">{slots.filter((s) => s.activityType === 'LESSON').length} periods</p>
-            </div>
-          </div>
+          ))}
         </div>
 
-        {/* Week grid table */}
-        <div className="overflow-x-auto p-6">
-          <table className="w-full border-collapse text-sm" style={{ minWidth: 700 }}>
+        {/* Week grid */}
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse" style={{ minWidth: 700 }}>
             <thead>
               <tr>
                 {DAYS.map((day) => (
                   <th key={day}
-                    className="border border-slate-200 bg-[#312E81] px-3 py-2.5 text-center font-display text-sm font-black uppercase tracking-wider text-white">
+                    className="border border-slate-300 bg-[#312E81] px-3 py-3 text-center font-display text-xs font-black uppercase tracking-widest text-white">
                     {fmtLabel(day)}
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {(() => {
-                const maxRows = Math.max(...DAYS.map((d) => slotsByDay(d).length), 1);
-                return Array.from({ length: maxRows }, (_, i) => (
-                  <tr key={i}>
-                    {DAYS.map((day) => {
-                      const s = slotsByDay(day)[i];
-                      return (
-                        <td key={day} className="border border-slate-200 p-2 align-top" style={{ minWidth: 120 }}>
-                          {s ? (
-                            <div className="rounded-md p-2" style={{
+              {Array.from({ length: maxRows }, (_, ri) => (
+                <tr key={ri} className={ri % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}>
+                  {DAYS.map((day) => {
+                    const s = slotsByDay(day)[ri];
+                    return (
+                      <td key={day} className="border border-slate-200 p-1.5 align-top" style={{ minWidth: 130 }}>
+                        {s ? (
+                          <div
+                            className="rounded-lg p-2.5"
+                            style={{
                               borderLeft: `4px solid ${actColor(s)}`,
-                              background: actColor(s) + '15',
-                            }}>
-                              <p className="text-xs font-black leading-snug text-slate-900">
-                                {s.label || s.subjectName || fmtLabel(s.activityType)}
-                              </p>
-                              <p className="mt-0.5 text-[10px] font-bold text-slate-500">
-                                {s.startTime} – {s.endTime}
-                              </p>
-                              {s.teacherName && <p className="mt-0.5 truncate text-[10px] text-slate-500">{s.teacherName}</p>}
-                              {s.venue       && <p className="truncate text-[10px] text-slate-400">{s.venue.name}</p>}
-                            </div>
-                          ) : null}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ));
-              })()}
+                              background: actColor(s) + '12',
+                            }}
+                          >
+                            <p className="text-xs font-black leading-snug text-slate-900">
+                              {s.label || s.subjectName || fmtLabel(s.activityType)}
+                            </p>
+                            <p className="mt-1 text-[10px] font-bold text-slate-500">
+                              {s.startTime} – {s.endTime}
+                            </p>
+                            {s.teacherName && (
+                              <p className="mt-0.5 truncate text-[10px] font-semibold text-slate-400">{s.teacherName}</p>
+                            )}
+                            {s.venue?.name && (
+                              <p className="truncate text-[9px] text-slate-300">{s.venue.name}</p>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="h-full min-h-[60px]" />
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
 
         {/* Legend */}
-        <div className="flex flex-wrap gap-3 border-t border-slate-100 px-6 pb-4 pt-4">
+        <div className="flex flex-wrap gap-4 border-t border-slate-100 bg-white px-6 py-4">
           {ACTIVITY_TYPES.filter((t) => slots.some((s) => s.activityType === t)).map((t) => (
             <span key={t} className="flex items-center gap-1.5 text-[10px] font-bold text-slate-600">
-              <span className="h-3 w-3 rounded-full" style={{ background: ACTIVITY_COLORS[t] }} />
+              <span className="h-2.5 w-2.5 rounded-full shadow-sm" style={{ background: ACTIVITY_COLORS[t] }} />
               {fmtLabel(t)}
             </span>
           ))}
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between rounded-b-2xl border-t border-slate-200 bg-slate-50 px-8 py-4">
-          <p className="text-xs font-semibold text-slate-400">Kilimanjaro Schools · Timetable Office</p>
-          <p className="text-xs font-semibold text-slate-400">
-            {sheet.isPublished ? 'OFFICIAL — Published' : 'DRAFT — Not Published'}
+        <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-8 py-3.5">
+          <p className="text-[10px] font-semibold text-slate-400">Kilimanjaro Education Management System · Timetable Office</p>
+          <p className={`text-[10px] font-black ${sheet.isPublished ? 'text-emerald-600' : 'text-amber-500'}`}>
+            {sheet.isPublished ? '✓ OFFICIAL — Published' : '⚠ DRAFT — Not for distribution'}
           </p>
         </div>
+
+        {/* Bottom accent */}
+        <div className="h-1.5 bg-gradient-to-r from-[#1E1B4B] via-[#4338CA] to-sky-400" />
       </div>
-    </>
+    </div>
   );
 }

@@ -26,6 +26,7 @@ export class FundRequestsService {
   async create(dto: CreateFundRequestDto, user: RequestUser) {
     const amount = new Prisma.Decimal(dto.amount);
     if (amount.lessThanOrEqualTo(0)) throw new BadRequestException('Amount must be greater than zero');
+    const requesterName = dto.requestedByName?.trim() || user.email || user.role;
 
     const created = await this.prisma.fundRequest.create({
       data: {
@@ -37,14 +38,14 @@ export class FundRequestsService {
         department: dto.department,
         neededBy: dto.neededBy ? new Date(dto.neededBy) : undefined,
         requestedById: user.id,
-        requestedByName: dto.requestedByName,
+        requestedByName: requesterName,
         requestedByRole: user.role,
         status: FundRequestStatus.SUBMITTED,
         events: {
           create: {
             action: 'SUBMITTED',
             actorId: user.id,
-            actorName: dto.requestedByName,
+            actorName: requesterName,
             actorRole: user.role,
             note: 'Request submitted',
           },

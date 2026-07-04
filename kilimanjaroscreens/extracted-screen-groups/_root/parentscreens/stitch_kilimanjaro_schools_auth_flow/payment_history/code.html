@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Payment History - Kilimanjaro Schools</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-bright": "#faf8ff",
+                        "tertiary-fixed": "#e1e0ff",
+                        "on-tertiary": "#ffffff",
+                        "secondary-fixed-dim": "#4cd7f6",
+                        "on-secondary-fixed-variant": "#004e5c",
+                        "surface-container": "#eaedff",
+                        "surface-container-high": "#e2e7ff",
+                        "primary-fixed-dim": "#89ceff",
+                        "primary-container": "#0ea5e9",
+                        "on-tertiary-container": "#1407ad",
+                        "tertiary-fixed-dim": "#c0c1ff",
+                        "on-primary": "#ffffff",
+                        "primary-fixed": "#c9e6ff",
+                        "on-surface-variant": "#3e4850",
+                        "surface-dim": "#d2d9f4",
+                        "on-error-container": "#93000a",
+                        "inverse-primary": "#89ceff",
+                        "primary": "#006591",
+                        "surface-container-highest": "#dae2fd",
+                        "surface-tint": "#006591",
+                        "on-primary-fixed": "#001e2f",
+                        "surface": "#faf8ff",
+                        "secondary": "#00687a",
+                        "error-container": "#ffdad6",
+                        "on-background": "#131b2e",
+                        "inverse-surface": "#283044",
+                        "background": "#faf8ff",
+                        "tertiary-container": "#8d90ff",
+                        "on-error": "#ffffff",
+                        "secondary-fixed": "#acedff",
+                        "on-secondary": "#ffffff",
+                        "secondary-container": "#57dffe",
+                        "surface-container-lowest": "#ffffff",
+                        "surface-variant": "#dae2fd",
+                        "outline-variant": "#bec8d2",
+                        "on-primary-fixed-variant": "#004c6e",
+                        "on-tertiary-fixed-variant": "#2f2ebe",
+                        "inverse-on-surface": "#eef0ff",
+                        "tertiary": "#494bd6",
+                        "on-surface": "#131b2e",
+                        "outline": "#6e7881",
+                        "error": "#ba1a1a",
+                        "on-secondary-container": "#006172",
+                        "on-tertiary-fixed": "#07006c",
+                        "surface-container-low": "#f2f3ff",
+                        "on-primary-container": "#003751",
+                        "on-secondary-fixed": "#001f26"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "xl": "32px",
+                        "md": "16px",
+                        "xs": "8px",
+                        "lg": "24px",
+                        "sm": "12px",
+                        "container-padding": "20px",
+                        "base": "4px"
+                    },
+                    "fontFamily": {
+                        "label-lg": ["Plus Jakarta Sans"],
+                        "body-lg": ["Plus Jakarta Sans"],
+                        "display-lg": ["Space Grotesk"],
+                        "label-md": ["Plus Jakarta Sans"],
+                        "headline-lg": ["Space Grotesk"],
+                        "headline-md": ["Space Grotesk"],
+                        "body-sm": ["Plus Jakarta Sans"],
+                        "headline-sm": ["Space Grotesk"],
+                        "body-md": ["Plus Jakarta Sans"]
+                    },
+                    "fontSize": {
+                        "label-lg": ["14px", {"lineHeight": "20px", "letterSpacing": "0.01em", "fontWeight": "600"}],
+                        "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                        "display-lg": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.04em", "fontWeight": "600"}],
+                        "headline-lg": ["30px", {"lineHeight": "36px", "fontWeight": "600"}],
+                        "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                        "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                        "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "500"}],
+                        "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .sky-shadow {
+            box-shadow: 0 10px 15px rgba(14, 165, 233, 0.12);
+        }
+        .inset-divider {
+            position: relative;
+        }
+        .inset-divider::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 16px;
+            right: 16px;
+            height: 1px;
+            background-color: #bec8d2;
+            opacity: 0.5;
+        }
+        .inset-divider:last-child::after {
+            display: none;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background font-body-md text-on-background min-h-screen pb-24">
+<!-- TopAppBar -->
+<header class="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-container-padding h-14 bg-surface-bright shadow1">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full overflow-hidden bg-surface-container">
+<img alt="Amina Profile" class="w-full h-full object-cover" data-alt="A professional headshot of a confident African woman with a warm smile, set against a soft-focus office background. The lighting is bright and natural, consistent with a high-end corporate mobile application. The colors are muted and professional, emphasizing a trustworthy user experience." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBGidlO1hbBkuUV2vGIRRGWoNHYfRYVBnb8_i34SjE17JcB6lSGMctqcM78fG9G1tWWwCd5shJwro_cB9lelA1RD_6AsCTjn-VZg_rM23aDczXJ1l2LW_slFaHxzK8b7FIsRzHvh8hH6Y1UVfSE5KfXi29FJMksbrJ9stGBB6DRsyBl_oyamRZSa-lFqCEtqFjwdXmG4vibs3B4YhblLf_9fp8nHWHQBFOqMHtu3IBht3ZdVnr9pHLaZ8qCy_6Th80zRlG_wHDMZw"/>
+</div>
+<h1 class="font-headline-sm text-headline-sm-mobile text-primary font-bold">Kilimanjaro Schools</h1>
+</div>
+<button class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-container transition-colors">
+<span class="material-symbols-outlined text-on-surface-variant">notifications</span>
+</button>
+</header>
+<main class="pt-20 px-container-padding max-w-md mx-auto">
+<!-- Title & Hero Section -->
+<div class="mb-lg">
+<h2 class="font-headline-md text-headline-md-mobile text-on-surface mb-xs">Payment History</h2>
+<p class="font-body-sm text-on-surface-variant">View and manage your school fee transactions</p>
+</div>
+<!-- Summary Card -->
+<div class="bg-primary-container rounded-xl p-md sky-shadow mb-lg relative overflow-hidden">
+<div class="absolute -right-4 -top-4 w-24 h-24 bg-white/10 rounded-full blur-2xl"></div>
+<div class="relative z-10">
+<p class="font-label-md text-white/80 uppercase mb-base">Total paid this academic year</p>
+<p class="font-display-lg text-white">TZS 870,000</p>
+<div class="mt-sm flex items-center gap-2">
+<span class="material-symbols-outlined text-white text-sm" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<p class="font-label-md text-white/90">All installments current</p>
+</div>
+</div>
+</div>
+<!-- Filter Bar -->
+<div class="flex gap-sm mb-lg overflow-x-auto pb-2 scrollbar-hide">
+<button class="px-md py-2 rounded-full bg-primary text-on-primary font-label-lg whitespace-nowrap">All Children</button>
+<button class="px-md py-2 rounded-full bg-surface-container-high text-on-surface-variant font-label-lg whitespace-nowrap hover:bg-surface-container-highest transition-colors">Amina</button>
+<button class="px-md py-2 rounded-full bg-surface-container-high text-on-surface-variant font-label-lg whitespace-nowrap hover:bg-surface-container-highest transition-colors">Jabir</button>
+</div>
+<!-- Grouped Payment List -->
+<div class="space-y-xl">
+<!-- Month Group: March 2026 -->
+<section>
+<h3 class="font-label-lg text-primary mb-md px-base">March 2026</h3>
+<div class="bg-surface-container-lowest rounded-xl shadow1 border border-surface">
+<!-- Row 1 -->
+<button class="w-full flex items-center justify-between p-md inset-divider active:scale-95 transition-transform text-left">
+<div class="flex items-center gap-md">
+<div class="w-12 h-12 rounded-xl bg-secondary-container/20 flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">receipt_long</span>
+</div>
+<div>
+<h4 class="font-label-lg text-on-surface">Amina - Term 1 Installment</h4>
+<p class="font-body-sm text-on-surface-variant">March 12, 2026 • Mobile Money</p>
+</div>
+</div>
+<div class="text-right">
+<p class="font-label-lg text-on-surface">TZS 250,000</p>
+<span class="text-[10px] font-bold text-secondary bg-secondary-container/30 px-1.5 py-0.5 rounded uppercase">Verified</span>
+</div>
+</button>
+<!-- Row 2 -->
+<button class="w-full flex items-center justify-between p-md inset-divider active:scale-95 transition-transform text-left">
+<div class="flex items-center gap-md">
+<div class="w-12 h-12 rounded-xl bg-tertiary-container/20 flex items-center justify-center text-tertiary">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">bus_alert</span>
+</div>
+<div>
+<h4 class="font-label-lg text-on-surface">Jabir - Transport Fee</h4>
+<p class="font-body-sm text-on-surface-variant">March 05, 2026 • Bank Transfer</p>
+</div>
+</div>
+<div class="text-right">
+<p class="font-label-lg text-on-surface">TZS 85,000</p>
+<span class="text-[10px] font-bold text-secondary bg-secondary-container/30 px-1.5 py-0.5 rounded uppercase">Verified</span>
+</div>
+</button>
+</div>
+</section>
+<!-- Month Group: January 2026 -->
+<section>
+<h3 class="font-label-lg text-primary mb-md px-base">January 2026</h3>
+<div class="bg-surface-container-lowest rounded-xl shadow1 border border-surface">
+<!-- Row 1 -->
+<button class="w-full flex items-center justify-between p-md inset-divider active:scale-95 transition-transform text-left">
+<div class="flex items-center gap-md">
+<div class="w-12 h-12 rounded-xl bg-secondary-container/20 flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">school</span>
+</div>
+<div>
+<h4 class="font-label-lg text-on-surface">Amina - Registration Fee</h4>
+<p class="font-body-sm text-on-surface-variant">January 15, 2026 • Credit Card</p>
+</div>
+</div>
+<div class="text-right">
+<p class="font-label-lg text-on-surface">TZS 400,000</p>
+<span class="text-[10px] font-bold text-secondary bg-secondary-container/30 px-1.5 py-0.5 rounded uppercase">Verified</span>
+</div>
+</button>
+<!-- Row 2 -->
+<button class="w-full flex items-center justify-between p-md inset-divider active:scale-95 transition-transform text-left">
+<div class="flex items-center gap-md">
+<div class="w-12 h-12 rounded-xl bg-tertiary-container/20 flex items-center justify-center text-tertiary">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">menu_book</span>
+</div>
+<div>
+<h4 class="font-label-lg text-on-surface">Jabir - Lab Material Fee</h4>
+<p class="font-body-sm text-on-surface-variant">January 10, 2026 • Mobile Money</p>
+</div>
+</div>
+<div class="text-right">
+<p class="font-label-lg text-on-surface">TZS 135,000</p>
+<span class="text-[10px] font-bold text-secondary bg-secondary-container/30 px-1.5 py-0.5 rounded uppercase">Verified</span>
+</div>
+</button>
+</div>
+</section>
+</div>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 pb-4 pt-2 bg-surface-container-lowest rounded-t-xl border-t border-outline-variant shadow3">
+<button class="flex flex-col items-center justify-center text-on-surface-variant px-5 py-1 hover:bg-surface-container-high transition-all">
+<span class="material-symbols-outlined">home</span>
+<span class="font-label-md text-label-md-mobile">Home</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant px-5 py-1 hover:bg-surface-container-high transition-all">
+<span class="material-symbols-outlined">school</span>
+<span class="font-label-md text-label-md-mobile">Academics</span>
+</button>
+<button class="flex flex-col items-center justify-center bg-primary-container text-on-primary-container rounded-full px-5 py-1 active:scale-90 transition-all duration-200">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">payments</span>
+<span class="font-label-md text-label-md-mobile">Payments</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant px-5 py-1 hover:bg-surface-container-high transition-all">
+<span class="material-symbols-outlined">chat_bubble</span>
+<span class="font-label-md text-label-md-mobile">Contact</span>
+</button>
+</nav>
+</body></html>

@@ -519,20 +519,25 @@ export class InvoicesService {
     });
     if (!invoice) throw new NotFoundException('Invoice not found');
 
-    const student = this.unwrap<any>(
-      await this.studentClient.get(
-        `/api/v1/students/${invoice.studentId}`,
-        {},
-        {
-          'X-User-Id': 'finance-service',
-          'X-User-Role': 'PRINCIPAL',
-        },
-      ),
-    );
+    let student: any = {};
+    try {
+      student = this.unwrap<any>(
+        await this.studentClient.get(
+          `/api/v1/students/${invoice.studentId}`,
+          {},
+          {
+            'X-User-Id': 'finance-service',
+            'X-User-Role': 'PRINCIPAL',
+          },
+        ),
+      );
+    } catch {
+      student = {};
+    }
 
     const pdfUrl = await this.pdf.generate({
       invoiceNumber: invoice.invoiceNumber,
-      studentName: `${student.firstName || ''} ${student.lastName || ''}`.trim(),
+      studentName: `${student.firstName || ''} ${student.lastName || ''}`.trim() || invoice.studentId,
       registrationNumber: student.registrationNumber || '-',
       className: student.enrolments?.[0]?.class?.name || invoice.classId,
       termId: invoice.termId,

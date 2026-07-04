@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Pending Approvals | Kilimanjaro Teachers</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .ks-grade-bar {
+            height: 8px;
+            border-radius: 4px;
+            overflow: hidden;
+            display: flex;
+            background: #f1f5f9;
+        }
+        .pulse-red {
+            box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+        .glass-header {
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "primary-fixed": "#c9e6ff",
+                        "surface-container-highest": "#dae2fd",
+                        "surface-variant": "#dae2fd",
+                        "tertiary": "#494bd6",
+                        "background": "#faf8ff",
+                        "on-background": "#131b2e",
+                        "on-error-container": "#93000a",
+                        "surface-container-lowest": "#ffffff",
+                        "on-tertiary": "#ffffff",
+                        "surface-container-low": "#f2f3ff",
+                        "on-secondary-fixed": "#001f26",
+                        "on-primary-fixed": "#001e2f",
+                        "on-tertiary-fixed": "#07006c",
+                        "on-secondary": "#ffffff",
+                        "on-error": "#ffffff",
+                        "error": "#ba1a1a",
+                        "tertiary-fixed-dim": "#c0c1ff",
+                        "on-tertiary-fixed-variant": "#2f2ebe",
+                        "surface-bright": "#faf8ff",
+                        "outline-variant": "#bec8d2",
+                        "on-primary-fixed-variant": "#004c6e",
+                        "inverse-on-surface": "#eef0ff",
+                        "surface-container": "#eaedff",
+                        "secondary-fixed-dim": "#4cd7f6",
+                        "secondary": "#00687a",
+                        "primary-container": "#0ea5e9",
+                        "error-container": "#ffdad6",
+                        "surface-dim": "#d2d9f4",
+                        "surface": "#faf8ff",
+                        "on-surface": "#131b2e",
+                        "on-tertiary-container": "#1407ad",
+                        "on-primary": "#ffffff",
+                        "tertiary-fixed": "#e1e0ff",
+                        "tertiary-container": "#8d90ff",
+                        "on-surface-variant": "#3e4850",
+                        "primary-fixed-dim": "#89ceff",
+                        "surface-container-high": "#e2e7ff",
+                        "surface-tint": "#006591",
+                        "inverse-primary": "#89ceff",
+                        "on-primary-container": "#003751",
+                        "secondary-container": "#57dffe",
+                        "on-secondary-fixed-variant": "#004e5c",
+                        "secondary-fixed": "#acedff",
+                        "on-secondary-container": "#006172",
+                        "primary": "#006591",
+                        "outline": "#6e7881",
+                        "inverse-surface": "#283044"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "lg": "24px",
+                        "md": "16px",
+                        "xl": "32px",
+                        "base": "4px",
+                        "container-padding": "20px",
+                        "sm": "12px",
+                        "xs": "8px"
+                    },
+                    "fontFamily": {
+                        "body-lg": ["Plus Jakarta Sans"],
+                        "display-lg": ["Space Grotesk"],
+                        "label-md": ["Plus Jakarta Sans"],
+                        "label-lg": ["Plus Jakarta Sans"],
+                        "headline-lg": ["Space Grotesk"],
+                        "headline-sm": ["Space Grotesk"],
+                        "headline-md": ["Space Grotesk"],
+                        "body-md": ["Plus Jakarta Sans"],
+                        "body-sm": ["Plus Jakarta Sans"]
+                    },
+                    "fontSize": {
+                        "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                        "display-lg": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.04em", "fontWeight": "600"}],
+                        "label-lg": ["14px", {"lineHeight": "20px", "letterSpacing": "0.01em", "fontWeight": "600"}],
+                        "headline-lg": ["30px", {"lineHeight": "36px", "fontWeight": "600"}],
+                        "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "500"}],
+                        "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                        "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                        "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-surface font-body-md min-h-screen pb-32">
+<!-- Top App Bar -->
+<header class="fixed top-0 z-50 w-full h-16 bg-surface dark:bg-inverse-surface border-b border-outline-variant dark:border-outline/30 shadow-sm dark:shadow-none flex justify-between items-center px-container-padding glass-header">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-primary-container flex items-center justify-center overflow-hidden">
+<img alt="Teacher profile photo" class="w-full h-full object-cover" data-alt="A professional headshot of a senior African male educator in a modern office. He is wearing a crisp white shirt and a blue blazer. The background features a soft-focus library with educational books. The lighting is bright and professional, conveying authority and wisdom." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDV1341Ww168IxY6RvHI1diX2w-2Tju07dJaXLhNv-iLSgBpgWXWgYZybo8HkW7Z88oo1HCBbGJuYCAafIZ_RzkjzDowK6qwlXPFbHn1qGBdMLdPdXV8goGEkIDS4lxRfIS2WHxtfWZla89zxOJcmJZzOX4dSE8x8rGyD7OedrbrqOX_P0ZOghOkcHVW-EZ2f1prd1EH7rPPO1XfHfPlTY9ZgdGuiOgTWGNAH6cvjhZtswcr71Dh-eQmD6JIwQtHgsnOLo_cvyzcg"/>
+</div>
+<h1 class="font-headline-sm text-primary dark:text-primary-fixed-dim font-bold tracking-tight">Kilimanjaro Teachers</h1>
+</div>
+<button class="w-10 h-10 flex items-center justify-center text-on-surface-variant hover:bg-surface-container-high transition-colors rounded-full">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+</header>
+<main class="pt-24 px-container-padding max-w-2xl mx-auto">
+<!-- Header Section -->
+<div class="mb-lg">
+<h2 class="font-headline-md text-headline-md text-on-background mb-base">Pending Approvals</h2>
+<p class="font-body-sm text-body-sm text-outline">Review and finalize assessment marks from your department.</p>
+</div>
+<!-- Filter Row -->
+<div class="flex gap-xs mb-lg overflow-x-auto pb-2 no-scrollbar">
+<button class="px-md py-xs bg-primary text-on-primary rounded-full font-label-lg text-label-lg transition-all active:scale-95 whitespace-nowrap">All Subjects</button>
+<button class="px-md py-xs bg-surface-container-high text-on-surface-variant rounded-full font-label-lg text-label-lg hover:bg-surface-variant transition-all active:scale-95 whitespace-nowrap">Biology</button>
+<button class="px-md py-xs bg-surface-container-high text-on-surface-variant rounded-full font-label-lg text-label-lg hover:bg-surface-variant transition-all active:scale-95 whitespace-nowrap">Chemistry</button>
+<button class="px-md py-xs bg-surface-container-high text-on-surface-variant rounded-full font-label-lg text-label-lg hover:bg-surface-variant transition-all active:scale-95 whitespace-nowrap">Physics</button>
+</div>
+<!-- Assessment Cards List -->
+<div class="space-y-md">
+<!-- Card 1: Oldest (Urgent) -->
+<div class="relative group bg-surface-container-lowest rounded-xl border border-outline-variant shadow-[0_2px_4px_rgba(14,165,233,0.05)] overflow-hidden transition-all hover:shadow-lg">
+<div class="absolute left-0 top-0 bottom-0 w-1.5 bg-error"></div>
+<div class="p-md">
+<div class="flex justify-between items-start mb-sm">
+<div>
+<span class="inline-flex items-center gap-1.5 font-label-md text-label-md text-error mb-1">
+<span class="w-2 h-2 rounded-full bg-error pulse-red"></span>
+                                Awaiting 3 days
+                            </span>
+<h3 class="font-headline-sm text-on-surface font-semibold">Biology — Form 2A</h3>
+<p class="font-body-sm text-body-sm text-outline">Teacher: Mr. David Mchuma</p>
+</div>
+<div class="text-right">
+<p class="font-label-md text-label-md text-outline">Submitted</p>
+<p class="font-body-sm text-body-sm font-medium">Mon, 10:45 AM</p>
+</div>
+</div>
+<!-- Stats Grid -->
+<div class="grid grid-cols-3 gap-md py-sm border-y border-outline-variant/30 mb-sm">
+<div>
+<p class="text-[10px] font-bold text-outline uppercase tracking-wider">Students</p>
+<p class="font-headline-sm text-primary">42</p>
+</div>
+<div>
+<p class="text-[10px] font-bold text-outline uppercase tracking-wider">Avg Score</p>
+<p class="font-headline-sm text-primary">68%</p>
+</div>
+<div>
+<p class="text-[10px] font-bold text-outline uppercase tracking-wider">Pass Rate</p>
+<p class="font-headline-sm text-primary">84%</p>
+</div>
+</div>
+<!-- Grade Distribution -->
+<div class="mb-lg">
+<div class="flex justify-between font-label-md text-label-md mb-xs">
+<span>Grade Distribution</span>
+<span class="text-outline">A/B/C/D/F</span>
+</div>
+<div class="ks-grade-bar">
+<div class="h-full bg-primary" style="width: 25%"></div>
+<div class="h-full bg-secondary" style="width: 35%"></div>
+<div class="h-full bg-tertiary-container" style="width: 24%"></div>
+<div class="h-full bg-surface-variant" style="width: 10%"></div>
+<div class="h-full bg-error-container" style="width: 6%"></div>
+</div>
+</div>
+<!-- Actions -->
+<div class="flex gap-sm">
+<button class="flex-1 h-[48px] bg-primary text-on-primary rounded-xl font-label-lg flex items-center justify-center gap-2 hover:opacity-90 active:scale-95 transition-all">
+<span class="material-symbols-outlined text-[20px]" data-icon="edit_note">edit_note</span>
+                            Review Marks
+                        </button>
+<button class="flex-1 h-[48px] border border-secondary text-secondary rounded-xl font-label-lg flex items-center justify-center gap-2 hover:bg-secondary/5 active:scale-95 transition-all">
+<span class="material-symbols-outlined text-[20px]" data-icon="check_circle">check_circle</span>
+                            Quick Approve
+                        </button>
+</div>
+</div>
+</div>
+<!-- Card 2: Chemistry -->
+<div class="relative bg-surface-container-lowest rounded-xl border border-outline-variant shadow-[0_2px_4px_rgba(14,165,233,0.05)] overflow-hidden transition-all hover:shadow-lg">
+<div class="p-md">
+<div class="flex justify-between items-start mb-sm">
+<div>
+<span class="inline-flex items-center gap-1.5 font-label-md text-label-md text-outline mb-1">
+                                Submitted yesterday
+                            </span>
+<h3 class="font-headline-sm text-on-surface font-semibold">Chemistry — Form 3C</h3>
+<p class="font-body-sm text-body-sm text-outline">Teacher: Mrs. Sarah Kimaro</p>
+</div>
+<div class="text-right">
+<p class="font-label-md text-label-md text-outline">Submitted</p>
+<p class="font-body-sm text-body-sm font-medium">Tue, 02:15 PM</p>
+</div>
+</div>
+<div class="grid grid-cols-3 gap-md py-sm border-y border-outline-variant/30 mb-sm">
+<div>
+<p class="text-[10px] font-bold text-outline uppercase tracking-wider">Students</p>
+<p class="font-headline-sm text-primary">38</p>
+</div>
+<div>
+<p class="text-[10px] font-bold text-outline uppercase tracking-wider">Avg Score</p>
+<p class="font-headline-sm text-primary">74%</p>
+</div>
+<div>
+<p class="text-[10px] font-bold text-outline uppercase tracking-wider">Pass Rate</p>
+<p class="font-headline-sm text-primary">92%</p>
+</div>
+</div>
+<div class="mb-lg">
+<div class="flex justify-between font-label-md text-label-md mb-xs">
+<span>Grade Distribution</span>
+</div>
+<div class="ks-grade-bar">
+<div class="h-full bg-primary" style="width: 40%"></div>
+<div class="h-full bg-secondary" style="width: 30%"></div>
+<div class="h-full bg-tertiary-container" style="width: 22%"></div>
+<div class="h-full bg-surface-variant" style="width: 5%"></div>
+<div class="h-full bg-error-container" style="width: 3%"></div>
+</div>
+</div>
+<div class="flex gap-sm">
+<button class="flex-1 h-[48px] bg-primary text-on-primary rounded-xl font-label-lg flex items-center justify-center gap-2 hover:opacity-90 active:scale-95 transition-all">
+                            Review Marks
+                        </button>
+<button class="flex-1 h-[48px] border border-secondary text-secondary rounded-xl font-label-lg flex items-center justify-center gap-2 hover:bg-secondary/5 active:scale-95 transition-all">
+                            Quick Approve
+                        </button>
+</div>
+</div>
+</div>
+<!-- Card 3: Physics -->
+<div class="relative bg-surface-container-lowest rounded-xl border border-outline-variant shadow-[0_2px_4px_rgba(14,165,233,0.05)] overflow-hidden transition-all hover:shadow-lg">
+<div class="p-md">
+<div class="flex justify-between items-start mb-sm">
+<div>
+<span class="inline-flex items-center gap-1.5 font-label-md text-label-md text-outline mb-1">
+                                Submitted today
+                            </span>
+<h3 class="font-headline-sm text-on-surface font-semibold">Physics — Form 4B</h3>
+<p class="font-body-sm text-body-sm text-outline">Teacher: Mr. Isaac Newton Jr.</p>
+</div>
+<div class="text-right">
+<p class="font-label-md text-label-md text-outline">Submitted</p>
+<p class="font-body-sm text-body-sm font-medium">Today, 08:30 AM</p>
+</div>
+</div>
+<div class="grid grid-cols-3 gap-md py-sm border-y border-outline-variant/30 mb-sm">
+<div>
+<p class="text-[10px] font-bold text-outline uppercase tracking-wider">Students</p>
+<p class="font-headline-sm text-primary">31</p>
+</div>
+<div>
+<p class="text-[10px] font-bold text-outline uppercase tracking-wider">Avg Score</p>
+<p class="font-headline-sm text-primary">59%</p>
+</div>
+<div>
+<p class="text-[10px] font-bold text-outline uppercase tracking-wider">Pass Rate</p>
+<p class="font-headline-sm text-primary">71%</p>
+</div>
+</div>
+<div class="mb-lg">
+<div class="flex justify-between font-label-md text-label-md mb-xs">
+<span>Grade Distribution</span>
+</div>
+<div class="ks-grade-bar">
+<div class="h-full bg-primary" style="width: 15%"></div>
+<div class="h-full bg-secondary" style="width: 25%"></div>
+<div class="h-full bg-tertiary-container" style="width: 31%"></div>
+<div class="h-full bg-surface-variant" style="width: 19%"></div>
+<div class="h-full bg-error-container" style="width: 10%"></div>
+</div>
+</div>
+<div class="flex gap-sm">
+<button class="flex-1 h-[48px] bg-primary text-on-primary rounded-xl font-label-lg flex items-center justify-center gap-2 hover:opacity-90 active:scale-95 transition-all">
+                            Review Marks
+                        </button>
+<button class="flex-1 h-[48px] border border-secondary text-secondary rounded-xl font-label-lg flex items-center justify-center gap-2 hover:bg-secondary/5 active:scale-95 transition-all">
+                            Quick Approve
+                        </button>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Bottom Navigation Bar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-2 py-3 bg-surface dark:bg-inverse-surface shadow-lg rounded-t-xl border-t border-outline-variant/20">
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant hover:bg-surface-variant dark:hover:bg-surface-container-highest transition-colors rounded-lg px-2" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span class="font-label-md text-label-md mt-1">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center bg-primary-container dark:bg-primary-fixed text-on-primary-container dark:text-on-primary-fixed-variant rounded-full px-4 py-1 active:scale-90 duration-150" href="#">
+<span class="material-symbols-outlined" data-icon="how_to_reg">how_to_reg</span>
+<span class="font-label-md text-label-md">Attendance</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant hover:bg-surface-variant dark:hover:bg-surface-container-highest transition-colors rounded-lg px-2" href="#">
+<span class="material-symbols-outlined" data-icon="edit_note">edit_note</span>
+<span class="font-label-md text-label-md mt-1">Marks</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant hover:bg-surface-variant dark:hover:bg-surface-container-highest transition-colors rounded-lg px-2" href="#">
+<span class="material-symbols-outlined" data-icon="calendar_month">calendar_month</span>
+<span class="font-label-md text-label-md mt-1">Schedule</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant hover:bg-surface-variant dark:hover:bg-surface-container-highest transition-colors rounded-lg px-2" href="#">
+<span class="material-symbols-outlined" data-icon="menu">menu</span>
+<span class="font-label-md text-label-md mt-1">Menu</span>
+</a>
+</nav>
+<!-- Micro-interaction JavaScript -->
+<script>
+        document.querySelectorAll('button').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                let ripple = document.createElement('div');
+                ripple.classList.add('ripple');
+                this.appendChild(ripple);
+                let d = Math.max(this.clientWidth, this.clientHeight);
+                ripple.style.width = ripple.style.height = d + 'px';
+                ripple.style.left = e.clientX - this.getBoundingClientRect().left - d/2 + 'px';
+                ripple.style.top = e.clientY - this.getBoundingClientRect().top - d/2 + 'px';
+                ripple.classList.add('ripple-effect');
+                setTimeout(() => ripple.remove(), 600);
+            });
+        });
+    </script>
+<style>
+        .ripple {
+            position: absolute;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            transform: scale(0);
+            pointer-events: none;
+        }
+        .ripple-effect {
+            animation: ripple-animation 0.6s linear;
+        }
+        @keyframes ripple-animation {
+            to { transform: scale(4); opacity: 0; }
+        }
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</body></html>

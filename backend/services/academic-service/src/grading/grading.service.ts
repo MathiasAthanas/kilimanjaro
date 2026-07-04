@@ -97,6 +97,28 @@ export class GradingService {
     return result;
   }
 
+  async updateGradingScale(id: string, dto: { name: string; grades: Array<{ grade: string; minScore: number; maxScore: number; points: number; remark: string; isPassing: boolean }> }) {
+    const existing = await this.prisma.gradingScale.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Grading scale not found');
+
+    this.validateBoundaries(dto.grades);
+
+    const updated = await this.prisma.gradingScale.update({
+      where: { id },
+      data: {
+        name: dto.name,
+        grades: {
+          deleteMany: {},
+          create: dto.grades,
+        },
+      },
+      include: { grades: { orderBy: { minScore: 'asc' } } },
+    });
+
+    await this.redis.delByPattern(`grading-scale:active:${existing.academicYearId}:*`);
+    return updated;
+  }
+
   async deleteGradingScale(id: string): Promise<void> {
     const existing = await this.prisma.gradingScale.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Grading scale not found');

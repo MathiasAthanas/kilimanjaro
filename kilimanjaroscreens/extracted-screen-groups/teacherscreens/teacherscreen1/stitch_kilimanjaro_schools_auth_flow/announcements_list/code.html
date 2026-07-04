@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Teacher Announcements - Kilimanjaro Schools</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&amp;family=Plus+Jakarta+Sans:wght@300..800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "tertiary-container": "#8d90ff",
+                        "surface": "#faf8ff",
+                        "secondary-fixed": "#acedff",
+                        "primary": "#006591",
+                        "surface-container-lowest": "#ffffff",
+                        "primary-fixed-dim": "#89ceff",
+                        "surface-container-highest": "#dae2fd",
+                        "surface-bright": "#faf8ff",
+                        "on-secondary-container": "#006172",
+                        "on-background": "#131b2e",
+                        "primary-fixed": "#c9e6ff",
+                        "outline-variant": "#bec8d2",
+                        "on-primary-container": "#003751",
+                        "surface-variant": "#dae2fd",
+                        "background": "#faf8ff",
+                        "on-primary-fixed": "#001e2f",
+                        "on-primary": "#ffffff",
+                        "surface-tint": "#006591",
+                        "outline": "#6e7881",
+                        "on-secondary-fixed": "#001f26",
+                        "tertiary-fixed-dim": "#c0c1ff",
+                        "inverse-on-surface": "#eef0ff",
+                        "error-container": "#ffdad6",
+                        "tertiary": "#494bd6",
+                        "on-primary-fixed-variant": "#004c6e",
+                        "on-secondary": "#ffffff",
+                        "primary-container": "#0ea5e9",
+                        "surface-container": "#eaedff",
+                        "secondary-container": "#57dffe",
+                        "error": "#ba1a1a",
+                        "surface-dim": "#d2d9f4",
+                        "on-error": "#ffffff",
+                        "on-tertiary-container": "#1407ad",
+                        "surface-container-high": "#e2e7ff",
+                        "secondary": "#00687a",
+                        "inverse-surface": "#283044",
+                        "inverse-primary": "#89ceff",
+                        "tertiary-fixed": "#e1e0ff",
+                        "on-secondary-fixed-variant": "#004e5c",
+                        "on-tertiary-fixed-variant": "#2f2ebe",
+                        "on-tertiary-fixed": "#07006c",
+                        "on-tertiary": "#ffffff",
+                        "surface-container-low": "#f2f3ff",
+                        "secondary-fixed-dim": "#4cd7f6",
+                        "on-surface": "#131b2e",
+                        "on-error-container": "#93000a",
+                        "on-surface-variant": "#3e4850"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "xl": "32px",
+                        "lg": "24px",
+                        "container-padding": "20px",
+                        "xs": "8px",
+                        "md": "16px",
+                        "base": "4px",
+                        "sm": "12px"
+                    },
+                    "fontFamily": {
+                        "headline-md": ["Space Grotesk"],
+                        "label-lg": ["Plus Jakarta Sans"],
+                        "body-md": ["Plus Jakarta Sans"],
+                        "display-lg": ["Space Grotesk"],
+                        "headline-sm": ["Space Grotesk"],
+                        "headline-lg": ["Space Grotesk"],
+                        "label-md": ["Plus Jakarta Sans"],
+                        "body-lg": ["Plus Jakarta Sans"],
+                        "body-sm": ["Plus Jakarta Sans"]
+                    },
+                    "fontSize": {
+                        "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                        "label-lg": ["14px", {"lineHeight": "20px", "letterSpacing": "0.01em", "fontWeight": "600"}],
+                        "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                        "display-lg": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "500"}],
+                        "headline-lg": ["30px", {"lineHeight": "36px", "fontWeight": "600"}],
+                        "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.04em", "fontWeight": "600"}],
+                        "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                        "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .sky-gradient {
+            background: linear-gradient(135deg, #0ea5e9 0%, #006591 100%);
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(226, 232, 240, 0.5);
+        }
+        .shadow-sky {
+            box-shadow: 0 10px 15px rgba(14, 165, 233, 0.12);
+        }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #bec8d2; border-radius: 10px; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-surface text-on-surface min-h-screen font-body-md">
+<!-- TopAppBar -->
+<header class="flex justify-between items-center px-container-padding h-16 w-full fixed top-0 z-50 bg-surface shadow-sm border-b border-outline-variant">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full overflow-hidden border-2 border-primary-container">
+<img alt="Teacher profile photo" class="w-full h-full object-cover" data-alt="A professional headshot of a senior educator with a warm and approachable expression. The teacher is set against a clean, blurred office background with soft daylight filtering through. The visual style is high-contrast and modern, reflecting the corporate and educational prestige of the Kilimanjaro Schools brand. Lighting is bright and airy." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBy3WxGvoTFlVHuJALjJyaOMA48POAkbqEVan-T4yNkM8wMltV6PVQNIsBeza-6rD5UWdaENoTCXjy7FZEIfVE7lEk98Xbzgiq4DapS0Jas8e5bmWbXr6CyZSSt0Lzmz34XJitNClBi57xdN3looji8G8KOyC7is_K882C-XBY9mxuI0KlfXRqxozOQekf8jxTU8Wk6vPgoSGoDRfV-VRxSJg3YkrX6hdoYSz1exh3_WpuLS6pLomJCeOfu_htTpNe_I1ZzV2XXfw"/>
+</div>
+<span class="font-headline-sm text-primary font-bold tracking-tight">Kilimanjaro Teachers</span>
+</div>
+<button class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-container-high transition-colors text-on-surface-variant relative">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+<span class="absolute top-2 right-2 w-2 h-2 bg-error rounded-full border border-surface"></span>
+</button>
+</header>
+<!-- Main Content -->
+<main class="pt-24 pb-32 px-container-padding max-w-5xl mx-auto">
+<!-- Welcome Section -->
+<section class="mb-lg">
+<h1 class="font-headline-lg text-headline-lg text-on-surface mb-base">Announcements</h1>
+<p class="font-body-md text-on-surface-variant">Manage and broadcast updates to your classes and colleagues.</p>
+</section>
+<!-- Search & Filter Bento -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-sm mb-lg">
+<div class="md:col-span-2 relative">
+<span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline" data-icon="search">search</span>
+<input class="w-full h-[56px] pl-12 pr-4 bg-surface-container-low border border-outline-variant rounded-xl focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all font-body-md" placeholder="Search notices, events, or archives..." type="text"/>
+</div>
+<div class="flex gap-sm">
+<button class="flex-1 flex items-center justify-center gap-2 h-[56px] border border-outline-variant rounded-xl hover:bg-surface-container transition-all font-label-lg">
+<span class="material-symbols-outlined" data-icon="filter_list">filter_list</span>
+                    Filter
+                </button>
+<button class="w-[56px] h-[56px] flex items-center justify-center border border-outline-variant rounded-xl hover:bg-surface-container transition-all">
+<span class="material-symbols-outlined" data-icon="archive">archive</span>
+</button>
+</div>
+</div>
+<!-- Feed List -->
+<div class="space-y-lg">
+<!-- Priority Announcement (Urgent) -->
+<div class="glass-card rounded-xl p-md shadow-sky border-l-4 border-error overflow-hidden relative group">
+<div class="absolute -top-4 -right-4 w-24 h-24 bg-error/5 rounded-full blur-2xl"></div>
+<div class="flex justify-between items-start mb-sm relative z-10">
+<div class="flex gap-2">
+<span class="px-3 py-1 bg-error/10 text-error rounded-full font-label-md text-[10px] uppercase flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]" data-icon="priority_high" data-weight="fill" style="font-variation-settings: 'FILL' 1;">priority_high</span>
+                            URGENT
+                        </span>
+<span class="px-3 py-1 bg-primary/10 text-primary rounded-full font-label-md text-[10px] uppercase">SCHOOL-WIDE</span>
+</div>
+<span class="font-label-md text-outline-variant">2h ago</span>
+</div>
+<h3 class="font-headline-sm text-on-surface mb-xs">Emergency Faculty Meeting: Grade 12 Results</h3>
+<p class="font-body-md text-on-surface-variant mb-md leading-relaxed">Please gather in the Staff Room immediately after the final bell today. We need to discuss the preliminary Grade 12 Mock Exam results and regional benchmarking.</p>
+<div class="flex items-center justify-between pt-md border-t border-outline-variant/30">
+<div class="flex -space-x-2">
+<div class="w-8 h-8 rounded-full border-2 border-surface bg-primary-fixed flex items-center justify-center text-[10px] font-bold">AK</div>
+<div class="w-8 h-8 rounded-full border-2 border-surface bg-secondary-fixed flex items-center justify-center text-[10px] font-bold">ML</div>
+<div class="w-8 h-8 rounded-full border-2 border-surface bg-surface-container-highest flex items-center justify-center text-[10px] text-outline">+14</div>
+</div>
+<button class="text-primary font-label-lg flex items-center gap-1 hover:underline">
+                        Acknowledge <span class="material-symbols-outlined text-sm" data-icon="chevron_right">chevron_right</span>
+</button>
+</div>
+</div>
+<!-- Visual Announcement -->
+<div class="glass-card rounded-xl overflow-hidden shadow-sky group">
+<div class="h-48 w-full overflow-hidden">
+<img alt="Science Lab" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" data-alt="A state-of-the-art secondary school science laboratory with modern digital microscopes and ergonomic workstations. The lighting is crisp and blue-toned, emphasizing a clean and high-tech educational environment. Students in white coats are blurred in the background, focusing on professional experimentation. The overall aesthetic is vibrant, corporate, and forward-thinking." src="https://lh3.googleusercontent.com/aida-public/AB6AXuB1UhMRxuBrgzyhomvQQrbyi--cxlpambhOX1oaUDRNvNI_qjJo6vw-d3WPJzlmvBFX7hzw987FyfO9MZ4IiMrI1ECLIEMlxfJ9OKvQdre3oMA6sFfxanTaJ44YFHS_eKM2XrR3LHuWOu1KvYgDsxc2e1DS8CyZjyn9zc-GJ_5iFpObNTWKTfBn3o9iE3wYem7oTewM2IaHAbBIeOP1DsT15fMulT5BTsuCd6on0hgQ9UCAedCz4wGf7RZ77R7j-FQVA7goENr4yA"/>
+</div>
+<div class="p-md">
+<div class="flex justify-between items-start mb-sm">
+<span class="px-3 py-1 bg-tertiary/10 text-tertiary rounded-full font-label-md text-[10px] uppercase">GRADE 10 PHYSICS</span>
+<span class="font-label-md text-outline-variant">Yesterday</span>
+</div>
+<h3 class="font-headline-sm text-on-surface mb-xs">Lab Session: Wave Motion Experiment</h3>
+<p class="font-body-md text-on-surface-variant mb-md">Reminder to all Grade 10 students that tomorrow's lab session requires full PPE and the pre-lab reports. We will be using the new frequency generators.</p>
+<div class="flex items-center gap-4">
+<button class="flex items-center gap-1.5 text-on-surface-variant font-label-md hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-lg" data-icon="comment">comment</span>
+                            12 Comments
+                        </button>
+<button class="flex items-center gap-1.5 text-on-surface-variant font-label-md hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-lg" data-icon="visibility">visibility</span>
+                            245 Seen
+                        </button>
+</div>
+</div>
+</div>
+<!-- Standard List Item -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl p-md flex gap-md items-start hover:border-primary-container transition-all cursor-pointer">
+<div class="w-12 h-12 rounded-xl bg-secondary-container/20 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-secondary" data-icon="event">event</span>
+</div>
+<div class="flex-1">
+<div class="flex justify-between">
+<h4 class="font-label-lg text-on-surface">Annual Sports Day Scheduling</h4>
+<span class="font-label-md text-outline-variant">3 days ago</span>
+</div>
+<p class="font-body-sm text-on-surface-variant line-clamp-1">Draft schedule for the 2024 Sports Day is now available for review by the Physical Education department...</p>
+<div class="mt-sm flex gap-2">
+<span class="px-2 py-0.5 bg-surface-container-high rounded text-[10px] font-bold text-outline">PLANNING</span>
+</div>
+</div>
+</div>
+<!-- Another List Item -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl p-md flex gap-md items-start hover:border-primary-container transition-all cursor-pointer">
+<div class="w-12 h-12 rounded-xl bg-tertiary-container/20 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-tertiary" data-icon="description">description</span>
+</div>
+<div class="flex-1">
+<div class="flex justify-between">
+<h4 class="font-label-lg text-on-surface">Updated Syllabus: Grade 11 Mathematics</h4>
+<span class="font-label-md text-outline-variant">Oct 12</span>
+</div>
+<p class="font-body-sm text-on-surface-variant line-clamp-1">Revised curriculum for the second semester including new modules on Spherical Trigonometry...</p>
+<div class="mt-sm flex gap-2">
+<span class="px-2 py-0.5 bg-surface-container-high rounded text-[10px] font-bold text-outline">ACADEMIC</span>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- FAB: Create Announcement -->
+<button class="fixed bottom-24 right-6 w-14 h-14 sky-gradient text-white rounded-2xl shadow-xl hover:scale-105 active:scale-95 transition-all flex items-center justify-center z-[55]" onclick="openModal()">
+<span class="material-symbols-outlined text-[32px]" data-icon="add">add</span>
+</button>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-2 py-3 bg-surface rounded-t-xl shadow-[0_-2px_10px_rgba(14,165,233,0.08)]">
+<a class="flex flex-col items-center justify-center text-on-surface-variant" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span class="font-label-md text-label-md">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant" href="#">
+<span class="material-symbols-outlined" data-icon="how_to_reg">how_to_reg</span>
+<span class="font-label-md text-label-md">Attendance</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant" href="#">
+<span class="material-symbols-outlined" data-icon="edit_note">edit_note</span>
+<span class="font-label-md text-label-md">Marks</span>
+</a>
+<a class="flex flex-col items-center justify-center bg-primary-container text-on-primary-container rounded-full px-4 py-1 scale-90" href="#">
+<span class="material-symbols-outlined" data-icon="notifications" style="font-variation-settings: 'FILL' 1;">notifications</span>
+<span class="font-label-md text-label-md">Notices</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant" href="#">
+<span class="material-symbols-outlined" data-icon="menu">menu</span>
+<span class="font-label-md text-label-md">Menu</span>
+</a>
+</nav>
+<!-- Modal Backdrop (Hidden) -->
+<div class="fixed inset-0 bg-inverse-surface/40 backdrop-blur-sm z-[70] hidden opacity-0 transition-opacity duration-300" id="modal-backdrop">
+<div class="flex items-end md:items-center justify-center min-h-screen">
+<!-- Modal Content -->
+<div class="bg-surface w-full md:max-w-lg rounded-t-3xl md:rounded-3xl p-lg shadow-5 translate-y-full transition-transform duration-500" id="create-modal">
+<div class="flex justify-between items-center mb-lg">
+<h2 class="font-headline-md text-on-surface">New Announcement</h2>
+<button class="w-10 h-10 rounded-full hover:bg-surface-container-high flex items-center justify-center" onclick="closeModal()">
+<span class="material-symbols-outlined" data-icon="close">close</span>
+</button>
+</div>
+<div class="space-y-md">
+<div>
+<label class="font-label-lg block mb-xs text-on-surface-variant">Audience</label>
+<select class="w-full h-14 bg-surface-container border border-outline-variant rounded-xl px-4 font-body-md focus:border-primary outline-none">
+<option>School-wide (All Staff &amp; Students)</option>
+<option>Teachers Only</option>
+<option>Grade 10 - All Sections</option>
+<option>Physics Dept</option>
+</select>
+</div>
+<div>
+<label class="font-label-lg block mb-xs text-on-surface-variant">Title</label>
+<input class="w-full h-14 bg-surface-container border border-outline-variant rounded-xl px-4 font-body-md focus:border-primary outline-none" placeholder="Add a clear headline" type="text"/>
+</div>
+<div>
+<label class="font-label-lg block mb-xs text-on-surface-variant">Priority</label>
+<div class="flex gap-sm">
+<button class="flex-1 py-3 border border-outline-variant rounded-xl font-label-lg flex items-center justify-center gap-2 hover:bg-error/5 hover:border-error transition-all group">
+<span class="w-2 h-2 rounded-full bg-error"></span> Urgent
+                            </button>
+<button class="flex-1 py-3 border-2 border-primary rounded-xl font-label-lg flex items-center justify-center gap-2 bg-primary/5 text-primary">
+<span class="w-2 h-2 rounded-full bg-primary"></span> Normal
+                            </button>
+</div>
+</div>
+<div>
+<label class="font-label-lg block mb-xs text-on-surface-variant">Content</label>
+<textarea class="w-full bg-surface-container border border-outline-variant rounded-xl p-4 font-body-md focus:border-primary outline-none resize-none" placeholder="Write your announcement details here..." rows="4"></textarea>
+</div>
+<div class="flex gap-sm pt-md">
+<button class="flex-1 h-14 border border-outline-variant rounded-xl font-label-lg hover:bg-surface-container transition-all">Save Draft</button>
+<button class="flex-1 h-14 sky-gradient text-white rounded-xl font-label-lg shadow-sky transition-all hover:opacity-90 active:scale-95">Post Now</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+<script>
+        function openModal() {
+            const backdrop = document.getElementById('modal-backdrop');
+            const modal = document.getElementById('create-modal');
+            backdrop.classList.remove('hidden');
+            setTimeout(() => {
+                backdrop.classList.add('opacity-100');
+                modal.classList.remove('translate-y-full');
+            }, 10);
+        }
+
+        function closeModal() {
+            const backdrop = document.getElementById('modal-backdrop');
+            const modal = document.getElementById('create-modal');
+            backdrop.classList.remove('opacity-100');
+            modal.classList.add('translate-y-full');
+            setTimeout(() => {
+                backdrop.classList.add('hidden');
+            }, 500);
+        }
+
+        // Close on backdrop click
+        document.getElementById('modal-backdrop').addEventListener('click', function(e) {
+            if (e.target === this) closeModal();
+        });
+    </script>
+</body></html>

@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Payment Receipt - Kilimanjaro Schools</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .receipt-perforation {
+            background-image: radial-gradient(circle, transparent 70%, #faf8ff 75%);
+            background-size: 24px 24px;
+            background-position: center -12px;
+            height: 12px;
+            width: 100%;
+        }
+        .parchment-texture {
+            background-color: #ffffff;
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(14, 165, 233, 0.03) 0, transparent 50%), 
+                radial-gradient(at 50% 0%, rgba(14, 165, 233, 0.02) 0, transparent 50%);
+        }
+        .shadow-sky {
+            box-shadow: 0 10px 15px rgba(14, 165, 233, 0.12);
+        }
+    </style>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "surface-bright": "#faf8ff",
+                    "tertiary-fixed": "#e1e0ff",
+                    "on-tertiary": "#ffffff",
+                    "secondary-fixed-dim": "#4cd7f6",
+                    "on-secondary-fixed-variant": "#004e5c",
+                    "surface-container": "#eaedff",
+                    "surface-container-high": "#e2e7ff",
+                    "primary-fixed-dim": "#89ceff",
+                    "primary-container": "#0ea5e9",
+                    "on-tertiary-container": "#1407ad",
+                    "tertiary-fixed-dim": "#c0c1ff",
+                    "on-primary": "#ffffff",
+                    "primary-fixed": "#c9e6ff",
+                    "on-surface-variant": "#3e4850",
+                    "surface-dim": "#d2d9f4",
+                    "on-error-container": "#93000a",
+                    "inverse-primary": "#89ceff",
+                    "primary": "#006591",
+                    "surface-container-highest": "#dae2fd",
+                    "surface-tint": "#006591",
+                    "on-primary-fixed": "#001e2f",
+                    "surface": "#faf8ff",
+                    "secondary": "#00687a",
+                    "error-container": "#ffdad6",
+                    "on-background": "#131b2e",
+                    "inverse-surface": "#283044",
+                    "background": "#faf8ff",
+                    "tertiary-container": "#8d90ff",
+                    "on-error": "#ffffff",
+                    "secondary-fixed": "#acedff",
+                    "on-secondary": "#ffffff",
+                    "secondary-container": "#57dffe",
+                    "surface-container-lowest": "#ffffff",
+                    "surface-variant": "#dae2fd",
+                    "outline-variant": "#bec8d2",
+                    "on-primary-fixed-variant": "#004c6e",
+                    "on-tertiary-fixed-variant": "#2f2ebe",
+                    "inverse-on-surface": "#eef0ff",
+                    "tertiary": "#494bd6",
+                    "on-surface": "#131b2e",
+                    "outline": "#6e7881",
+                    "error": "#ba1a1a",
+                    "on-secondary-container": "#006172",
+                    "on-tertiary-fixed": "#07006c",
+                    "surface-container-low": "#f2f3ff",
+                    "on-primary-container": "#003751",
+                    "on-secondary-fixed": "#001f26"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "xl": "32px",
+                    "md": "16px",
+                    "xs": "8px",
+                    "lg": "24px",
+                    "sm": "12px",
+                    "container-padding": "20px",
+                    "base": "4px"
+            },
+            "fontFamily": {
+                    "label-lg": ["Plus Jakarta Sans"],
+                    "body-lg": ["Plus Jakarta Sans"],
+                    "display-lg": ["Space Grotesk"],
+                    "label-md": ["Plus Jakarta Sans"],
+                    "headline-lg": ["Space Grotesk"],
+                    "headline-md": ["Space Grotesk"],
+                    "body-sm": ["Plus Jakarta Sans"],
+                    "headline-sm": ["Space Grotesk"],
+                    "body-md": ["Plus Jakarta Sans"]
+            },
+            "fontSize": {
+                    "label-lg": ["14px", {"lineHeight": "20px", "letterSpacing": "0.01em", "fontWeight": "600"}],
+                    "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                    "display-lg": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.04em", "fontWeight": "600"}],
+                    "headline-lg": ["30px", {"lineHeight": "36px", "fontWeight": "600"}],
+                    "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                    "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                    "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "500"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-surface-bright text-on-surface min-h-screen font-body-md selection:bg-primary-container selection:text-on-primary-container">
+<!-- Top Navigation Anchor -->
+<header class="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-container-padding h-14 shadow1 bg-surface-bright dark:bg-inverse-surface">
+<div class="flex items-center gap-3">
+<button class="material-symbols-outlined text-primary dark:text-primary-fixed-dim hover:bg-surface-container transition-colors rounded-full p-2 scale-95 transition-transform duration-150">arrow_back</button>
+<span class="font-headline-sm text-headline-sm text-primary dark:text-primary-fixed-dim font-bold">Kilimanjaro Schools</span>
+</div>
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-on-surface-variant dark:text-outline-variant hover:bg-surface-container transition-colors rounded-full p-2">notifications</span>
+<div class="w-8 h-8 rounded-full overflow-hidden border border-primary/20">
+<img alt="Amina Profile" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDA-bmaLWbKJ6DVZ2xK9nsMhwWHM4N2FMkluSAiRkLB8MZMuI7fz54b2z9aYOOxZ5GRA9d-6zD8H0v6KNleoXvoW1jDyPCM64ERfSOLPd1ZhkCf5e-tweNEJswtwUukmtgXokDeaeVmC098REbiwOPI6QxHsj854Xl_whfWrmayp1FR-wHbaipPb32XNExhpCrUEFOeObbDE8ldK5HZEu8p6IOipqkhn-KKP9m5kEcjG8OI-JZ_S_yfWTBdf6oV_74OQkhp_EDu0w"/>
+</div>
+</div>
+</header>
+<main class="pt-20 pb-28 px-container-padding max-w-md mx-auto">
+<!-- Transaction Success Banner -->
+<div class="text-center mb-8">
+<div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 mb-4 animate-bounce">
+<span class="material-symbols-outlined text-[40px]" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+<h1 class="font-headline-md text-headline-md-mobile text-emerald-700 uppercase tracking-wider mb-1">PAYMENT CONFIRMED</h1>
+<p class="font-display-lg text-display-lg-mobile text-on-surface font-extrabold">TZS 200,000</p>
+</div>
+<!-- Digital Receipt Canvas -->
+<div class="relative parchment-texture rounded-t-2xl shadow-sky border border-surface-container overflow-hidden">
+<!-- Branding Header -->
+<div class="p-md flex justify-between items-start border-b border-dashed border-outline-variant/50">
+<div>
+<h2 class="font-headline-sm text-headline-sm text-primary font-bold">Official Receipt</h2>
+<p class="font-label-md text-label-md-mobile text-on-surface-variant">Kilimanjaro Int. Academy</p>
+</div>
+<div class="text-right">
+<p class="font-label-md text-label-md text-primary">RCP-2026-00312</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">12 Oct, 2026</p>
+</div>
+</div>
+<!-- Receipt Body Content -->
+<div class="p-md space-y-lg">
+<div class="grid grid-cols-2 gap-y-4">
+<div>
+<p class="font-label-md text-label-md-mobile text-outline uppercase tracking-tight">Student Name</p>
+<p class="font-body-md text-body-md font-semibold text-on-surface">Amina Profile</p>
+</div>
+<div class="text-right">
+<p class="font-label-md text-label-md-mobile text-outline uppercase tracking-tight">Grade / Class</p>
+<p class="font-body-md text-body-md font-semibold text-on-surface">Grade 4 - Blue</p>
+</div>
+<div>
+<p class="font-label-md text-label-md-mobile text-outline uppercase tracking-tight">Payment Method</p>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-body-sm text-primary">account_balance_wallet</span>
+<p class="font-body-md text-body-md font-semibold text-on-surface">M-Pesa</p>
+</div>
+</div>
+<div class="text-right">
+<p class="font-label-md text-label-md-mobile text-outline uppercase tracking-tight">Reference #</p>
+<p class="font-body-md text-body-md font-semibold text-on-surface">REF7718293</p>
+</div>
+</div>
+<!-- Invoice Summary Block -->
+<div class="bg-surface-container-low rounded-xl p-md border border-outline-variant/30">
+<p class="font-label-lg text-label-lg-mobile text-primary mb-3">Allocation Details</p>
+<div class="space-y-sm">
+<div class="flex justify-between items-center">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Tuition Fees (Q4)</span>
+<span class="font-body-md text-body-md font-medium">TZS 150,000</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Transport Charges</span>
+<span class="font-body-md text-body-md font-medium">TZS 50,000</span>
+</div>
+<div class="h-px bg-outline-variant/40 my-2"></div>
+<div class="flex justify-between items-center">
+<span class="font-label-lg text-label-lg-mobile text-on-surface">Total Paid</span>
+<span class="font-label-lg text-label-lg-mobile text-primary">TZS 200,000</span>
+</div>
+</div>
+</div>
+<!-- Footer / Signature -->
+<div class="pt-4 text-center">
+<div class="inline-block border-b border-primary/20 pb-1 mb-2">
+<img alt="Official Signature" class="h-10 opacity-60 grayscale brightness-125" data-alt="A refined digital representation of an official school administrator's handwritten signature in blue ink on a crisp white parchment background. The signature is elegant and flowing, conveying authority and trust. The lighting is bright and even, matching a modern corporate aesthetic. The overall feel is professional and institutional." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDOwcoX6yVufRVh9hyfI_h9T94rOQQ9p7BsZE6WbwNNMKUZ0hDkf59oj8EwO8yFWY0g2x5Zg9cogfBbZAAgNcj0WmH9n7_77hno2ULKKUDDU9lsPhMxjYPxgBpYDMG0BD53bqqTi8WOZMC4wD27SNt63xwiPirNRySgR_souZwnYYSrSbk8n5T_LC6TPaUGyDNe-sBU-6Z5wznNHmaozi_m-ciby-Ot_ezlh56XV951NM9nWxuplDCjMYmgOtN7AZjgZGyYLN_ExA"/>
+</div>
+<p class="font-label-md text-label-md-mobile text-outline">Bursar Office - Digital Verification</p>
+</div>
+</div>
+<!-- Perforated Edge Effect -->
+<div class="receipt-perforation"></div>
+</div>
+<!-- Action Buttons -->
+<div class="mt-lg space-y-md">
+<button class="w-full h-[54px] rounded-[14px] bg-primary text-on-primary font-bold flex items-center justify-center gap-3 hover:bg-on-primary-fixed-variant transition-all active:scale-95 shadow3">
+<span class="material-symbols-outlined">download</span>
+                Download PDF Receipt
+            </button>
+<button class="w-full h-[54px] rounded-[14px] border-2 border-primary text-primary font-bold flex items-center justify-center gap-3 hover:bg-surface-container transition-all active:scale-95">
+<span class="material-symbols-outlined">mail</span>
+                Email to Registered Parent
+            </button>
+</div>
+<!-- Success Message -->
+<p class="mt-lg text-center font-body-sm text-body-sm text-on-surface-variant px-md">
+            A confirmation copy has been sent to the parent's registered email address (p.amina@domain.com).
+        </p>
+</main>
+<!-- Bottom Navigation Anchor -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 pb-4 pt-2 bg-surface-container-lowest dark:bg-inverse-surface border-t border-outline-variant dark:border-none shadow-lg rounded-t-xl">
+<div class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant px-5 py-1 hover:bg-surface-container-high dark:hover:bg-surface-container-highest rounded-full transition-all active:scale-90">
+<span class="material-symbols-outlined">home</span>
+<span class="font-label-md text-label-md-mobile">Home</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant px-5 py-1 hover:bg-surface-container-high dark:hover:bg-surface-container-highest rounded-full transition-all active:scale-90">
+<span class="material-symbols-outlined">school</span>
+<span class="font-label-md text-label-md-mobile">Academics</span>
+</div>
+<div class="flex flex-col items-center justify-center bg-primary-container dark:bg-on-primary-fixed-variant text-on-primary-container dark:text-primary-fixed rounded-full px-5 py-1 active:scale-90 transition-all duration-200">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">payments</span>
+<span class="font-label-md text-label-md-mobile">Payments</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant px-5 py-1 hover:bg-surface-container-high dark:hover:bg-surface-container-highest rounded-full transition-all active:scale-90">
+<span class="material-symbols-outlined">chat_bubble</span>
+<span class="font-label-md text-label-md-mobile">Contact</span>
+</div>
+</nav>
+</body></html>

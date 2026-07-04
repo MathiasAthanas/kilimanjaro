@@ -39,6 +39,12 @@ export class GradingController {
     });
   }
 
+  @Patch('grading-scales/:id')
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL)
+  updateGradingScale(@Param('id') id: string, @Body() dto: { name: string; grades: any[] }) {
+    return this.gradingService.updateGradingScale(id, dto);
+  }
+
   @Patch('grading-scales/:id/activate')
   @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL)
   activateGradingScale(@Param('id') id: string) {

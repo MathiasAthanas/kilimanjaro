@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Approval History | Kilimanjaro Teachers</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-container": "#eaedff",
+                        "on-tertiary-fixed": "#07006c",
+                        "inverse-primary": "#89ceff",
+                        "on-primary-container": "#003751",
+                        "on-tertiary-container": "#1407ad",
+                        "surface-dim": "#d2d9f4",
+                        "tertiary-container": "#8d90ff",
+                        "error-container": "#ffdad6",
+                        "surface-variant": "#dae2fd",
+                        "on-secondary-fixed": "#001f26",
+                        "outline": "#6e7881",
+                        "surface-container-highest": "#dae2fd",
+                        "primary-fixed": "#c9e6ff",
+                        "tertiary": "#494bd6",
+                        "on-surface-variant": "#3e4850",
+                        "on-error-container": "#93000a",
+                        "error": "#ba1a1a",
+                        "surface-tint": "#006591",
+                        "secondary": "#00687a",
+                        "tertiary-fixed": "#e1e0ff",
+                        "on-tertiary-fixed-variant": "#2f2ebe",
+                        "surface-container-high": "#e2e7ff",
+                        "on-tertiary": "#ffffff",
+                        "on-primary-fixed": "#001e2f",
+                        "on-secondary-fixed-variant": "#004e5c",
+                        "on-secondary": "#ffffff",
+                        "secondary-fixed": "#acedff",
+                        "inverse-on-surface": "#eef0ff",
+                        "inverse-surface": "#283044",
+                        "background": "#faf8ff",
+                        "secondary-fixed-dim": "#4cd7f6",
+                        "on-primary": "#ffffff",
+                        "outline-variant": "#bec8d2",
+                        "on-error": "#ffffff",
+                        "surface": "#faf8ff",
+                        "primary-fixed-dim": "#89ceff",
+                        "tertiary-fixed-dim": "#c0c1ff",
+                        "on-background": "#131b2e",
+                        "on-surface": "#131b2e",
+                        "primary-container": "#0ea5e9",
+                        "primary": "#006591",
+                        "surface-container-lowest": "#ffffff",
+                        "on-secondary-container": "#006172",
+                        "surface-bright": "#faf8ff",
+                        "surface-container-low": "#f2f3ff",
+                        "secondary-container": "#57dffe",
+                        "on-primary-fixed-variant": "#004c6e"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "lg": "24px",
+                        "base": "4px",
+                        "container-padding": "20px",
+                        "xs": "8px",
+                        "xl": "32px",
+                        "sm": "12px",
+                        "md": "16px"
+                    },
+                    "fontFamily": {
+                        "label-md": ["Plus Jakarta Sans"],
+                        "display-lg": ["Space Grotesk"],
+                        "headline-lg": ["Space Grotesk"],
+                        "body-md": ["Plus Jakarta Sans"],
+                        "body-lg": ["Plus Jakarta Sans"],
+                        "headline-md": ["Space Grotesk"],
+                        "headline-sm": ["Space Grotesk"],
+                        "body-sm": ["Plus Jakarta Sans"],
+                        "label-lg": ["Plus Jakarta Sans"]
+                    },
+                    "fontSize": {
+                        "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.04em", "fontWeight": "600"}],
+                        "display-lg": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "headline-lg": ["30px", {"lineHeight": "36px", "fontWeight": "600"}],
+                        "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                        "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                        "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                        "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "500"}],
+                        "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                        "label-lg": ["14px", {"lineHeight": "20px", "letterSpacing": "0.01em", "fontWeight": "600"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .approval-card-hover:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px rgba(14, 165, 233, 0.12);
+        }
+        .glass-header {
+            background: rgba(250, 248, 255, 0.8);
+            backdrop-filter: blur(12px);
+        }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #bec8d2; border-radius: 10px; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-surface min-h-screen pb-32">
+<!-- TopAppBar -->
+<header class="flex justify-between items-center px-container-padding h-16 w-full fixed top-0 z-50 bg-surface shadow-sm border-b border-outline-variant">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-primary-container flex items-center justify-center overflow-hidden border-2 border-white shadow-sm">
+<img alt="Teacher profile photo" class="w-full h-full object-cover" data-alt="A professional close-up portrait of a senior male educator with a kind expression. He is wearing a sharp charcoal suit and a light blue shirt. The background is a brightly lit, modern office with soft-focus architectural details and a corporate light-mode aesthetic dominated by whites and soft blues." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDI_TyjX63nmvNFTS0x_coSUajbMFCcRwe1Aum_7clBwRmMVlylDs0fFGH_YsL9EwvY8_I3H4nrSIFcOeSSHmhau4QPHCpDBk56-G9V9ORNQ0f3XHdIH74E-qf9H4hPGehsPbOUfQKbLndbf1aM5M3G8tjPbQBvNvHSL7mYiJg0xCkjqe7wc5C5Jhuszesc7g5i8OCBWm8OgK2B7zrrCJv-ECcE1CY3QQV3Np312fIJwTv9XHwTfax2CsTv8QxqUMNPEmtP6jWGKQ"/>
+</div>
+<h1 class="font-headline-sm text-primary font-bold tracking-tight">Kilimanjaro Teachers</h1>
+</div>
+<button class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-container-high transition-colors">
+<span class="material-symbols-outlined text-primary" data-icon="notifications">notifications</span>
+</button>
+</header>
+<main class="pt-20 px-container-padding max-w-4xl mx-auto">
+<!-- Breadcrumb & Header -->
+<div class="mb-lg">
+<div class="flex items-center gap-1 text-on-surface-variant font-label-md text-label-md mb-2">
+<span>Portal</span>
+<span class="material-symbols-outlined text-[14px]">chevron_right</span>
+<span>Approvals</span>
+<span class="material-symbols-outlined text-[14px]">chevron_right</span>
+<span class="text-primary">History</span>
+</div>
+<h2 class="font-headline-md text-headline-md-mobile md:text-headline-md text-on-surface mb-2">Approval History</h2>
+<p class="font-body-md text-body-md text-on-surface-variant">Review the status of assessment submissions across your department.</p>
+</div>
+<!-- Filter Chips Section -->
+<div class="mb-lg flex flex-col gap-4">
+<div class="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
+<button class="bg-primary text-on-primary px-4 py-2 rounded-full font-label-lg text-label-lg flex items-center gap-2 whitespace-nowrap shadow-sm">
+<span class="material-symbols-outlined text-[18px]">filter_list</span>
+                    All Status
+                </button>
+<button class="bg-surface-container-low border border-outline-variant text-on-surface-variant px-4 py-2 rounded-full font-label-lg text-label-lg whitespace-nowrap hover:bg-surface-container-high transition-all">
+                    Approved
+                </button>
+<button class="bg-surface-container-low border border-outline-variant text-on-surface-variant px-4 py-2 rounded-full font-label-lg text-label-lg whitespace-nowrap hover:bg-surface-container-high transition-all">
+                    Rejected
+                </button>
+<button class="bg-surface-container-low border border-outline-variant text-on-surface-variant px-4 py-2 rounded-full font-label-lg text-label-lg whitespace-nowrap hover:bg-surface-container-high transition-all">
+                    Pending Appeal
+                </button>
+</div>
+<div class="flex items-center gap-3">
+<div class="flex-1 relative">
+<span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline" data-icon="calendar_today">calendar_today</span>
+<select class="w-full h-[54px] pl-12 pr-4 rounded-[14px] bg-surface-container-lowest border border-outline-variant focus:border-primary focus:ring-1 focus:ring-primary appearance-none font-body-md text-body-md">
+<option>Last 7 Days</option>
+<option>Last 30 Days</option>
+<option>Current Semester</option>
+<option>Academic Year 2023/24</option>
+</select>
+</div>
+<button class="w-[54px] h-[54px] rounded-[14px] bg-surface-container border border-outline-variant flex items-center justify-center hover:bg-surface-container-high transition-all">
+<span class="material-symbols-outlined text-primary" data-icon="download">download</span>
+</button>
+</div>
+</div>
+<!-- Group: This Week -->
+<section class="mb-xl">
+<div class="flex items-center gap-4 mb-md">
+<h3 class="font-label-lg text-label-lg text-primary bg-primary-fixed px-3 py-1 rounded-lg">THIS WEEK</h3>
+<div class="h-[1px] flex-1 bg-outline-variant/30"></div>
+</div>
+<div class="grid gap-md">
+<!-- Approval Card 1 -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl p-md approval-card-hover transition-all cursor-pointer flex gap-md items-start">
+<div class="w-12 h-12 rounded-xl bg-secondary-container flex items-center justify-center flex-shrink-0">
+<span class="material-symbols-outlined text-on-secondary-container" data-icon="functions">functions</span>
+</div>
+<div class="flex-1">
+<div class="flex justify-between items-start mb-1">
+<h4 class="font-headline-sm text-[18px] text-on-surface">Advanced Mathematics</h4>
+<span class="bg-[#ecfdf5] text-[#059669] font-label-md text-label-md px-3 py-1 rounded-full border border-[#10b981]/20">Approved</span>
+</div>
+<p class="font-body-md text-body-md text-on-surface-variant mb-2">Mid-term Assessment • Grade 12B</p>
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-surface-container-high overflow-hidden">
+<img alt="Teacher" data-alt="A professional headshot of a middle-aged female teacher with a warm, encouraging smile. She is wearing a cream-colored blazer and glasses. The lighting is soft and flattering, set against a clean, modern educational office background with light-toned wooden furniture and a minimalist plant." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBWGG0Or2VVtZHQ8m5z4k8Us8RHMVrXaGYH17vc6EDN0VRhIqJrIAZ-DtU5r6mHGu6dpJmtK3c-8vSJV9kM2eYVhLubEs1WZJzCmyDhZaXtPqFj769XdP8Hkr_gq06EIQyn0f6BUx3kDAotiIq_QrKQS80ca6nCoZDwLDE-Q3YJBIa7BznBTyPAY9MBZuIBqN4A78QnZM0FCwT-XQhBQVSMuMF6sfFzNPo8KOSszbKX9xKTgZJrdE1_MTSizuZP5DLCPLf82INTdw"/>
+</div>
+<span class="font-label-md text-label-md text-on-surface-variant">By Sarah Jenkins</span>
+<span class="text-outline mx-1">•</span>
+<span class="font-label-md text-label-md text-outline">Oct 24, 09:15 AM</span>
+</div>
+</div>
+</div>
+<!-- Rejection Card 1 -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl p-md approval-card-hover transition-all cursor-pointer flex gap-md items-start">
+<div class="w-12 h-12 rounded-xl bg-tertiary-container flex items-center justify-center flex-shrink-0">
+<span class="material-symbols-outlined text-on-tertiary-container" data-icon="science">science</span>
+</div>
+<div class="flex-1">
+<div class="flex justify-between items-start mb-1">
+<h4 class="font-headline-sm text-[18px] text-on-surface">Physics - Lab Practical</h4>
+<span class="bg-[#fff1f2] text-[#e11d48] font-label-md text-label-md px-3 py-1 rounded-full border border-[#f43f5e]/20">Rejected</span>
+</div>
+<p class="font-body-md text-body-md text-on-surface-variant mb-2">Quarterly Lab Report • Grade 11A</p>
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-surface-container-high overflow-hidden">
+<img alt="Teacher" data-alt="A portrait of a male teacher in his late 30s with a thoughtful, focused expression. He is wearing a casual navy sweater over a collared shirt. The background is a contemporary school library with blurred bookshelves and bright natural light streaming through large windows." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDpb2lxfK-x_-qdVTQsMmm9vwskWG6XE4_9tFGwDTrQrWU_q1_cIOkFScJ2zBHS7T4LwaSdhHwr575c3l0dzKDNL029AwKX8ZhRuXsXNho14_yFDIh0mGXCWaO6oSfa6yypmYvvzLMeSn-tKxjtt3ZQEEJACm_ax2WXf5QfEu-24WEnSmJj9NPm7Z58lRVpGB3QjBmHsJjumNkV5pUL3ZRClZqyz1qsHjX4jh7ZVYAp3K0k-bQV2u31tODRicA3LVPRCfKeZJpbYg"/>
+</div>
+<span class="font-label-md text-label-md text-on-surface-variant">By Michael Chen</span>
+<span class="text-outline mx-1">•</span>
+<span class="font-label-md text-label-md text-outline">Oct 23, 02:30 PM</span>
+</div>
+<div class="mt-3 p-3 bg-error-container/30 rounded-lg border-l-4 border-error">
+<p class="font-body-sm text-body-sm text-on-error-container"><strong>Reason:</strong> Grading criteria for Section B needs further clarification regarding error margins.</p>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Group: Last Week -->
+<section class="mb-xl">
+<div class="flex items-center gap-4 mb-md">
+<h3 class="font-label-lg text-label-lg text-on-surface-variant bg-surface-variant px-3 py-1 rounded-lg">LAST WEEK</h3>
+<div class="h-[1px] flex-1 bg-outline-variant/30"></div>
+</div>
+<div class="grid gap-md opacity-80">
+<!-- Approval Card 2 -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl p-md approval-card-hover transition-all cursor-pointer flex gap-md items-start">
+<div class="w-12 h-12 rounded-xl bg-primary-container flex items-center justify-center flex-shrink-0">
+<span class="material-symbols-outlined text-white" data-icon="language">language</span>
+</div>
+<div class="flex-1">
+<div class="flex justify-between items-start mb-1">
+<h4 class="font-headline-sm text-[18px] text-on-surface">English Literature</h4>
+<span class="bg-[#ecfdf5] text-[#059669] font-label-md text-label-md px-3 py-1 rounded-full border border-[#10b981]/20">Approved</span>
+</div>
+<p class="font-body-md text-body-md text-on-surface-variant mb-2">Essay: Modernism • Grade 10C</p>
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-surface-container-high overflow-hidden">
+<img alt="Teacher" data-alt="A close-up portrait of a female educator with a friendly, professional smile. She is wearing a modern teal blouse and subtle jewelry. The background is a soft-focus classroom with colorful student art on the walls and warm afternoon sunlight." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBHEyPZiirivyexUK3s3aiqz4CwelUZ3OaYEeXHG31gN4Al8O347mGgEndjkfg5DFNkQ34YHf-KT8IZ-dJ9mmkoDlL8mt5dZSwdxuleCbD2Cj4bH5kgTwpPuZoYAMTcKWZ57_LpetiucbpJW1VYBtx2eg4nNu3kDsGpSQR5KgMYDgEvth6uVlPyDsmouZalcAxPoGyAcbwvnrG05S9CgrGnofuVoDqWPd5yu9kfn3MBotP_L24JiYF2WAG7xddSpGg_auowzl7GJw"/>
+</div>
+<span class="font-label-md text-label-md text-on-surface-variant">By Amara Okafor</span>
+<span class="text-outline mx-1">•</span>
+<span class="font-label-md text-label-md text-outline">Oct 19, 11:00 AM</span>
+</div>
+</div>
+</div>
+<!-- Approval Card 3 -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl p-md approval-card-hover transition-all cursor-pointer flex gap-md items-start">
+<div class="w-12 h-12 rounded-xl bg-secondary-container flex items-center justify-center flex-shrink-0">
+<span class="material-symbols-outlined text-on-secondary-container" data-icon="history_edu">history_edu</span>
+</div>
+<div class="flex-1">
+<div class="flex justify-between items-start mb-1">
+<h4 class="font-headline-sm text-[18px] text-on-surface">History of Civilizations</h4>
+<span class="bg-[#ecfdf5] text-[#059669] font-label-md text-label-md px-3 py-1 rounded-full border border-[#10b981]/20">Approved</span>
+</div>
+<p class="font-body-md text-body-md text-on-surface-variant mb-2">Unit Test 3 • Grade 12A</p>
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-surface-container-high overflow-hidden">
+<img alt="Teacher" data-alt="A portrait of a male teacher in his 40s with an approachable, confident air. He is wearing a neatly pressed button-down shirt. The background is a clean, bright corridor of a modern school building with glass walls and minimalist signage." src="https://lh3.googleusercontent.com/aida-public/AB6AXuChyYuSOj-6I8wnth2aGr1i2W0cVPQpR-3VB6OTGclwFjbqLf52eT8HJL8aIxs__3MI4bWKdynvj4VtRZ_MBYt6Cn6sy1CybFyJFZYJpgskchFoodd7Hgu35g2YJzFfHk9YpDFAum6B4Y-9deWXky06uFvfIB8IbuQsi-OcMo1FxsnTM6dFtMpwQPu34EIEIrUVJV7Jx4LpRcD19FxL0uQpuMLNRWfRQv-5cc-8gUD6xY3ifhV2A0y6vVztnlcNBsJrF0ew4v-g0w"/>
+</div>
+<span class="font-label-md text-label-md text-on-surface-variant">By David Miller</span>
+<span class="text-outline mx-1">•</span>
+<span class="font-label-md text-label-md text-outline">Oct 18, 08:45 AM</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-2 py-3 bg-surface border-t border-outline-variant shadow-lg md:hidden">
+<a class="flex flex-col items-center justify-center text-on-surface-variant group" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span class="font-label-md text-label-md">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant" href="#">
+<span class="material-symbols-outlined" data-icon="how_to_reg">how_to_reg</span>
+<span class="font-label-md text-label-md">Attendance</span>
+</a>
+<a class="flex flex-col items-center justify-center bg-primary-container text-on-primary-container rounded-full px-4 py-1 scale-90 duration-150" href="#">
+<span class="material-symbols-outlined" data-icon="edit_note">edit_note</span>
+<span class="font-label-md text-label-md">Marks</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant" href="#">
+<span class="material-symbols-outlined" data-icon="calendar_month">calendar_month</span>
+<span class="font-label-md text-label-md">Schedule</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant" href="#">
+<span class="material-symbols-outlined" data-icon="menu">menu</span>
+<span class="font-label-md text-label-md">Menu</span>
+</a>
+</nav>
+<!-- Desktop Navigation Drawer -->
+<aside class="hidden md:flex fixed left-0 top-0 h-full z-[60] flex flex-col py-6 gap-4 bg-surface border-r border-outline-variant w-80">
+<div class="px-6 mb-4">
+<h2 class="font-headline-md text-primary font-black">KJS PORTAL</h2>
+</div>
+<div class="px-6 py-4 flex items-center gap-3 bg-surface-container-low mx-4 rounded-xl mb-4">
+<div class="w-12 h-12 rounded-full overflow-hidden border-2 border-primary/20">
+<img alt="S. Kilimanjaro" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDTtNw5_ZFNEHkmiKtWlU5WkDu0Nw4WzBWYiJthTIIRDnUuRyQB5q976iAIkcNmoQtCjark6YVmrL-cG3weSaXKm-gwx-T8yEIOQKjhnmbfa5e3wDIlGBG1VtThxpUjycGRjWmRRkVLX9Cb0n6wyMe1TJlJwZXbbBA6L5eC2FtdCxn3XSPdUhaNi9I2rhZm1QWuLWdAc3huqTvBOessmU_LGrDfv3KRGMtTEp5y3hQlnWZDZDexCZ51KPd6q6iqE7CrcooCgF5XLQ"/>
+</div>
+<div>
+<p class="font-label-lg text-label-lg text-on-surface">S. Kilimanjaro</p>
+<p class="font-body-sm text-[12px] text-on-surface-variant">Senior Educator • Grade 10</p>
+<p class="font-body-sm text-[10px] text-primary font-bold">Staff ID: KJS-102</p>
+</div>
+</div>
+<nav class="flex-1 flex flex-col gap-1">
+<a class="flex items-center gap-4 px-6 py-3 text-on-surface-variant hover:bg-surface-container-low transition-all mx-2 rounded-lg" href="#">
+<span class="material-symbols-outlined" data-icon="home">home</span>
+<span class="font-label-lg text-label-lg">Dashboard</span>
+</a>
+<a class="flex items-center gap-4 px-6 py-3 text-on-surface-variant hover:bg-surface-container-low transition-all mx-2 rounded-lg" href="#">
+<span class="material-symbols-outlined" data-icon="fact_check">fact_check</span>
+<span class="font-label-lg text-label-lg">Attendance Log</span>
+</a>
+<a class="flex items-center gap-4 px-6 py-3 bg-primary-container text-on-primary-container font-bold transition-all mx-2 rounded-lg" href="#">
+<span class="material-symbols-outlined" data-icon="app_registration">app_registration</span>
+<span class="font-label-lg text-label-lg">Marks Entry</span>
+</a>
+<a class="flex items-center gap-4 px-6 py-3 text-on-surface-variant hover:bg-surface-container-low transition-all mx-2 rounded-lg" href="#">
+<span class="material-symbols-outlined" data-icon="analytics">analytics</span>
+<span class="font-label-lg text-label-lg">Syllabus Progress</span>
+</a>
+<a class="flex items-center gap-4 px-6 py-3 text-on-surface-variant hover:bg-surface-container-low transition-all mx-2 rounded-lg" href="#">
+<span class="material-symbols-outlined" data-icon="grid_view">grid_view</span>
+<span class="font-label-lg text-label-lg">Weekly Timetable</span>
+</a>
+<div class="mt-auto px-6 py-4 flex flex-col gap-2">
+<a class="flex items-center gap-4 py-2 text-on-surface-variant hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span class="font-label-lg text-label-lg">Portal Settings</span>
+</a>
+<button class="w-full h-[48px] rounded-xl bg-error/10 text-error flex items-center justify-center gap-2 font-label-lg hover:bg-error/20 transition-all">
+<span class="material-symbols-outlined" data-icon="logout">logout</span>
+                    Logout
+                </button>
+</div>
+</nav>
+</aside>
+<!-- Interactive Search FAB (Mobile Only) -->
+<button class="fixed right-6 bottom-24 w-14 h-14 bg-primary text-on-primary rounded-full shadow-lg flex items-center justify-center transition-transform active:scale-90 md:hidden z-40">
+<span class="material-symbols-outlined" data-icon="search">search</span>
+</button>
+<script>
+        // Micro-interactions for status filter chips
+        document.querySelectorAll('button').forEach(btn => {
+            btn.addEventListener('click', function() {
+                if(this.innerText.includes('Approved') || this.innerText.includes('Rejected') || this.innerText.includes('All')) {
+                    document.querySelectorAll('button').forEach(b => {
+                        b.classList.remove('bg-primary', 'text-on-primary');
+                        if(b.innerText.includes('Approved') || b.innerText.includes('Rejected')) {
+                            b.classList.add('bg-surface-container-low', 'text-on-surface-variant');
+                        }
+                    });
+                    this.classList.remove('bg-surface-container-low', 'text-on-surface-variant');
+                    this.classList.add('bg-primary', 'text-on-primary');
+                }
+            });
+        });
+
+        // Add glass effect on scroll for TopAppBar
+        window.addEventListener('scroll', () => {
+            const header = document.querySelector('header');
+            if (window.scrollY > 20) {
+                header.classList.add('glass-header');
+            } else {
+                header.classList.remove('glass-header');
+            }
+        });
+    </script>
+</body></html>

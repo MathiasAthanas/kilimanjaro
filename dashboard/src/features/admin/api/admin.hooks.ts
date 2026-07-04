@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../lib/api/client';
-import { arrayFromApi, payloadOf } from '../../../lib/api/response';
+import { arrayFromApi, dedupeById, payloadOf } from '../../../lib/api/response';
 import type { AdminStatus } from './adminApi';
 
 type AdminUserRow = {
@@ -222,6 +222,7 @@ export const adminKeys = {
   students: (params?: Record<string, unknown>) => [...adminKeys.all, 'students', params ?? {}] as const,
   classes: () => [...adminKeys.all, 'classes'] as const,
   subjects: () => [...adminKeys.all, 'subjects'] as const,
+  classSubjects: (params?: Record<string, unknown>) => [...adminKeys.all, 'class-subjects', params ?? {}] as const,
   combinations: () => [...adminKeys.all, 'combinations'] as const,
   pathways: () => [...adminKeys.all, 'pathways'] as const,
   gradingScales: () => [...adminKeys.all, 'grading-scales'] as const,
@@ -251,7 +252,23 @@ export function useAdminDashboard() {
 export function useAdminUsers() {
   return useQuery({
     queryKey: adminKeys.users(),
-    queryFn: () => api.get('/auth/users').then((r) => toAdminUsers(payloadOf(r))),
+    queryFn: () => api.get('/auth/users', { params: { limit: 100 } }).then((r) => toAdminUsers(payloadOf(r))),
+    staleTime: 30_000,
+  });
+}
+
+export function useTeachingStaff() {
+  return useQuery({
+    queryKey: [...adminKeys.users(), 'teaching-staff'] as const,
+    queryFn: async () => {
+      const [teachers, hods] = await Promise.all([
+        api.get('/auth/users', { params: { role: 'TEACHER', isActive: true, limit: 100 } }).then((r) => toAdminUsers(payloadOf(r))),
+        api.get('/auth/users', { params: { role: 'HEAD_OF_DEPARTMENT', isActive: true, limit: 100 } }).then((r) => toAdminUsers(payloadOf(r))),
+      ]);
+      const byId = new Map<string, AdminUserRow>();
+      [...teachers, ...hods].forEach((user) => byId.set(user.id, user));
+      return Array.from(byId.values()).sort((a, b) => a.name.localeCompare(b.name));
+    },
     staleTime: 30_000,
   });
 }
@@ -325,6 +342,36 @@ export function useAdminSubjects() {
             status: String(s.status ?? (s.isActive === false ? 'INACTIVE' : 'ACTIVE')),
             classes: Array.isArray(classesRaw) ? classesRaw.length : Number(classesRaw),
             teachers: Array.isArray(teachersRaw) ? teachersRaw.length : Number(teachersRaw),
+          };
+        }),
+      ),
+    staleTime: 30_000,
+  });
+}
+
+export function useClassSubjects(params?: Record<string, unknown>) {
+  return useQuery({
+    queryKey: adminKeys.classSubjects(params),
+    queryFn: () =>
+      api.get('/academics/class-subjects', { params }).then((r) =>
+        arrayFromApi(payloadOf(r), ['classSubjects', 'assignments']).map((raw) => {
+          const item = raw as Record<string, unknown>;
+          const subject = item.subject && typeof item.subject === 'object' ? item.subject as Record<string, unknown> : undefined;
+          const combination = item.combination && typeof item.combination === 'object' ? item.combination as Record<string, unknown> : undefined;
+          return {
+            ...item,
+            id: String(item.id ?? crypto.randomUUID()),
+            classId: String(item.classId ?? ''),
+            subjectId: String(item.subjectId ?? subject?.id ?? ''),
+            subjectName: String(subject?.name ?? item.subjectName ?? ''),
+            subjectCode: String(subject?.code ?? item.subjectCode ?? ''),
+            teacherId: String(item.teacherId ?? ''),
+            academicYearId: String(item.academicYearId ?? ''),
+            educationStage: String(item.educationStage ?? ''),
+            classLevel: item.classLevel == null ? '' : String(item.classLevel),
+            combinationId: String(item.combinationId ?? ''),
+            combinationName: String(combination?.name ?? ''),
+            isActive: Boolean(item.isActive ?? true),
           };
         }),
       ),
@@ -410,7 +457,7 @@ export function useAssessmentTypes() {
     queryKey: adminKeys.assessmentTypes(),
     queryFn: () =>
       api.get('/academics/assessment-types').then((r) =>
-        arrayFromApi(payloadOf(r), ['assessmentTypes', 'types']).map((raw) => {
+        dedupeById(arrayFromApi(payloadOf(r), ['assessmentTypes', 'types']).map((raw) => {
           const t = raw as Record<string, unknown>;
           return {
             ...t,
@@ -426,7 +473,7 @@ export function useAssessmentTypes() {
             isActive: Boolean(t.isActive ?? true),
             scope: String(t.scope ?? t.level ?? t.stageScope ?? t.educationStage ?? ''),
           };
-        }),
+        })),
       ),
     staleTime: 60_000,
   });
@@ -659,6 +706,15 @@ export function useCreateGradingScaleMutation() {
   return useMutation({
     mutationFn: (payload: unknown) =>
       api.post('/academics/grading-scales', payload).then((r) => r.data?.data ?? r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: adminKeys.gradingScales() }),
+  });
+}
+
+export function useUpdateGradingScaleMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: unknown }) =>
+      api.patch(`/academics/grading-scales/${id}`, payload).then((r) => r.data?.data ?? r.data),
     onSuccess: () => qc.invalidateQueries({ queryKey: adminKeys.gradingScales() }),
   });
 }
@@ -1206,8 +1262,17 @@ export function useDeleteFeeCategoryMutation() {
 export function useCreateFeeCategoryMutation() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { code: string; name: string; type: string; amount: number }) =>
+    mutationFn: (body: { name: string; description?: string; isOptional: boolean; isBillablePerTerm: boolean }) =>
       api.post('/finance/fee-categories', body).then((r) => r.data?.data ?? r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['finance', 'fee-categories'] }),
+  });
+}
+
+export function useUpdateFeeCategoryMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: { name?: string; description?: string; isOptional?: boolean; isBillablePerTerm?: boolean; isActive?: boolean } }) =>
+      api.patch(`/finance/fee-categories/${id}`, payload).then((r) => r.data?.data ?? r.data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['finance', 'fee-categories'] }),
   });
 }
@@ -1217,11 +1282,21 @@ export function useCreateFeeCategoryMutation() {
 export function useAssignSubjectToClassMutation() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ classId, subjectId }: { classId: string; subjectId: string }) =>
-      api.post(`/students/classes/${classId}/subjects`, { subjectId }).then((r) => r.data?.data ?? r.data),
+    mutationFn: (payload: {
+      classId: string;
+      subjectId: string;
+      academicYearId: string;
+      teacherId: string;
+      educationStage?: string;
+      classLevel?: number;
+      combinationId?: string;
+      isActive?: boolean;
+    }) =>
+      api.post('/academics/class-subjects', payload).then((r) => r.data?.data ?? r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: adminKeys.classes() });
       qc.invalidateQueries({ queryKey: adminKeys.subjects() });
+      qc.invalidateQueries({ queryKey: [...adminKeys.all, 'class-subjects'] });
     },
   });
 }
@@ -1229,11 +1304,25 @@ export function useAssignSubjectToClassMutation() {
 export function useUnassignSubjectFromClassMutation() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ classId, subjectId }: { classId: string; subjectId: string }) =>
-      api.delete(`/students/classes/${classId}/subjects/${subjectId}`).then((r) => r.data?.data ?? r.data),
+    mutationFn: ({ id }: { id: string }) =>
+      api.patch(`/academics/class-subjects/${id}`, { isActive: false }).then((r) => r.data?.data ?? r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: adminKeys.classes() });
       qc.invalidateQueries({ queryKey: adminKeys.subjects() });
+      qc.invalidateQueries({ queryKey: [...adminKeys.all, 'class-subjects'] });
+    },
+  });
+}
+
+export function useUpdateClassSubjectMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: Record<string, unknown> }) =>
+      api.patch(`/academics/class-subjects/${id}`, payload).then((r) => r.data?.data ?? r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: adminKeys.classes() });
+      qc.invalidateQueries({ queryKey: adminKeys.subjects() });
+      qc.invalidateQueries({ queryKey: [...adminKeys.all, 'class-subjects'] });
     },
   });
 }

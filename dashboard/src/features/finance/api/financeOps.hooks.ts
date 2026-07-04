@@ -302,6 +302,27 @@ export interface FinancialStatement {
   disbursements: { total: number; count: number };
   store: { stockValue: number; received: number; issued: number };
   assets: { purchaseCost: number; currentValue: number; count: number };
+  receivables: {
+    ageing: Array<{ bucket: string; amount: number; count: number }>;
+    byStatus: Array<{ status: string; amount: number; count: number }>;
+    topDebtors: Array<{ studentName: string; className: string; invoiceNumber: string; outstanding: number; daysOverdue: number }>;
+    rollForward: { openingEstimate: number; newBillings: number; collections: number; closingOutstanding: number; estimatedAdjustments: number };
+  };
+  cashflow: { inflows: number; outflows: number; netCashflow: number; disbursements: number; inventoryIssued: number };
+  inventory: {
+    lowStock: Array<{ itemCode: string; name: string; category: string; quantityOnHand: number; reorderLevel: number; stockValue: number }>;
+    byCategory: Array<{ category: string; value: number; items: number }>;
+  };
+  assetBreakdown: {
+    byStatus: Array<{ status: string; value: number; count: number }>;
+    byCondition: Array<{ condition: string; value: number; count: number }>;
+  };
+  transactions: {
+    recentCollections: Array<{ date: string; reference: string; payer: string; method: string; amount: number }>;
+    recentExpenses: Array<{ date: string; category: string; description: string; payee: string; amount: number }>;
+    recentDisbursements: Array<{ date: string; requestNumber: string; title: string; department: string; amount: number }>;
+  };
+  ratios: { expenseToCollectionRate: number; receivableExposureRate: number; cashCoverage: number };
   net: { operatingResult: number; collectedLessExpenses: number };
   series: Array<{ label: string; collected: number; expenses: number }>;
 }

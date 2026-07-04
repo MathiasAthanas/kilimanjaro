@@ -29,6 +29,9 @@ import {
   useUpdateSyllabusMutation,
   useCreatePairingMutation,
   useTeacherSyllabus,
+  useCurrentTerm,
+  useStudentReportCards,
+  useUpdateReportCardCommentsMutation,
 } from '../api/teacher.hooks';
 import { downloadReportWhenReady, useGenerateReportMutation } from '../../operations/api/operations.hooks';
 import {
@@ -774,7 +777,8 @@ export function TimetablePage() {
 
 export function SyllabusPage() {
   const { data: apiClasses = [] as typeof teacherClasses } = useTeacherClasses() as { data: typeof teacherClasses };
-  const { data: syllabusItems = [] } = useTeacherSyllabus() as { data: Array<{ id: string; classSubjectId: string; totalTopics: number; coveredTopics: number; completion: number; notes: string }> };
+  const { data: syllabusItems = [] } = useTeacherSyllabus() as { data: Array<{ id: string; termId: string; classSubjectId: string; totalTopics: number; coveredTopics: number; completion: number; notes: string }> };
+  const { data: currentTerm } = useCurrentTerm() as { data: { id: string } | null | undefined };
   const updateMutation = useUpdateSyllabusMutation();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValues, setEditValues] = useState<{ covered: string; total: string; notes: string }>({ covered: '', total: '', notes: '' });
@@ -788,15 +792,19 @@ export function SyllabusPage() {
   };
 
   const handleSave = (klass: typeof apiClasses[number]) => {
-    const syl = syllabusItems.find((s) => s.classSubjectId === klass.id);
-    const sylId = syl?.id ?? klass.id;
     const covered = Math.max(0, Number(editValues.covered) || 0);
     const total = Math.max(1, Number(editValues.total) || 24);
     if (covered > total) { toast('Covered topics cannot exceed total topics', 'warning'); return; }
-    updateMutation.mutate({ id: sylId, coveredTopics: covered, notes: editValues.notes }, {
-      onSuccess: () => { toast('Syllabus updated', 'success'); setEditingId(null); },
-      onError: () => toast('Failed to update syllabus', 'error'),
-    });
+    const syl = syllabusItems.find((s) => s.classSubjectId === klass.id);
+    const termId = syl?.termId || currentTerm?.id || '';
+    if (!termId) { toast('Could not determine term — please reload', 'error'); return; }
+    updateMutation.mutate(
+      { classSubjectId: klass.id, termId, totalTopics: total, coveredTopics: covered, notes: editValues.notes },
+      {
+        onSuccess: () => { toast('Syllabus updated', 'success'); setEditingId(null); },
+        onError: () => toast('Failed to update syllabus', 'error'),
+      },
+    );
   };
 
   return (
@@ -1718,4 +1726,145 @@ function useAssessment() {
     return { loading: false, assessment };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assessmentId, apiAssessments, isLoading]);
+}
+
+// ─── Report Card Remarks page ─────────────────────────────────────────────────
+
+function RemarkRow({ student, currentTermId }: { student: any; currentTermId: string }) {
+  const { data: cards = [], isLoading } = useStudentReportCards(student.id ?? student.studentId ?? '');
+  const mutation = useUpdateReportCardCommentsMutation();
+  const card = cards.find((c: any) => c.termId === currentTermId || c.term?.id === currentTermId) ?? cards[0];
+  const [remark, setRemark] = React.useState('');
+  const [saved, setSaved] = React.useState(false);
+
+  React.useEffect(() => {
+    if (card) setRemark(String((card as any).teacherComment ?? (card as any).teacherRemark?.message ?? ''));
+  }, [card]);
+
+  const cardId = (card as any)?.id ?? '';
+  const handleSave = () => {
+    if (!cardId) return;
+    mutation.mutate({ id: cardId, teacherComment: remark }, {
+      onSuccess: () => { setSaved(true); toast('Remark saved', 'success'); setTimeout(() => setSaved(false), 3000); },
+      onError: () => toast('Failed to save remark', 'error'),
+    });
+  };
+
+  const studentName = String(student.name ?? student.studentName ?? student.fullName ?? '');
+
+  return (
+    <tr className="border-t border-ks-line">
+      <td className="px-4 py-3 font-black text-ks-navy">{studentName}</td>
+      <td className="px-4 py-3 text-xs text-ks-muted">
+        {isLoading ? <span className="text-ks-muted">Loading…</span>
+          : !card ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-ks-muted">No card generated</span>
+          : <Badge tone="emerald">Card ready</Badge>}
+      </td>
+      <td className="px-4 py-4">
+        {card ? (
+          <textarea
+            className="w-full rounded-lg border border-ks-line bg-ks-paper px-3 py-2 text-sm font-semibold text-ks-slate outline-none focus:border-ks-navy resize-none"
+            rows={2}
+            maxLength={600}
+            placeholder="Enter your teacher remark for this student…"
+            value={remark}
+            onChange={(e) => { setRemark(e.target.value); setSaved(false); }}
+          />
+        ) : (
+          <p className="text-xs text-ks-muted italic">Report card must be generated first by Principal/AQA</p>
+        )}
+      </td>
+      <td className="px-4 py-3">
+        {card && (
+          <button
+            onClick={handleSave}
+            disabled={mutation.isPending || !cardId}
+            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-black transition ${
+              saved ? 'bg-emerald-100 text-emerald-700' : 'bg-ks-navy text-white hover:opacity-90 disabled:opacity-50'
+            }`}
+          >
+            {saved ? <><CheckCircle2 className="h-3.5 w-3.5" /> Saved</> : mutation.isPending ? 'Saving…' : <><Save className="h-3.5 w-3.5" /> Save</>}
+          </button>
+        )}
+      </td>
+    </tr>
+  );
+}
+
+function ClassRemarks({ classSubjectId, currentTermId }: { classSubjectId: string; currentTermId: string }) {
+  const { data: students = [], isLoading } = useClassStudents(classSubjectId);
+
+  if (isLoading) return <SkeletonTable cols={4} />;
+  if (!students.length) return (
+    <p className="py-8 text-center text-sm text-ks-muted">No students found for this class.</p>
+  );
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-ks-line bg-white shadow-sm">
+      <table className="w-full text-sm">
+        <thead className="bg-ks-paper">
+          <tr>
+            {['Student Name', 'Report Card', 'Teacher Remark (max 600 chars)', 'Action'].map((h) => (
+              <th key={h} className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-wider text-ks-muted">{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {(students as any[]).map((s: any) => (
+            <RemarkRow key={s.id ?? s.studentId} student={s} currentTermId={currentTermId} />
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+export function TeacherReportRemarksPage() {
+  const { data: classes = [] } = useTeacherClasses();
+  const { data: currentTerm } = useCurrentTerm();
+  const [selectedClassId, setSelectedClassId] = React.useState('');
+  const termId = String((currentTerm as any)?.id ?? '');
+
+  return (
+    <TeacherWorkspaceShell title="Report Card Remarks" eyebrow="Add your remarks to student report cards">
+      <div className="rounded-2xl border border-ks-line bg-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-center gap-3">
+          <MessageSquarePlus className="h-4 w-4 text-ks-muted" />
+          <p className="text-xs font-black uppercase tracking-widest text-ks-muted">Select Class</p>
+          <select
+            className="rounded-lg border border-ks-line bg-ks-paper px-3 py-1.5 text-sm font-bold text-ks-navy outline-none"
+            value={selectedClassId}
+            onChange={(e) => setSelectedClassId(e.target.value)}
+          >
+            <option value="">Choose a class…</option>
+            {(classes as any[]).map((c: any) => (
+              <option key={c.id} value={c.id}>{c.subject} · {c.className}</option>
+            ))}
+          </select>
+          {currentTerm && (
+            <span className="rounded-full bg-ks-navy/10 px-3 py-1 text-xs font-black text-ks-navy">
+              {String((currentTerm as any).name ?? 'Current Term')}
+            </span>
+          )}
+        </div>
+        <p className="mt-2 text-xs font-semibold text-ks-muted">
+          Your remarks appear on the student's official report card. Be specific and constructive. Changes are saved per-student.
+        </p>
+      </div>
+
+      {!selectedClassId ? (
+        <div className="rounded-2xl border border-ks-line bg-white p-12 text-center shadow-sm">
+          <MessageSquarePlus className="mx-auto h-10 w-10 text-ks-muted" />
+          <p className="mt-4 font-black text-ks-navy">Select a class above to view students and add remarks</p>
+          <p className="mt-1 text-sm text-ks-muted">Remarks you enter here will be saved directly to each student's report card.</p>
+        </div>
+      ) : !termId ? (
+        <div className="rounded-2xl border border-ks-line bg-white p-8 text-center shadow-sm">
+          <p className="text-sm text-ks-muted">Unable to determine current term. Please refresh.</p>
+        </div>
+      ) : (
+        <ClassRemarks classSubjectId={selectedClassId} currentTermId={termId} />
+      )}
+    </TeacherWorkspaceShell>
+  );
 }

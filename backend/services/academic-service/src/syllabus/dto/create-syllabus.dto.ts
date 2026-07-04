@@ -1,4 +1,4 @@
-import { IsInt, IsNotEmpty, IsString, Min } from 'class-validator';
+import { IsInt, IsNotEmpty, IsOptional, IsString, Min } from 'class-validator';
 
 export class CreateSyllabusDto {
   @IsString()
@@ -12,4 +12,13 @@ export class CreateSyllabusDto {
   @IsInt()
   @Min(1)
   totalTopics!: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  coveredTopics?: number;
+
+  @IsOptional()
+  @IsString()
+  notes?: string;
 }

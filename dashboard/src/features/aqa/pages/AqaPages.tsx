@@ -3,17 +3,21 @@ import {
   ArrowRight,
   BookOpen,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   Download,
   FileText,
   Filter,
   Play,
   Plus,
   Save,
+  Search,
   Send,
   Settings,
   ShieldCheck,
   TrendingDown,
   TrendingUp,
+  Users,
   XCircle,
   Zap,
 } from 'lucide-react';
@@ -27,6 +31,7 @@ import { Card } from '../../../components/common/Card';
 import { aqaAlerts, heatmap, pairings, reports, thresholds } from '../api/aqaApi';
 import {
   useAqaAlerts,
+  useAqaAlertsByClass,
   useAqaHeatmap,
   useAqaInterventions,
   useAqaPairings,
@@ -155,27 +160,122 @@ export function PerformanceCommandCenterPage() {
   const { data: apiAlerts = [] as typeof aqaAlerts } = useAqaAlerts() as unknown as { data: typeof aqaAlerts };
   const { data: schoolSummary } = useAqaSchoolSummary() as { data: Record<string, unknown> | undefined };
   const summary = (schoolSummary?.performanceSummary ?? {}) as Record<string, number>;
-  // school summary holds the TRUE totals; the alerts feed is paginated
-  const criticalTotal = Number(summary.criticalCount ?? apiAlerts.filter((a) => a.severity === 'CRITICAL').length);
-  const atRiskTotal = Number(summary.atRiskCount ?? apiAlerts.filter((a) => a.severity === 'HIGH').length);
+
+  const criticalTotal  = Number(summary.criticalCount  ?? apiAlerts.filter((a) => a.severity === 'CRITICAL').length);
+  const atRiskTotal    = Number(summary.atRiskCount    ?? apiAlerts.filter((a) => a.severity === 'HIGH').length);
   const improvingTotal = Number(summary.improvingCount ?? apiAlerts.filter((a) => a.severity === 'POSITIVE').length);
-  const medium = apiAlerts.filter((a) => a.severity === 'MEDIUM');
+  const mediumCount    = apiAlerts.filter((a) => a.severity === 'MEDIUM').length;
+
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [search, setSearch]         = useState('');
+  const [sevFilter, setSevFilter]   = useState<string>('ALL');
+  const [typeFilter, setTypeFilter] = useState<string>('ALL');
+
+  const alertTypes = useMemo(
+    () => ['ALL', ...Array.from(new Set(apiAlerts.map((a) => a.type)))],
+    [apiAlerts],
+  );
+
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase();
+    return apiAlerts.filter((a) => {
+      const matchSearch = !q || a.student.toLowerCase().includes(q) || a.className.toLowerCase().includes(q) || a.subject.toLowerCase().includes(q) || (a.teacher ?? '').toLowerCase().includes(q);
+      const matchSev    = sevFilter === 'ALL' || a.severity === sevFilter;
+      const matchType   = typeFilter === 'ALL' || a.type === typeFilter;
+      return matchSearch && matchSev && matchType;
+    });
+  }, [apiAlerts, search, sevFilter, typeFilter]);
+
+  const selectedAlert = filtered.find((a) => a.id === selectedId) ?? filtered[0] ?? null;
+
   return (
-    <AqaWorkspaceShell title="Performance Command Center" eyebrow="Alert triage and investigation">
+    <AqaWorkspaceShell title="Performance Command Center" eyebrow="Alert triage · click any card to investigate">
       <AqaMetricStrip items={[
         { label: 'Critical',   value: String(criticalTotal).padStart(2, '0'),  detail: 'Failure risk',      tone: 'bg-ks-rose',    trend: 'up'      },
         { label: 'At risk',    value: String(atRiskTotal).padStart(2, '0'),    detail: 'High severity',     tone: 'bg-ks-amber',   trend: 'neutral' },
-        { label: 'Monitoring', value: String(medium.length).padStart(2, '0'),  detail: 'Medium severity',   tone: 'bg-ks-blue',    trend: 'neutral' },
+        { label: 'Monitoring', value: String(mediumCount).padStart(2, '0'),    detail: 'Medium severity',   tone: 'bg-ks-blue',    trend: 'neutral' },
         { label: 'Improving',  value: String(improvingTotal).padStart(2, '0'), detail: 'Positive trend',    tone: 'bg-ks-emerald', trend: 'down', inverted: true },
       ]} />
 
-      <FilterBar items={['Severity', 'Alert type', 'Subject', 'Class', 'Teacher / HOD', 'Escalated', 'Has pairing']} />
+      {/* Live filter bar */}
+      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-ks-line/60 bg-ks-mist/20 px-4 py-3">
+        <div className="relative min-w-[200px] flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ks-muted" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search student, class, subject, teacher…"
+            className="h-9 w-full rounded-lg border border-ks-line bg-white pl-9 pr-3 text-sm font-semibold outline-none focus:border-ks-blue"
+          />
+        </div>
+        <div className="flex flex-wrap gap-1">
+          {(['ALL', 'CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'POSITIVE'] as const).map((s) => (
+            <button
+              key={s}
+              onClick={() => setSevFilter(s)}
+              className={`rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-wider transition ${
+                sevFilter === s
+                  ? s === 'CRITICAL' ? 'bg-ks-rose text-white' : s === 'HIGH' ? 'bg-ks-amber text-white' : s === 'POSITIVE' ? 'bg-ks-emerald text-white' : 'bg-ks-navy text-white'
+                  : 'border border-ks-line bg-white text-ks-muted hover:text-ks-navy'
+              }`}
+            >
+              {s === 'ALL' ? 'All' : s}
+            </button>
+          ))}
+        </div>
+        <select
+          value={typeFilter}
+          onChange={(e) => setTypeFilter(e.target.value)}
+          className="h-9 rounded-lg border border-ks-line bg-white px-3 text-sm font-semibold text-ks-navy outline-none"
+        >
+          {alertTypes.map((t) => (
+            <option key={t} value={t}>{t === 'ALL' ? 'All Alert Types' : t.replace(/_/g, ' ')}</option>
+          ))}
+        </select>
+        {(search || sevFilter !== 'ALL' || typeFilter !== 'ALL') && (
+          <button
+            onClick={() => { setSearch(''); setSevFilter('ALL'); setTypeFilter('ALL'); }}
+            className="text-xs font-bold text-ks-muted hover:text-ks-navy"
+          >
+            Clear
+          </button>
+        )}
+        <span className="ml-auto text-xs font-bold text-ks-muted">
+          {filtered.length} / {apiAlerts.length} alert{apiAlerts.length !== 1 ? 's' : ''}
+        </span>
+      </div>
 
       <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_360px]">
-        <section className="grid gap-gutter md:grid-cols-2">
-          {apiAlerts.map((alert) => <AlertCard key={alert.id} alert={alert} />)}
+        <section className="grid content-start gap-gutter md:grid-cols-2">
+          {filtered.length === 0 && (
+            <div className="md:col-span-2">
+              <EmptyState title="No alerts match" description="Adjust the search or filters above to find alerts." />
+            </div>
+          )}
+          {filtered.map((alert) => (
+            <div
+              key={alert.id}
+              onClick={() => setSelectedId(alert.id)}
+              className={`cursor-pointer rounded-xl transition-shadow ${
+                selectedAlert?.id === alert.id
+                  ? 'ring-2 ring-ks-blue ring-offset-2'
+                  : 'hover:ring-1 hover:ring-ks-line hover:ring-offset-1'
+              }`}
+            >
+              <AlertCard alert={alert} />
+            </div>
+          ))}
         </section>
-        {apiAlerts[0] && <InvestigationPanel alert={apiAlerts[0] as Parameters<typeof InvestigationPanel>[0]['alert']} />}
+        {selectedAlert ? (
+          <InvestigationPanel alert={selectedAlert as Parameters<typeof InvestigationPanel>[0]['alert']} />
+        ) : (
+          <div className="sticky top-24 flex h-64 items-center justify-center rounded-xl border border-dashed border-ks-line bg-white text-center">
+            <div>
+              <Users className="mx-auto h-8 w-8 text-ks-muted" />
+              <p className="mt-2 text-sm font-bold text-ks-muted">Click an alert card to open the investigation panel</p>
+            </div>
+          </div>
+        )}
       </div>
     </AqaWorkspaceShell>
   );
@@ -396,17 +496,177 @@ export function AcademicAnalyticsPage() {
 
 export function AqaClassAnalyticsPage() {
   const { classId } = useParams();
+  const [expandedStudent, setExpandedStudent] = useState<string | null>(null);
+
+  const { data: classAlerts = [] as typeof aqaAlerts, isLoading } = useAqaAlertsByClass(classId ?? '') as unknown as { data: typeof aqaAlerts; isLoading: boolean };
+  const { data: apiHeatmap = [] as typeof heatmap } = useAqaHeatmap() as unknown as { data: typeof heatmap };
+  const { data: apiInterventions = [] } = useAqaInterventions() as { data: Array<Record<string, unknown>> };
+  const createIntervention = useCreateAqaInterventionMutation();
+
+  // Find class cells in the heatmap for subject breakdown
+  const classCells = useMemo(
+    () => apiHeatmap.filter((c) => c.classId === classId || c.className.includes(classId ?? '')),
+    [apiHeatmap, classId],
+  );
+  const classLabel = classCells[0]?.className ?? classId ?? 'Class';
+
+  // Metrics from live data
+  const criticalCount   = classAlerts.filter((a) => a.severity === 'CRITICAL').length;
+  const totalAlerts     = classAlerts.filter((a) => a.severity !== 'POSITIVE').length;
+  const topPerformers   = classAlerts.filter((a) => a.currentScore >= 80).length;
+  const classAverage    = classCells.length
+    ? Math.round(classCells.reduce((s, c) => s + c.average, 0) / classCells.length)
+    : (classAlerts.length ? Math.round(classAlerts.reduce((s, a) => s + a.currentScore, 0) / classAlerts.length) : null);
+  const interventionCount = (apiInterventions as Array<{ className?: string; class?: string }>).filter(
+    (i) => String(i.className ?? i.class ?? '').includes(classId ?? '') || String(i.className ?? '').includes(classLabel),
+  ).length;
+
   return (
-    <AqaWorkspaceShell title={`${classId ?? 'Form 3B'} Analytics`} eyebrow="Class academic health">
+    <AqaWorkspaceShell title={`${classLabel} Analytics`} eyebrow="Class academic health · live data">
       <AqaMetricStrip items={[
-        { label: 'Class average',  value: '68%',  detail: 'Chemistry drag detected', tone: 'bg-ks-amber',   trend: 'up'   },
-        { label: 'Subject alerts', value: '07',   detail: '3 critical flags',         tone: 'bg-ks-rose',    trend: 'up'   },
-        { label: 'Interventions',  value: '11',   detail: '5 pending follow-up',      tone: 'bg-ks-blue',    trend: 'neutral'},
-        { label: 'Top performers', value: '14',   detail: '80%+ threshold',           tone: 'bg-ks-emerald', inverted: true},
+        {
+          label: 'Class average',
+          value: classAverage !== null ? `${classAverage}%` : '—',
+          detail: classCells.length > 0 ? `${classCells.length} subject${classCells.length !== 1 ? 's' : ''} tracked` : 'No heatmap data',
+          tone: classAverage !== null && classAverage < 60 ? 'bg-ks-rose' : classAverage !== null && classAverage < 75 ? 'bg-ks-amber' : 'bg-ks-blue',
+          trend: 'neutral',
+        },
+        {
+          label: 'Active alerts',
+          value: String(totalAlerts).padStart(2, '0'),
+          detail: `${criticalCount} critical flag${criticalCount !== 1 ? 's' : ''}`,
+          tone: 'bg-ks-rose',
+          trend: criticalCount > 0 ? 'up' : 'neutral',
+        },
+        {
+          label: 'Interventions',
+          value: String(interventionCount),
+          detail: 'Logged for this class',
+          tone: 'bg-ks-blue',
+          trend: 'neutral',
+        },
+        {
+          label: 'Top performers',
+          value: String(topPerformers),
+          detail: '80%+ threshold',
+          tone: 'bg-ks-emerald',
+          inverted: true,
+        },
       ]} />
+
+      {/* Subject performance grid from heatmap */}
+      {classCells.length > 0 && (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {classCells.map((cell) => {
+            const bgColor = cell.average >= 75 ? '#f0fdf4' : cell.average >= 60 ? '#eff6ff' : cell.average >= 50 ? '#fffbeb' : '#fff1f2';
+            const barColor = cell.average >= 75 ? '#10b981' : cell.average >= 60 ? '#3b82f6' : cell.average >= 50 ? '#f59e0b' : '#f43f5e';
+            const textColor = cell.average >= 75 ? '#047857' : cell.average >= 60 ? '#1d4ed8' : cell.average >= 50 ? '#b45309' : '#be123c';
+            return (
+              <div key={cell.subject} className="rounded-xl border border-[#e2e8f0] p-4 shadow-sm" style={{ background: bgColor }}>
+                <p className="text-[10px] font-black uppercase tracking-widest text-[#64748b]">{cell.subject}</p>
+                <p className="mt-1 font-display text-3xl font-black" style={{ color: textColor }}>{cell.average}%</p>
+                <div className="mt-2 h-1.5 rounded-full bg-[#e2e8f0]">
+                  <div className="h-full rounded-full" style={{ width: `${Math.min(cell.average, 100)}%`, background: barColor }} />
+                </div>
+                <div className="mt-2 flex items-center justify-between">
+                  {(cell.alerts ?? 0) > 0
+                    ? <p className="text-[10px] font-bold text-[#be123c]">{cell.alerts} alert{cell.alerts !== 1 ? 's' : ''}</p>
+                    : <p className="text-[10px] font-bold text-[#047857]">No alerts</p>
+                  }
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Alert table for this class */}
+      {!isLoading && classAlerts.length > 0 && (
+        <div className="overflow-hidden rounded-xl border border-ks-line bg-white shadow-sm">
+          <div className="border-b border-ks-line bg-ks-paper/60 px-5 py-4">
+            <h2 className="font-display text-base font-black text-ks-navy">Students Requiring Attention</h2>
+            <p className="text-xs font-semibold text-ks-muted">{classAlerts.filter((a) => a.severity !== 'POSITIVE').length} alert{classAlerts.length !== 1 ? 's' : ''} in {classLabel}</p>
+          </div>
+          <div className="divide-y divide-ks-line">
+            {classAlerts.map((alert) => {
+              const isCritical = alert.severity === 'CRITICAL';
+              const isOpen = expandedStudent === alert.id;
+              const initials = alert.student.split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase();
+              return (
+                <div key={alert.id}>
+                  <div
+                    className={`flex cursor-pointer items-center gap-4 px-5 py-3 transition hover:bg-ks-paper ${isCritical ? 'bg-ks-rose/5' : ''}`}
+                    onClick={() => setExpandedStudent(isOpen ? null : alert.id)}
+                  >
+                    <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[11px] font-black text-white ${isCritical ? 'bg-ks-rose' : alert.severity === 'HIGH' ? 'bg-ks-amber' : 'bg-ks-blue'}`}>
+                      {initials}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold text-ks-navy">{alert.student}</p>
+                      <p className="text-[11px] text-ks-muted">{alert.subject} · {alert.type.replace(/_/g, ' ')}</p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-3">
+                      <span className={`font-mono text-lg font-black ${isCritical ? 'text-ks-rose' : alert.currentScore >= 65 ? 'text-ks-emerald' : 'text-ks-amber'}`}>{alert.currentScore}%</span>
+                      <span className={`text-xs font-black ${alert.change < 0 ? 'text-ks-rose' : 'text-ks-emerald'}`}>{alert.change > 0 ? '+' : ''}{alert.change}%</span>
+                      {isOpen ? <ChevronUp className="h-4 w-4 text-ks-muted" /> : <ChevronDown className="h-4 w-4 text-ks-muted" />}
+                    </div>
+                  </div>
+                  {isOpen && (
+                    <div className="border-t border-ks-line bg-[#f8fafc] px-5 py-4">
+                      <p className="mb-3 text-xs font-semibold text-ks-slate">{alert.evidence}</p>
+                      <div className="flex flex-wrap gap-2">
+                        <NavLink to={`/aqa/performance/alerts/${alert.id}`}>
+                          <button className="rounded-lg border border-ks-line px-3 py-1.5 text-[10px] font-black text-ks-navy hover:bg-white">Investigate →</button>
+                        </NavLink>
+                        <NavLink to={`/aqa/students/${alert.studentId}`}>
+                          <button className="rounded-lg border border-ks-line px-3 py-1.5 text-[10px] font-black text-ks-navy hover:bg-white">Student Profile →</button>
+                        </NavLink>
+                        <button
+                          onClick={() => createIntervention.mutate({ studentId: alert.studentId, alertId: alert.id, type: 'ACADEMIC', note: `Flagged in ${classLabel} class review` }, { onSuccess: () => toast('Intervention created', 'success'), onError: () => toast('Failed', 'error') })}
+                          className="rounded-lg border border-ks-amber/40 bg-ks-amber/10 px-3 py-1.5 text-[10px] font-black text-ks-amber hover:bg-ks-amber/20"
+                        >
+                          + Create Intervention
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {!isLoading && classAlerts.length === 0 && (
+        <EmptyState title="No alerts for this class" description="This class has no active performance alerts. All students are within acceptable thresholds." />
+      )}
+
       <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_360px]">
-        <TrendBoard student={classId ?? 'Form 3B'} subject="All subjects" />
-        <AtRiskTable compact />
+        <TrendBoard student={classLabel} subject="All subjects" />
+        <Card className="sticky top-24 h-fit rounded-xl p-5">
+          <p className="text-[11px] font-black uppercase tracking-widest text-ks-muted">Class actions</p>
+          <div className="mt-4 space-y-2">
+            <NavLink to="/aqa/interventions/create">
+              <Button className="w-full rounded-xl"><Plus className="h-4 w-4" /> New Class Intervention</Button>
+            </NavLink>
+            <NavLink to={`/aqa/performance?class=${classId}`}>
+              <Button variant="secondary" className="w-full rounded-xl"><ArrowRight className="h-4 w-4" /> View all alerts</Button>
+            </NavLink>
+          </div>
+          <div className="mt-5 grid grid-cols-2 gap-2">
+            {[
+              { label: 'Total alerts', value: String(totalAlerts) },
+              { label: 'Critical', value: String(criticalCount) },
+              { label: 'Subjects tracked', value: String(classCells.length || '—') },
+              { label: 'Top 80%+', value: String(topPerformers) },
+            ].map(({ label, value }) => (
+              <div key={label} className="rounded-xl border border-ks-line bg-ks-paper p-3 text-center">
+                <p className="text-[10px] font-black uppercase text-ks-muted">{label}</p>
+                <p className="mt-1 font-display text-xl font-black text-ks-navy">{value}</p>
+              </div>
+            ))}
+          </div>
+        </Card>
       </div>
     </AqaWorkspaceShell>
   );
@@ -415,20 +675,194 @@ export function AqaClassAnalyticsPage() {
 // ─── Student profile ──────────────────────────────────────────────────────────
 
 export function AqaStudentProfilePage() {
-  const { loading, alert } = useStudentAlert();
-  if (loading) return <AqaWorkspaceShell title="Loading…" eyebrow="Student profile — AQA view"><SkeletonTable cols={4} /></AqaWorkspaceShell>;
-  if (!alert) return <AqaWorkspaceShell title="Not Found" eyebrow="Student profile — AQA view"><EmptyState title="Student not found" description="No performance record found for this student." /></AqaWorkspaceShell>;
+  const { studentId } = useParams();
+  const { data: allAlerts = [] as typeof aqaAlerts, isLoading } = useAqaAlerts() as unknown as { data: typeof aqaAlerts; isLoading: boolean };
+  const { data: apiInterventions = [] } = useAqaInterventions() as { data: Array<Record<string, unknown>> };
+  const resolveMutation    = useResolveAqaAlertMutation();
+  const escalateMutation   = useEscalateAlertMutation();
+  const interventionMutation = useCreateAqaInterventionMutation();
+  const pairingMutation    = useActivateAqaPairingMutation();
+
+  const [resolveNote, setResolveNote] = useState('');
+  const [showResolve, setShowResolve] = useState<string | null>(null);
+
+  // All alerts for this student
+  const studentAlerts = useMemo(
+    () => allAlerts.filter((a) => a.studentId === studentId),
+    [allAlerts, studentId],
+  );
+  const primaryAlert = studentAlerts.find((a) => a.severity === 'CRITICAL') ?? studentAlerts.find((a) => a.severity === 'HIGH') ?? studentAlerts[0] ?? null;
+
+  // Interventions for this student
+  const studentInterventions = useMemo(
+    () => (apiInterventions as Array<{ studentId?: string; student?: string; id: string; type?: string; status?: string; note?: string; week?: string }>).filter(
+      (i) => i.studentId === studentId || i.student === primaryAlert?.student,
+    ),
+    [apiInterventions, studentId, primaryAlert],
+  );
+
+  if (isLoading) return <AqaWorkspaceShell title="Loading…" eyebrow="Student profile — AQA view"><SkeletonTable cols={4} /></AqaWorkspaceShell>;
+  if (!primaryAlert) return (
+    <AqaWorkspaceShell title="Student Not Found" eyebrow="Student profile — AQA view">
+      <EmptyState title="No performance record" description="No AQA alerts found for this student. They may not have been processed by the engine yet." />
+    </AqaWorkspaceShell>
+  );
+
+  const initials = primaryAlert.student.split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase();
+  const worstScore = Math.min(...studentAlerts.map((a) => a.currentScore));
+  const overallChange = studentAlerts.reduce((s, a) => s + a.change, 0) / studentAlerts.length;
+
   return (
-    <AqaWorkspaceShell title={alert.student} eyebrow="Student profile — AQA view">
+    <AqaWorkspaceShell title={primaryAlert.student} eyebrow="Student profile — AQA 360° view">
       <AqaMetricStrip items={[
-        { label: 'Current score', value: `${alert.currentScore}%`, detail: alert.subject,        tone: alert.currentScore < 50 ? 'bg-ks-rose' : 'bg-ks-blue',    trend: alert.change < 0 ? 'up' : 'down' },
-        { label: 'Score change',  value: `${alert.change}%`,       detail: alert.type,           tone: alert.change < 0 ? 'bg-ks-rose' : 'bg-ks-emerald',        trend: alert.change < 0 ? 'up' : 'down' },
-        { label: 'Pairing',       value: alert.pairingStatus,      detail: 'Academic support',   tone: 'bg-ks-blue'                                                                                         },
-        { label: 'Finance context', value: 'Read-only',            detail: 'Authorized by admin',tone: 'bg-ks-gold', inverted: true                                                                         },
+        { label: 'Lowest score',   value: `${worstScore}%`,                                detail: `${studentAlerts.length} subject alert${studentAlerts.length !== 1 ? 's' : ''}`, tone: worstScore < 50 ? 'bg-ks-rose' : 'bg-ks-amber', trend: 'up' },
+        { label: 'Avg change',     value: `${overallChange > 0 ? '+' : ''}${Math.round(overallChange)}%`, detail: 'Across flagged subjects', tone: overallChange < 0 ? 'bg-ks-rose' : 'bg-ks-emerald', trend: overallChange < 0 ? 'up' : 'down' },
+        { label: 'Pairing',        value: primaryAlert.pairingStatus,                      detail: 'Academic support status', tone: 'bg-ks-blue' },
+        { label: 'Interventions',  value: String(studentInterventions.length),             detail: 'Logged this term', tone: 'bg-ks-gold', inverted: true },
       ]} />
+
       <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_360px]">
-        <TrendBoard student={alert.student} subject={alert.subject} />
-        <InvestigationPanel alert={alert} />
+        <div className="space-y-gutter">
+          {/* Student identity card */}
+          <Card className="overflow-hidden rounded-xl">
+            <div className="flex items-start gap-5 border-b border-ks-line bg-ks-navy p-6 text-white">
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-white/15 text-xl font-black text-white">
+                {initials}
+              </div>
+              <div>
+                <h2 className="font-display text-2xl font-black text-white">{primaryAlert.student}</h2>
+                <p className="mt-1 text-sm font-semibold text-white/70">{primaryAlert.className} · Teacher: {primaryAlert.teacher} · HOD: {primaryAlert.hod}</p>
+              </div>
+            </div>
+            {/* Multi-subject alert breakdown */}
+            <div className="divide-y divide-ks-line">
+              {studentAlerts.map((alert) => {
+                const isCritical = alert.severity === 'CRITICAL';
+                const barPct = Math.max(0, Math.min(100, alert.currentScore));
+                const barColor = alert.currentScore < 50 ? '#f43f5e' : alert.currentScore < 65 ? '#f59e0b' : '#10b981';
+                return (
+                  <div key={alert.id} className={`px-6 py-4 ${isCritical ? 'bg-ks-rose/5' : ''}`}>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-ks-muted">{alert.type.replace(/_/g, ' ')} · {alert.subject}</p>
+                        <p className="mt-0.5 text-sm font-semibold text-ks-slate">{alert.evidence}</p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className={`font-mono text-2xl font-black ${isCritical ? 'text-ks-rose' : 'text-ks-navy'}`}>{alert.currentScore}%</span>
+                        <span className={`text-sm font-black ${alert.change < 0 ? 'text-ks-rose' : 'text-ks-emerald'}`}>{alert.change > 0 ? '+' : ''}{alert.change}%</span>
+                      </div>
+                    </div>
+                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-ks-mist">
+                      <div className="h-full rounded-full" style={{ width: `${barPct}%`, background: barColor }} />
+                    </div>
+                    {/* Per-alert resolve/escalate */}
+                    {showResolve === alert.id ? (
+                      <div className="mt-3 space-y-2">
+                        <textarea
+                          value={resolveNote}
+                          onChange={(e) => setResolveNote(e.target.value)}
+                          rows={2}
+                          placeholder="Describe the resolution action…"
+                          className="w-full resize-none rounded-xl border border-ks-line px-3 py-2 text-sm font-semibold outline-none focus:border-ks-blue"
+                        />
+                        <div className="flex gap-2">
+                          <Button
+                            variant="success"
+                            className="rounded-xl py-1.5 text-xs"
+                            disabled={!resolveNote.trim() || resolveMutation.isPending}
+                            onClick={() => resolveMutation.mutate({ id: alert.id, body: { note: resolveNote } }, { onSuccess: () => { toast('Alert resolved', 'success'); setShowResolve(null); setResolveNote(''); }, onError: () => toast('Failed to resolve', 'error') })}
+                          >
+                            Confirm Resolve
+                          </Button>
+                          <Button variant="secondary" className="rounded-xl py-1.5 text-xs" onClick={() => setShowResolve(null)}>Cancel</Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        <button onClick={() => setShowResolve(alert.id)} className="rounded-full border border-ks-emerald/40 px-2.5 py-1 text-[10px] font-black text-ks-emerald hover:bg-ks-emerald/10">Resolve</button>
+                        <button
+                          onClick={() => escalateMutation.mutate({ id: alert.id, body: { reason: 'Escalated from student profile' } }, { onSuccess: () => toast('Escalated to principal', 'warning'), onError: () => toast('Failed', 'error') })}
+                          className="rounded-full border border-ks-rose/40 px-2.5 py-1 text-[10px] font-black text-ks-rose hover:bg-ks-rose/10"
+                        >
+                          Escalate
+                        </button>
+                        <NavLink to={`/aqa/performance/alerts/${alert.id}`} className="rounded-full border border-ks-line px-2.5 py-1 text-[10px] font-black text-ks-muted hover:text-ks-navy">Investigate →</NavLink>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+
+          {/* Trend board for worst subject */}
+          <TrendBoard student={primaryAlert.student} subject={primaryAlert.subject} />
+
+          {/* Intervention history */}
+          {studentInterventions.length > 0 && (
+            <Card className="overflow-hidden rounded-xl">
+              <div className="border-b border-ks-line px-5 py-4">
+                <h3 className="font-display text-base font-black text-ks-navy">Intervention History</h3>
+              </div>
+              <div className="divide-y divide-ks-line">
+                {studentInterventions.map((iv) => (
+                  <div key={String(iv.id)} className="px-5 py-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-black uppercase tracking-wide text-ks-muted">{String(iv.type ?? 'ACADEMIC')} · Week {String(iv.week ?? '—')}</p>
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${String(iv.status) === 'COMPLETED' ? 'bg-ks-emerald/10 text-ks-emerald' : 'bg-ks-amber/10 text-ks-amber'}`}>{String(iv.status ?? 'OPEN')}</span>
+                    </div>
+                    {iv.note && <p className="mt-1 text-sm font-semibold text-ks-slate">{String(iv.note)}</p>}
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+        </div>
+
+        {/* Sticky action panel */}
+        <div className="sticky top-24 h-fit space-y-gutter">
+          <Card className="overflow-hidden rounded-xl">
+            <div className="border-b border-ks-line bg-ks-paper/60 px-5 py-4">
+              <p className="text-[11px] font-black uppercase tracking-wider text-ks-muted">AQA actions</p>
+            </div>
+            <div className="p-5 space-y-2">
+              <Button
+                className="w-full rounded-xl"
+                disabled={pairingMutation.isPending}
+                onClick={() => pairingMutation.mutate({ id: primaryAlert.id, body: { studentId: primaryAlert.studentId } }, { onSuccess: () => toast('Pairing assigned', 'success'), onError: () => toast('Failed', 'error') })}
+              >
+                {pairingMutation.isPending ? 'Assigning…' : 'Assign Peer Pairing'}
+              </Button>
+              <Button
+                variant="secondary"
+                className="w-full rounded-xl"
+                disabled={interventionMutation.isPending}
+                onClick={() => interventionMutation.mutate({ studentId: primaryAlert.studentId, alertId: primaryAlert.id, type: 'ACADEMIC', note: `Manual intervention for ${primaryAlert.student}` }, { onSuccess: () => toast('Intervention created', 'success'), onError: () => toast('Failed', 'error') })}
+              >
+                {interventionMutation.isPending ? 'Creating…' : '+ Create Intervention'}
+              </Button>
+              <NavLink to="/principal/approvals" className="block">
+                <Button variant="quiet" className="w-full rounded-xl">Escalate to Principal</Button>
+              </NavLink>
+            </div>
+          </Card>
+
+          <Card className="rounded-xl p-5">
+            <p className="text-[11px] font-black uppercase tracking-wider text-ks-muted">Evidence summary</p>
+            <div className="mt-4 space-y-3">
+              {studentAlerts.map((a) => (
+                <div key={a.id} className="rounded-xl border border-ks-line bg-ks-paper p-3">
+                  <p className="text-[10px] font-black uppercase text-ks-muted">{a.subject}</p>
+                  <p className="mt-1 text-xs font-semibold text-ks-navy">{a.evidence}</p>
+                  <div className="mt-2 flex items-center gap-2">
+                    <span className={`font-mono font-black ${a.currentScore < 50 ? 'text-ks-rose' : 'text-ks-amber'}`}>{a.currentScore}%</span>
+                    <span className="text-[10px] text-ks-muted">{a.type.replace(/_/g, ' ')}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        </div>
       </div>
     </AqaWorkspaceShell>
   );

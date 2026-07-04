@@ -119,6 +119,34 @@ function decimalToNumber(raw: unknown): number {
 
 function normaliseInvoice(raw: unknown) {
   const inv = raw as Record<string, unknown>;
+  const lineItems = arrayFromApi(inv, ['lineItems', 'items']).map((rawItem) => {
+    const item = rawItem as Record<string, unknown>;
+    return {
+      ...item,
+      id: strOf(item.id) || strOf(item.feeCategoryId) || crypto.randomUUID(),
+      category: strOf(item.category, item.feeCategoryName, item.name, item.description, item.feeCategoryId) || 'Fee item',
+      mandatory: item.mandatory === undefined ? true : Boolean(item.mandatory),
+      amount: decimalToNumber(item.amount ?? item.totalAmount ?? item.value),
+    };
+  });
+  const invoicePayments = arrayFromApi(inv, ['payments']).map((rawPayment) => {
+    const payment = rawPayment as Record<string, unknown>;
+    return {
+      ...payment,
+      id: strOf(payment.id) || crypto.randomUUID(),
+      invoiceId: strOf(payment.invoiceId),
+      paymentNumber: strOf(payment.paymentNumber, payment.number),
+      number: strOf(payment.paymentNumber, payment.number, payment.id),
+      invoiceNumber: strOf(inv.invoiceNumber, inv.number),
+      student: strOf(payment.payerName, inv.student, inv.studentName),
+      method: strOf(payment.method, payment.paymentMethod),
+      amount: decimalToNumber(payment.amount),
+      status: strOf(payment.status) || 'PENDING',
+      enteredBy: strOf(payment.enteredBy, payment.recordedBy) || 'Finance desk',
+      date: strOf(payment.paidAt, payment.createdAt),
+      receiptId: strOf(payment.receiptId),
+    };
+  });
   return {
     ...inv,
     id: strOf(inv.id) || crypto.randomUUID(),
@@ -135,6 +163,11 @@ function normaliseInvoice(raw: unknown) {
     total: decimalToNumber(inv.total ?? inv.totalAmount ?? inv.amount),
     paid: decimalToNumber(inv.paid ?? inv.paidAmount ?? inv.amountPaid),
     outstanding: decimalToNumber(inv.outstanding ?? inv.outstandingBalance ?? inv.outstandingAmount ?? inv.balance),
+    subtotal: decimalToNumber(inv.subtotal),
+    discountAmount: decimalToNumber(inv.discountAmount),
+    studentId: strOf(inv.studentId),
+    lineItems,
+    payments: invoicePayments,
   };
 }
 
@@ -189,7 +222,19 @@ export function useInvoices(params?: Record<string, unknown>) {
 export function useInvoice(id: string) {
   return useQuery({
     queryKey: financeKeys.invoice(id),
-    queryFn: () => api.get(`/finance/invoices/${id}`).then(payloadOf),
+    queryFn: async () => {
+      const raw = await api.get(`/finance/invoices/${id}`).then(payloadOf);
+      const inv = normaliseInvoice(raw);
+      if (!inv.student) {
+        const info = (await getStudentNameMap()).get(String((raw as Record<string, unknown>).studentId ?? ''));
+        if (info) {
+          inv.student = info.name;
+          if (!inv.registration) inv.registration = info.registration;
+          if (!inv.className) inv.className = info.className;
+        }
+      }
+      return inv;
+    },
     enabled: Boolean(id),
   });
 }
@@ -313,7 +358,15 @@ export function useFeeCategories() {
               mandatory: !(c.isOptional ?? c.optional ?? false),
               frequency: strOf(c.frequency, c.billingFrequency, c.period) || (c.isBillablePerTerm ? 'Per Term' : 'One-time'),
               active: Boolean(c.isActive ?? c.active ?? true),
-              usedByStructures: countOf(c.usedByStructures ?? c.usedBy ?? c.structureCount ?? 0),
+              usedByStructures: countOf(
+                c.usedByStructures ??
+                c.usedBy ??
+                c.structureCount ??
+                (c._count as Record<string, unknown> | undefined)?.feeStructures ??
+                0,
+              ),
+              usedByAssignments: countOf((c._count as Record<string, unknown> | undefined)?.assignments ?? 0),
+              usedByInvoices: countOf((c._count as Record<string, unknown> | undefined)?.lineItems ?? 0),
             };
           }),
         ),
@@ -437,33 +490,45 @@ export function useFeeAssignments() {
 }
 
 export function useAssets() {
+  const normaliseAsset = (raw: unknown): Record<string, unknown> => {
+    const a = raw as Record<string, unknown>;
+    const childAssets = arrayFromApi(a, ['childAssets']).map(normaliseAsset);
+    return {
+      ...a,
+      id: strOf(a.id) || crypto.randomUUID(),
+      assetNumber: strOf(a.assetNumber, a.number, a.code),
+      name: strOf(a.name, a.assetName),
+      category: strOf(a.category),
+      type: strOf(a.type),
+      serialNumber: strOf(a.serialNumber, a.serial),
+      serial: strOf(a.serialNumber, a.serial),
+      location: strOf(a.location),
+      condition: strOf(a.condition) || 'GOOD',
+      status: strOf(a.status) || 'ACTIVE',
+      brand: strOf(a.brand),
+      model: strOf(a.model),
+      assignedTo: strOf(a.assignedTo),
+      isGroup: a.isGroup === true,
+      groupType: strOf(a.groupType),
+      parentAssetId: strOf(a.parentAssetId),
+      childCount: Number(a.childCount ?? childAssets.length ?? 0),
+      quantity: decimalToNumber(a.quantity) || 1,
+      unitCost: decimalToNumber(a.unitCost),
+      purchaseCost: decimalToNumber(a.groupPurchaseCost ?? a.purchaseCost ?? a.cost ?? a.purchasePrice),
+      currentValue: decimalToNumber(a.groupCurrentValue ?? a.currentValue ?? a.value),
+      groupPurchaseCost: decimalToNumber(a.groupPurchaseCost),
+      groupCurrentValue: decimalToNumber(a.groupCurrentValue),
+      currency: strOf(a.currency) || 'TZS',
+      purchaseDate: strOf(a.purchaseDate, a.purchasedAt, a.createdAt),
+      warrantyExpiry: strOf(a.warrantyExpiryDate, a.warrantyExpiry),
+      childAssets,
+    };
+  };
   return useQuery({
     queryKey: financeKeys.assets(),
     queryFn: () =>
-      api.get('/finance/assets').then((r) =>
-        arrayFromApi(payloadOf(r), ['items', 'assets']).map((raw) => {
-          const a = raw as Record<string, unknown>;
-          return {
-            ...a,
-            id: strOf(a.id) || crypto.randomUUID(),
-            assetNumber: strOf(a.assetNumber, a.number, a.code),
-            name: strOf(a.name, a.assetName),
-            category: strOf(a.category),
-            type: strOf(a.type),
-            serialNumber: strOf(a.serialNumber, a.serial),
-            location: strOf(a.location),
-            condition: strOf(a.condition) || 'GOOD',
-            status: strOf(a.status) || 'ACTIVE',
-            brand: strOf(a.brand),
-            model: strOf(a.model),
-            assignedTo: strOf(a.assignedTo),
-            purchaseCost: decimalToNumber(a.purchaseCost ?? a.cost ?? a.purchasePrice),
-            currentValue: decimalToNumber(a.currentValue ?? a.value),
-            currency: strOf(a.currency) || 'TZS',
-            purchaseDate: strOf(a.purchaseDate, a.purchasedAt, a.createdAt),
-            warrantyExpiry: strOf(a.warrantyExpiryDate, a.warrantyExpiry),
-          };
-        }),
+      api.get('/finance/assets', { params: { rootOnly: true, includeChildren: true } }).then((r) =>
+        arrayFromApi(payloadOf(r), ['items', 'assets']).map(normaliseAsset),
       ),
   });
 }
@@ -487,8 +552,34 @@ export function useAssetSummary() {
 export function useAsset(id: string) {
   return useQuery({
     queryKey: financeKeys.asset(id),
-    queryFn: () => api.get(`/finance/assets/${id}`).then(payloadOf),
+    queryFn: () => api.get(`/finance/assets/${id}`).then((r) => {
+      const normalise = (raw: unknown): Record<string, unknown> => {
+        const a = raw as Record<string, unknown>;
+        const childAssets = arrayFromApi(a, ['childAssets']).map(normalise);
+        return {
+          ...a,
+          assetNumber: strOf(a.assetNumber),
+          serial: strOf(a.serialNumber, a.serial),
+          quantity: decimalToNumber(a.quantity) || 1,
+          unitCost: decimalToNumber(a.unitCost),
+          purchaseCost: decimalToNumber(a.groupPurchaseCost ?? a.purchaseCost),
+          currentValue: decimalToNumber(a.groupCurrentValue ?? a.currentValue),
+          groupPurchaseCost: decimalToNumber(a.groupPurchaseCost),
+          groupCurrentValue: decimalToNumber(a.groupCurrentValue),
+          childCount: Number(a.childCount ?? childAssets.length ?? 0),
+          childAssets,
+        };
+      };
+      return normalise(payloadOf(r));
+    }),
     enabled: Boolean(id),
+  });
+}
+
+export function useFixedAssetRegister() {
+  return useQuery({
+    queryKey: [...financeKeys.assets(), 'fixed-register'],
+    queryFn: () => api.get('/finance/assets/reports/fixed-asset-register').then(payloadOf),
   });
 }
 
@@ -503,16 +594,22 @@ export function useFinanceAuditLogs() {
             const l = raw as Record<string, unknown>;
             const before = (l.previousValue ?? {}) as Record<string, unknown>;
             const after = (l.newValue ?? {}) as Record<string, unknown>;
+            const entityType = strOf(l.entityType);
+            const entityId   = strOf(l.entityId);
             return {
               ...l,
               id: strOf(l.id) || crypto.randomUUID(),
               date: strOf(l.createdAt, l.created_at, l.timestamp, l.performedAt),
               actor: strOf(l.performedByRole, l.performedBy, l.actor, l.userRole) || 'System',
+              actorName: strOf(l.performedByName, l.actorName, l.performedBy) || '',
+              actorId: strOf(l.performedById, l.actorId, l.userId) || '',
               action: strOf(l.action, l.eventType) || 'Event',
-              entity: [strOf(l.entityType), strOf(l.entityId).slice(0, 8)].filter(Boolean).join(' #'),
+              entityType,
+              entityId,
+              entity: [entityType, entityId.slice(0, 8)].filter(Boolean).join(' #'),
               correlationId: strOf(l.correlationId, l.requestId, l.ipAddress),
               before: before as Record<string, string | number | boolean>,
-              after: after as Record<string, string | number | boolean>,
+              after:  after  as Record<string, string | number | boolean>,
             };
           }),
         ),
@@ -648,6 +745,15 @@ export function useRefundPaymentMutation() {
   });
 }
 
+export function useAddPaymentNoteMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, note }: { id: string; note: string }) =>
+      api.post(`/finance/payments/${id}/notes`, { note }).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: financeKeys.pendingPaymentApprovals() }),
+  });
+}
+
 export function useVoidReceiptMutation() {
   const qc = useQueryClient();
   return useMutation({
@@ -675,6 +781,18 @@ export function useUpdateFeeCategoryMutation() {
   });
 }
 
+export function useReorderFeeCategoriesMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (orderedIds: string[]) =>
+      api.patch('/finance/fee-categories/reorder', { orderedIds }).then((r) => r.data?.data ?? r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: financeKeys.feeCategories() });
+      qc.invalidateQueries({ queryKey: financeKeys.feeMatrix() });
+    },
+  });
+}
+
 export function useDeleteFeeCategoryMutation() {
   const qc = useQueryClient();
   return useMutation({
@@ -689,7 +807,10 @@ export function useApplyInvoiceDiscountMutation() {
   return useMutation({
     mutationFn: ({ id, body }: { id: string; body: Record<string, unknown> }) =>
       api.patch(`/finance/invoices/${id}/discount`, body).then((r) => r.data),
-    onSuccess: (_d, { id }) => qc.invalidateQueries({ queryKey: financeKeys.invoice(id) }),
+    onSuccess: (_d, { id }) => {
+      qc.invalidateQueries({ queryKey: financeKeys.invoice(id) });
+      qc.invalidateQueries({ queryKey: financeKeys.invoices() });
+    },
   });
 }
 
@@ -785,7 +906,7 @@ export function useUpdateAssetMutation() {
 export function useWaiveInvoiceMutation() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, body }: { id: string; body: { reason: string } }) =>
+    mutationFn: ({ id, body }: { id: string; body: Record<string, unknown> }) =>
       api.patch(`/finance/invoices/${id}/waive`, body).then((r) => r.data?.data ?? r.data),
     onSuccess: (_d, { id }) => {
       qc.invalidateQueries({ queryKey: financeKeys.invoice(id) });

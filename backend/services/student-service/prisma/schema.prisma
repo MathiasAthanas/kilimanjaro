@@ -122,6 +122,8 @@ enum PairingStatus {
 }
 
 enum EducationStage {
+  NURSERY
+  PRE_UNIT
   PRIMARY
   O_LEVEL
   A_LEVEL

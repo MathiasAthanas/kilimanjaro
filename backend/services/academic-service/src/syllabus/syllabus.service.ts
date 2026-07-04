@@ -15,26 +15,34 @@ export class SyllabusService {
       throw new NotFoundException('Class subject not found');
     }
 
-    if (user.role === ROLES.TEACHER && classSubject.teacherId !== user.id) {
+    if ([ROLES.TEACHER, ROLES.HEAD_OF_DEPARTMENT].includes(user.role as any) && classSubject.teacherId !== user.id) {
       throw new NotFoundException('Class subject not found in your scope');
     }
 
-    const completion = 0;
+    const coveredTopics = dto.coveredTopics ?? 0;
+    const completion = dto.totalTopics > 0
+      ? Number(((coveredTopics / dto.totalTopics) * 100).toFixed(2))
+      : 0;
+
     return this.prisma.syllabusTracker.upsert({
       where: { classSubjectId_termId: { classSubjectId: dto.classSubjectId, termId: dto.termId } },
       create: {
         classSubjectId: dto.classSubjectId,
         termId: dto.termId,
         totalTopics: dto.totalTopics,
-        coveredTopics: 0,
+        coveredTopics,
         completionPercentage: completion,
+        notes: dto.notes,
         lastUpdatedById: user.id,
       },
       update: {
         totalTopics: dto.totalTopics,
+        coveredTopics,
         completionPercentage: completion,
+        notes: dto.notes,
         lastUpdatedById: user.id,
       },
+      include: { classSubject: { include: { subject: true } } },
     });
   }
 
@@ -48,7 +56,7 @@ export class SyllabusService {
       throw new NotFoundException('Syllabus tracker not found');
     }
 
-    if (user.role === ROLES.TEACHER && existing.classSubject.teacherId !== user.id) {
+    if ([ROLES.TEACHER, ROLES.HEAD_OF_DEPARTMENT].includes(user.role as any) && existing.classSubject.teacherId !== user.id) {
       throw new NotFoundException('Syllabus tracker not found in your scope');
     }
 

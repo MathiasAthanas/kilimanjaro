@@ -2656,15 +2656,25 @@ export function HodAnnouncementsPage() {
   );
 }
 
+const AUDIENCE_OPTIONS = [
+  { value: 'TEACHERS', label: 'Department Teachers', roles: ['TEACHER'] },
+  { value: 'HODS', label: 'All HODs', roles: ['HEAD_OF_DEPARTMENT'] },
+  { value: 'TEACHERS_HODS', label: 'Teachers & HODs', roles: ['TEACHER', 'HEAD_OF_DEPARTMENT'] },
+  { value: 'ALL_STAFF', label: 'All Staff', roles: [] },
+  { value: 'PRINCIPAL', label: 'Principal & Admin', roles: ['PRINCIPAL', 'SYSTEM_ADMIN'] },
+] as const;
+
 export function CreateHodAnnouncementPage() {
   const navigate = useNavigate();
   const createMutation = useCreateHodAnnouncementMutation();
-  const [form, setForm] = useState({ title: '', body: '', priority: 'NORMAL', audience: 'All Sciences teachers', scheduledAt: '' });
+  const [form, setForm] = useState({ title: '', body: '', priority: 'NORMAL', audience: 'TEACHERS', scheduledAt: '' });
+
+  const audienceOpt = AUDIENCE_OPTIONS.find((a) => a.value === form.audience) ?? AUDIENCE_OPTIONS[0];
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.title.trim() || !form.body.trim()) { toast('Title and body are required', 'error'); return; }
-    createMutation.mutate({ title: form.title, body: form.body, priority: form.priority, audience: form.audience, scheduledAt: form.scheduledAt || undefined }, {
+    createMutation.mutate({ title: form.title, body: form.body, priority: form.priority, targetRoles: [...audienceOpt.roles], channels: ['IN_APP'], scheduledAt: form.scheduledAt || undefined }, {
       onSuccess: () => { toast('Announcement published', 'success'); navigate('/hod/announcements'); },
       onError: () => toast('Failed to publish announcement', 'error'),
     });
@@ -2703,7 +2713,11 @@ export function CreateHodAnnouncementPage() {
                 </label>
                 <label className="block">
                   <span className="text-[11px] font-black uppercase tracking-[0.22em] text-ks-muted">Audience</span>
-                  <input value={form.audience} onChange={set('audience')} className="mt-2 h-11 w-full rounded-xl border border-ks-line px-3 font-semibold outline-none transition focus:border-ks-blue focus:ring-2 focus:ring-ks-blue/10" placeholder="All Sciences teachers" />
+                  <select value={form.audience} onChange={set('audience')} className="mt-2 h-11 w-full rounded-xl border border-ks-line px-3 font-semibold outline-none transition focus:border-ks-blue">
+                    {AUDIENCE_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
                 </label>
                 <label className="block">
                   <span className="text-[11px] font-black uppercase tracking-[0.22em] text-ks-muted">Schedule (optional)</span>
@@ -2721,7 +2735,7 @@ export function CreateHodAnnouncementPage() {
               <p className="font-black text-ks-navy">{form.title || 'Announcement title…'}</p>
               <p className="mt-2 text-sm font-semibold leading-relaxed text-ks-slate">{form.body || 'Announcement body will appear here for recipients.'}</p>
               <div className="mt-3 flex items-center gap-2">
-                <span className="rounded-full bg-ks-blue/10 px-2 py-0.5 text-[10px] font-black text-ks-blue">{form.audience}</span>
+                <span className="rounded-full bg-ks-blue/10 px-2 py-0.5 text-[10px] font-black text-ks-blue">{audienceOpt.label}</span>
                 <span className="rounded-full bg-ks-amber/10 px-2 py-0.5 text-[10px] font-black text-ks-amber">{form.priority}</span>
               </div>
             </div>

@@ -391,13 +391,14 @@ export class AcademicService {
     const cached = await this.redis.get<any>(key);
     if (cached) return cached;
 
-    const [alerts, pairings, interventions, students, classes] = await Promise.all([
-      this.prisma.performanceAlert.findMany({ where: { createdAt: scopedTermId ? undefined : undefined } }),
-      this.prisma.peerPairing.findMany(),
-      this.prisma.academicIntervention.findMany(),
-      this.prisma.student.findMany({ select: { id: true, firstName: true, lastName: true } }),
-      this.prisma.class.findMany({ select: { id: true, name: true } }),
-    ]);
+    try {
+      const [alerts, pairings, interventions, students, classes] = await Promise.all([
+        this.prisma.performanceAlert.findMany(),
+        this.prisma.peerPairing.findMany(),
+        this.prisma.academicIntervention.findMany(),
+        this.prisma.student.findMany({ select: { id: true, firstName: true, lastName: true } }),
+        this.prisma.class.findMany({ select: { id: true, name: true } }),
+      ]);
 
     const byType = alerts.reduce<Record<string, number>>((acc, row) => {
       acc[row.alertType] = (acc[row.alertType] || 0) + 1;
@@ -503,7 +504,44 @@ export class AcademicService {
         })),
     };
 
-    await this.redis.set(key, data, 1800);
-    return data;
+      await this.redis.set(key, data, 1800);
+      return data;
+    } catch {
+      const fallback = {
+        alertsSummary: {
+          totalAlerts: 0,
+          byType: {},
+          bySeverity: {},
+          resolvedCount: 0,
+          unresolvedCount: 0,
+          resolutionRate: 0,
+          averageResolutionDays: 0,
+        },
+        pairingSummary: {
+          totalSuggested: 0,
+          activated: 0,
+          rejected: 0,
+          completed: 0,
+          expired: 0,
+          activationRate: 0,
+          positiveOutcomeCount: 0,
+          negativeOutcomeCount: 0,
+          averageScoreImprovement: 0,
+          effectivenessRate: 0,
+        },
+        interventionSummary: {
+          totalInterventions: 0,
+          byType: {},
+          followedUpCount: 0,
+          followUpRate: 0,
+        },
+        mostAlertedSubjects: [],
+        mostAlertedClasses: [],
+        chronicUnderperformers: [],
+        successStories: [],
+      };
+      await this.redis.set(key, fallback, 300);
+      return fallback;
+    }
   }
 }

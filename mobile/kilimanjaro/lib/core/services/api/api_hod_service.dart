@@ -6,6 +6,23 @@ import '../../../models/hod_models.dart';
 import '../../config/app_config.dart';
 import '../interfaces/hod_service_interface.dart';
 
+String _buildName(Map<String, dynamic> json) {
+  final first = json['firstName'] as String? ?? '';
+  final last = json['lastName'] as String? ?? '';
+  final combined = '$first $last'.trim();
+  return combined.isNotEmpty
+      ? combined
+      : (json['name'] as String? ?? json['fullName'] as String? ?? '');
+}
+
+String _buildNameFromNested(Map<String, dynamic>? nested, String? fallback) {
+  if (nested != null) {
+    final n = _buildName(nested);
+    if (n.isNotEmpty) return n;
+  }
+  return fallback ?? '';
+}
+
 class ApiHodService implements IHodService {
   ApiHodService(this._storage) : _dio = _buildDio();
 
@@ -84,7 +101,8 @@ class ApiHodService implements IHodService {
       subject: json['subjectName'] as String? ?? json['subject'] as String? ?? '',
       classLabel: json['classLabel'] as String? ?? (json['class'] as Map<String, dynamic>?)?['name'] as String? ?? '',
       assessmentType: json['assessmentType'] as String? ?? json['type'] as String? ?? '',
-      teacherName: json['teacherName'] as String? ?? (json['teacher'] as Map<String, dynamic>?)?['name'] as String? ?? '',
+      teacherName: json['teacherName'] as String? ??
+          _buildNameFromNested(json['teacher'] as Map<String, dynamic>?, null),
       submittedAgo: json['submittedAgo'] as String? ?? json['submittedAt'] as String? ?? '',
       studentCount: json['studentCount'] as int? ?? scores.length,
       maxScore: (json['maxScore'] as num?)?.toDouble() ?? 100.0,
@@ -158,7 +176,7 @@ class ApiHodService implements IHodService {
     return list.cast<Map<String, dynamic>>().map((json) {
       return HodTeacherSummary(
         id: json['id'] as String? ?? '',
-        name: json['name'] as String? ?? '',
+        name: _buildName(json),
         subjects: json['subjects'] as String? ?? '',
         onTimeRate: (json['onTimeRate'] as num?)?.toDouble() ?? 0.0,
         averageScore: (json['averageScore'] as num?)?.toDouble() ?? 0.0,
@@ -243,7 +261,8 @@ class ApiHodService implements IHodService {
       return HodIntervention(
         id: json['id'] as String? ?? '',
         title: json['title'] as String? ?? json['studentName'] as String? ?? '',
-        teacherName: json['teacherName'] as String? ?? (json['performedBy'] as Map<String, dynamic>?)?['name'] as String? ?? '',
+        teacherName: json['teacherName'] as String? ??
+            _buildNameFromNested(json['performedBy'] as Map<String, dynamic>?, null),
         type: json['type'] as String? ?? '',
         note: json['note'] as String? ?? json['notes'] as String? ?? '',
         timeAgo: json['timeAgo'] as String? ?? json['createdAt'] as String? ?? '',

@@ -37,6 +37,7 @@ import {
   useCreateClassMutation,
   useCreateClassPathwayMutation,
   useCreateGradingScaleMutation,
+  useUpdateGradingScaleMutation,
   useActivateGradingScaleMutation,
   useSaveAssessmentTypesMutation,
   useBulkPromoteMutation,
@@ -70,16 +71,22 @@ import {
   useCreateAnnouncementAdminMutation,
   useDeleteFeeCategoryMutation,
   useCreateFeeCategoryMutation,
+  useUpdateFeeCategoryMutation,
   useAssignSubjectToClassMutation,
   useUnassignSubjectFromClassMutation,
+  useClassSubjects,
+  useUpdateClassSubjectMutation,
+  useTeachingStaff,
   useDepartments,
   useCreateDepartmentMutation,
   useUpdateDepartmentMutation,
   useDeleteDepartmentMutation,
   useDepartmentHods,
+  useDepartmentByUser,
   useAssignHodMutation,
   useRemoveHodMutation,
 } from '../api/admin.hooks';
+import { useAuthStore } from '../../../lib/auth/authStore';
 import { useFeeCategories } from '../../finance/api/finance.hooks';
 import { useAnnouncements } from '../../common/common.hooks';
 import {
@@ -98,7 +105,7 @@ import { SkeletonTable } from '../../../components/common/SkeletonTable';
 
 export function AdminHomePage() {
   const { data: apiServiceHealth = [] as typeof serviceHealth } = useServiceHealth() as unknown as { data: typeof serviceHealth };
-  const { data: apiUsers = [] as typeof adminUsers } = useAdminUsers() as unknown as { data: typeof adminUsers };
+  const { data: apiUsers = [] as typeof adminUsers } = useTeachingStaff() as unknown as { data: typeof adminUsers };
   const { data: apiStudents = [] as typeof adminStudents } = useAdminStudents() as unknown as { data: typeof adminStudents };
   const { data: apiAudit = [] as typeof adminAuditEvents } = useAdminAuditEvents() as unknown as { data: typeof adminAuditEvents };
   const { data: apiLogs = [] as typeof notificationLogs } = useNotificationLogs() as unknown as { data: typeof notificationLogs };
@@ -1061,13 +1068,22 @@ export function TermsPage() {
 
 export function ClassSubjectsPage() {
   const { classId: routeClassId } = useParams();
+  const session = useAuthStore((state) => state.session);
+  const currentUser = session?.user as any;
+  const isHodUser = String(currentUser?.role ?? '').toUpperCase() === 'HOD' || String(currentUser?.role ?? '').toUpperCase() === 'HEAD_OF_DEPARTMENT';
+  const { data: myDept } = useDepartmentByUser(isHodUser ? currentUser?.id : undefined);
   const { data: apiClasses = [] as typeof adminClasses } = useAdminClasses() as unknown as { data: typeof adminClasses };
   const { data: apiSubjects = [] as typeof adminSubjects } = useAdminSubjects() as unknown as { data: typeof adminSubjects };
+  const { data: apiUsers = [] as typeof adminUsers } = useAdminUsers() as unknown as { data: typeof adminUsers };
+  const { data: apiYears = [] } = useAcademicYears();
+  const { data: apiClassSubjects = [] } = useClassSubjects();
   const assignMutation = useAssignSubjectToClassMutation();
   const unassignMutation = useUnassignSubjectFromClassMutation();
+  const updateMutation = useUpdateClassSubjectMutation();
   const [selectedClassId, setSelectedClassId] = useState(routeClassId ?? '');
   const [pendingUnassignId, setPendingUnassignId] = useState<string | null>(null);
   const [assignSubjectId, setAssignSubjectId] = useState('');
+  const [assignTeacherId, setAssignTeacherId] = useState('');
 
   const sortedClasses = (apiClasses as any[]).slice().sort((a: any, b: any) =>
     String(a.name ?? '').localeCompare(String(b.name ?? '')));
@@ -1076,34 +1092,72 @@ export function ClassSubjectsPage() {
   }));
 
   const selectedClass = (apiClasses as any[]).find((c: any) => String(c.id) === selectedClassId);
+  const currentYear = (apiYears as any[]).find((y: any) => y.isCurrent) ?? (apiYears as any[])[0];
+  const selectedAcademicYearId = String((selectedClass as any)?.academicYearId ?? (currentYear as any)?.id ?? '');
+  const teacherOptions = (apiUsers as any[])
+    .filter((user: any) => ['TEACHER', 'HEAD_OF_DEPARTMENT', 'HOD'].includes(String(user.role)))
+    .sort((a: any, b: any) => String(a.name ?? '').localeCompare(String(b.name ?? '')))
+    .map((user: any) => {
+      const departmentNames = new Set<string>();
+      (apiClassSubjects as any[])
+        .filter((item: any) => item.isActive !== false && String(item.teacherId) === String(user.id))
+        .forEach((item: any) => {
+          const subject = (apiSubjects as any[]).find((s: any) => String(s.id) === String(item.subjectId));
+          const dept = String(subject?.department ?? '').trim();
+          if (dept) departmentNames.add(dept);
+        });
+      const departments = Array.from(departmentNames);
+      return {
+        value: String(user.id),
+        label: `${String(user.name ?? user.email)}${user.email ? ` — ${String(user.email)}` : ''}${departments.length ? ` (${departments.join(', ')})` : ''}`,
+        departments,
+      };
+    });
 
   const allStageSubjects = selectedClass
     ? (apiSubjects as any[]).filter((s: any) => {
         const sStage = String(s.stage ?? s.educationStage ?? '').replace('-', '_').toUpperCase();
         const cStage = String(selectedClass.stage ?? selectedClass.educationStage ?? '').replace('-', '_').toUpperCase();
-        return sStage === cStage;
+        const sameStage = sStage === cStage;
+        const sameDepartment = !isHodUser || !((myDept as any)?.id) || String(s.departmentId ?? '') === String((myDept as any).id);
+        return sameStage && sameDepartment;
       })
     : [];
 
-  const assignedIds: string[] = selectedClass
-    ? ((selectedClass as any).subjects ?? []).map((s: any) => String(s.id ?? s.subjectId ?? s))
-    : [];
+  const activeAssignments = (apiClassSubjects as any[]).filter((item: any) =>
+    String(item.classId) === selectedClassId &&
+    String(item.academicYearId) === selectedAcademicYearId &&
+    item.isActive !== false,
+  );
+  const assignedIds = activeAssignments.map((item: any) => String(item.subjectId));
 
-  const classSubjects = allStageSubjects.filter((s: any) => assignedIds.includes(String(s.id)));
+  const classSubjects = activeAssignments.map((assignment: any) => {
+    const subject = allStageSubjects.find((s: any) => String(s.id) === String(assignment.subjectId));
+    const teacher = (apiUsers as any[]).find((user: any) => String(user.id) === String(assignment.teacherId));
+    return { ...assignment, subject, teacher };
+  });
   const unassignedSubjects = allStageSubjects.filter((s: any) => !assignedIds.includes(String(s.id)));
 
-  const handleUnassign = (subjectId: string) => {
+  const handleUnassign = (assignmentId: string) => {
     if (!selectedClassId) return;
-    unassignMutation.mutate({ classId: selectedClassId, subjectId }, {
+    unassignMutation.mutate({ id: assignmentId }, {
       onSuccess: () => { toast('Subject unassigned', 'warning'); setPendingUnassignId(null); },
       onError: () => { toast('Failed to unassign subject', 'error'); setPendingUnassignId(null); },
     });
   };
 
   const handleAssign = () => {
-    if (!selectedClassId || !assignSubjectId) return;
-    assignMutation.mutate({ classId: selectedClassId, subjectId: assignSubjectId }, {
-      onSuccess: () => { toast('Subject assigned', 'success'); setAssignSubjectId(''); },
+    if (!selectedClass || !selectedAcademicYearId || !assignSubjectId || !assignTeacherId) return;
+    assignMutation.mutate({
+      classId: selectedClassId,
+      subjectId: assignSubjectId,
+      academicYearId: selectedAcademicYearId,
+      teacherId: assignTeacherId,
+      educationStage: String((selectedClass as any).educationStage ?? (selectedClass as any).stage ?? '').replace('-', '_').toUpperCase(),
+      classLevel: Number((selectedClass as any).level ?? (selectedClass as any).classLevel ?? 0) || undefined,
+      isActive: true,
+    }, {
+      onSuccess: () => { toast('Subject assigned', 'success'); setAssignSubjectId(''); setAssignTeacherId(''); },
       onError: () => toast('Failed to assign subject', 'error'),
     });
   };
@@ -1138,22 +1192,35 @@ export function ClassSubjectsPage() {
                 <table className="w-full text-left text-sm">
                   <thead className="bg-[#1E1B4B] text-[11px] font-black uppercase tracking-widest text-white">
                     <tr>
-                      {['Subject', 'Code', 'Type', 'Stage', ''].map((h) => <th key={h} className="px-5 py-3">{h}</th>)}
+                      {['Subject', 'Code', 'Teacher', 'Stage', ''].map((h) => <th key={h} className="px-5 py-3">{h}</th>)}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {classSubjects.map((s: any) => (
-                      <React.Fragment key={s.id}>
+                    {classSubjects.map((assignment: any) => {
+                      const s = assignment.subject ?? assignment;
+                      return (
+                      <React.Fragment key={assignment.id}>
                         <tr className="hover:bg-slate-50">
-                          <Td><span className="font-black text-slate-900">{s.name}</span></Td>
-                          <Td><span className="font-mono text-xs font-black text-[#4338CA]">{s.code ?? s.shortCode ?? '—'}</span></Td>
-                          <Td>{String(s.type ?? s.subjectType ?? '—')}</Td>
-                          <Td><Badge tone="blue">{String(s.stage ?? s.educationStage ?? '—')}</Badge></Td>
+                          <Td><span className="font-black text-slate-900">{s.name ?? assignment.subjectName}</span></Td>
+                          <Td><span className="font-mono text-xs font-black text-[#4338CA]">{s.code ?? assignment.subjectCode ?? '—'}</span></Td>
                           <Td>
-                            {pendingUnassignId === s.id ? (
+                            <select
+                              value={assignment.teacherId}
+                              onChange={(e) => updateMutation.mutate({ id: assignment.id, payload: { teacherId: e.target.value } }, {
+                                onSuccess: () => toast('Teacher updated', 'success'),
+                                onError: () => toast('Failed to update teacher', 'error'),
+                              })}
+                              className="min-w-[220px] rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-[#4338CA]"
+                            >
+                              {teacherOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                            </select>
+                          </Td>
+                          <Td><Badge tone="blue">{String(s.stage ?? s.educationStage ?? assignment.educationStage ?? '—')}</Badge></Td>
+                          <Td>
+                            {pendingUnassignId === assignment.id ? (
                               <span className="flex items-center gap-2">
                                 <button
-                                  onClick={() => handleUnassign(s.id)}
+                                  onClick={() => handleUnassign(assignment.id)}
                                   disabled={unassignMutation.isPending}
                                   className="rounded-lg bg-rose-600 px-2.5 py-1 text-xs font-black text-white hover:bg-rose-700 disabled:opacity-40"
                                 >
@@ -1163,7 +1230,7 @@ export function ClassSubjectsPage() {
                               </span>
                             ) : (
                               <button
-                                onClick={() => setPendingUnassignId(s.id)}
+                                onClick={() => setPendingUnassignId(assignment.id)}
                                 className="rounded-lg border border-rose-200 px-2.5 py-1 text-xs font-black text-rose-600 hover:bg-rose-50"
                               >
                                 Unassign
@@ -1172,7 +1239,8 @@ export function ClassSubjectsPage() {
                           </Td>
                         </tr>
                       </React.Fragment>
-                    ))}
+                    );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -1191,9 +1259,17 @@ export function ClassSubjectsPage() {
                       options={[{ value: '', label: 'Choose subject…' }, ...unassignedSubjects.map((s: any) => ({ value: String(s.id), label: `${String(s.name)} (${String(s.code ?? '')})` }))]}
                     />
                   </div>
+                  <div className="flex-1 min-w-[240px]">
+                    <SelectField
+                      label="Teacher"
+                      value={assignTeacherId}
+                      onChange={setAssignTeacherId}
+                      options={teacherOptions.length ? [{ value: '', label: 'Choose teacher…' }, ...teacherOptions] : [{ value: '', label: 'Create a teacher first' }]}
+                    />
+                  </div>
                   <Button
                     className="rounded-xl bg-[#4338CA]"
-                    disabled={!assignSubjectId}
+                    disabled={!assignSubjectId || !assignTeacherId || !selectedAcademicYearId}
                     loading={assignMutation.isPending}
                     onClick={handleAssign}
                   >
@@ -1252,7 +1328,7 @@ function combPrincipalLabel(subjects: unknown): string {
 }
 
 type ClassWizardState = {
-  educationStage: 'EARLY_CHILDHOOD' | 'PRIMARY' | 'O_LEVEL' | 'A_LEVEL';
+  educationStage: 'NURSERY' | 'PRE_UNIT' | 'PRIMARY' | 'O_LEVEL' | 'A_LEVEL';
   level: string;
   stream: string;
   academicYearId: string;
@@ -1260,6 +1336,28 @@ type ClassWizardState = {
   capacity: string;
   curriculumCode: string;
 };
+
+const EDUCATION_STAGE_OPTIONS = [
+  { value: 'NURSERY', label: 'Nursery' },
+  { value: 'PRE_UNIT', label: 'Pre-Unit' },
+  { value: 'PRIMARY', label: 'Primary' },
+  { value: 'O_LEVEL', label: 'O-Level' },
+  { value: 'A_LEVEL', label: 'A-Level' },
+];
+
+function stageLabel(value: unknown): string {
+  const key = String(value ?? '').replace('-', '_').toUpperCase();
+  return EDUCATION_STAGE_OPTIONS.find((item) => item.value === key)?.label || String(value ?? '—');
+}
+
+function stageTone(value: unknown): 'emerald' | 'amber' | 'blue' | 'sky' | 'slate' {
+  const key = String(value ?? '').replace('-', '_').toUpperCase();
+  if (key === 'PRIMARY') return 'emerald';
+  if (key === 'A_LEVEL') return 'amber';
+  if (key === 'O_LEVEL') return 'blue';
+  if (key === 'NURSERY' || key === 'PRE_UNIT') return 'sky';
+  return 'slate';
+}
 
 const STANDARD_STREAM_OPTIONS = [
   { value: 'A', label: 'Stream A' },
@@ -1291,8 +1389,8 @@ type GeneratedPathway = {
 };
 
 const UNIVERSAL_PROGRESSION_RULES: UniversalProgressionRule[] = [
-  { from: 'NURSERY', to: 'PRE_UNIT', transitionType: 'PROMOTION', label: 'Nursery to Pre-Unit' },
-  { from: 'PRE_UNIT', to: 'STANDARD_1', transitionType: 'PROMOTION', label: 'Pre-Unit to Standard 1' },
+  { from: 'NURSERY', to: 'PRE_UNIT', transitionType: 'CROSS_STAGE', label: 'Nursery to Pre-Unit' },
+  { from: 'PRE_UNIT', to: 'STANDARD_1', transitionType: 'CROSS_STAGE', label: 'Pre-Unit to Standard 1' },
   { from: 'STANDARD_1', to: 'STANDARD_2', transitionType: 'PROMOTION', label: 'Standard 1 to Standard 2' },
   { from: 'STANDARD_2', to: 'STANDARD_3', transitionType: 'PROMOTION', label: 'Standard 2 to Standard 3' },
   { from: 'STANDARD_3', to: 'STANDARD_4', transitionType: 'PROMOTION', label: 'Standard 3 to Standard 4' },
@@ -1313,6 +1411,8 @@ function universalLevelKey(cls: any): UniversalLevelKey | null {
   const stage = String(cls.educationStage ?? cls.stage ?? '').replace('-', '_').toUpperCase();
   const curriculum = String(cls.curriculumCode ?? cls.curriculum ?? '').toUpperCase();
   const level = Number(cls.level ?? cls.numericLevel);
+  if (stage === 'NURSERY') return 'NURSERY';
+  if (stage === 'PRE_UNIT') return 'PRE_UNIT';
   if (name.includes('nursery') || curriculum.includes('NURSERY')) return 'NURSERY';
   if (name.includes('pre-unit') || name.includes('pre unit') || curriculum.includes('PRE_PRIMARY')) return 'PRE_UNIT';
   if (stage === 'PRIMARY' && level >= 1 && level <= 7) return `STANDARD_${level}` as UniversalLevelKey;
@@ -1367,10 +1467,8 @@ function generateUniversalPathways(classes: any[], academicYearId: string): Gene
 }
 
 const STAGE_LEVEL_OPTIONS = {
-  EARLY_CHILDHOOD: [
-    { value: 'nursery', label: 'Nursery' },
-    { value: 'pre-unit', label: 'Pre-Unit' },
-  ],
+  NURSERY: [{ value: '1', label: 'Nursery' }],
+  PRE_UNIT: [{ value: '1', label: 'Pre-Unit' }],
   PRIMARY: Array.from({ length: 7 }, (_, i) => ({ value: String(i + 1), label: `Class ${i + 1}` })),
   O_LEVEL: Array.from({ length: 4 }, (_, i) => ({ value: String(i + 1), label: `Form ${i + 1}` })),
   A_LEVEL: [
@@ -1380,21 +1478,23 @@ const STAGE_LEVEL_OPTIONS = {
 };
 
 function curriculumForStage(stage: ClassWizardState['educationStage']) {
-  if (stage === 'EARLY_CHILDHOOD') return 'PRE_PRIMARY';
+  if (stage === 'NURSERY') return 'NURSERY';
+  if (stage === 'PRE_UNIT') return 'PRE_PRIMARY';
   if (stage === 'PRIMARY') return 'NECTA_PRIMARY';
   if (stage === 'A_LEVEL') return 'NECTA_ALEVEL';
   return 'NECTA_OLEVEL';
 }
 
 function displayNameForClass(stage: ClassWizardState['educationStage'], level: string, stream: string) {
-  if (stage === 'EARLY_CHILDHOOD') return level === 'nursery' ? 'Nursery' : 'Pre-Unit';
+  if (stage === 'NURSERY') return `Nursery${stream ? ` ${stream}` : ''}`.trim();
+  if (stage === 'PRE_UNIT') return `Pre-Unit${stream ? ` ${stream}` : ''}`.trim();
   if (stage === 'PRIMARY') return `Class ${level}${stream ? ` ${stream}` : ''}`.trim();
   if (stage === 'A_LEVEL') return `Form ${level} ${stream}`;
   return `Form ${level}${stream ? ` ${stream}` : ''}`.trim();
 }
 
 function isTerminalClass(stage: ClassWizardState['educationStage'], level: string) {
-  return (stage === 'EARLY_CHILDHOOD' && level === 'pre-unit')
+  return (stage === 'PRE_UNIT' && level === '1')
     || (stage === 'PRIMARY' && level === '7')
     || (stage === 'O_LEVEL' && level === '4')
     || (stage === 'A_LEVEL' && level === '6');
@@ -1590,7 +1690,7 @@ export function ClassesPage() {
       const next = { ...current, [key]: value };
       if (key === 'educationStage') {
         const stage = value as ClassWizardState['educationStage'];
-        next.level = stage === 'A_LEVEL' ? '5' : stage === 'EARLY_CHILDHOOD' ? 'nursery' : '1';
+        next.level = stage === 'A_LEVEL' ? '5' : '1';
         next.stream = stage === 'A_LEVEL' && combinationOptions[0]?.value ? combinationOptions[0].value : 'A';
         next.curriculumCode = curriculumForStage(stage);
       }
@@ -1638,7 +1738,7 @@ export function ClassesPage() {
       return;
     }
     const duplicate = apiClasses.some((item: any) =>
-      String(item.stage ?? item.educationStage) === classForm.educationStage &&
+      String(item.stage ?? item.educationStage).replace('-', '_').toUpperCase() === classForm.educationStage &&
       String(item.level ?? item.numericLevel) === classForm.level &&
       String(item.stream ?? '') === classForm.stream &&
       String(item.year ?? item.academicYearId ?? '') === academicYearId,
@@ -1752,22 +1852,17 @@ export function ClassesPage() {
   return (
     <AdminShell title="Class Management" eyebrow="Classes, rosters, assigned subjects">
       <AdminMetricStrip items={[
-        { label: 'Primary Classes', value: String(byStage.Primary ?? 0), detail: 'Class 1 to terminal primary', tone: 'green' },
-        { label: 'O-Level Classes', value: String(byStage['O-Level'] ?? 0), detail: 'Form 1 to Form 4', tone: 'blue' },
-        { label: 'A-Level Streams', value: String(byStage['A-Level'] ?? 0), detail: 'Form 5/6 combinations', tone: 'amber' },
-        { label: 'Terminal Classes', value: String(apiClasses.filter((item) => item.terminal).length), detail: 'Cross-stage or graduation', tone: 'rose' },
+        { label: 'Pre-Primary', value: String((byStage.NURSERY ?? 0) + (byStage['Nursery'] ?? 0) + (byStage.PRE_UNIT ?? 0) + (byStage['Pre-Unit'] ?? 0)), detail: 'Nursery and Pre-Unit', tone: 'green' },
+        { label: 'Primary Classes', value: String((byStage.PRIMARY ?? 0) + (byStage.Primary ?? 0)), detail: 'Class 1 to terminal primary', tone: 'green' },
+        { label: 'O-Level Classes', value: String((byStage.O_LEVEL ?? 0) + (byStage['O-Level'] ?? 0)), detail: 'Form 1 to Form 4', tone: 'blue' },
+        { label: 'A-Level Streams', value: String((byStage.A_LEVEL ?? 0) + (byStage['A-Level'] ?? 0)), detail: 'Form 5/6 combinations', tone: 'amber' },
       ]} />
       <AdminFormSection
         title="Class Setup Wizard"
         subtitle="Create Early Childhood, Primary, O-Level and A-Level classes for the selected academic year."
       >
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <SelectField key={`stage-${classForm.educationStage}`} label="Education Stage" value={classForm.educationStage} onChange={setClassValue('educationStage')} options={[
-            { value: 'EARLY_CHILDHOOD', label: 'Early Childhood (Nursery / Pre-Unit)' },
-            { value: 'PRIMARY', label: 'Primary' },
-            { value: 'O_LEVEL', label: 'O-Level' },
-            { value: 'A_LEVEL', label: 'A-Level' },
-          ]} />
+          <SelectField key={`stage-${classForm.educationStage}`} label="Education Stage" value={classForm.educationStage} onChange={setClassValue('educationStage')} options={EDUCATION_STAGE_OPTIONS} />
           <SelectField key={`level-${classForm.educationStage}-${classForm.level}`} label="Class/Form Level" value={classForm.level} onChange={setClassValue('level')} options={STAGE_LEVEL_OPTIONS[classForm.educationStage]} />
           <Field label="Display Name" value={className} readOnly />
           <SelectField key={`stream-${classForm.educationStage}-${classForm.stream}`} label="Stream or Combination" value={classForm.stream} onChange={setClassValue('stream')} options={streamOptions} />
@@ -1775,6 +1870,7 @@ export function ClassesPage() {
           <SelectField key={`class-teacher-${classForm.classTeacherId}`} label="Class Teacher" value={classForm.classTeacherId || teacherOptions[0]?.value} onChange={setClassValue('classTeacherId')} options={teacherOptions.length ? teacherOptions : [{ value: '', label: 'Create a teacher first' }]} />
           <Field label="Capacity" value={classForm.capacity} onChange={setClassField('capacity')} type="number" />
           <SelectField key={`curriculum-${classForm.curriculumCode}`} label="Curriculum Code" value={classForm.curriculumCode} onChange={setClassValue('curriculumCode')} options={[
+            { value: 'NURSERY', label: 'Nursery' },
             { value: 'PRE_PRIMARY', label: 'Pre-Primary (Nursery / Pre-Unit)' },
             { value: 'NECTA_PRIMARY', label: 'NECTA Primary' },
             { value: 'NECTA_OLEVEL', label: 'NECTA O-Level' },
@@ -1782,7 +1878,7 @@ export function ClassesPage() {
           ]} />
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-3">
-          <FeatureToggle label="Terminal year" description="Required for Form 4, Form 6 and final primary year." enabled={terminalYear} />
+          <FeatureToggle label="Terminal year" description="Required for Pre-Unit, Form 4, Form 6 and final primary year." enabled={terminalYear} />
           <FeatureToggle label="Validate stage range" description="Blocks Class/Form level collisions before submit." enabled />
           <FeatureToggle label="Use universal pathways" description="Classes follow the progression trend defined below." enabled />
         </div>
@@ -1811,7 +1907,7 @@ export function ClassesPage() {
                     <p className="font-black text-slate-900">{item.name}</p>
                     <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">{item.curriculum}</p>
                   </Td>
-                  <Td><Badge tone={item.stage === 'Primary' ? 'emerald' : item.stage === 'A-Level' ? 'amber' : item.stage === 'Early Childhood' ? 'slate' : 'blue'}>{item.stage}</Badge></Td>
+                  <Td><Badge tone={stageTone(item.stage) as any}>{stageLabel(item.stage)}</Badge></Td>
                   <Td>{item.stream || <span className="text-slate-400">—</span>}</Td>
                   <Td>{item.students}</Td>
                   <Td className="max-w-[120px] truncate">{item.teacher || <span className="text-slate-400">—</span>}</Td>
@@ -2283,7 +2379,7 @@ export function ClassDetailPage() {
                     <td className="px-4 py-3">
                       <Badge tone={s.riskLevel === 'HIGH' ? 'rose' : s.riskLevel === 'MEDIUM' ? 'amber' : 'emerald'}>{String(s.riskLevel ?? 'LOW')}</Badge>
                     </td>
-                    <td className="px-4 py-3 font-mono text-sm text-slate-700">{s.balance != null ? `UGX ${Number(s.balance).toLocaleString()}` : '—'}</td>
+                    <td className="px-4 py-3 font-mono text-sm text-slate-700">{s.balance != null ? `TSh ${Number(s.balance).toLocaleString()}` : '—'}</td>
                     <td className="px-4 py-3">
                       <NavLink to={`/admin/students/${s.id}`} className="text-xs font-black text-[#4338CA] hover:underline">Open →</NavLink>
                     </td>
@@ -2312,7 +2408,13 @@ export function SubjectsPage() {
       toast('Subject name and code are required.', 'warning');
       return;
     }
-    createSubjectMutation.mutate(form, {
+    createSubjectMutation.mutate({
+      name: form.name.trim(),
+      code: form.code.trim().toUpperCase(),
+      educationStage: form.stage,
+      departmentId: form.departmentId || undefined,
+      department: form.department || undefined,
+    }, {
       onSuccess: () => {
         toast(`Subject "${form.name}" created successfully.`, 'success');
         setForm({ name: '', code: '', stage: 'O_LEVEL', departmentId: '', department: '' });
@@ -2334,11 +2436,7 @@ export function SubjectsPage() {
             label="Education Stage"
             value={form.stage}
             onChange={(v) => setForm((f) => ({ ...f, stage: v }))}
-            options={[
-              { value: 'PRIMARY', label: 'Primary' },
-              { value: 'O_LEVEL', label: 'O-Level' },
-              { value: 'A_LEVEL', label: 'A-Level' },
-            ]}
+            options={EDUCATION_STAGE_OPTIONS}
           />
           <SelectField
             label="Department"
@@ -2384,7 +2482,7 @@ function SubjectsTable() {
   };
   const cancelEdit = () => setEditingId(null);
   const saveEdit = (id: string) => {
-    const stageMap: Record<string, string> = { 'Primary': 'PRIMARY', 'O-Level': 'O_LEVEL', 'A-Level': 'A_LEVEL', 'Pre-Primary': 'PRE_PRIMARY' };
+    const stageMap: Record<string, string> = { 'Nursery': 'NURSERY', 'Pre-Unit': 'PRE_UNIT', 'Primary': 'PRIMARY', 'O-Level': 'O_LEVEL', 'A-Level': 'A_LEVEL' };
     updateSubjectMutation.mutate({ id, payload: { name: editForm.name.trim(), code: editForm.code.trim().toUpperCase(), educationStage: stageMap[editForm.stage] ?? editForm.stage, departmentId: editForm.departmentId || undefined, department: editForm.department || undefined } }, {
       onSuccess: () => { setEditingId(null); toast('Subject updated.', 'success'); },
       onError: (e: any) => toast(e?.response?.data?.message ?? 'Failed to update subject.', 'error'),
@@ -2408,13 +2506,13 @@ function SubjectsTable() {
       {apiSubjects.map((item) => {
         const isEditing = editingId === String(item.id);
         const isDeleting = pendingDeleteId === String(item.id);
-        const stageTone = item.stage === 'Primary' ? 'emerald' : item.stage === 'A-Level' ? 'amber' : item.stage === 'Pre-Primary' ? 'sky' : 'blue';
+        const subjectStageTone = stageTone(item.stage);
         return (
           <React.Fragment key={item.id}>
             <tr className={isDeleting ? 'bg-red-50' : isEditing ? 'bg-indigo-50' : 'hover:bg-slate-50'}>
               <Td><p className="font-black text-slate-900">{item.name}</p></Td>
               <Td className="font-mono text-xs text-slate-500">{item.code}</Td>
-              <Td><Badge tone={stageTone as any}>{item.stage}</Badge></Td>
+              <Td><Badge tone={subjectStageTone as any}>{stageLabel(item.stage)}</Badge></Td>
               <Td>{item.department || <span className="text-slate-400">—</span>}</Td>
               <Td>{item.classes}</Td>
               <Td>
@@ -2467,7 +2565,7 @@ function SubjectsTable() {
                       <label className="block text-[11px] font-black uppercase tracking-widest text-slate-500 mb-1">Stage</label>
                       <select value={editForm.stage} onChange={(e) => setEditForm((f) => ({ ...f, stage: e.target.value }))}
                         className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold focus:border-[#4338CA] focus:outline-none">
-                        {[['PRE_PRIMARY','Pre-Primary'],['PRIMARY','Primary'],['O_LEVEL','O-Level'],['A_LEVEL','A-Level']].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                        {EDUCATION_STAGE_OPTIONS.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}
                       </select>
                     </div>
                     <div>
@@ -2527,7 +2625,15 @@ export function SubjectDetailPage() {
 
   const handleUpdate = () => {
     if (!form.name.trim() || !form.code.trim()) { toast('Name and code required', 'warning'); return; }
-    updateMutation.mutate({ id: subjectId!, payload: form }, {
+    updateMutation.mutate({
+      id: subjectId!,
+      payload: {
+        name: form.name.trim(),
+        code: form.code.trim().toUpperCase(),
+        educationStage: String(form.stage).replace('-', '_').toUpperCase(),
+        department: form.department || undefined,
+      },
+    }, {
       onSuccess: () => toast('Subject updated', 'success'),
       onError: () => toast('Failed to update subject', 'error'),
     });
@@ -2576,11 +2682,7 @@ export function SubjectDetailPage() {
               label="Education Stage"
               value={form.stage}
               onChange={(v) => setForm((f) => ({ ...f, stage: v }))}
-              options={[
-                { value: 'PRIMARY', label: 'Primary' },
-                { value: 'O_LEVEL', label: 'O-Level' },
-                { value: 'A_LEVEL', label: 'A-Level' },
-              ]}
+              options={EDUCATION_STAGE_OPTIONS}
             />
             <Field label="Department" value={form.department} onChange={(e) => setForm((f) => ({ ...f, department: e.target.value }))} placeholder="e.g. Sciences" />
           </div>
@@ -2623,47 +2725,63 @@ export function SubjectDetailPage() {
 
 // â"€â"€â"€ Grading scales â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
+const GRADING_DEFAULT_BOUNDARIES: Record<string, Array<{ label: string; min: number; max: number; points: number; remark: string; isPassing: boolean }>> = {
+  NURSERY:  [{ label: 'EE', min: 75, max: 100, points: 4, remark: 'Exceeding Expectations', isPassing: true }, { label: 'ME', min: 50, max: 74, points: 3, remark: 'Meeting Expectations', isPassing: true }, { label: 'AE', min: 25, max: 49, points: 2, remark: 'Approaching Expectations', isPassing: true }, { label: 'BE', min: 0, max: 24, points: 1, remark: 'Below Expectations', isPassing: false }],
+  PRE_UNIT: [{ label: 'EE', min: 75, max: 100, points: 4, remark: 'Exceeding Expectations', isPassing: true }, { label: 'ME', min: 50, max: 74, points: 3, remark: 'Meeting Expectations', isPassing: true }, { label: 'AE', min: 25, max: 49, points: 2, remark: 'Approaching Expectations', isPassing: true }, { label: 'BE', min: 0, max: 24, points: 1, remark: 'Below Expectations', isPassing: false }],
+  PRIMARY:  [{ label: 'A', min: 75, max: 100, points: 1, remark: 'Excellent', isPassing: true }, { label: 'B', min: 60, max: 74, points: 2, remark: 'Good', isPassing: true }, { label: 'C', min: 45, max: 59, points: 3, remark: 'Average', isPassing: true }, { label: 'D', min: 30, max: 44, points: 4, remark: 'Below Average', isPassing: true }, { label: 'F', min: 0, max: 29, points: 5, remark: 'Fail', isPassing: false }],
+  O_LEVEL:  [{ label: 'A', min: 75, max: 100, points: 1, remark: 'Distinction', isPassing: true }, { label: 'B', min: 60, max: 74, points: 2, remark: 'Credit', isPassing: true }, { label: 'C', min: 45, max: 59, points: 3, remark: 'Merit', isPassing: true }, { label: 'D', min: 30, max: 44, points: 4, remark: 'Pass', isPassing: true }, { label: 'F', min: 0, max: 29, points: 5, remark: 'Fail', isPassing: false }],
+  A_LEVEL:  [{ label: 'A', min: 80, max: 100, points: 1, remark: 'Distinction', isPassing: true }, { label: 'B', min: 65, max: 79, points: 2, remark: 'Merit', isPassing: true }, { label: 'C', min: 50, max: 64, points: 3, remark: 'Credit', isPassing: true }, { label: 'D', min: 40, max: 49, points: 4, remark: 'Pass', isPassing: true }, { label: 'E', min: 30, max: 39, points: 5, remark: 'Subsidiary Pass', isPassing: true }, { label: 'F', min: 0, max: 29, points: 6, remark: 'Fail', isPassing: false }],
+};
+
 export function GradingPage() {
+  const [activeStage, setActiveStage] = useState<StageKey>('O_LEVEL');
+  const [showCreate, setShowCreate] = useState(false);
   const { data: apiGradingScales = [] as typeof gradingScales } = useGradingScales() as unknown as { data: typeof gradingScales };
   const createGradingScaleMutation = useCreateGradingScaleMutation();
+  const updateGradingScaleMutation = useUpdateGradingScaleMutation();
   const activateGradingScaleMutation = useActivateGradingScaleMutation();
   const deleteGradingScaleMutation = useDeleteGradingScaleMutation();
   const { data: academicYears = [] } = useAcademicYears();
-  const currentYear = (academicYears as any[]).find((year) => year.isCurrent) ?? (academicYears as any[])[0];
+  const currentYear = (academicYears as any[]).find((y: any) => y.isCurrent) ?? (academicYears as any[])[0];
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  const saveScale = (scale: any) => (payload: { name: string; boundaries: Array<{ label: string; min: number; max: number; points: number; remark: string; isPassing: boolean }> }) => {
-    const academicYearId = String(scale.academicYearId ?? currentYear?.id ?? '');
-    if (!academicYearId) {
-      toast('Create or select an academic year before saving a grading scale.', 'warning');
-      return;
-    }
+  const stageScales = (apiGradingScales as any[]).filter(
+    (s) => normaliseStage(s.educationStage) === activeStage,
+  );
+  const activeLabel = STAGE_TABS.find((t) => t.value === activeStage)?.label ?? activeStage;
+
+  const toGradePayload = (boundaries: Array<{ label: string; min: number; max: number; points: number; remark: string; isPassing: boolean }>) =>
+    boundaries.map((b) => ({ grade: b.label, minScore: b.min, maxScore: b.max, points: b.points, remark: b.remark, isPassing: b.isPassing }));
+
+  const updateScale = (id: string) => (payload: { name: string; boundaries: Array<{ label: string; min: number; max: number; points: number; remark: string; isPassing: boolean }> }) => {
+    updateGradingScaleMutation.mutate({ id, payload: { name: payload.name, grades: toGradePayload(payload.boundaries) } }, {
+      onSuccess: () => toast('Grading scale updated.', 'success'),
+      onError: (error) => toast(error instanceof Error ? error.message : 'Failed to update grading scale', 'error'),
+    });
+  };
+
+  const createScale = (payload: { name: string; boundaries: Array<{ label: string; min: number; max: number; points: number; remark: string; isPassing: boolean }> }) => {
+    const academicYearId = String(currentYear?.id ?? '');
+    if (!academicYearId) { toast('Create or select an academic year first.', 'warning'); return; }
     createGradingScaleMutation.mutate({
       name: payload.name,
       academicYearId,
-      educationStage: scale.educationStage || undefined,
-      classLevel: scale.classLevel ? Number(scale.classLevel) : undefined,
-      subjectId: scale.subjectId || undefined,
-      grades: payload.boundaries.map((boundary) => ({
-        grade: boundary.label,
-        minScore: boundary.min,
-        maxScore: boundary.max,
-        points: boundary.points,
-        remark: boundary.remark,
-        isPassing: boundary.isPassing,
-      })),
+      educationStage: activeStage,
+      grades: toGradePayload(payload.boundaries),
     }, {
-      onSuccess: () => toast('Grading scale saved.', 'success'),
-      onError: (error) => toast(error instanceof Error ? error.message : 'Failed to save grading scale', 'error'),
+      onSuccess: () => { toast('Grading scale created.', 'success'); setShowCreate(false); },
+      onError: (error) => toast(error instanceof Error ? error.message : 'Failed to create grading scale', 'error'),
     });
   };
+
   const activateScale = (id: string) => {
     activateGradingScaleMutation.mutate(id, {
       onSuccess: () => toast('Grading scale activated.', 'success'),
       onError: (error) => toast(error instanceof Error ? error.message : 'Failed to activate grading scale', 'error'),
     });
   };
+
   const confirmDeleteScale = (id: string) => {
     deleteGradingScaleMutation.mutate(id, {
       onSuccess: () => { setPendingDeleteId(null); setDeleteError(null); toast('Grading scale deleted.', 'success'); },
@@ -2672,13 +2790,35 @@ export function GradingPage() {
   };
 
   return (
-    <AdminShell title="Grading Scales" eyebrow="Grade boundaries and activation">
-      {apiGradingScales.map((scale) => {
+    <AdminShell title="Grading Scales" eyebrow="Grade boundaries per education stage">
+      <div className="flex items-center gap-1 rounded-2xl bg-slate-100 p-1">
+        {STAGE_TABS.map((tab) => (
+          <button
+            key={tab.value}
+            onClick={() => { setActiveStage(tab.value); setShowCreate(false); setPendingDeleteId(null); setDeleteError(null); }}
+            className={`flex-1 rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-widest transition ${activeStage === tab.value ? 'bg-white shadow-sm text-[#1E1B4B]' : 'text-slate-500 hover:text-slate-700'}`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {stageScales.length === 0 && !showCreate && (
+        <div className="rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 px-6 py-10 text-center">
+          <p className="text-sm font-semibold text-slate-500">No grading scale for {activeLabel} yet.</p>
+          <p className="mt-1 text-xs text-slate-400">Create one to enable grade reporting for this stage.</p>
+        </div>
+      )}
+
+      {stageScales.map((scale) => {
         const isDeleting = pendingDeleteId === scale.id;
         return (
           <div key={scale.id} className="space-y-2">
             <div className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
-              <p className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">{scale.scope}</p>
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">{scale.scope}</p>
+                {scale.active && <p className="mt-0.5 text-[10px] font-bold text-emerald-600">Active — used for grading in this stage</p>}
+              </div>
               <div className="flex items-center gap-3">
                 <Badge tone={scale.active ? 'emerald' : 'amber'}>{scale.active ? 'Active' : 'Draft'}</Badge>
                 {isDeleting ? (
@@ -2705,16 +2845,36 @@ export function GradingPage() {
             </div>
             <GradingBoundaryEditor
               scale={scale}
-              loading={createGradingScaleMutation.isPending || activateGradingScaleMutation.isPending}
-              onSave={saveScale(scale)}
+              loading={updateGradingScaleMutation.isPending || activateGradingScaleMutation.isPending}
+              onSave={updateScale(scale.id)}
               onActivate={() => activateScale(scale.id)}
             />
           </div>
         );
       })}
-      <NavLink to="/admin/grading/create">
-        <Button variant="secondary" className="rounded-xl">+ Create New Scale</Button>
-      </NavLink>
+
+      {showCreate && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between rounded-2xl bg-indigo-50 px-4 py-3">
+            <p className="text-xs font-black uppercase tracking-[0.22em] text-indigo-600">New {activeLabel} Scale</p>
+            <button onClick={() => setShowCreate(false)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <GradingBoundaryEditor
+            key={`new-${activeStage}`}
+            scale={{ id: 'new', name: `New ${activeLabel} Scale`, active: false, boundaries: GRADING_DEFAULT_BOUNDARIES[activeStage] ?? [] }}
+            loading={createGradingScaleMutation.isPending}
+            onSave={createScale}
+          />
+        </div>
+      )}
+
+      {!showCreate && (
+        <Button variant="secondary" className="rounded-xl" onClick={() => setShowCreate(true)}>
+          + Add Scale for {activeLabel}
+        </Button>
+      )}
     </AdminShell>
   );
 }
@@ -2723,33 +2883,38 @@ export function CreateGradingScalePage() {
   const createGradingScaleMutation = useCreateGradingScaleMutation();
   const { data: academicYears = [] } = useAcademicYears();
   const currentYear = (academicYears as any[]).find((year) => year.isCurrent) ?? (academicYears as any[])[0];
+  const [stage, setStage] = useState('O_LEVEL');
+  const navigate = useNavigate();
+
   const saveNewScale = (payload: { name: string; boundaries: Array<{ label: string; min: number; max: number; points: number; remark: string; isPassing: boolean }> }) => {
     const academicYearId = String(currentYear?.id ?? '');
-    if (!academicYearId) {
-      toast('Create or select an academic year before saving a grading scale.', 'warning');
-      return;
-    }
+    if (!academicYearId) { toast('Create or select an academic year before saving a grading scale.', 'warning'); return; }
     createGradingScaleMutation.mutate({
       name: payload.name,
       academicYearId,
-      educationStage: 'O_LEVEL',
-      grades: payload.boundaries.map((boundary) => ({
-        grade: boundary.label,
-        minScore: boundary.min,
-        maxScore: boundary.max,
-        points: boundary.points,
-        remark: boundary.remark,
-        isPassing: boundary.isPassing,
-      })),
+      educationStage: stage as any,
+      grades: payload.boundaries.map((b) => ({ grade: b.label, minScore: b.min, maxScore: b.max, points: b.points, remark: b.remark, isPassing: b.isPassing })),
     }, {
-      onSuccess: () => toast('Grading scale created.', 'success'),
+      onSuccess: () => { toast('Grading scale created.', 'success'); navigate('/admin/grading'); },
       onError: (error) => toast(error instanceof Error ? error.message : 'Failed to create grading scale', 'error'),
     });
   };
+
   return (
     <AdminShell title="Create Grading Scale" eyebrow="Boundary validation">
+      <div className="flex items-center gap-3 rounded-2xl bg-slate-50 px-5 py-4">
+        <p className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">Education Stage</p>
+        <select
+          value={stage}
+          onChange={(e) => setStage(e.target.value)}
+          className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold outline-none focus:border-[#4338CA]"
+        >
+          {STAGE_TABS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+        </select>
+      </div>
       <GradingBoundaryEditor
-        scale={{ id: 'new', name: 'New O-Level Scale', active: false, boundaries: [{ label: 'A', min: 75, max: 100, points: 1, remark: 'Distinction' }, { label: 'B', min: 60, max: 74, points: 2, remark: 'Credit' }, { label: 'C', min: 45, max: 59, points: 3, remark: 'Merit' }, { label: 'D', min: 30, max: 44, points: 4, remark: 'Pass' }, { label: 'F', min: 0, max: 29, points: 5, remark: 'Fail', isPassing: false }] }}
+        key={stage}
+        scale={{ id: 'new', name: `New ${STAGE_TABS.find((t) => t.value === stage)?.label ?? ''} Scale`, active: false, boundaries: GRADING_DEFAULT_BOUNDARIES[stage] ?? [] }}
         loading={createGradingScaleMutation.isPending}
         onSave={saveNewScale}
       />
@@ -2759,34 +2924,83 @@ export function CreateGradingScalePage() {
 
 // â"€â"€â"€ Assessment types â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
+const STAGE_TABS = [
+  { value: 'NURSERY', label: 'Nursery' },
+  { value: 'PRE_UNIT', label: 'Pre-Unit' },
+  { value: 'PRIMARY', label: 'Primary' },
+  { value: 'O_LEVEL', label: 'O-Level' },
+  { value: 'A_LEVEL', label: 'A-Level' },
+] as const;
+
+type StageKey = typeof STAGE_TABS[number]['value'];
+
+function normaliseStage(raw: unknown): string {
+  return String(raw ?? '').replace(/-/g, '_').toUpperCase();
+}
+
 export function AssessmentTypesPage() {
   const { data: apiAssessmentTypes = [] as typeof assessmentTypes } = useAssessmentTypes() as unknown as { data: typeof assessmentTypes };
   const saveAssessmentTypesMutation = useSaveAssessmentTypesMutation();
-  const oLevelTypes = apiAssessmentTypes.filter((type: any) => String(type.educationStage ?? type.scope).replace('-', '_').toUpperCase() === 'O_LEVEL' && type.isActive !== false);
-  const total = assessmentWeightsTotal(oLevelTypes.map((t) => Number(t.weight ?? 0)));
+  const [activeStage, setActiveStage] = useState<StageKey>('O_LEVEL');
+  const { data: academicYears = [] } = useAcademicYears();
+  const currentYear = (academicYears as any[]).find((y: any) => y.isCurrent) ?? (academicYears as any[])[0];
+  const defaultAcademicYearId = String(currentYear?.id ?? '');
+
+  const stageTypes = (apiAssessmentTypes as any[]).filter(
+    (t) => normaliseStage(t.educationStage ?? t.scope) === activeStage && t.isActive !== false,
+  );
+  const total = assessmentWeightsTotal(stageTypes.map((t) => Number(t.weight ?? 0)));
+
   const saveAssessmentTypes = (payload: { rows: Array<Record<string, unknown>>; deactivateIds: string[] }) => {
     saveAssessmentTypesMutation.mutate(payload, {
       onSuccess: () => toast('Assessment types saved.', 'success'),
       onError: (error) => toast(error instanceof Error ? error.message : 'Failed to save assessment types', 'error'),
     });
   };
+
   return (
-    <AdminShell title="Assessment Types" eyebrow="Weight distribution">
+    <AdminShell title="Assessment Types" eyebrow="Weight distribution per education stage">
       <AdminMetricStrip items={[{
-        label: 'O-Level Weight',
+        label: `${STAGE_TABS.find((s) => s.value === activeStage)?.label} Weight`,
         value: `${total}%`,
-        detail: total === 100 ? 'O-Level distribution valid' : 'O-Level must equal 100%',
+        detail: total === 100 ? 'Distribution valid' : 'Must equal 100%',
         tone: total === 100 ? 'green' : 'rose',
       }, {
-        label: 'Scoped Types',
-        value: String(apiAssessmentTypes.length),
-        detail: 'Primary, O-Level, A-Level and subject-specific',
+        label: 'Total Types',
+        value: String((apiAssessmentTypes as any[]).filter((t) => t.isActive !== false).length),
+        detail: 'Across all stages',
         tone: 'blue',
       }]} />
+      <div className="mb-4 flex flex-wrap gap-2">
+        {STAGE_TABS.map((tab) => {
+          const count = (apiAssessmentTypes as any[]).filter(
+            (t) => normaliseStage(t.educationStage ?? t.scope) === tab.value && t.isActive !== false,
+          ).length;
+          return (
+            <button
+              key={tab.value}
+              onClick={() => setActiveStage(tab.value)}
+              className={`flex items-center gap-1.5 rounded-xl border px-4 py-2 text-xs font-black transition ${
+                activeStage === tab.value
+                  ? 'border-[#4338CA] bg-[#4338CA] text-white'
+                  : 'border-slate-200 bg-white text-slate-600 hover:border-[#4338CA] hover:text-[#4338CA]'
+              }`}
+            >
+              {tab.label}
+              <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-black ${activeStage === tab.value ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                {count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
       <AssessmentTypeEditor
-        types={oLevelTypes.length ? oLevelTypes : apiAssessmentTypes.filter((type: any) => type.isActive !== false)}
+        key={activeStage}
+        types={stageTypes}
         loading={saveAssessmentTypesMutation.isPending}
         onSave={saveAssessmentTypes}
+        defaultStage={activeStage}
+        defaultAcademicYearId={defaultAcademicYearId}
       />
     </AdminShell>
   );
@@ -3181,7 +3395,7 @@ export function StudentAdminProfilePage() {
         { label: 'Registration', value: String(student.registration ?? (student as any).admissionNumber ?? '—'), detail: String(student.className ?? ''), tone: 'blue' },
         { label: 'Status', value: String(student.status ?? 'ACTIVE'), detail: 'Registry', tone: 'green' },
         { label: 'Guardians', value: String((guardians ?? []).length || (student.guardians ?? 0)), detail: 'on record', tone: 'blue' },
-        { label: 'Balance', value: `UGX ${Number(finance?.balance ?? student.balance ?? 0).toLocaleString()}`, detail: 'Outstanding', tone: (finance?.balance ?? student.balance ?? 0) > 0 ? 'amber' : 'green' },
+        { label: 'Balance', value: `TSh ${Number(finance?.balance ?? student.balance ?? 0).toLocaleString()}`, detail: 'Outstanding', tone: (finance?.balance ?? student.balance ?? 0) > 0 ? 'amber' : 'green' },
         { label: 'Risk', value: String(student.risk ?? 'LOW'), detail: 'Academic risk band', tone: student.risk === 'CRITICAL' ? 'rose' : 'amber' },
         { label: 'Portal', value: student.linked ? 'Linked' : 'Not linked', detail: 'Account', tone: student.linked ? 'green' : 'rose' },
       ]} />
@@ -3317,11 +3531,11 @@ export function StudentAdminProfilePage() {
                     <div className="grid gap-4 md:grid-cols-2">
                       <div className="rounded-xl border border-slate-200 p-4">
                         <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">Outstanding Balance</p>
-                        <p className="mt-1 text-2xl font-black text-slate-900">UGX {Number(finance?.balance ?? student.balance ?? 0).toLocaleString()}</p>
+                        <p className="mt-1 text-2xl font-black text-slate-900">TSh {Number(finance?.balance ?? student.balance ?? 0).toLocaleString()}</p>
                       </div>
                       <div className="rounded-xl border border-slate-200 p-4">
                         <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">Total Paid</p>
-                        <p className="mt-1 text-2xl font-black text-slate-900">UGX {Number(finance?.totalPaid ?? 0).toLocaleString()}</p>
+                        <p className="mt-1 text-2xl font-black text-slate-900">TSh {Number(finance?.totalPaid ?? 0).toLocaleString()}</p>
                       </div>
                     </div>
                     {(finance?.transactions ?? []).length > 0 && (
@@ -3335,7 +3549,7 @@ export function StudentAdminProfilePage() {
                               <tr key={i}>
                                 <Td className="font-mono text-xs">{String(t.date ?? '—').slice(0, 10)}</Td>
                                 <Td>{String(t.description ?? t.desc ?? '—')}</Td>
-                                <Td className="font-mono">UGX {Number(t.amount ?? 0).toLocaleString()}</Td>
+                                <Td className="font-mono">TSh {Number(t.amount ?? 0).toLocaleString()}</Td>
                                 <Td><Badge tone={t.type === 'payment' ? 'emerald' : 'amber'}>{String(t.type ?? 'charge')}</Badge></Td>
                               </tr>
                             ))}
@@ -3407,56 +3621,75 @@ export function StudentAdminProfilePage() {
 // â"€â"€â"€ Fee categories â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 export function AdminFeeCategoriesPage() {
-  const { data: rawCategories = [], isLoading, isError, refetch } = useFeeCategories() as unknown as { data: Array<{ id?: string; code?: string; name?: string; type?: string; category?: string; amount?: number; defaultAmount?: number; usedByStructures?: number }> | undefined; isLoading: boolean; isError: boolean; refetch: () => void };
+  const { data: rawCategories = [], isLoading, isError, refetch } = useFeeCategories() as unknown as { data: Array<Record<string, unknown>>; isLoading: boolean; isError: boolean; refetch: () => void };
   const createMutation = useCreateFeeCategoryMutation();
+  const updateMutation = useUpdateFeeCategoryMutation();
   const deleteMutation = useDeleteFeeCategoryMutation();
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
-  const [createForm, setCreateForm] = useState({ code: '', name: '', type: 'Mandatory', amount: '' });
-  const setF = (k: keyof typeof createForm) => (e: React.ChangeEvent<HTMLInputElement>) =>
-    setCreateForm((f) => ({ ...f, [k]: k === 'code' ? e.target.value.toUpperCase() : e.target.value }));
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [createForm, setCreateForm] = useState({ name: '', description: '', isOptional: false, isBillablePerTerm: true });
+  const [editForm, setEditForm] = useState({ name: '', description: '', isOptional: false, isBillablePerTerm: true, isActive: true });
 
   const categories = (rawCategories ?? []).map((c) => ({
-    id: c.id ?? '',
-    code: c.code ?? c.id ?? '',
-    name: c.name ?? '',
-    type: c.type ?? c.category ?? 'Optional',
-    amount: c.amount ?? c.defaultAmount ?? 0,
-    used: c.usedByStructures ?? 0,
+    id: String(c.id ?? ''),
+    code: String(c.code ?? c.id ?? ''),
+    name: String(c.name ?? ''),
+    description: String(c.description ?? ''),
+    isOptional: Boolean(c.isOptional ?? !(c.mandatory)),
+    isBillablePerTerm: c.frequency === 'Per Term' || Boolean(c.isBillablePerTerm ?? true),
+    active: Boolean(c.active ?? c.isActive ?? true),
+    used: Number(c.usedByStructures ?? c.used ?? 0),
   }));
 
   const handleCreate = () => {
-    if (!createForm.code.trim() || !createForm.name.trim()) { toast('Code and name are required', 'warning'); return; }
-    createMutation.mutate({ ...createForm, amount: Number(createForm.amount) }, {
-      onSuccess: () => { toast('Fee category created', 'success'); setCreateForm({ code: '', name: '', type: 'Mandatory', amount: '' }); },
-      onError: () => toast('Failed to create fee category', 'error'),
+    if (!createForm.name.trim()) { toast('Category name is required', 'warning'); return; }
+    createMutation.mutate({ name: createForm.name, description: createForm.description || undefined, isOptional: createForm.isOptional, isBillablePerTerm: createForm.isBillablePerTerm }, {
+      onSuccess: () => { toast('Fee category created', 'success'); setCreateForm({ name: '', description: '', isOptional: false, isBillablePerTerm: true }); },
+      onError: (e: any) => toast(e?.response?.data?.message ?? 'Failed to create fee category', 'error'),
+    });
+  };
+
+  const openEdit = (cat: (typeof categories)[number]) => {
+    setEditForm({ name: cat.name, description: cat.description, isOptional: cat.isOptional, isBillablePerTerm: cat.isBillablePerTerm, isActive: cat.active });
+    setEditingId(cat.id);
+  };
+
+  const handleUpdate = (id: string) => {
+    updateMutation.mutate({ id, payload: { name: editForm.name, description: editForm.description || undefined, isOptional: editForm.isOptional, isBillablePerTerm: editForm.isBillablePerTerm, isActive: editForm.isActive } }, {
+      onSuccess: () => { toast('Fee category updated', 'success'); setEditingId(null); },
+      onError: (e: any) => toast(e?.response?.data?.message ?? 'Failed to update fee category', 'error'),
     });
   };
 
   const handleDelete = (id: string) => {
     deleteMutation.mutate(id, {
       onSuccess: () => { toast('Fee category deleted', 'warning'); setPendingDeleteId(null); },
-      onError: () => { toast('Failed to delete fee category', 'error'); setPendingDeleteId(null); },
+      onError: (e: any) => { toast(e?.response?.data?.message ?? 'Failed to delete fee category', 'error'); setPendingDeleteId(null); },
     });
   };
+
+  const Toggle = ({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) => (
+    <button type="button" onClick={() => onChange(!checked)} className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+      <span className={`relative inline-flex h-5 w-9 flex-shrink-0 rounded-full transition-colors ${checked ? 'bg-[#4338CA]' : 'bg-slate-300'}`}>
+        <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${checked ? 'left-4' : 'left-0.5'}`} />
+      </span>
+      {label}
+    </button>
+  );
 
   if (isLoading) return <AdminShell title="Fee Categories" eyebrow="Finance setup"><SkeletonTable cols={5} /></AdminShell>;
   if (isError) return <AdminShell title="Fee Categories" eyebrow="Finance setup"><DataError onRetry={refetch} /></AdminShell>;
   return (
     <AdminShell title="Fee Categories" eyebrow="Finance setup with dependency safety">
       {/* Create form */}
-      <AdminFormSection title="Add Fee Category" subtitle="Categories are used in fee structures. Deleting a category removes it from all structures.">
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <Field label="Code" value={createForm.code} onChange={setF('code')} placeholder="e.g. TUITION" />
-          <Field label="Name" value={createForm.name} onChange={setF('name')} placeholder="e.g. Tuition Fee" />
-          <SelectField
-            label="Type"
-            value={createForm.type}
-            onChange={(v) => setCreateForm((f) => ({ ...f, type: v }))}
-            options={[{ value: 'Mandatory', label: 'Mandatory' }, { value: 'Optional', label: 'Optional' }]}
-          />
-          <Field label="Default Amount (UGX)" value={createForm.amount} onChange={setF('amount')} placeholder="e.g. 500000" />
+      <AdminFormSection title="Add Fee Category" subtitle="Code is auto-generated from name. Amounts are set per fee structure, not on the category.">
+        <div className="grid gap-4 md:grid-cols-2">
+          <Field label="Name *" value={createForm.name} onChange={(e) => setCreateForm((f) => ({ ...f, name: e.target.value }))} placeholder="e.g. Tuition Fee" />
+          <Field label="Description" value={createForm.description} onChange={(e) => setCreateForm((f) => ({ ...f, description: e.target.value }))} placeholder="Optional description" />
         </div>
-        <div className="mt-4">
+        <div className="mt-4 flex flex-wrap items-center gap-6">
+          <Toggle checked={createForm.isOptional} onChange={(v) => setCreateForm((f) => ({ ...f, isOptional: v }))} label={createForm.isOptional ? 'Optional fee' : 'Mandatory fee'} />
+          <Toggle checked={createForm.isBillablePerTerm} onChange={(v) => setCreateForm((f) => ({ ...f, isBillablePerTerm: v }))} label={createForm.isBillablePerTerm ? 'Billed per term' : 'One-time fee'} />
           <Button className="rounded-xl bg-[#4338CA]" loading={createMutation.isPending} onClick={handleCreate}>
             <Plus className="h-4 w-4" /> Create Category
           </Button>
@@ -3464,42 +3697,63 @@ export function AdminFeeCategoriesPage() {
       </AdminFormSection>
 
       {/* Table */}
-      <AdminDataTable columns={['Code', 'Name', 'Type', 'Amount', 'Used By', 'Actions']}>
+      <AdminDataTable columns={['Code', 'Name', 'Type', 'Billing', 'Used By', 'Active', 'Actions']}>
         {categories.length === 0 && (
-          <tr><td colSpan={6} className="px-5 py-6 text-center text-sm text-slate-500">No fee categories yet — add one above.</td></tr>
+          <tr><td colSpan={7} className="px-5 py-6 text-center text-sm text-slate-500">No fee categories yet — add one above.</td></tr>
         )}
         {categories.map((cat) => (
-          <React.Fragment key={cat.id || cat.code}>
-            <tr className="hover:bg-slate-50">
-              <Td className="font-mono text-xs text-slate-500">{cat.code}</Td>
-              <Td><p className="font-black text-slate-900">{cat.name}</p></Td>
-              <Td><Badge tone={cat.type === 'Mandatory' ? 'rose' : 'blue'}>{cat.type}</Badge></Td>
-              <Td className="font-mono text-xs">UGX {cat.amount.toLocaleString('en-US')}</Td>
-              <Td>{`${cat.used} structures`}</Td>
+          <React.Fragment key={cat.id}>
+            <tr className={`hover:bg-slate-50 ${editingId === cat.id ? 'bg-indigo-50/60' : ''}`}>
+              <Td className="font-mono text-xs font-bold text-slate-500">{cat.code}</Td>
+              <Td><p className="font-black text-slate-900">{cat.name}</p>{cat.description && <p className="text-[11px] text-slate-400">{cat.description}</p>}</Td>
+              <Td><Badge tone={cat.isOptional ? 'blue' : 'rose'}>{cat.isOptional ? 'Optional' : 'Mandatory'}</Badge></Td>
+              <Td><Badge tone={cat.isBillablePerTerm ? 'emerald' : 'amber'}>{cat.isBillablePerTerm ? 'Per Term' : 'One-time'}</Badge></Td>
+              <Td className="text-sm text-slate-600">{cat.used} structure{cat.used !== 1 ? 's' : ''}</Td>
+              <Td><Badge tone={cat.active ? 'emerald' : 'rose'}>{cat.active ? 'Active' : 'Inactive'}</Badge></Td>
               <Td>
-                {pendingDeleteId === cat.id ? (
-                  <span className="flex items-center gap-2">
-                    <button
-                      onClick={() => handleDelete(cat.id)}
-                      disabled={deleteMutation.isPending}
-                      className="rounded-lg bg-rose-600 px-2.5 py-1 text-xs font-black text-white hover:bg-rose-700 disabled:opacity-40"
-                    >
-                      {deleteMutation.isPending ? 'Deleting…' : 'Yes, delete'}
-                    </button>
-                    <button onClick={() => setPendingDeleteId(null)} className="rounded-lg border px-2.5 py-1 text-xs font-black text-slate-600 hover:bg-slate-100">Cancel</button>
-                  </span>
-                ) : (
+                <div className="flex items-center gap-2">
                   <button
-                    onClick={() => setPendingDeleteId(cat.id)}
-                    disabled={cat.used > 0}
-                    title={cat.used > 0 ? 'Remove from all fee structures first' : 'Delete category'}
-                    className="inline-flex items-center gap-1 rounded-lg border border-rose-200 px-2.5 py-1 text-xs font-black text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-40"
+                    onClick={() => editingId === cat.id ? setEditingId(null) : openEdit(cat)}
+                    className="inline-flex items-center gap-1 rounded-lg border border-indigo-200 px-2.5 py-1 text-xs font-black text-indigo-600 hover:bg-indigo-50"
                   >
-                    <Trash2 className="h-3 w-3" /> Delete
+                    <Edit2 className="h-3 w-3" /> {editingId === cat.id ? 'Cancel' : 'Edit'}
                   </button>
-                )}
+                  {pendingDeleteId === cat.id ? (
+                    <span className="flex items-center gap-1">
+                      <button onClick={() => handleDelete(cat.id)} disabled={deleteMutation.isPending}
+                        className="rounded-lg bg-rose-600 px-2.5 py-1 text-xs font-black text-white hover:bg-rose-700 disabled:opacity-40">
+                        {deleteMutation.isPending ? '…' : 'Yes'}
+                      </button>
+                      <button onClick={() => setPendingDeleteId(null)} className="rounded-lg border px-2.5 py-1 text-xs font-black text-slate-600 hover:bg-slate-100">No</button>
+                    </span>
+                  ) : (
+                    <button onClick={() => setPendingDeleteId(cat.id)} disabled={cat.used > 0}
+                      title={cat.used > 0 ? 'Remove from fee structures first' : 'Delete'}
+                      className="inline-flex items-center gap-1 rounded-lg border border-rose-200 px-2.5 py-1 text-xs font-black text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-40">
+                      <Trash2 className="h-3 w-3" /> Delete
+                    </button>
+                  )}
+                </div>
               </Td>
             </tr>
+            {editingId === cat.id && (
+              <tr className="bg-indigo-50/40">
+                <td colSpan={7} className="px-5 py-4">
+                  <div className="space-y-3">
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <Field label="Name *" value={editForm.name} onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))} />
+                      <Field label="Description" value={editForm.description} onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))} />
+                    </div>
+                    <div className="flex flex-wrap items-center gap-6">
+                      <Toggle checked={editForm.isOptional} onChange={(v) => setEditForm((f) => ({ ...f, isOptional: v }))} label={editForm.isOptional ? 'Optional fee' : 'Mandatory fee'} />
+                      <Toggle checked={editForm.isBillablePerTerm} onChange={(v) => setEditForm((f) => ({ ...f, isBillablePerTerm: v }))} label={editForm.isBillablePerTerm ? 'Billed per term' : 'One-time fee'} />
+                      <Toggle checked={editForm.isActive} onChange={(v) => setEditForm((f) => ({ ...f, isActive: v }))} label={editForm.isActive ? 'Active' : 'Inactive'} />
+                      <Button className="rounded-xl bg-[#4338CA]" loading={updateMutation.isPending} onClick={() => handleUpdate(cat.id)}>Save Changes</Button>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            )}
           </React.Fragment>
         ))}
       </AdminDataTable>
@@ -4080,10 +4334,12 @@ export function AdminAnnouncementsPage() {
 
 // â"€â"€â"€ Stage Configuration (Gap 10) â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
-const STAGE_DESCRIPTIONS: Record<string, { label: string; note: string; tone: 'emerald' | 'blue' | 'amber' }> = {
-  PRIMARY: { label: 'Primary School', note: 'Class 1 up to terminal year (Class 6 or 7). Pass mark: 50 %. PSLE national exam at terminal year.', tone: 'emerald' },
-  O_LEVEL: { label: 'Secondary O-Level', note: 'Form 1 to Form 4. CSEE national exam at Form 4. Registration prefix: KS-S-.', tone: 'blue' },
-  A_LEVEL: { label: 'Advanced Level', note: 'Form 5 and Form 6. ACSEE national exam at Form 6. Combination-based subjects. Registration prefix: KS-A-.', tone: 'amber' },
+const STAGE_DESCRIPTIONS: Record<string, { label: string; note: string; tone: 'emerald' | 'blue' | 'amber' | 'violet' | 'rose' }> = {
+  NURSERY:  { label: 'Nursery', note: 'Early childhood education. Developmental assessment (EE/ME/AE/BE scale). Registration prefix: KEMS-N-.', tone: 'violet' },
+  PRE_UNIT: { label: 'Pre-Unit', note: 'Pre-primary preparation class. Assessment uses EE/ME/AE/BE scale. Registration prefix: KEMS-PU-.', tone: 'rose' },
+  PRIMARY:  { label: 'Primary School', note: 'Class 1 up to terminal year (Class 6 or 7). Pass mark: 50%. PSLE national exam at terminal year. Registration prefix: KEMS-P-.', tone: 'emerald' },
+  O_LEVEL:  { label: 'Secondary O-Level', note: 'Form 1 to Form 4. CSEE national exam at Form 4. Registration prefix: KEMS-O-.', tone: 'blue' },
+  A_LEVEL:  { label: 'Advanced Level', note: 'Form 5 and Form 6. ACSEE national exam at Form 6. Combination-based subjects. Registration prefix: KEMS-A-.', tone: 'amber' },
 };
 
 type StageConfigState = {
@@ -4106,16 +4362,16 @@ type StageConfigState = {
 const DEFAULT_STAGE_CONFIG: StageConfigState = {
   terminalPrimary: '7',
   primaryPassMark: '50',
-  primaryPrefix: 'KS-P',
+  primaryPrefix: 'KEMS-P',
   primaryPsleIndex: true,
   primaryHolistic: true,
   oLevelFailure: '40',
   oLevelRisk: '50',
-  oLevelPrefix: 'KS-S',
+  oLevelPrefix: 'KEMS-O',
   oLevelCandidateNumber: true,
   aLevelFailure: '25',
   aLevelRisk: '35',
-  aLevelPrefix: 'KS-A',
+  aLevelPrefix: 'KEMS-A',
   requirePrincipalSubjects: true,
   requireCompulsorySubsidiary: true,
 };
@@ -4182,23 +4438,28 @@ export function StageConfigPage() {
   return (
     <AdminShell title="Stage Range Configuration" eyebrow="Primary · O-Level · A-Level school structure">
       <AdminMetricStrip items={[
-        { label: 'Primary',  value: `Class 1-${config.terminalPrimary}`, detail: 'Configurable terminal year', tone: 'green'  },
-        { label: 'O-Level',  value: 'Form 1–4',                   detail: 'CSEE at Form 4',              tone: 'blue'  },
-        { label: 'A-Level',  value: 'Form 5–6',                   detail: 'ACSEE at Form 6',             tone: 'amber' },
-        { label: 'Reg. Prefix', value: `${config.primaryPrefix} / ${config.oLevelPrefix} / ${config.aLevelPrefix}`,     detail: 'Stage-prefixed numbers',      tone: 'blue'  },
+        { label: 'Nursery',  value: 'KEMS-N',                     detail: 'Early childhood',             tone: 'purple' as any },
+        { label: 'Pre-Unit', value: 'KEMS-PU',                    detail: 'Pre-primary',                 tone: 'purple' as any },
+        { label: 'Primary',  value: `KEMS-P (Cl 1–${config.terminalPrimary})`, detail: 'PSLE terminal year', tone: 'green'  },
+        { label: 'O-Level',  value: 'KEMS-O (Fm 1–4)',            detail: 'CSEE at Form 4',              tone: 'blue'  },
+        { label: 'A-Level',  value: 'KEMS-A (Fm 5–6)',            detail: 'ACSEE at Form 6',             tone: 'amber' },
       ]} />
 
       {/* Stage overview cards */}
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         {Object.entries(STAGE_DESCRIPTIONS).map(([key, { label, note, tone }]) => (
           <div key={key} className={`rounded-2xl border p-5 ${
             tone === 'emerald' ? 'border-emerald-200 bg-emerald-50'
           : tone === 'amber'   ? 'border-amber-200 bg-amber-50'
+          : tone === 'violet'  ? 'border-violet-200 bg-violet-50'
+          : tone === 'rose'    ? 'border-rose-200 bg-rose-50'
           :                      'border-blue-200 bg-blue-50'
           }`}>
             <p className={`text-[11px] font-black uppercase tracking-[0.24em] ${
               tone === 'emerald' ? 'text-emerald-700'
             : tone === 'amber'   ? 'text-amber-700'
+            : tone === 'violet'  ? 'text-violet-700'
+            : tone === 'rose'    ? 'text-rose-700'
             :                      'text-blue-700'
             }`}>{label}</p>
             <p className="mt-2 text-sm font-semibold text-slate-700">{note}</p>
@@ -4282,7 +4543,7 @@ const CROSS_STAGE_FLOWS = [
     from: 'Standard 7 (Primary)',
     to: 'Form 1 (O-Level)',
     type: 'CROSS_STAGE',
-    rule: 'Student must pass PSLE. New registration number issued: KS-S-YYYY-NNNNN.',
+    rule: 'Student must pass PSLE. New registration number issued: KEMS-O-YYNNN.',
     badge: 'Primary → O-Level',
     tone: 'emerald' as const,
   },
@@ -4291,7 +4552,7 @@ const CROSS_STAGE_FLOWS = [
     from: 'Form 4 (O-Level)',
     to: 'Form 5 (A-Level)',
     type: 'CROSS_STAGE',
-    rule: 'Student must select an A-Level combination. New registration number: KS-A-YYYY-NNNNN.',
+    rule: 'Student must select an A-Level combination. New registration number: KEMS-A-YYNNN.',
     badge: 'O-Level → A-Level',
     tone: 'amber' as const,
   },
@@ -4415,7 +4676,7 @@ export function CrossStagePromotionPage() {
               {[
                 flow.type === 'GRADUATION' ? 'Student status becomes GRADUATED' : 'Previous active enrolment is closed',
                 flow.type === 'GRADUATION' ? 'Graduation pathway is saved' : `New enrolment is created in ${selectedTo}`,
-                flow.id === 'std7-form1' ? 'New KS-S registration is issued' : flow.id === 'form4-form5' ? 'New KS-A registration is issued' : 'Terminal student record is preserved',
+                flow.id === 'std7-form1' ? 'New KEMS-O registration is issued' : flow.id === 'form4-form5' ? 'New KEMS-A registration is issued' : 'Terminal student record is preserved',
                 'Promotion audit event is published',
               ].map((item) => (
                 <div key={item} className="flex gap-2 rounded-xl bg-slate-50 p-3 text-sm font-semibold text-slate-700">
@@ -4930,4 +5191,3 @@ function useUser() {
     user: isLoading ? null : (apiUsers.find((u) => u.id === id) ?? null),
   }), [id, apiUsers, isLoading]);
 }
-

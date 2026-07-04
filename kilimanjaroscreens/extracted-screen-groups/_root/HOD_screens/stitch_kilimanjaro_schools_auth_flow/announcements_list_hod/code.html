@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>HOD Announcements | Kilimanjaro Teachers</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "surface-container": "#eaedff",
+                    "on-tertiary-fixed": "#07006c",
+                    "inverse-primary": "#89ceff",
+                    "on-primary-container": "#003751",
+                    "on-tertiary-container": "#1407ad",
+                    "surface-dim": "#d2d9f4",
+                    "tertiary-container": "#8d90ff",
+                    "error-container": "#ffdad6",
+                    "surface-variant": "#dae2fd",
+                    "on-secondary-fixed": "#001f26",
+                    "outline": "#6e7881",
+                    "surface-container-highest": "#dae2fd",
+                    "primary-fixed": "#c9e6ff",
+                    "tertiary": "#494bd6",
+                    "on-surface-variant": "#3e4850",
+                    "on-error-container": "#93000a",
+                    "error": "#ba1a1a",
+                    "surface-tint": "#006591",
+                    "secondary": "#00687a",
+                    "tertiary-fixed": "#e1e0ff",
+                    "on-tertiary-fixed-variant": "#2f2ebe",
+                    "surface-container-high": "#e2e7ff",
+                    "on-tertiary": "#ffffff",
+                    "on-primary-fixed": "#001e2f",
+                    "on-secondary-fixed-variant": "#004e5c",
+                    "on-secondary": "#ffffff",
+                    "secondary-fixed": "#acedff",
+                    "inverse-on-surface": "#eef0ff",
+                    "inverse-surface": "#283044",
+                    "background": "#faf8ff",
+                    "secondary-fixed-dim": "#4cd7f6",
+                    "on-primary": "#ffffff",
+                    "outline-variant": "#bec8d2",
+                    "on-error": "#ffffff",
+                    "surface": "#faf8ff",
+                    "primary-fixed-dim": "#89ceff",
+                    "tertiary-fixed-dim": "#c0c1ff",
+                    "on-background": "#131b2e",
+                    "on-surface": "#131b2e",
+                    "primary-container": "#0ea5e9",
+                    "primary": "#006591",
+                    "surface-container-lowest": "#ffffff",
+                    "on-secondary-container": "#006172",
+                    "surface-bright": "#faf8ff",
+                    "surface-container-low": "#f2f3ff",
+                    "secondary-container": "#57dffe",
+                    "on-primary-fixed-variant": "#004c6e"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "lg": "24px",
+                    "base": "4px",
+                    "container-padding": "20px",
+                    "xs": "8px",
+                    "xl": "32px",
+                    "sm": "12px",
+                    "md": "16px"
+            },
+            "fontFamily": {
+                    "label-md": ["Plus Jakarta Sans"],
+                    "display-lg": ["Space Grotesk"],
+                    "headline-lg": ["Space Grotesk"],
+                    "body-md": ["Plus Jakarta Sans"],
+                    "body-lg": ["Plus Jakarta Sans"],
+                    "headline-md": ["Space Grotesk"],
+                    "headline-sm": ["Space Grotesk"],
+                    "body-sm": ["Plus Jakarta Sans"],
+                    "label-lg": ["Plus Jakarta Sans"]
+            },
+            "fontSize": {
+                    "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.04em", "fontWeight": "600"}],
+                    "display-lg": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "headline-lg": ["30px", {"lineHeight": "36px", "fontWeight": "600"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                    "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                    "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "500"}],
+                    "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                    "label-lg": ["14px", {"lineHeight": "20px", "letterSpacing": "0.01em", "fontWeight": "600"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            display: inline-block;
+            line-height: 1;
+            text-transform: none;
+            letter-spacing: normal;
+            word-wrap: normal;
+            white-space: nowrap;
+            direction: ltr;
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+        .shadow-sky {
+            box-shadow: 0 10px 15px rgba(14, 165, 233, 0.12);
+        }
+        body {
+            -webkit-tap-highlight-color: transparent;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background font-body-md min-h-screen pb-32">
+<!-- TopAppBar -->
+<header class="bg-surface text-primary font-headline-sm flex justify-between items-center px-container-padding h-16 w-full fixed top-0 z-50 shadow-sm border-b border-outline-variant">
+<div class="flex items-center gap-3">
+<img alt="Teacher profile photo" class="w-10 h-10 rounded-full border-2 border-primary-container" data-alt="A professional headshot of a female educator with a friendly smile, set against a clean, modern educational office background. The lighting is soft and natural, emphasizing a high-contrast corporate tech aesthetic with bright, crisp whites and soft blue accents reflecting a modern school portal identity." src="https://lh3.googleusercontent.com/aida-public/AB6AXuChWAlAm0p75gRaCb1v-ves2wUTZRX2fOxv2a6Syy_Vwr1AvXDtc3bQhzjXgtF7T5z7vwngRWUr8kYYgL8DaBweC8ctDuT7rnqF8PBfBQrJLRCDZ24DBRTp82bf_RmVxu0_iwtnWos7fjH0npVWVWtXFt6q8rvT2H58DCr0loiUAS4iXOCJGK3I_DwnLh29BAyxkgo96ulBYuhMDFOMc_LOVVeHfrYYy7O-yIDyhpUrA2L5u-q5QglpGH-04E1PiiOX2A0Ne9eSwQ"/>
+<h1 class="font-headline-sm text-primary font-bold tracking-tight">Kilimanjaro Teachers</h1>
+</div>
+<button class="material-symbols-outlined p-2 rounded-full hover:bg-surface-container-high transition-colors">notifications</button>
+</header>
+<main class="pt-20 px-container-padding max-w-3xl mx-auto">
+<!-- Dashboard Header -->
+<div class="mb-lg">
+<h2 class="font-headline-md text-on-surface mb-xs">Announcements</h2>
+<p class="font-body-sm text-on-surface-variant">Stay updated with departmental and school-wide alerts.</p>
+</div>
+<!-- Priority Filters -->
+<div class="flex gap-sm overflow-x-auto pb-4 no-scrollbar -mx-container-padding px-container-padding">
+<button class="bg-primary-container text-on-primary-container px-4 py-2 rounded-full font-label-lg whitespace-nowrap shadow-sky">All Feed</button>
+<button class="bg-surface border border-outline-variant text-on-surface-variant px-4 py-2 rounded-full font-label-lg whitespace-nowrap hover:bg-surface-container-high transition-colors">Urgent</button>
+<button class="bg-surface border border-outline-variant text-on-surface-variant px-4 py-2 rounded-full font-label-lg whitespace-nowrap hover:bg-surface-container-high transition-colors">Department</button>
+<button class="bg-surface border border-outline-variant text-on-surface-variant px-4 py-2 rounded-full font-label-lg whitespace-nowrap hover:bg-surface-container-high transition-colors">School-wide</button>
+</div>
+<!-- Urgent/Pinned Section (Bento Style) -->
+<section class="mb-lg grid grid-cols-1 md:grid-cols-2 gap-md">
+<div class="bg-error-container text-on-error-container p-md rounded-xl shadow-sm border border-error/10 relative overflow-hidden">
+<div class="absolute -right-4 -top-4 opacity-10">
+<span class="material-symbols-outlined text-8xl" style="font-variation-settings: 'FILL' 1;">error</span>
+</div>
+<div class="flex items-center gap-xs mb-xs">
+<span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;">warning</span>
+<span class="font-label-md uppercase tracking-wider">Urgent Action Required</span>
+</div>
+<h3 class="font-headline-sm mb-xs">Grade 10 Mark Entry Deadline</h3>
+<p class="font-body-sm mb-md opacity-90">All term 3 marks must be finalized by 5:00 PM today for report generation.</p>
+<button class="bg-on-error-container text-white px-md py-2 rounded-lg font-label-lg w-full">Finalize Now</button>
+</div>
+<div class="glass-card p-md rounded-xl border border-primary-container/30 shadow-sky">
+<div class="flex justify-between items-start mb-xs">
+<span class="bg-secondary-container text-on-secondary-container px-2 py-1 rounded-md font-label-md">Department</span>
+<span class="font-label-md text-outline">2h ago</span>
+</div>
+<h3 class="font-headline-sm mb-xs text-primary">Science Lab Upgrade</h3>
+<p class="font-body-sm text-on-surface-variant mb-xs">New microscope kits arriving Friday. Briefing at 7:30 AM in Lab 3.</p>
+<div class="flex -space-x-2">
+<img alt="User" class="w-6 h-6 rounded-full border border-white" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCnSO4a3E5KP4faTCbTJ2jfBj5eqe9xXF7LOIg_6-2W8IqJSObznsYMvxGum3sU17xMWnfzsu0k8pwBFOr7vALmI2Nu9OBEYRfsk8BvF1XBw-pHJTXhr5zo0G5m0MR6yqvfRYL67IsFNPMva9z608YP-UZB4ymAlpB9CILtl0CgvhVAnQLmV2K_i24sF06y7PfA4FF5dkxtBSBcHz8iv7MgR9hpTRa9agoMntOytl_q7gosNItLJQMb8U9CNPo2aNnsNns92DQEog"/>
+<img alt="User" class="w-6 h-6 rounded-full border border-white" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCWN96QhAHSgvxQ0_CW-Jr7vMvFe8NjUrpvLC7FuTnC-KHmxRQpAKqmXcShQg4di9-Tk94meje8xwU7O21sPwdzlu_tRgshrteGjziLoiCLqpIukl75jTtizdK5nWjW83WZsDVniI4-j9XEfeKazw2jnxrJpRrpptgYd08otK5KlTqIIk47mbRM2QBR5NSLJO6FmOSiYW9lzMHhDeQANikxxk5Ou4-FgOvgkLUkhh6SXTkbGKpajGqmb4vjIPwqXXcTrotWZvlPSQ"/>
+<div class="w-6 h-6 rounded-full bg-surface-container-highest border border-white flex items-center justify-center text-[10px] font-bold">+4</div>
+</div>
+</div>
+</section>
+<!-- Main List Feed -->
+<section class="space-y-md">
+<div class="flex justify-between items-center px-xs">
+<h4 class="font-label-lg text-outline uppercase tracking-widest">Recent Updates</h4>
+<button class="text-primary font-label-lg flex items-center gap-1">Mark all as read <span class="material-symbols-outlined text-sm">done_all</span></button>
+</div>
+<!-- List Item 1 -->
+<div class="bg-surface p-md rounded-xl border border-outline-variant hover:shadow-md transition-shadow cursor-pointer group">
+<div class="flex gap-md">
+<div class="bg-surface-container-highest w-12 h-12 rounded-lg flex-shrink-0 flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-white transition-colors">
+<span class="material-symbols-outlined">event_available</span>
+</div>
+<div class="flex-1">
+<div class="flex justify-between items-start">
+<h4 class="font-headline-sm text-on-surface">Staff Meeting Agenda</h4>
+<span class="font-label-md text-outline">Today</span>
+</div>
+<p class="font-body-sm text-on-surface-variant line-clamp-2 mt-xs">The focus of tomorrow's meeting will be on the upcoming Kilimanjaro expedition preparation and safety protocols...</p>
+<div class="mt-md flex items-center gap-lg">
+<div class="flex items-center gap-xs text-outline font-label-md">
+<span class="material-symbols-outlined text-sm">attachment</span> 2 files
+                            </div>
+<div class="flex items-center gap-xs text-outline font-label-md">
+<span class="material-symbols-outlined text-sm">comment</span> 12 replies
+                            </div>
+</div>
+</div>
+</div>
+</div>
+<!-- List Item 2 -->
+<div class="bg-surface p-md rounded-xl border border-outline-variant hover:shadow-md transition-shadow cursor-pointer group">
+<div class="flex gap-md">
+<div class="bg-surface-container-highest w-12 h-12 rounded-lg flex-shrink-0 flex items-center justify-center text-secondary group-hover:bg-secondary group-hover:text-white transition-colors">
+<span class="material-symbols-outlined">campaign</span>
+</div>
+<div class="flex-1">
+<div class="flex justify-between items-start">
+<h4 class="font-headline-sm text-on-surface">Founders Day Prep</h4>
+<span class="font-label-md text-outline">Yesterday</span>
+</div>
+<p class="font-body-sm text-on-surface-variant line-clamp-2 mt-xs">Volunteer slots for the anniversary gala are now open. Please sign up in the staff portal under 'Events'.</p>
+<div class="mt-md flex items-center gap-lg">
+<div class="flex items-center gap-xs text-secondary font-label-md">
+<span class="material-symbols-outlined text-sm">stars</span> Featured
+                            </div>
+</div>
+</div>
+</div>
+</div>
+<!-- List Item 3 -->
+<div class="bg-surface p-md rounded-xl border border-outline-variant hover:shadow-md transition-shadow cursor-pointer group">
+<div class="flex gap-md">
+<div class="bg-surface-container-highest w-12 h-12 rounded-lg flex-shrink-0 flex items-center justify-center text-tertiary group-hover:bg-tertiary group-hover:text-white transition-colors">
+<span class="material-symbols-outlined">health_and_safety</span>
+</div>
+<div class="flex-1">
+<div class="flex justify-between items-start">
+<h4 class="font-headline-sm text-on-surface">Health Awareness Week</h4>
+<span class="font-label-md text-outline">Oct 22</span>
+</div>
+<p class="font-body-sm text-on-surface-variant line-clamp-2 mt-xs">The infirmary will be hosting basic first aid refresher courses for all faculty members starting next Monday.</p>
+</div>
+</div>
+</div>
+</section>
+<!-- Empty State Hidden -->
+<div class="hidden flex-col items-center justify-center py-xl text-center">
+<div class="w-32 h-32 bg-surface-container rounded-full flex items-center justify-center mb-md">
+<span class="material-symbols-outlined text-6xl text-outline-variant">notifications_off</span>
+</div>
+<h3 class="font-headline-sm text-on-surface">No new announcements</h3>
+<p class="font-body-sm text-on-surface-variant">Check back later or change your filters.</p>
+</div>
+</main>
+<!-- Create Announcement FAB -->
+<button class="fixed bottom-24 right-container-padding bg-primary-container text-on-primary-container h-[54px] px-6 rounded-[14px] shadow-5 flex items-center gap-2 font-label-lg active:scale-95 transition-all z-40" id="fab-create">
+<span class="material-symbols-outlined" style="font-variation-settings: 'wght' 600;">add</span>
+<span>Post Announcement</span>
+</button>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-2 py-3 bg-surface rounded-t-xl shadow-[0_-2px_10px_rgba(14,165,233,0.08)]">
+<a class="flex flex-col items-center justify-center text-on-surface-variant font-label-md" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span>Home</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant font-label-md" href="#">
+<span class="material-symbols-outlined">how_to_reg</span>
+<span>Attendance</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant font-label-md" href="#">
+<span class="material-symbols-outlined">edit_note</span>
+<span>Marks</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant font-label-md" href="#">
+<span class="material-symbols-outlined">calendar_month</span>
+<span>Schedule</span>
+</a>
+<button class="flex flex-col items-center justify-center bg-primary-container text-on-primary-container rounded-full px-4 py-1 font-label-md active:scale-90 duration-150">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">menu</span>
+<span>Menu</span>
+</button>
+</nav>
+<!-- Simple Feedback Toast (Hidden by default) -->
+<div class="fixed bottom-28 left-1/2 -translate-x-1/2 bg-inverse-surface text-inverse-on-surface px-md py-3 rounded-lg font-label-md shadow-lg opacity-0 pointer-events-none transition-all duration-300" id="toast">
+        Announcement drafted successfully
+    </div>
+<script>
+        // Simple Interaction logic
+        const fab = document.getElementById('fab-create');
+        const toast = document.getElementById('toast');
+
+        fab.addEventListener('click', () => {
+            // Visual feedback
+            toast.style.opacity = '1';
+            toast.style.bottom = '112px';
+            
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.bottom = '100px';
+            }, 3000);
+        });
+
+        // Filter button behavior
+        const filters = document.querySelectorAll('button.whitespace-nowrap');
+        filters.forEach(filter => {
+            filter.addEventListener('click', () => {
+                filters.forEach(f => {
+                    f.classList.remove('bg-primary-container', 'text-on-primary-container', 'shadow-sky');
+                    f.classList.add('bg-surface', 'border', 'border-outline-variant', 'text-on-surface-variant');
+                });
+                filter.classList.remove('bg-surface', 'border', 'border-outline-variant', 'text-on-surface-variant');
+                filter.classList.add('bg-primary-container', 'text-on-primary-container', 'shadow-sky');
+            });
+        });
+
+        // Micro-interaction for list items
+        const listItems = document.querySelectorAll('.group');
+        listItems.forEach(item => {
+            item.addEventListener('mousedown', () => {
+                item.style.transform = 'scale(0.98)';
+            });
+            item.addEventListener('mouseup', () => {
+                item.style.transform = 'scale(1)';
+            });
+            item.style.transition = 'transform 0.1s ease-out, background-color 0.2s';
+        });
+    </script>
+</body></html>

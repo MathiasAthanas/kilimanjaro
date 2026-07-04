@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { AnnouncementStatus } from '../../generated/prisma';
 import { RequestUser } from '../common/interfaces/request-user.interface';
 import { DispatchService } from '../dispatch/dispatch.service';
@@ -8,6 +8,8 @@ import { CreateAnnouncementDto, UpdateAnnouncementDto } from './dto/announcement
 
 @Injectable()
 export class AnnouncementsService {
+  private readonly logger = new Logger(AnnouncementsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
@@ -37,7 +39,9 @@ export class AnnouncementsService {
     });
 
     if (immediate) {
-      await this.dispatch.dispatchAnnouncement(row);
+      this.dispatch.dispatchAnnouncement(row).catch((e) =>
+        this.logger.warn(`Announcement dispatch failed (non-fatal): ${(e as Error).message}`),
+      );
     }
 
     await this.redis.del('notif:announcements:*');

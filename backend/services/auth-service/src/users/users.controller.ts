@@ -106,6 +106,7 @@ export class UsersController {
   }
 
   @Get()
+  @Roles(Role.SYSTEM_ADMIN, Role.PRINCIPAL, Role.ACADEMIC_QA, Role.HEAD_OF_DEPARTMENT)
   async list(@Query() query: ListUsersDto) {
     return this.usersService.listUsers(query);
   }

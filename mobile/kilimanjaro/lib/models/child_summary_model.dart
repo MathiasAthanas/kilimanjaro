@@ -40,9 +40,15 @@ class ChildSummary {
           })
         : (json['outstandingBalance'] as num?)?.toDouble() ?? 0.0;
 
+    final first = profile['firstName'] as String? ?? '';
+    final last = profile['lastName'] as String? ?? '';
+    final combinedName = '$first $last'.trim();
+
     return ChildSummary(
       id: profile['id'] as String? ?? '',
-      name: profile['name'] as String? ?? '',
+      name: combinedName.isNotEmpty
+          ? combinedName
+          : (profile['name'] as String? ?? profile['fullName'] as String? ?? ''),
       registrationNumber: profile['registrationNumber'] as String? ?? profile['regNumber'] as String? ?? '',
       classLabel: (profile['class'] as Map<String, dynamic>?)?['name'] as String? ?? profile['classLabel'] as String? ?? '',
       academicYear: (profile['academicYear'] as Map<String, dynamic>?)?['name'] as String? ?? profile['academicYear'] as String? ?? '',

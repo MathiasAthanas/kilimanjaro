@@ -20,6 +20,8 @@ export class FeeCategoriesService {
     private readonly audit: AuditService,
   ) {}
 
+  private readonly activeCacheKey = 'fee-categories:active:v2';
+
   private codeFromName(name: string): string {
     return name
       .trim()
@@ -28,19 +30,35 @@ export class FeeCategoriesService {
       .toUpperCase();
   }
 
+  private codeFromInput(value: string): string {
+    return value
+      .trim()
+      .replace(/\s+/g, '_')
+      .replace(/[^A-Za-z0-9_]/g, '')
+      .toUpperCase();
+  }
+
   async create(dto: CreateFeeCategoryDto, user: RequestUser) {
+    const code = dto.code ? this.codeFromInput(dto.code) : this.codeFromName(dto.name);
     const existing = await this.prisma.feeCategory.findFirst({
-      where: { name: { equals: dto.name, mode: 'insensitive' } },
+      where: {
+        OR: [
+          { name: { equals: dto.name, mode: 'insensitive' } },
+          { code },
+        ],
+      },
     });
     if (existing) {
-      throw new ConflictException('Fee category name already exists');
+      throw new ConflictException('Fee category name or code already exists');
     }
 
-    const code = this.codeFromName(dto.name);
     const category = await this.prisma.feeCategory.create({
       data: {
-        ...dto,
+        name: dto.name,
         code,
+        description: dto.description,
+        isOptional: dto.isOptional,
+        isBillablePerTerm: dto.isBillablePerTerm,
         displayOrder: dto.displayOrder ?? 0,
         createdById: user.id,
       },
@@ -54,14 +72,14 @@ export class FeeCategoriesService {
       performedByRole: user.role,
       newValue: category,
     });
-    await this.redis.del('fee-categories:active');
+    await this.redis.del('fee-categories:active', this.activeCacheKey);
     return category;
   }
 
   async list(filters: { isActive?: string; isOptional?: string; isBillablePerTerm?: string }) {
     const useCache = !filters.isActive && !filters.isOptional && !filters.isBillablePerTerm;
     if (useCache) {
-      const cached = await this.redis.get('fee-categories:active');
+      const cached = await this.redis.get(this.activeCacheKey);
       if (cached) return cached;
     }
 
@@ -73,10 +91,19 @@ export class FeeCategoriesService {
           filters.isBillablePerTerm === undefined ? undefined : filters.isBillablePerTerm === 'true',
       },
       orderBy: [{ displayOrder: 'asc' }, { name: 'asc' }],
+      include: {
+        _count: {
+          select: {
+            feeStructures: true,
+            assignments: true,
+            lineItems: true,
+          },
+        },
+      },
     });
 
     if (useCache) {
-      await this.redis.set('fee-categories:active', rows, 1800);
+      await this.redis.set(this.activeCacheKey, rows, 1800);
     }
 
     return rows;
@@ -90,6 +117,11 @@ export class FeeCategoriesService {
 
   async update(id: string, dto: UpdateFeeCategoryDto, user: RequestUser) {
     const existing = await this.byId(id);
+    const code = dto.code ? this.codeFromInput(dto.code) : undefined;
+    if (code && code !== existing.code) {
+      const duplicate = await this.prisma.feeCategory.findUnique({ where: { code } });
+      if (duplicate) throw new ConflictException('Fee category code already exists');
+    }
 
     if (dto.isActive === false) {
       const activeUsage = await this.prisma.invoiceLineItem.findFirst({
@@ -107,6 +139,7 @@ export class FeeCategoriesService {
       where: { id },
       data: {
         name: dto.name,
+        code,
         description: dto.description,
         isOptional: dto.isOptional,
         isBillablePerTerm: dto.isBillablePerTerm,
@@ -129,7 +162,7 @@ export class FeeCategoriesService {
       newValue: updated,
     });
 
-    await this.redis.del('fee-categories:active', 'fee-matrix:*');
+    await this.redis.del('fee-categories:active', this.activeCacheKey, 'fee-matrix:*');
     return updated;
   }
 
@@ -145,7 +178,7 @@ export class FeeCategoriesService {
     }
 
     await this.prisma.feeCategory.delete({ where: { id } });
-    await this.redis.del('fee-categories:active');
+    await this.redis.del('fee-categories:active', this.activeCacheKey);
     return { deleted: true };
   }
 
@@ -156,7 +189,7 @@ export class FeeCategoriesService {
       ),
     );
 
-    await this.redis.del('fee-categories:active');
+    await this.redis.del('fee-categories:active', this.activeCacheKey);
     return { reordered: dto.orderedIds.length };
   }
 }

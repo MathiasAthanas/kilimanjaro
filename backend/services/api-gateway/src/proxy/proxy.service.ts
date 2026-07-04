@@ -5,6 +5,13 @@ import { firstValueFrom } from 'rxjs';
 import { Request } from 'express';
 import { getServiceUrls } from '../common/config/service-urls.config';
 
+export interface ProxiedResponse {
+  statusCode: number;
+  data: unknown;
+  headers?: Record<string, string | string[] | undefined>;
+  isBinary?: boolean;
+}
+
 export interface ResolvedRoute {
   serviceName: 'auth' | 'student' | 'academic' | 'finance' | 'notification' | 'analytics' | 'elearning';
   serviceUrl: string;
@@ -58,7 +65,7 @@ export class ProxyService {
     req: Request,
     route: ResolvedRoute,
     auth?: { id: string; role: string; email?: string | null },
-  ): Promise<{ statusCode: number; data: unknown }> {
+  ): Promise<ProxiedResponse> {
     const internalApiKey = this.configService.get<string>('INTERNAL_API_KEY') || '';
     const timeoutMs = Number(this.configService.get<string>('PROXY_TIMEOUT_MS', '30000'));
 
@@ -91,6 +98,7 @@ export class ProxyService {
     }
 
     const targetUrl = `${route.serviceUrl}${route.outboundPath}`;
+    const wantsBinary = this.isBinaryRoute(route.outboundPath);
 
     try {
       const response = await firstValueFrom(
@@ -101,11 +109,17 @@ export class ProxyService {
           data: ['GET', 'HEAD'].includes(req.method.toUpperCase()) ? undefined : req.body,
           headers,
           timeout: timeoutMs,
+          responseType: wantsBinary ? 'arraybuffer' : 'json',
           validateStatus: () => true,
         }),
       );
 
-      return { statusCode: response.status, data: response.data };
+      return {
+        statusCode: response.status,
+        data: response.data,
+        headers: response.headers as Record<string, string | string[] | undefined>,
+        isBinary: wantsBinary && response.status >= 200 && response.status < 300,
+      };
     } catch {
       throw new ServiceUnavailableException('Service temporarily unavailable');
     }
@@ -115,6 +129,10 @@ export class ProxyService {
     const raw = path || '/';
     const noPrefix = raw.startsWith('/api/v1') ? raw.substring('/api/v1'.length) || '/' : raw;
     return noPrefix.startsWith('/') ? noPrefix : `/${noPrefix}`;
+  }
+
+  private isBinaryRoute(path: string): boolean {
+    return /\/download(?:\/)?$/.test(path);
   }
 
   private route(

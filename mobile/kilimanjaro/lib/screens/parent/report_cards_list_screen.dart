@@ -100,7 +100,7 @@ class ParentReportCardsListScreen extends ConsumerWidget {
                                     ),
                                     const SizedBox(height: 3),
                                     Text(
-                                      'Published ${formatParentShortDate(DateTime(2026, 3, 21))}',
+                                      'Published ${formatParentShortDate(card.generatedAt ?? DateTime.now())}',
                                       style: Theme.of(
                                         context,
                                       ).textTheme.bodySmall,

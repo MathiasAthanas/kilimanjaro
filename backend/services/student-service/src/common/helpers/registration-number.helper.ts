@@ -1,42 +1,59 @@
 /**
- * Gap 9 — Stage-prefixed registration numbers
+ * Registration number format:  KEMS-{STAGE}-{YY}{NNN}
  *
- * Format:  KS-{PREFIX}-{YEAR}-{NNNNN}
- *   Primary   →  KS-P-2026-00001
- *   O-Level   →  KS-S-2026-00001   (Secondary)
- *   A-Level   →  KS-A-2026-00001
+ *   Nursery   →  KEMS-N-26001
+ *   Pre-Unit  →  KEMS-PU-26001
+ *   Primary   →  KEMS-P-26001
+ *   O-Level   →  KEMS-O-26001
+ *   A-Level   →  KEMS-A-26001
  *
- * The legacy format (KS-{YEAR}-{NNNNN}) is kept for backward
- * compatibility via `formatRegistrationNumber`.
+ * Where YY = last 2 digits of academic year, NNN = 3-digit zero-padded sequence.
+ * Legacy format (KS-…) is still parseable by stageFromRegistrationNumber.
  */
 
-export type EducationStageCode = 'PRIMARY' | 'O_LEVEL' | 'A_LEVEL';
+export type EducationStageCode = 'NURSERY' | 'PRE_UNIT' | 'PRIMARY' | 'O_LEVEL' | 'A_LEVEL';
+
+const SCHOOL_PREFIX = 'KEMS';
 
 const STAGE_PREFIX: Record<EducationStageCode, string> = {
-  PRIMARY: 'P',
-  O_LEVEL: 'S',
-  A_LEVEL: 'A',
+  NURSERY:  'N',
+  PRE_UNIT: 'PU',
+  PRIMARY:  'P',
+  O_LEVEL:  'O',
+  A_LEVEL:  'A',
 };
 
-/** New stage-aware format.  KS-P-2026-00001 */
+/** Generate a registration number.  KEMS-P-26001 */
 export function formatRegistrationNumberWithStage(
   year: number,
   sequence: number,
   stage: EducationStageCode,
 ): string {
-  const prefix = STAGE_PREFIX[stage] ?? 'S';
-  return `KS-${prefix}-${year}-${String(sequence).padStart(5, '0')}`;
+  const stageCode = STAGE_PREFIX[stage] ?? 'O';
+  const yy = String(year).slice(-2);
+  const seq = String(sequence).padStart(3, '0');
+  return `${SCHOOL_PREFIX}-${stageCode}-${yy}${seq}`;
 }
 
-/** Legacy format kept for backward compatibility.  KS-2026-00001 */
+/** Legacy shim — produces KEMS-{YY}{NNN} when stage is unknown. */
 export function formatRegistrationNumber(year: number, sequence: number): string {
-  return `KS-${year}-${String(sequence).padStart(5, '0')}`;
+  const yy = String(year).slice(-2);
+  const seq = String(sequence).padStart(3, '0');
+  return `${SCHOOL_PREFIX}-${yy}${seq}`;
 }
 
-/** Derive stage from a registration number string. */
+/** Derive stage from a registration number string (handles both old KS- and new KEMS- formats). */
 export function stageFromRegistrationNumber(regNo: string): EducationStageCode | null {
-  if (/^KS-P-/.test(regNo)) return 'PRIMARY';
-  if (/^KS-A-/.test(regNo)) return 'A_LEVEL';
-  if (/^KS-S-/.test(regNo)) return 'O_LEVEL';
-  return null; // legacy format — treat as O_LEVEL
+  if (/^KEMS-N-/.test(regNo))  return 'NURSERY';
+  if (/^KEMS-PU-/.test(regNo)) return 'PRE_UNIT';
+  if (/^KEMS-P-/.test(regNo))  return 'PRIMARY';
+  if (/^KEMS-O-/.test(regNo))  return 'O_LEVEL';
+  if (/^KEMS-A-/.test(regNo))  return 'A_LEVEL';
+  // legacy KS- formats
+  if (/^KS-N-/.test(regNo))    return 'NURSERY';
+  if (/^KS-U-/.test(regNo))    return 'PRE_UNIT';
+  if (/^KS-P-/.test(regNo))    return 'PRIMARY';
+  if (/^KS-A-/.test(regNo))    return 'A_LEVEL';
+  if (/^KS-S-/.test(regNo))    return 'O_LEVEL';
+  return null;
 }

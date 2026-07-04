@@ -38,6 +38,12 @@ export class FeeCategoriesController {
     return this.feeCategoriesService.list({ isActive, isOptional, isBillablePerTerm });
   }
 
+  @Patch('reorder')
+  @Roles(ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN)
+  reorder(@Body() dto: ReorderCategoriesDto) {
+    return this.feeCategoriesService.reorder(dto);
+  }
+
   @Get(':id')
   @Roles(
     ROLES.FINANCE,
@@ -62,11 +68,5 @@ export class FeeCategoriesController {
   @Roles(ROLES.SYSTEM_ADMIN)
   remove(@Param('id') id: string) {
     return this.feeCategoriesService.delete(id);
-  }
-
-  @Patch('reorder')
-  @Roles(ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN)
-  reorder(@Body() dto: ReorderCategoriesDto) {
-    return this.feeCategoriesService.reorder(dto);
   }
 }

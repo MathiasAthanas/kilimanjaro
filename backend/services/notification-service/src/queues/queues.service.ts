@@ -1,10 +1,11 @@
-import { Injectable, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Queue } from 'bullmq';
 import { QUEUE_NAMES } from './queue.constants';
 
 @Injectable()
 export class QueuesService implements OnModuleDestroy {
+  private readonly logger = new Logger(QueuesService.name);
   readonly sms: Queue;
   readonly email: Queue;
   readonly push: Queue;
@@ -24,19 +25,35 @@ export class QueuesService implements OnModuleDestroy {
   }
 
   async addSms(data: any) {
-    await this.sms.add('send-sms', data, { attempts: 3, backoff: { type: 'exponential', delay: 1000 } });
+    try {
+      await this.sms.add('send-sms', data, { attempts: 3, backoff: { type: 'exponential', delay: 1000 } });
+    } catch (e) {
+      this.logger.warn(`SMS queue unavailable: ${(e as Error).message}`);
+    }
   }
 
   async addEmail(data: any) {
-    await this.email.add('send-email', data, { attempts: 3, backoff: { type: 'exponential', delay: 1000 } });
+    try {
+      await this.email.add('send-email', data, { attempts: 3, backoff: { type: 'exponential', delay: 1000 } });
+    } catch (e) {
+      this.logger.warn(`Email queue unavailable: ${(e as Error).message}`);
+    }
   }
 
   async addPush(data: any) {
-    await this.push.add('send-push', data, { attempts: 3, backoff: { type: 'exponential', delay: 1000 } });
+    try {
+      await this.push.add('send-push', data, { attempts: 3, backoff: { type: 'exponential', delay: 1000 } });
+    } catch (e) {
+      this.logger.warn(`Push queue unavailable: ${(e as Error).message}`);
+    }
   }
 
   async addInApp(data: any) {
-    await this.inApp.add('send-inapp', data, { attempts: 1 });
+    try {
+      await this.inApp.add('send-inapp', data, { attempts: 1 });
+    } catch (e) {
+      this.logger.warn(`In-app queue unavailable: ${(e as Error).message}`);
+    }
   }
 
   async stats() {

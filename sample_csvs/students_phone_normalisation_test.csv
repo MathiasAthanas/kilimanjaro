@@ -1,0 +1,6 @@
+# Tests that different phone formats for the same number all map to one parent auth account.
+# All 3 students below have the same parent (0733300001 = 255733300001 = +255733300001).
+first_name,last_name,date_of_birth,gender,class_name,guardian_first_name,guardian_last_name,guardian_phone,guardian_relationship
+Pendo,Mollel,2010-08-01,FEMALE,Form 3,Amos,Mollel,0733300001,FATHER
+Benson,Mollel,2012-03-11,MALE,Form 2,Amos,Mollel,255733300001,FATHER
+Irene,Mollel,2014-11-30,FEMALE,Form 1,Amos,Mollel,+255733300001,FATHER

@@ -12,6 +12,9 @@ export class CreateAssetDto {
   @IsOptional() @IsIn(ASSET_CONDITIONS) condition?: (typeof ASSET_CONDITIONS)[number];
   @IsOptional() @IsIn(ASSET_STATUSES) status?: (typeof ASSET_STATUSES)[number];
   @IsOptional() @IsString() description?: string;
+  @IsOptional() isGroup?: boolean;
+  @IsOptional() @IsString() groupType?: string;
+  @IsOptional() @IsString() parentAssetId?: string;
   @IsOptional() @IsString() location?: string;
   @IsOptional() @IsString() brand?: string;
   @IsOptional() @IsString() model?: string;
@@ -20,6 +23,8 @@ export class CreateAssetDto {
   @IsOptional() @IsString() purchaseDate?: string;
   @IsOptional() @IsString() warrantyExpiry?: string;
   @IsOptional() @IsString() currency?: string;
+  @IsOptional() @IsString() quantity?: string;
+  @IsOptional() @IsString() unitCost?: string;
   @IsOptional() @IsString() purchaseCost?: string;
   @IsOptional() @IsString() currentValue?: string;
 }

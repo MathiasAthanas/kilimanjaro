@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Marks Entry Sheet | Kilimanjaro Teachers</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind Configuration -->
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "surface-variant": "#dae2fd",
+                    "tertiary": "#494bd6",
+                    "background": "#faf8ff",
+                    "on-background": "#131b2e",
+                    "primary-fixed": "#c9e6ff",
+                    "surface-container-highest": "#dae2fd",
+                    "surface-container-low": "#f2f3ff",
+                    "on-secondary-fixed": "#001f26",
+                    "on-primary-fixed": "#001e2f",
+                    "on-tertiary-fixed": "#07006c",
+                    "on-secondary": "#ffffff",
+                    "on-error": "#ffffff",
+                    "error": "#ba1a1a",
+                    "on-error-container": "#93000a",
+                    "surface-container-lowest": "#ffffff",
+                    "on-tertiary": "#ffffff",
+                    "on-primary-fixed-variant": "#004c6e",
+                    "inverse-on-surface": "#eef0ff",
+                    "tertiary-fixed-dim": "#c0c1ff",
+                    "on-tertiary-fixed-variant": "#2f2ebe",
+                    "surface-bright": "#faf8ff",
+                    "outline-variant": "#bec8d2",
+                    "error-container": "#ffdad6",
+                    "surface-container": "#eaedff",
+                    "secondary-fixed-dim": "#4cd7f6",
+                    "secondary": "#00687a",
+                    "primary-container": "#0ea5e9",
+                    "on-tertiary-container": "#1407ad",
+                    "on-primary": "#ffffff",
+                    "tertiary-fixed": "#e1e0ff",
+                    "surface-dim": "#d2d9f4",
+                    "surface": "#faf8ff",
+                    "on-surface": "#131b2e",
+                    "surface-container-high": "#e2e7ff",
+                    "surface-tint": "#006591",
+                    "inverse-primary": "#89ceff",
+                    "on-primary-container": "#003751",
+                    "tertiary-container": "#8d90ff",
+                    "on-surface-variant": "#3e4850",
+                    "primary-fixed-dim": "#89ceff",
+                    "on-secondary-fixed-variant": "#004e5c",
+                    "secondary-fixed": "#acedff",
+                    "on-secondary-container": "#006172",
+                    "secondary-container": "#57dffe",
+                    "outline": "#6e7881",
+                    "inverse-surface": "#283044",
+                    "primary": "#006591"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "xl": "32px",
+                    "base": "4px",
+                    "lg": "24px",
+                    "md": "16px",
+                    "sm": "12px",
+                    "xs": "8px",
+                    "container-padding": "20px"
+            },
+            "fontFamily": {
+                    "headline-md": ["Space Grotesk"],
+                    "body-md": ["Plus Jakarta Sans"],
+                    "body-sm": ["Plus Jakarta Sans"],
+                    "headline-sm": ["Space Grotesk"],
+                    "headline-lg": ["Space Grotesk"],
+                    "label-md": ["Plus Jakarta Sans"],
+                    "label-lg": ["Plus Jakarta Sans"],
+                    "body-lg": ["Plus Jakarta Sans"],
+                    "display-lg": ["Space Grotesk"]
+            },
+            "fontSize": {
+                    "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                    "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "500"}],
+                    "headline-lg": ["30px", {"lineHeight": "36px", "fontWeight": "600"}],
+                    "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.04em", "fontWeight": "600"}],
+                    "label-lg": ["14px", {"lineHeight": "20px", "letterSpacing": "0.01em", "fontWeight": "600"}],
+                    "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                    "display-lg": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .numpad-slide-up {
+            transform: translateY(100%);
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .numpad-slide-up.active {
+            transform: translateY(0);
+        }
+        .score-input:focus {
+            outline: none;
+            border-color: #0ea5e9;
+            box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.2);
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #bec8d2;
+            border-radius: 10px;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background font-body-md min-h-screen overflow-x-hidden pb-80">
+<!-- TopAppBar Sticky Header -->
+<header class="fixed top-0 z-50 w-full bg-surface shadow-sm border-b border-outline-variant h-24 flex flex-col justify-center px-container-padding">
+<div class="flex justify-between items-center mb-2">
+<div class="flex items-center gap-3">
+<button class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-variant transition-colors">
+<span class="material-symbols-outlined text-primary">arrow_back</span>
+</button>
+<h1 class="font-headline-sm text-headline-sm-mobile md:text-headline-sm text-primary font-bold tracking-tight">Math F2A — CAT 2</h1>
+</div>
+<button class="bg-outline-variant text-white px-6 py-2 rounded-xl font-label-lg opacity-50 cursor-not-allowed transition-all" disabled="" id="submitBtn">
+                Submit
+            </button>
+</div>
+<!-- Progress Bar -->
+<div class="w-full bg-surface-container-high h-1.5 rounded-full overflow-hidden">
+<div class="bg-primary-container h-full transition-all duration-500" id="progressBar" style="width: 0%"></div>
+</div>
+<div class="flex justify-between items-center mt-1">
+<span class="text-label-md text-on-surface-variant" id="progressText">0 / 38 marked</span>
+<span class="text-label-md text-primary font-bold">Max Score: 50</span>
+</div>
+</header>
+<!-- Subheader: Stats -->
+<section class="mt-28 px-container-padding mb-6">
+<div class="grid grid-cols-3 gap-3 bg-surface-container-low p-4 rounded-xl border border-outline-variant/30">
+<div class="flex flex-col">
+<span class="text-label-md text-on-surface-variant">Class avg:</span>
+<span class="font-headline-sm text-primary" id="statAvg">—</span>
+</div>
+<div class="flex flex-col border-x border-outline-variant/30 px-3">
+<span class="text-label-md text-on-surface-variant">Highest:</span>
+<span class="font-headline-sm text-secondary" id="statHigh">—</span>
+</div>
+<div class="flex flex-col items-end">
+<span class="text-label-md text-on-surface-variant">Lowest:</span>
+<span class="font-headline-sm text-tertiary" id="statLow">—</span>
+</div>
+</div>
+</section>
+<!-- Student Entry List -->
+<main class="px-container-padding flex flex-col gap-2">
+<!-- Student Rows Generated by Script -->
+<div class="flex flex-col gap-2" id="studentContainer">
+<!-- Row Placeholder -->
+</div>
+</main>
+<!-- KSNumpad Overlay -->
+<div class="numpad-slide-up fixed bottom-0 left-0 w-full bg-surface-container-highest border-t border-outline-variant rounded-t-[24px] shadow-[0_-10px_40px_rgba(0,0,0,0.1)] z-[60] pb-6 px-4 pt-4" id="numpad">
+<div class="w-12 h-1.5 bg-outline-variant/40 rounded-full mx-auto mb-6"></div>
+<div class="flex justify-between items-center mb-4 px-2">
+<div class="flex flex-col">
+<span class="font-label-lg text-on-surface" id="activeStudentName">Select a student</span>
+<span class="text-label-md text-on-surface-variant" id="activeStudentReg">---</span>
+</div>
+<div class="text-headline-md text-primary font-bold bg-white px-4 py-1 rounded-lg border border-primary/20 min-w-[60px] text-center" id="numpadDisplay">
+                -
+            </div>
+</div>
+<div class="grid grid-cols-4 gap-2">
+<!-- Numbers -->
+<button class="h-16 bg-white rounded-xl font-headline-md shadow-sm active:scale-95 transition-all" onclick="appendNum('7')">7</button>
+<button class="h-16 bg-white rounded-xl font-headline-md shadow-sm active:scale-95 transition-all" onclick="appendNum('8')">8</button>
+<button class="h-16 bg-white rounded-xl font-headline-md shadow-sm active:scale-95 transition-all" onclick="appendNum('9')">9</button>
+<button class="h-16 bg-amber-100 text-amber-800 rounded-xl font-label-lg border border-amber-200 active:scale-95 transition-all" onclick="handleSpecial('ABSENT')">ABS</button>
+<button class="h-16 bg-white rounded-xl font-headline-md shadow-sm active:scale-95 transition-all" onclick="appendNum('4')">4</button>
+<button class="h-16 bg-white rounded-xl font-headline-md shadow-sm active:scale-95 transition-all" onclick="appendNum('5')">5</button>
+<button class="h-16 bg-white rounded-xl font-headline-md shadow-sm active:scale-95 transition-all" onclick="appendNum('6')">6</button>
+<button class="h-16 bg-error-container text-on-error-container rounded-xl flex items-center justify-center border border-error/10 active:scale-95 transition-all" onclick="handleSpecial('DELETE')">
+<span class="material-symbols-outlined">backspace</span>
+</button>
+<button class="h-16 bg-white rounded-xl font-headline-md shadow-sm active:scale-95 transition-all" onclick="appendNum('1')">1</button>
+<button class="h-16 bg-white rounded-xl font-headline-md shadow-sm active:scale-95 transition-all" onclick="appendNum('2')">2</button>
+<button class="h-16 bg-white rounded-xl font-headline-md shadow-sm active:scale-95 transition-all" onclick="appendNum('3')">3</button>
+<button class="row-span-2 h-full bg-primary-container text-on-primary-container rounded-xl flex flex-col items-center justify-center gap-1 active:scale-95 transition-all font-bold" onclick="confirmScore()" rowspan="2">
+<span class="material-symbols-outlined">check_circle</span>
+<span class="text-label-md">NEXT</span>
+</button>
+<button class="col-span-2 h-16 bg-white rounded-xl font-headline-md shadow-sm active:scale-95 transition-all" onclick="appendNum('0')">0</button>
+<button class="h-16 bg-white rounded-xl font-headline-md shadow-sm active:scale-95 transition-all" onclick="appendNum('.')">.</button>
+</div>
+</div>
+<!-- Hidden Navigation Shell Logic -->
+<div class="fixed bottom-0 left-0 w-full bg-surface py-3 px-4 border-t border-outline-variant flex justify-around items-center md:hidden z-40 bg-opacity-80 backdrop-blur-md">
+<div class="flex flex-col items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="text-label-md">Home</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined">how_to_reg</span>
+<span class="text-label-md">Attendance</span>
+</div>
+<div class="flex flex-col items-center justify-center bg-primary-container text-on-primary-container rounded-full px-4 py-1 scale-90">
+<span class="material-symbols-outlined">edit_note</span>
+<span class="text-label-md">Marks</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined">calendar_month</span>
+<span class="text-label-md">Schedule</span>
+</div>
+</div>
+<script>
+        const students = [
+            { id: 1, name: "Amani Mwangi", reg: "KJS-102-01", score: null },
+            { id: 2, name: "Baraka Juma", reg: "KJS-102-02", score: null },
+            { id: 3, name: "Chausiku Simba", reg: "KJS-102-03", score: null },
+            { id: 4, name: "Doto Bakari", reg: "KJS-102-04", score: null },
+            { id: 5, name: "Emanuel Lema", reg: "KJS-102-05", score: null },
+            { id: 6, name: "Faraja Mrope", reg: "KJS-102-06", score: null },
+            { id: 7, name: "Getrude Shayo", reg: "KJS-102-07", score: null },
+            { id: 8, name: "Hassan Ali", reg: "KJS-102-08", score: null },
+            { id: 9, name: "Imani Petro", reg: "KJS-102-09", score: null },
+            { id: 10, name: "Jabari Omar", reg: "KJS-102-10", score: null },
+            { id: 11, name: "Khadija Ramadhan", reg: "KJS-102-11", score: null },
+            { id: 12, name: "Lulu Massawe", reg: "KJS-102-12", score: null },
+            { id: 13, name: "Musa Kilwa", reg: "KJS-102-13", score: null },
+            { id: 14, name: "Neema Swai", reg: "KJS-102-14", score: null },
+            { id: 15, name: "Othman Jengo", reg: "KJS-102-15", score: null },
+            { id: 16, name: "Pili Zungu", reg: "KJS-102-16", score: null },
+            { id: 17, name: "Rashid Kombo", reg: "KJS-102-17", score: null },
+            { id: 18, name: "Salome Shirima", reg: "KJS-102-18", score: null },
+            { id: 19, name: "Tumaini Mollel", reg: "KJS-102-19", score: null },
+            { id: 20, name: "Umi Hassan", reg: "KJS-102-20", score: null }
+        ];
+
+        let activeStudentId = null;
+        let currentInput = "";
+
+        const container = document.getElementById('studentContainer');
+        const numpad = document.getElementById('numpad');
+        const numpadDisplay = document.getElementById('numpadDisplay');
+
+        function renderList() {
+            container.innerHTML = students.map(s => `
+                <div id="row-${s.id}" onclick="selectStudent(${s.id})" 
+                     class="flex justify-between items-center bg-white p-4 rounded-xl border ${activeStudentId === s.id ? 'border-primary-container bg-surface-container-low' : 'border-outline-variant/20'} transition-all duration-200 shadow-sm min-h-[64px]">
+                    <div class="flex flex-col">
+                        <span class="font-label-lg ${activeStudentId === s.id ? 'text-primary' : 'text-on-surface'}">${s.name}</span>
+                        <span class="text-label-md text-on-surface-variant">${s.reg}</span>
+                    </div>
+                    <div class="w-16 h-10 rounded-lg flex items-center justify-center font-headline-sm border-2 ${s.score === null ? 'border-dashed border-outline-variant text-outline-variant' : 'border-primary-container text-primary bg-primary-container/10'}">
+                        ${s.score === null ? '—' : (s.score === 'ABS' ? '<span class="text-amber-600 text-label-md">ABS</span>' : s.score)}
+                    </div>
+                </div>
+            `).join('');
+            updateHeader();
+        }
+
+        function selectStudent(id) {
+            activeStudentId = id;
+            const student = students.find(s => s.id === id);
+            document.getElementById('activeStudentName').innerText = student.name;
+            document.getElementById('activeStudentReg').innerText = student.reg;
+            currentInput = "";
+            numpadDisplay.innerText = "-";
+            numpad.classList.add('active');
+            renderList();
+            
+            // Scroll into view
+            document.getElementById(`row-${id}`).scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+
+        function appendNum(n) {
+            if (!activeStudentId) return;
+            if (currentInput.length >= 3) return;
+            if (n === '.' && currentInput.includes('.')) return;
+            currentInput += n;
+            numpadDisplay.innerText = currentInput;
+        }
+
+        function handleSpecial(type) {
+            if (!activeStudentId) return;
+            if (type === 'DELETE') {
+                currentInput = currentInput.slice(0, -1);
+                numpadDisplay.innerText = currentInput || "-";
+            } else if (type === 'ABSENT') {
+                currentInput = "ABS";
+                numpadDisplay.innerText = "ABS";
+            }
+        }
+
+        function confirmScore() {
+            if (!activeStudentId) return;
+            const student = students.find(s => s.id === activeStudentId);
+            
+            if (currentInput === "ABS") {
+                student.score = "ABS";
+            } else if (currentInput !== "") {
+                const val = parseFloat(currentInput);
+                if (val > 50) {
+                    alert("Max score is 50");
+                    return;
+                }
+                student.score = val;
+            }
+
+            // Move to next student
+            const currentIndex = students.findIndex(s => s.id === activeStudentId);
+            if (currentIndex < students.length - 1) {
+                selectStudent(students[currentIndex + 1].id);
+            } else {
+                numpad.classList.remove('active');
+                activeStudentId = null;
+                renderList();
+            }
+        }
+
+        function updateHeader() {
+            const markedCount = students.filter(s => s.score !== null).length;
+            const total = students.length;
+            const percent = (markedCount / total) * 100;
+
+            document.getElementById('progressBar').style.width = `${percent}%`;
+            document.getElementById('progressText').innerText = `${markedCount} / ${total} marked`;
+
+            const submitBtn = document.getElementById('submitBtn');
+            if (markedCount === total) {
+                submitBtn.disabled = false;
+                submitBtn.classList.remove('bg-outline-variant', 'opacity-50', 'cursor-not-allowed');
+                submitBtn.classList.add('bg-primary-container', 'hover:bg-primary', 'shadow-md');
+            }
+
+            // Stats
+            const validScores = students.filter(s => typeof s.score === 'number').map(s => s.score);
+            if (validScores.length > 0) {
+                const avg = (validScores.reduce((a, b) => a + b, 0) / validScores.length).toFixed(1);
+                const high = Math.max(...validScores);
+                const low = Math.min(...validScores);
+                document.getElementById('statAvg').innerText = avg;
+                document.getElementById('statHigh').innerText = high;
+                document.getElementById('statLow').innerText = low;
+            }
+        }
+
+        // Initialize
+        renderList();
+    </script>
+</body></html>

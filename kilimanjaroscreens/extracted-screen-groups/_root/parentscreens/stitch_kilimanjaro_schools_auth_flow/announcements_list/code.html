@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Announcements | Kilimanjaro Schools</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .urgent-pulse {
+            animation: pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes pulse-ring {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: .5; transform: scale(1.05); }
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-variant": "#dae2fd",
+                        "surface-tint": "#006591",
+                        "on-tertiary-container": "#1407ad",
+                        "on-primary-fixed": "#001e2f",
+                        "on-error": "#ffffff",
+                        "error": "#ba1a1a",
+                        "tertiary-container": "#8d90ff",
+                        "tertiary": "#494bd6",
+                        "surface-container": "#eaedff",
+                        "tertiary-fixed": "#e1e0ff",
+                        "surface-container-lowest": "#ffffff",
+                        "surface-bright": "#faf8ff",
+                        "on-tertiary-fixed-variant": "#2f2ebe",
+                        "on-secondary-fixed": "#001f26",
+                        "secondary-fixed": "#acedff",
+                        "on-error-container": "#93000a",
+                        "on-background": "#131b2e",
+                        "secondary": "#00687a",
+                        "on-secondary-container": "#006172",
+                        "on-tertiary": "#ffffff",
+                        "inverse-primary": "#89ceff",
+                        "surface-container-low": "#f2f3ff",
+                        "on-secondary-fixed-variant": "#004e5c",
+                        "surface-container-high": "#e2e7ff",
+                        "error-container": "#ffdad6",
+                        "on-surface": "#131b2e",
+                        "surface-dim": "#d2d9f4",
+                        "on-tertiary-fixed": "#07006c",
+                        "secondary-container": "#57dffe",
+                        "primary-fixed": "#c9e6ff",
+                        "tertiary-fixed-dim": "#c0c1ff",
+                        "on-surface-variant": "#3e4850",
+                        "surface-container-highest": "#dae2fd",
+                        "on-primary-container": "#003751",
+                        "primary-fixed-dim": "#89ceff",
+                        "on-secondary": "#ffffff",
+                        "secondary-fixed-dim": "#4cd7f6",
+                        "outline-variant": "#bec8d2",
+                        "outline": "#6e7881",
+                        "inverse-on-surface": "#eef0ff",
+                        "surface": "#faf8ff",
+                        "primary-container": "#0ea5e9",
+                        "on-primary": "#ffffff",
+                        "background": "#faf8ff",
+                        "inverse-surface": "#283044",
+                        "primary": "#006591",
+                        "on-primary-fixed-variant": "#004c6e"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "md": "16px",
+                        "lg": "24px",
+                        "xs": "8px",
+                        "sm": "12px",
+                        "xl": "32px",
+                        "container-padding": "20px",
+                        "base": "4px"
+                    },
+                    "fontFamily": {
+                        "body-sm": ["Plus Jakarta Sans"],
+                        "headline-lg": ["Space Grotesk"],
+                        "body-lg": ["Plus Jakarta Sans"],
+                        "label-lg": ["Plus Jakarta Sans"],
+                        "headline-sm": ["Space Grotesk"],
+                        "headline-md": ["Space Grotesk"],
+                        "body-md": ["Plus Jakarta Sans"],
+                        "display-lg": ["Space Grotesk"],
+                        "label-md": ["Plus Jakarta Sans"]
+                    },
+                    "fontSize": {
+                        "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                        "headline-lg": ["30px", {"lineHeight": "36px", "fontWeight": "600"}],
+                        "headline-lg-mobile": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                        "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                        "label-lg": ["14px", {"lineHeight": "20px", "letterSpacing": "0.01em", "fontWeight": "600"}],
+                        "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "500"}],
+                        "headline-sm-mobile": ["18px", {"lineHeight": "24px", "fontWeight": "500"}],
+                        "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                        "headline-md-mobile": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                        "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                        "display-lg": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.04em", "fontWeight": "600"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-surface font-body-md min-h-screen pb-32">
+<!-- Top App Bar -->
+<header class="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-container-padding h-14 bg-surface shadow-sm">
+<div class="flex items-center gap-xs">
+<button class="hover:opacity-80 transition-opacity p-2 active:scale-95 duration-150">
+<span class="material-symbols-outlined text-primary">arrow_back</span>
+</button>
+<h1 class="font-headline-md-mobile text-headline-md-mobile font-bold text-primary">Announcements</h1>
+</div>
+<div class="flex items-center gap-sm">
+<div class="w-8 h-8 rounded-full bg-primary-container flex items-center justify-center overflow-hidden">
+<img alt="Parent Profile" class="w-full h-full object-cover" data-alt="A professional close-up portrait of a Tanzanian parent with a friendly and warm expression, wearing modern business-casual attire. The background is a soft-focus office interior with bright, natural lighting that reflects a high-end corporate modern aesthetic. The color palette uses crisp whites and professional blues, ensuring high contrast and clarity in a light-mode UI setting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBRP01gyAHGLs251E7doHmMBuuaUHUIFgZd8FUrI4oSI9AfNFtlqL96wVrEt8yqJzwi63WRFjK6TscGWwGzAY4ETO-UwDSrSQwI9dyYDllIeo0Zs0fD5merbgWTVQvkUj9hm3fpEHqz33goccVn4U0sg8guljoFmdJt3BBOb64Q5_PQCikBgRiEIUI8G8P_VAuPn8hDYehqZFP1go_vhT_WMlOh-P_Tv7_bojzgBpjB3UR067pu-csN7ozwadM4u2rQTbiHbX-A5Q"/>
+</div>
+<span class="material-symbols-outlined text-primary hover:opacity-80 transition-opacity">notifications</span>
+</div>
+</header>
+<main class="mt-14 px-container-padding pt-lg">
+<!-- Filter Bar -->
+<section class="mb-lg overflow-x-auto no-scrollbar py-2">
+<div class="flex gap-sm items-center w-max">
+<!-- All -->
+<button class="px-md h-9 flex items-center justify-center rounded-full bg-primary text-on-primary font-label-lg shadow-sm">
+                    All
+                </button>
+<!-- Urgent -->
+<button class="px-md h-9 flex items-center justify-center rounded-full bg-error-container text-error font-label-lg border border-error/10 hover:bg-error/10 transition-colors">
+                    Urgent
+                </button>
+<!-- High -->
+<button class="px-md h-9 flex items-center justify-center rounded-full bg-secondary-container text-on-secondary-container font-label-lg hover:opacity-80 transition-opacity">
+                    High
+                </button>
+<!-- Normal -->
+<button class="px-md h-9 flex items-center justify-center rounded-full bg-surface-container-high text-on-surface font-label-lg hover:opacity-80 transition-opacity">
+                    Normal
+                </button>
+<!-- Low -->
+<button class="px-md h-9 flex items-center justify-center rounded-full bg-surface-container-low text-outline font-label-lg hover:opacity-80 transition-opacity">
+                    Low
+                </button>
+</div>
+</section>
+<!-- Announcements List -->
+<div class="flex flex-col gap-lg">
+<!-- 1. URGENT -->
+<article class="bg-surface-container-lowest border border-error/20 rounded-xl p-md shadow-[0_2px_4px_rgba(186,26,26,0.08)] relative overflow-hidden active:scale-[0.98] transition-transform">
+<div class="absolute top-0 left-0 w-1 h-full bg-error"></div>
+<div class="flex justify-between items-start mb-xs">
+<div class="flex items-center gap-xs">
+<span class="flex h-2 w-2 rounded-full bg-error urgent-pulse"></span>
+<span class="px-xs py-0.5 rounded bg-error-container text-error font-label-md uppercase text-[10px] tracking-wider">Urgent</span>
+</div>
+<span class="font-label-md text-on-surface-variant">2 hours ago</span>
+</div>
+<h3 class="font-headline-sm-mobile text-headline-sm-mobile text-on-surface mb-2 leading-tight">End of Term Exams Begin Monday 28 April</h3>
+<p class="font-body-sm text-on-surface-variant mb-md">All parents are advised to ensure students have completed their revision guides and settled any outstanding laboratory fees before the commencement date.</p>
+<div class="flex items-center gap-sm mt-auto pt-sm border-t border-outline-variant/30">
+<div class="w-8 h-8 rounded-full bg-surface-dim flex items-center justify-center overflow-hidden">
+<img alt="Dr. M. Kijazi" class="w-full h-full object-cover" data-alt="A dignified and authoritative portrait of a senior school principal, Dr. M. Kijazi, an African male in his late 50s wearing a crisp suit and glasses. He is standing in a brightly lit academic corridor with a modern architectural design. The image emphasizes reliability, leadership, and a professional educational environment, with a high-contrast lighting style consistent with a corporate modern design system." src="https://lh3.googleusercontent.com/aida-public/AB6AXuD0Qic64Z9LBFHo4B1pVmeL3q3Ip_noQkL7eOpCCjlauSv8NcMOuStWXLVpyg0iebzfQpvC2I9-af0jVL-eXWG1JKHei6FwOD8OOru8Kmx2e7PVBwuhxVGYlToTQm-TFNeXSVFtPuntRIgl0sTEmjNMDdJM7nYJi7U9Dm65hgOBnKqfYmE0Veg-Jk6y9agzTFt0_GqD_QbG5OwCAGdN1K3uLNB3Fn1Xfu65CuYR81JUxBRHOXVtI_A-323h1taOUkNqfSOtwDLtBw"/>
+</div>
+<div>
+<p class="font-label-lg text-primary">Dr. M. Kijazi</p>
+<p class="font-label-md text-outline">Principal</p>
+</div>
+</div>
+</article>
+<!-- 2. HIGH -->
+<article class="bg-surface rounded-xl p-md shadow-[0_2px_4px_rgba(14,165,233,0.05)] border border-surface-variant active:scale-[0.98] transition-transform">
+<div class="flex justify-between items-start mb-xs">
+<span class="px-xs py-0.5 rounded bg-secondary-container text-on-secondary-container font-label-md uppercase text-[10px] tracking-wider">High Priority</span>
+<span class="font-label-md text-on-surface-variant">1 day ago</span>
+</div>
+<h3 class="font-headline-sm-mobile text-headline-sm-mobile text-on-surface mb-2 leading-tight">National Science Exhibition — Registration Deadline</h3>
+<p class="font-body-sm text-on-surface-variant mb-md">Final call for registrations. Students wishing to participate must submit their project abstracts to the Science Department office by tomorrow 4:00 PM.</p>
+<div class="flex items-center gap-sm mt-auto pt-sm border-t border-outline-variant/30">
+<div class="w-8 h-8 rounded-full bg-secondary-container flex items-center justify-center">
+<span class="material-symbols-outlined text-secondary text-sm">science</span>
+</div>
+<div>
+<p class="font-label-lg text-on-surface">HOD Science</p>
+<p class="font-label-md text-outline">Science Department</p>
+</div>
+</div>
+</article>
+<!-- 3. NORMAL (AS JABIR'S CLASS) -->
+<article class="bg-surface rounded-xl p-md shadow-[0_2px_4px_rgba(14,165,233,0.05)] border border-surface-variant active:scale-[0.98] transition-transform">
+<div class="flex justify-between items-start mb-xs">
+<div class="flex gap-xs">
+<span class="px-xs py-0.5 rounded bg-surface-container-high text-on-surface-variant font-label-md uppercase text-[10px] tracking-wider">Normal</span>
+<span class="px-xs py-0.5 rounded bg-tertiary-container text-on-tertiary-container font-label-md text-[10px] flex items-center gap-1">
+<span class="material-symbols-outlined text-[10px]" style="font-variation-settings: 'FILL' 1;">person</span>
+                            Jabir's class
+                        </span>
+</div>
+<span class="font-label-md text-on-surface-variant">Yesterday</span>
+</div>
+<h3 class="font-headline-sm-mobile text-headline-sm-mobile text-on-surface mb-2 leading-tight">Form 1 Parents Meeting — Wednesday 30 April 2026</h3>
+<p class="font-body-sm text-on-surface-variant mb-md">Mandatory briefing for all Form 1 parents regarding the upcoming field trip and revised curriculum updates for the next semester.</p>
+<div class="flex items-center gap-sm mt-auto pt-sm border-t border-outline-variant/30">
+<div class="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center">
+<span class="material-symbols-outlined text-primary text-sm">meeting_room</span>
+</div>
+<div>
+<p class="font-label-lg text-on-surface">Academic Office</p>
+<p class="font-label-md text-outline">Administration</p>
+</div>
+</div>
+</article>
+<!-- 4. NORMAL -->
+<article class="bg-surface rounded-xl p-md shadow-[0_2px_4px_rgba(14,165,233,0.05)] border border-surface-variant active:scale-[0.98] transition-transform">
+<div class="flex justify-between items-start mb-xs">
+<span class="px-xs py-0.5 rounded bg-surface-container-high text-on-surface-variant font-label-md uppercase text-[10px] tracking-wider">Normal</span>
+<span class="font-label-md text-on-surface-variant">3 days ago</span>
+</div>
+<h3 class="font-headline-sm-mobile text-headline-sm-mobile text-on-surface mb-2 leading-tight">Library Hours Extended During Exam Period</h3>
+<p class="font-body-sm text-on-surface-variant mb-md">To support student revision, the main library will remain open until 8:00 PM on weekdays starting from next week until exams conclude.</p>
+<div class="flex items-center gap-sm mt-auto pt-sm border-t border-outline-variant/30">
+<div class="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center">
+<span class="material-symbols-outlined text-primary text-sm">menu_book</span>
+</div>
+<div>
+<p class="font-label-lg text-on-surface">Librarian</p>
+<p class="font-label-md text-outline">Library Services</p>
+</div>
+</div>
+</article>
+<!-- 5. LOW -->
+<article class="bg-surface rounded-xl p-md shadow-[0_2px_4px_rgba(14,165,233,0.05)] border border-surface-variant opacity-80 active:scale-[0.98] transition-transform">
+<div class="flex justify-between items-start mb-xs">
+<span class="px-xs py-0.5 rounded bg-surface-container-low text-outline font-label-md uppercase text-[10px] tracking-wider">Low</span>
+<span class="font-label-md text-on-surface-variant">1 week ago</span>
+</div>
+<h3 class="font-headline-sm-mobile text-headline-sm-mobile text-on-surface mb-2 leading-tight">School Photo Day — Wednesday 23 April</h3>
+<p class="font-body-sm text-on-surface-variant mb-md">Reminder that official class and individual photos will be taken next Wednesday. Students should be in full formal uniform.</p>
+<div class="flex items-center gap-sm mt-auto pt-sm border-t border-outline-variant/30">
+<div class="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center">
+<span class="material-symbols-outlined text-outline text-sm">photo_camera</span>
+</div>
+<div>
+<p class="font-label-lg text-on-surface">Admin</p>
+<p class="font-label-md text-outline">General Office</p>
+</div>
+</div>
+</article>
+</div>
+</main>
+<!-- Bottom Navigation Bar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-xs pb-2 pt-2 bg-surface shadow-[0_-4px_10px_rgba(0,0,0,0.05)] rounded-t-xl border-t border-outline-variant">
+<!-- Home -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant px-4 py-1 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined mb-1">home</span>
+<span class="font-label-md text-label-md">Home</span>
+</a>
+<!-- Academics -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant px-4 py-1 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined mb-1">school</span>
+<span class="font-label-md text-label-md">Academics</span>
+</a>
+<!-- Payments -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant px-4 py-1 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined mb-1">payments</span>
+<span class="font-label-md text-label-md">Payments</span>
+</a>
+<!-- Contact (Active) -->
+<a class="flex flex-col items-center justify-center bg-secondary-container text-on-secondary-container rounded-full px-4 py-1 scale-95 transition-transform duration-200" href="#">
+<span class="material-symbols-outlined mb-1" style="font-variation-settings: 'FILL' 1;">chat_bubble</span>
+<span class="font-label-md text-label-md">Contact</span>
+</a>
+</nav>
+</body></html>

@@ -65,7 +65,7 @@ class ParentReportCardViewScreen extends ConsumerWidget {
                     overallGrade: card.overallGrade,
                     rank: card.rank,
                     totalStudents: card.totalStudents,
-                    generatedAt: formatParentShortDate(DateTime(2026, 3, 21)),
+                    generatedAt: formatParentShortDate(card.generatedAt ?? DateTime.now()),
                     subjectRows: term.subjects
                         .map(
                           (subject) => ReportCardSubjectRow(

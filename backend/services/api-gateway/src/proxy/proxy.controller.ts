@@ -56,12 +56,31 @@ export class ProxyController {
   ) {
     const route = this.proxyService.resolveRoute(req.path);
     const result = await this.proxyService.forward(req, route, user);
+    if (result.isBinary) {
+      this.applyDownloadHeaders(res, result.headers);
+      return res.status(result.statusCode).send(Buffer.from(result.data as ArrayBuffer));
+    }
     return res.status(result.statusCode).json(result.data);
   }
 
   private async forwardPublic(req: Request, res: Response) {
     const route = this.proxyService.resolveRoute(req.path);
     const result = await this.proxyService.forward(req, route);
+    if (result.isBinary) {
+      this.applyDownloadHeaders(res, result.headers);
+      return res.status(result.statusCode).send(Buffer.from(result.data as ArrayBuffer));
+    }
     return res.status(result.statusCode).json(result.data);
+  }
+
+  private applyDownloadHeaders(res: Response, headers?: Record<string, string | string[] | undefined>) {
+    const contentType = headers?.['content-type'];
+    const contentDisposition = headers?.['content-disposition'];
+    const contentLength = headers?.['content-length'];
+
+    if (contentType) res.setHeader('Content-Type', contentType);
+    else res.setHeader('Content-Type', 'application/octet-stream');
+    if (contentDisposition) res.setHeader('Content-Disposition', contentDisposition);
+    if (contentLength) res.setHeader('Content-Length', contentLength);
   }
 }

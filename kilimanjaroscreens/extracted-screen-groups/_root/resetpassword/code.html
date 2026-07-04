@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "primary": "#006591",
+                      "on-secondary-fixed": "#001f26",
+                      "surface-container-highest": "#dae2fd",
+                      "surface-container-high": "#e2e7ff",
+                      "surface-variant": "#dae2fd",
+                      "surface-dim": "#d2d9f4",
+                      "error": "#ba1a1a",
+                      "on-error": "#ffffff",
+                      "inverse-primary": "#89ceff",
+                      "background": "#faf8ff",
+                      "error-container": "#ffdad6",
+                      "tertiary-fixed-dim": "#c0c1ff",
+                      "on-primary-fixed-variant": "#004c6e",
+                      "surface": "#faf8ff",
+                      "on-primary-fixed": "#001e2f",
+                      "primary-fixed": "#c9e6ff",
+                      "on-tertiary": "#ffffff",
+                      "outline-variant": "#bec8d2",
+                      "on-primary-container": "#003751",
+                      "on-surface": "#131b2e",
+                      "surface-bright": "#faf8ff",
+                      "tertiary-fixed": "#e1e0ff",
+                      "on-surface-variant": "#3e4850",
+                      "surface-tint": "#006591",
+                      "primary-container": "#0ea5e9",
+                      "outline": "#6e7881",
+                      "on-error-container": "#93000a",
+                      "inverse-on-surface": "#eef0ff",
+                      "surface-container-low": "#f2f3ff",
+                      "tertiary": "#494bd6",
+                      "on-secondary-container": "#006172",
+                      "surface-container-lowest": "#ffffff",
+                      "on-secondary": "#ffffff",
+                      "inverse-surface": "#283044",
+                      "on-primary": "#ffffff",
+                      "secondary-fixed": "#acedff",
+                      "tertiary-container": "#8d90ff",
+                      "surface-container": "#eaedff",
+                      "primary-fixed-dim": "#89ceff",
+                      "on-tertiary-fixed-variant": "#2f2ebe",
+                      "on-tertiary-fixed": "#07006c",
+                      "secondary": "#00687a",
+                      "on-background": "#131b2e",
+                      "secondary-fixed-dim": "#4cd7f6",
+                      "secondary-container": "#57dffe",
+                      "on-tertiary-container": "#1407ad",
+                      "on-secondary-fixed-variant": "#004e5c",
+                      "emerald-500": "#10b981",
+                      "amber-500": "#f59e0b",
+                      "rose-500": "#f43f5e"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "md": "16px",
+                      "container-padding": "20px",
+                      "xl": "32px",
+                      "lg": "24px",
+                      "xs": "8px",
+                      "sm": "12px",
+                      "base": "4px"
+              },
+              "fontFamily": {
+                      "label-md": ["Plus Jakarta Sans"],
+                      "body-sm": ["Plus Jakarta Sans"],
+                      "display-lg": ["Space Grotesk"],
+                      "headline-md": ["Space Grotesk"],
+                      "headline-lg": ["Space Grotesk"],
+                      "body-lg": ["Plus Jakarta Sans"],
+                      "headline-sm": ["Space Grotesk"],
+                      "body-md": ["Plus Jakarta Sans"],
+                      "label-lg": ["Plus Jakarta Sans"]
+              },
+              "fontSize": {
+                      "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.04em", "fontWeight": "600"}],
+                      "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                      "display-lg": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                      "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                      "headline-lg": ["30px", {"lineHeight": "36px", "fontWeight": "600"}],
+                      "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                      "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "500"}],
+                      "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                      "label-lg": ["14px", {"lineHeight": "20px", "letterSpacing": "0.01em", "fontWeight": "600"}]
+              }
+            },
+          },
+        }
+    </script>
+<style>
+        .primary-gradient {
+            background: linear-gradient(135deg, #006591 0%, #0ea5e9 100%);
+        }
+        .sky-tint-shadow {
+            box-shadow: 0 10px 15px rgba(14, 165, 233, 0.12);
+        }
+        .clean-inset-divider {
+            position: relative;
+        }
+        .clean-inset-divider::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 20px;
+            right: 20px;
+            height: 1px;
+            background-color: #E2E8F0;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .indicator-segment {
+            height: 4px;
+            border-radius: 2px;
+            flex: 1;
+            transition: all 0.3s ease;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background font-body-md min-h-screen flex flex-col">
+<!-- Top App Bar -->
+<header class="bg-background fixed top-0 w-full h-16 z-50 flex items-center justify-between px-container-padding shadow-sm">
+<div class="flex items-center gap-sm">
+<button class="p-xs hover:bg-surface-container-high transition-colors duration-200 active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-primary" data-icon="arrow_back">arrow_back</span>
+</button>
+<h1 class="font-headline-sm text-headline-sm-mobile font-bold text-on-surface">Kilimanjaro Schools</h1>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="flex-grow pt-24 pb-12 px-container-padding flex flex-col items-center">
+<!-- Step Indicator -->
+<div class="w-full max-w-md flex items-center justify-between mb-xl">
+<div class="flex flex-col items-center gap-xs">
+<div class="w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center font-bold text-label-md">
+<span class="material-symbols-outlined text-[18px]" data-icon="check">check</span>
+</div>
+<span class="font-label-md text-label-md text-emerald-500">Email</span>
+</div>
+<div class="h-[2px] flex-grow bg-emerald-500 mx-xs mb-6"></div>
+<div class="flex flex-col items-center gap-xs">
+<div class="w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center font-bold text-label-md">
+<span class="material-symbols-outlined text-[18px]" data-icon="check">check</span>
+</div>
+<span class="font-label-md text-label-md text-emerald-500">Verify</span>
+</div>
+<div class="h-[2px] flex-grow bg-primary-container mx-xs mb-6"></div>
+<div class="flex flex-col items-center gap-xs">
+<div class="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center font-bold text-label-md">3</div>
+<span class="font-label-md text-label-md text-primary">Reset</span>
+</div>
+</div>
+<!-- Illustration Section -->
+<div class="relative w-48 h-48 mb-lg flex items-center justify-center">
+<!-- Background Blob -->
+<div class="absolute inset-0 bg-primary-container opacity-10 rounded-full blur-2xl"></div>
+<!-- Open Padlock Illustration -->
+<div class="relative z-10">
+<span class="material-symbols-outlined text-[96px] text-primary" data-icon="lock_open">lock_open</span>
+<div class="absolute -top-2 -right-4 bg-white p-2 rounded-xl sky-tint-shadow border border-surface">
+<span class="material-symbols-outlined text-emerald-500 text-[32px]" data-icon="vpn_key">vpn_key</span>
+</div>
+</div>
+</div>
+<!-- Heading -->
+<div class="text-center mb-xl">
+<h2 class="font-headline-lg text-headline-lg-mobile text-on-surface mb-xs">Create new password</h2>
+<p class="font-body-md text-body-md text-on-surface-variant max-w-[280px] mx-auto">Your new password must be unique and different from previous ones.</p>
+</div>
+<!-- Password Form -->
+<div class="w-full max-w-md space-y-lg">
+<!-- New Password Field -->
+<div class="space-y-xs">
+<label class="font-label-lg text-label-lg text-on-surface ml-base">New Password</label>
+<div class="relative">
+<input class="w-full h-[56px] rounded-[14px] bg-[#F1F5F9] border-[#E2E8F0] focus:border-primary-container focus:ring-4 focus:ring-primary-container/10 px-md font-body-md" placeholder="Enter new password" type="password" value="School2024!"/>
+<button class="absolute right-md top-1/2 -translate-y-1/2 text-outline">
+<span class="material-symbols-outlined" data-icon="visibility">visibility</span>
+</button>
+</div>
+<!-- Strength Indicator -->
+<div class="mt-sm space-y-xs">
+<div class="flex gap-xs w-full">
+<div class="indicator-segment bg-rose-500"></div>
+<div class="indicator-segment bg-amber-500"></div>
+<div class="indicator-segment bg-primary-container"></div>
+<div class="indicator-segment bg-surface-container-highest"></div>
+</div>
+<div class="flex justify-between items-center">
+<span class="font-label-md text-label-md text-primary-container">Strength: Good</span>
+</div>
+</div>
+</div>
+<!-- Confirm Password Field -->
+<div class="space-y-xs">
+<label class="font-label-lg text-label-lg text-on-surface ml-base">Confirm Password</label>
+<div class="relative">
+<input class="w-full h-[56px] rounded-[14px] bg-[#F1F5F9] border-error focus:border-error focus:ring-4 focus:ring-error/10 px-md font-body-md" placeholder="Repeat new password" type="password" value="School2024"/>
+<div class="absolute right-md top-1/2 -translate-y-1/2 flex items-center">
+<span class="material-symbols-outlined text-error" data-icon="error">error</span>
+</div>
+</div>
+<p class="font-label-md text-label-md text-error ml-base">Passwords do not match</p>
+</div>
+<!-- Requirements Checklist -->
+<div class="bg-surface-container-low p-md rounded-xl border border-surface space-y-sm">
+<h4 class="font-label-lg text-label-lg text-on-surface mb-xs">Password Requirements</h4>
+<div class="grid grid-cols-1 gap-xs">
+<div class="flex items-center gap-sm">
+<span class="material-symbols-outlined text-emerald-500 text-[18px]" data-icon="check_circle" data-weight="fill" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">At least 8 characters long</span>
+</div>
+<div class="flex items-center gap-sm">
+<span class="material-symbols-outlined text-emerald-500 text-[18px]" data-icon="check_circle" data-weight="fill" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Contains an uppercase letter</span>
+</div>
+<div class="flex items-center gap-sm">
+<span class="material-symbols-outlined text-emerald-500 text-[18px]" data-icon="check_circle" data-weight="fill" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Includes at least one number</span>
+</div>
+<div class="flex items-center gap-sm opacity-50">
+<span class="material-symbols-outlined text-outline text-[18px]" data-icon="radio_button_unchecked">radio_button_unchecked</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Passwords must match</span>
+</div>
+</div>
+</div>
+<!-- Reset Button -->
+<button class="w-full h-[54px] rounded-[14px] primary-gradient text-white font-bold text-label-lg sky-tint-shadow active:scale-[0.98] transition-transform duration-150">
+                Reset Password
+            </button>
+</div>
+</main>
+<!-- Visual Anchor - Support Information -->
+<footer class="mt-auto px-container-padding py-lg text-center">
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+            Need help? Contact <a class="text-primary font-bold" href="#">School IT Support</a>
+</p>
+</footer>
+<!-- Image for Context (Hidden but prompt included per instruction) -->
+<div class="hidden">
+<img data-alt="A professional high-contrast educational setting in Kilimanjaro featuring modern school architecture under a bright blue sky. The scene is illuminated with vibrant daylight, emphasizing a clean light-mode aesthetic. Students are engaging with tablets in a minimalist open-air classroom that feels inspirational and forward-thinking. The color palette centers on primary sky blue and crisp white surfaces." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCTN4H_NQR7OGLa2HLpSQR4Ip41at2YS_b2RcEN0mh7Ys-wSCT9mpGhc_dUT6wQRVMnE9SVWKiuqQYVU3oiR2ogltrO3_LR8sR7BP-4yPSpw8xsfC6pn_CwxtgmSgc_ZASCKjqxATDlQTS9BQ4oafaJ-MdbB18ShS39-W6rtpVia_Gf5icdjmX7siHx1P31qZm4CbCdBIMwxFe_1pp4n2t1sfCoPxUzo1qmN1M02J8eiye4XsX73gMy4FAfapizXBnqY3dp4Px1bQ"/>
+</div>
+</body></html>

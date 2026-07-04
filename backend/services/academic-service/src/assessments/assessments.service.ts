@@ -47,6 +47,12 @@ export class AssessmentsService {
     }
   }
 
+  private ensureAssignedTeacherScope(user: RequestUser, teacherId: string): void {
+    if ([ROLES.TEACHER, ROLES.HEAD_OF_DEPARTMENT].includes(user.role as any) && user.id !== teacherId) {
+      throw new ForbiddenException('Teacher actions are limited to assigned class-subjects');
+    }
+  }
+
   private async assertHodSubjectScope(user: RequestUser, subjectId: string): Promise<void> {
     if (user.role !== ROLES.HEAD_OF_DEPARTMENT) {
       return;
@@ -251,7 +257,7 @@ export class AssessmentsService {
 
   async bulkUpsertMarks(id: string, dto: BulkMarksDto, user: RequestUser) {
     const assessment = await this.getAssessmentOrThrow(id);
-    this.ensureTeacherScope(user, assessment.classSubject.teacherId);
+    this.ensureAssignedTeacherScope(user, assessment.classSubject.teacherId);
 
     if (!([AssessmentStatus.OPEN, AssessmentStatus.DRAFT, AssessmentStatus.REJECTED] as AssessmentStatus[]).includes(assessment.status)) {
       throw new BadRequestException('Assessment is not open for editing');
@@ -361,7 +367,7 @@ export class AssessmentsService {
 
   async submitAssessment(id: string, _dto: SubmitAssessmentDto, user: RequestUser) {
     const assessment = await this.getAssessmentOrThrow(id);
-    this.ensureTeacherScope(user, assessment.classSubject.teacherId);
+    this.ensureAssignedTeacherScope(user, assessment.classSubject.teacherId);
 
     const studentIdsPayload = await this.studentClient.get<any>(
       `/students/internal/class/${assessment.classId}/student-ids`,

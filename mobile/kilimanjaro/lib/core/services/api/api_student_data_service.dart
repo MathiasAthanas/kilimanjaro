@@ -19,6 +19,8 @@ class ApiStudentDataService implements IStudentService {
 
   final FlutterSecureStorage _storage;
   final Dio _dio;
+  String? _cachedStudentId;
+  Map<String, dynamic>? _cachedPerformanceProfile;
 
   static Dio _buildDio() {
     return Dio(
@@ -155,23 +157,24 @@ class ApiStudentDataService implements IStudentService {
   // ─── Performance ─────────────────────────────────────────────────────────
 
   Future<Map<String, dynamic>?> _getStudentPerformanceProfile() async {
+    if (_cachedPerformanceProfile != null) return _cachedPerformanceProfile;
     final opts = await _auth();
     try {
-      final dashboard = await _dio.get<Map<String, dynamic>>(
-        '/mobile/student/dashboard',
-        options: opts,
-      );
-      final data = dashboard.data!;
-      final studentId = data['profile'] != null
-          ? (data['profile'] as Map<String, dynamic>)['id'] as String?
-          : null;
-      if (studentId == null) return null;
-
+      if (_cachedStudentId == null) {
+        final dashboard = await _dio.get<Map<String, dynamic>>(
+          '/mobile/student/dashboard',
+          options: opts,
+        );
+        _cachedStudentId =
+            (dashboard.data?['profile'] as Map<String, dynamic>?)?['id'] as String?;
+      }
+      if (_cachedStudentId == null) return null;
       final resp = await _dio.get<Map<String, dynamic>>(
-        '/students/performance/$studentId',
+        '/students/performance/$_cachedStudentId',
         options: opts,
       );
-      return resp.data;
+      _cachedPerformanceProfile = resp.data;
+      return _cachedPerformanceProfile;
     } on DioException {
       return null;
     }

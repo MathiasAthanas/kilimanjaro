@@ -1,0 +1,4 @@
+# PREREQUISITE: Run students_new_parents_test.csv first so that +255711100001 (Juma Mwanga) already exists.
+# This file tests that importing a student with an existing parent phone reuses the existing auth account.
+first_name,last_name,date_of_birth,gender,class_name,guardian_first_name,guardian_last_name,guardian_phone,guardian_relationship
+Mtoto,Mwanga,2013-05-20,MALE,Form 1,Juma,Mwanga,+255711100001,FATHER

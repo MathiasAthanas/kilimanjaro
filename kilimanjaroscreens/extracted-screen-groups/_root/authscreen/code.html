@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Kilimanjaro Schools — Login</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "primary": "#006591",
+                    "on-secondary-fixed": "#001f26",
+                    "surface-container-highest": "#dae2fd",
+                    "surface-container-high": "#e2e7ff",
+                    "surface-variant": "#dae2fd",
+                    "surface-dim": "#d2d9f4",
+                    "error": "#ba1a1a",
+                    "on-error": "#ffffff",
+                    "inverse-primary": "#89ceff",
+                    "background": "#faf8ff",
+                    "error-container": "#ffdad6",
+                    "tertiary-fixed-dim": "#c0c1ff",
+                    "on-primary-fixed-variant": "#004c6e",
+                    "surface": "#faf8ff",
+                    "on-primary-fixed": "#001e2f",
+                    "primary-fixed": "#c9e6ff",
+                    "on-tertiary": "#ffffff",
+                    "outline-variant": "#bec8d2",
+                    "on-primary-container": "#003751",
+                    "on-surface": "#131b2e",
+                    "surface-bright": "#faf8ff",
+                    "tertiary-fixed": "#e1e0ff",
+                    "on-surface-variant": "#3e4850",
+                    "surface-tint": "#006591",
+                    "primary-container": "#0ea5e9",
+                    "outline": "#6e7881",
+                    "on-error-container": "#93000a",
+                    "inverse-on-surface": "#eef0ff",
+                    "surface-container-low": "#f2f3ff",
+                    "tertiary": "#494bd6",
+                    "on-secondary-container": "#006172",
+                    "surface-container-lowest": "#ffffff",
+                    "on-secondary": "#ffffff",
+                    "inverse-surface": "#283044",
+                    "on-primary": "#ffffff",
+                    "secondary-fixed": "#acedff",
+                    "tertiary-container": "#8d90ff",
+                    "surface-container": "#eaedff",
+                    "primary-fixed-dim": "#89ceff",
+                    "on-tertiary-fixed-variant": "#2f2ebe",
+                    "on-tertiary-fixed": "#07006c",
+                    "secondary": "#00687a",
+                    "on-background": "#131b2e",
+                    "secondary-fixed-dim": "#4cd7f6",
+                    "secondary-container": "#57dffe",
+                    "on-tertiary-container": "#1407ad",
+                    "on-secondary-fixed-variant": "#004e5c"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "md": "16px",
+                    "container-padding": "20px",
+                    "xl": "32px",
+                    "lg": "24px",
+                    "xs": "8px",
+                    "sm": "12px",
+                    "base": "4px"
+            },
+            "fontFamily": {
+                    "label-md": ["Plus Jakarta Sans"],
+                    "body-sm": ["Plus Jakarta Sans"],
+                    "display-lg": ["Space Grotesk"],
+                    "headline-md": ["Space Grotesk"],
+                    "headline-lg": ["Space Grotesk"],
+                    "body-lg": ["Plus Jakarta Sans"],
+                    "headline-sm": ["Space Grotesk"],
+                    "body-md": ["Plus Jakarta Sans"],
+                    "label-lg": ["Plus Jakarta Sans"]
+            },
+            "fontSize": {
+                    "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.04em", "fontWeight": "600"}],
+                    "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                    "display-lg": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                    "headline-lg": ["30px", {"lineHeight": "36px", "fontWeight": "600"}],
+                    "headline-lg-mobile": ["32px", {"lineHeight": "40px", "fontWeight": "700"}],
+                    "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                    "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "500"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "label-lg": ["14px", {"lineHeight": "20px", "letterSpacing": "0.01em", "fontWeight": "600"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .hero-gradient {
+            background: linear-gradient(135deg, #006591 0%, #0ea5e9 100%);
+        }
+        .dark .hero-gradient {
+            background: linear-gradient(135deg, #001e2f 0%, #004c6e 100%);
+        }
+        .organic-wave {
+            position: absolute;
+            bottom: -1px;
+            left: 0;
+            width: 100%;
+            overflow: hidden;
+            line-height: 0;
+            transform: rotate(180deg);
+        }
+        .organic-wave svg {
+            position: relative;
+            display: block;
+            width: calc(154% + 1.3px);
+            height: 48px;
+        }
+        .organic-wave .shape-fill {
+            fill: #faf8ff;
+        }
+        .dark .organic-wave .shape-fill {
+            fill: #131b2e;
+        }
+        .shadow1 { box-shadow: 0 2px 4px rgba(14, 165, 233, 0.05); }
+        .shadow3 { box-shadow: 0 10px 15px rgba(14, 165, 233, 0.12); }
+        .dark-inner-glow { border: 1px solid rgba(14, 165, 233, 0.6); box-shadow: 0 0 15px rgba(14, 165, 233, 0.2); }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background dark:bg-on-background min-h-screen flex flex-col overflow-x-hidden">
+<!-- Hero Header (38%) -->
+<section class="hero-gradient relative h-[335px] w-full flex flex-col justify-start pt-xl px-container-padding overflow-hidden shrink-0">
+<!-- Subtle Overlapping White Circles -->
+<div class="absolute -top-10 -right-10 w-48 h-48 rounded-full bg-white/5"></div>
+<div class="absolute -top-4 -right-4 w-32 h-32 rounded-full bg-white/10"></div>
+<!-- Mountain Emblem -->
+<div class="z-10 mb-lg">
+<div class="w-[56px] h-[56px] bg-white rounded-xl flex items-center justify-center shadow-lg">
+<span class="material-symbols-outlined text-primary text-[32px]" data-icon="terrain">terrain</span>
+</div>
+</div>
+<!-- Heading Cluster -->
+<div class="z-10 text-white">
+<p class="font-body-md text-[16px] opacity-80 mb-xs">Welcome back,</p>
+<h1 class="font-headline-lg-mobile text-headline-lg-mobile tracking-tight">Sign in to continue</h1>
+</div>
+<!-- Organic Wave Curve -->
+<div class="organic-wave">
+<svg data-name="Layer 1" preserveaspectratio="none" viewbox="0 0 1200 120" xmlns="http://www.w3.org/2000/svg">
+<path class="shape-fill" d="M321.39,56.44c58-10.79,114.16-30.13,172-41.86,82.39-16.72,168.19-17.73,250.45-.39C823.78,31,906.67,72,985.66,92.83c70.05,18.48,146.53,26.09,214.34,3V0H0V27.35A600.21,600.21,0,0,0,321.39,56.44Z"></path>
+</svg>
+</div>
+</section>
+<!-- Form Section (62%) -->
+<main class="flex-grow flex flex-col bg-background dark:bg-on-background px-container-padding pt-lg pb-xl overflow-y-auto">
+<form class="space-y-lg max-w-md mx-auto w-full">
+<!-- Identifier Input Cluster -->
+<div class="space-y-sm">
+<div class="flex justify-between items-center px-base">
+<label class="font-label-lg text-on-surface-variant dark:text-surface-variant">Email or Registration Number</label>
+</div>
+<!-- Smart Chips -->
+<div class="flex gap-xs mb-xs">
+<button class="px-md py-xs rounded-full bg-primary/10 text-primary font-label-md border border-primary/20 hover:bg-primary/20 transition-colors" type="button">
+                        Student login
+                    </button>
+<button class="px-md py-xs rounded-full bg-surface-container-high text-on-surface-variant font-label-md hover:bg-surface-container-highest transition-colors" type="button">
+                        Staff login
+                    </button>
+</div>
+<div class="relative">
+<span class="material-symbols-outlined absolute left-md top-1/2 -translate-y-1/2 text-outline" data-icon="person">person</span>
+<input class="w-full h-[56px] pl-12 pr-md rounded-[14px] border-outline-variant bg-surface-container-lowest dark:bg-inverse-surface dark:border-outline focus:ring-2 focus:ring-primary focus:border-primary transition-all font-body-md text-on-surface dark:text-white outline-none" placeholder="e.g. 2024-ST-001" type="text"/>
+</div>
+</div>
+<!-- Password Input -->
+<div class="space-y-sm">
+<div class="flex justify-between items-center px-base">
+<label class="font-label-lg text-on-surface-variant dark:text-surface-variant">Password</label>
+</div>
+<div class="relative">
+<span class="material-symbols-outlined absolute left-md top-1/2 -translate-y-1/2 text-outline" data-icon="lock">lock</span>
+<input class="w-full h-[56px] pl-12 pr-12 rounded-[14px] border-outline-variant bg-surface-container-lowest dark:bg-inverse-surface dark:border-outline focus:ring-2 focus:ring-primary focus:border-primary transition-all font-body-md text-on-surface dark:text-white outline-none" placeholder="••••••••" type="password"/>
+<button class="absolute right-md top-1/2 -translate-y-1/2 text-outline hover:text-primary transition-colors" type="button">
+<span class="material-symbols-outlined" data-icon="visibility">visibility</span>
+</button>
+</div>
+<div class="text-right">
+<a class="font-label-lg text-primary-container font-semibold hover:underline" href="#">Forgot Password?</a>
+</div>
+</div>
+<!-- Sign In Button -->
+<div class="pt-md">
+<button class="w-full h-[54px] hero-gradient rounded-[14px] shadow3 dark:shadow-none dark:dark-inner-glow flex items-center justify-center gap-sm text-white font-bold text-body-lg active:scale-[0.98] transition-transform" type="submit">
+                    Sign In
+                    <span class="material-symbols-outlined" data-icon="arrow_forward">arrow_forward</span>
+</button>
+</div>
+<!-- Separator -->
+<div class="flex items-center gap-md py-sm">
+<div class="h-[1px] flex-grow bg-outline-variant/30"></div>
+<span class="font-label-md text-on-surface-variant/60 uppercase tracking-widest">or</span>
+<div class="h-[1px] flex-grow bg-outline-variant/30"></div>
+</div>
+<!-- Biometric Button -->
+<button class="w-full h-[54px] border-2 border-outline-variant dark:border-outline rounded-[14px] flex items-center justify-center gap-sm text-on-surface-variant dark:text-surface-variant font-label-lg hover:bg-surface-container-low transition-colors active:scale-[0.98]" type="button">
+<span class="material-symbols-outlined" data-icon="fingerprint">fingerprint</span>
+                Sign in with Biometrics
+            </button>
+</form>
+<!-- Footer Links -->
+<div class="mt-auto pt-xl text-center">
+<p class="font-body-sm text-on-surface-variant">Don't have an account? <a class="text-primary font-bold hover:underline" href="#">Contact Registry</a></p>
+</div>
+</main>
+<!-- Support Image Reference (Hidden or subtly used if needed) -->
+<div class="hidden">
+<img alt="School Architecture" data-alt="A high-angle architectural photograph of a modern university campus at sunset. The building features clean lines, expansive glass windows, and a sleek concrete facade. The sky transitions from a deep azure to a soft orange, casting a warm, inspirational glow over the educational grounds. The overall aesthetic is professional, academic, and forward-looking, mirroring the high-contrast tech edge of Kilimanjaro Schools' visual identity." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCXdSuZ4vU-B1kBuj5i3hUqzs-_Cu6N_V-O5dgwoYGLQwAtVp_Xc314vFWti-xDQZ1j1LCtRPSAbrkXnd2zcL_8xSH1q5IjTUC0nSJC94-Go1upxxFB75GpGpj-wMk89FfkB5LwF-CvoWjXFcin58wWTkOzMKtMDymgb6mEeYh7FsZmmbUj5eDuRojDhPsXH7gW1gqGcD1TvylDZoLjXT0GhAQBbaislx7HoCCehRm0G07tn_35vyasgKpMb_qb5yHpQmkRQpGZrg"/>
+</div>
+</body></html>

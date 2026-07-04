@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Kilimanjaro Teachers - My Classes</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-variant": "#dae2fd",
+                        "tertiary": "#494bd6",
+                        "background": "#faf8ff",
+                        "on-background": "#131b2e",
+                        "primary-fixed": "#c9e6ff",
+                        "surface-container-highest": "#dae2fd",
+                        "surface-container-low": "#f2f3ff",
+                        "on-secondary-fixed": "#001f26",
+                        "on-primary-fixed": "#001e2f",
+                        "on-tertiary-fixed": "#07006c",
+                        "on-secondary": "#ffffff",
+                        "on-error": "#ffffff",
+                        "error": "#ba1a1a",
+                        "on-error-container": "#93000a",
+                        "surface-container-lowest": "#ffffff",
+                        "on-tertiary": "#ffffff",
+                        "on-primary-fixed-variant": "#004c6e",
+                        "inverse-on-surface": "#eef0ff",
+                        "tertiary-fixed-dim": "#c0c1ff",
+                        "on-tertiary-fixed-variant": "#2f2ebe",
+                        "surface-bright": "#faf8ff",
+                        "outline-variant": "#bec8d2",
+                        "error-container": "#ffdad6",
+                        "surface-container": "#eaedff",
+                        "secondary-fixed-dim": "#4cd7f6",
+                        "secondary": "#00687a",
+                        "primary-container": "#0ea5e9",
+                        "on-tertiary-container": "#1407ad",
+                        "on-primary": "#ffffff",
+                        "tertiary-fixed": "#e1e0ff",
+                        "surface-dim": "#d2d9f4",
+                        "surface": "#faf8ff",
+                        "on-surface": "#131b2e",
+                        "surface-container-high": "#e2e7ff",
+                        "surface-tint": "#006591",
+                        "inverse-primary": "#89ceff",
+                        "on-primary-container": "#003751",
+                        "tertiary-container": "#8d90ff",
+                        "on-surface-variant": "#3e4850",
+                        "primary-fixed-dim": "#89ceff",
+                        "on-secondary-fixed-variant": "#004e5c",
+                        "secondary-fixed": "#acedff",
+                        "on-secondary-container": "#006172",
+                        "secondary-container": "#57dffe",
+                        "outline": "#6e7881",
+                        "inverse-surface": "#283044",
+                        "primary": "#006591"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "xl": "32px",
+                        "base": "4px",
+                        "lg": "24px",
+                        "md": "16px",
+                        "sm": "12px",
+                        "xs": "8px",
+                        "container-padding": "20px"
+                    },
+                    "fontFamily": {
+                        "headline-md": ["Space Grotesk"],
+                        "body-md": ["Plus Jakarta Sans"],
+                        "body-sm": ["Plus Jakarta Sans"],
+                        "headline-sm": ["Space Grotesk"],
+                        "headline-lg": ["Space Grotesk"],
+                        "label-md": ["Plus Jakarta Sans"],
+                        "label-lg": ["Plus Jakarta Sans"],
+                        "body-lg": ["Plus Jakarta Sans"],
+                        "display-lg": ["Space Grotesk"]
+                    },
+                    "fontSize": {
+                        "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                        "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                        "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                        "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "500"}],
+                        "headline-lg": ["30px", {"lineHeight": "36px", "fontWeight": "600"}],
+                        "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.04em", "fontWeight": "600"}],
+                        "label-lg": ["14px", {"lineHeight": "20px", "letterSpacing": "0.01em", "fontWeight": "600"}],
+                        "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                        "display-lg": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700"}]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .shadow-1 { box-shadow: 0 2px 4px rgba(14, 165, 233, 0.05); }
+        .shadow-3 { box-shadow: 0 10px 15px rgba(14, 165, 233, 0.12); }
+        .primary-gradient { background: linear-gradient(135deg, #0ea5e9 0%, #006591 100%); }
+        body { -webkit-tap-highlight-color: transparent; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background min-h-screen pb-24">
+<!-- TopAppBar Shell -->
+<header class="flex justify-between items-center px-container-padding h-16 w-full fixed top-0 z-50 bg-surface dark:bg-inverse-surface shadow-sm dark:shadow-none border-b border-outline-variant dark:border-outline/30">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full overflow-hidden border-2 border-primary-container">
+<img alt="Teacher profile photo" class="w-full h-full object-cover" data-alt="A professional headshot of a smiling educator in a bright, modern school environment. The setting features soft sunlight and a clean, high-contrast background consistent with a corporate modern educational institution. The teacher wears professional attire, conveying warmth, reliability, and expertise within a contemporary academic setting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuC9Twfi2L6-eTbU7Ov6fZb8d9zlMj1XWAu61FWsWvmlaxxltY0kHup4Xo7UdFiwIF0JQYvjtQHaUoG8_Akn-k414QKkhwLNVzyR4MC_33xluMfnlzJJ6t8t5aPMzw2mpo2GdefZOi87hT2y-yLhSIEpDJqJ4Q-4SEgVeP6NojVAu8Uysll3j_IqE9ok3YKlIIcyapbhU78F5-6X2oDRrCCQjdS9y-T-yyv41UJooMpvxR-B54atcR-r0Ix_PJTWEbDJiaQG6LJ5rg"/>
+</div>
+<h1 class="font-headline-sm text-primary dark:text-primary-fixed-dim font-bold tracking-tight">Kilimanjaro Teachers</h1>
+</div>
+<button class="material-symbols-outlined text-on-surface-variant dark:text-surface-variant hover:bg-surface-container-high dark:hover:bg-surface-variant p-2 rounded-full transition-colors active:opacity-80 active:scale-95">
+            notifications
+        </button>
+</header>
+<main class="pt-20 px-container-padding">
+<!-- Dashboard Header Section -->
+<section class="mb-lg">
+<div class="flex justify-between items-end mb-xs">
+<div>
+<span class="font-label-lg text-primary uppercase tracking-widest">Dashboard</span>
+<h2 class="font-headline-md text-headline-md text-on-background mt-1">My Classes</h2>
+</div>
+<div class="bg-secondary-container px-3 py-1 rounded-full">
+<span class="font-label-md text-on-secondary-container">Term 1 • 2025/2026</span>
+</div>
+</div>
+<div class="h-1 w-16 primary-gradient rounded-full"></div>
+</section>
+<!-- Vertical List of Class Cards -->
+<div class="flex flex-col gap-lg">
+<!-- Class Card 1 -->
+<div class="bg-surface shadow-1 border border-surface-container-high rounded-xl overflow-hidden hover:shadow-3 transition-shadow duration-300">
+<div class="p-md">
+<div class="flex justify-between items-start mb-sm">
+<div>
+<h3 class="font-headline-sm text-headline-sm text-on-background">Mathematics</h3>
+<div class="flex items-center gap-2 mt-1">
+<span class="bg-primary/10 text-primary px-2 py-0.5 rounded text-label-md font-semibold">Form 2A</span>
+<span class="text-on-surface-variant text-label-md flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px]">groups</span>
+                                    38 Students
+                                </span>
+</div>
+</div>
+<a class="text-primary font-label-lg hover:underline flex items-center gap-1 group" href="#">
+                            View Class 
+                            <span class="material-symbols-outlined text-[18px] group-hover:translate-x-1 transition-transform">arrow_forward</span>
+</a>
+</div>
+<!-- Assessment Status Strip -->
+<div class="bg-surface-container-low rounded-lg p-3 my-md grid grid-cols-4 gap-2">
+<div class="flex flex-col items-center gap-1">
+<span class="font-label-md text-outline text-[10px] uppercase">CAT 1</span>
+<span class="bg-success-container/20 text-green-700 text-[10px] px-2 py-0.5 rounded-full font-bold border border-green-200">Submitted</span>
+</div>
+<div class="flex flex-col items-center gap-1">
+<span class="font-label-md text-outline text-[10px] uppercase">CAT 2</span>
+<span class="bg-primary-container/20 text-primary text-[10px] px-2 py-0.5 rounded-full font-bold border border-primary/20">Open</span>
+</div>
+<div class="flex flex-col items-center gap-1">
+<span class="font-label-md text-outline text-[10px] uppercase">Midterm</span>
+<span class="bg-surface-variant text-on-surface-variant text-[10px] px-2 py-0.5 rounded-full font-bold">Draft</span>
+</div>
+<div class="flex flex-col items-center gap-1 opacity-50">
+<span class="font-label-md text-outline text-[10px] uppercase">Final</span>
+<span class="material-symbols-outlined text-[14px]">lock</span>
+</div>
+</div>
+<!-- Syllabus Progress -->
+<div class="mt-sm">
+<div class="flex justify-between items-center mb-1">
+<span class="font-label-md text-on-surface-variant">Syllabus Progress</span>
+<span class="font-label-md text-primary">65%</span>
+</div>
+<div class="w-full bg-surface-container-highest h-2 rounded-full overflow-hidden">
+<div class="h-full primary-gradient rounded-full" style="width: 65%"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Class Card 2 -->
+<div class="bg-surface shadow-1 border border-surface-container-high rounded-xl overflow-hidden hover:shadow-3 transition-shadow duration-300">
+<div class="p-md">
+<div class="flex justify-between items-start mb-sm">
+<div>
+<h3 class="font-headline-sm text-headline-sm text-on-background">Physics</h3>
+<div class="flex items-center gap-2 mt-1">
+<span class="bg-tertiary/10 text-tertiary px-2 py-0.5 rounded text-label-md font-semibold">Form 3C</span>
+<span class="text-on-surface-variant text-label-md flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px]">groups</span>
+                                    42 Students
+                                </span>
+</div>
+</div>
+<a class="text-primary font-label-lg hover:underline flex items-center gap-1 group" href="#">
+                            View Class 
+                            <span class="material-symbols-outlined text-[18px] group-hover:translate-x-1 transition-transform">arrow_forward</span>
+</a>
+</div>
+<!-- Assessment Status Strip -->
+<div class="bg-surface-container-low rounded-lg p-3 my-md grid grid-cols-4 gap-2">
+<div class="flex flex-col items-center gap-1">
+<span class="font-label-md text-outline text-[10px] uppercase">CAT 1</span>
+<span class="bg-success-container/20 text-green-700 text-[10px] px-2 py-0.5 rounded-full font-bold border border-green-200">Submitted</span>
+</div>
+<div class="flex flex-col items-center gap-1">
+<span class="font-label-md text-outline text-[10px] uppercase">CAT 2</span>
+<span class="bg-success-container/20 text-green-700 text-[10px] px-2 py-0.5 rounded-full font-bold border border-green-200">Submitted</span>
+</div>
+<div class="flex flex-col items-center gap-1">
+<span class="font-label-md text-outline text-[10px] uppercase">Midterm</span>
+<span class="bg-primary-container/20 text-primary text-[10px] px-2 py-0.5 rounded-full font-bold border border-primary/20">Open</span>
+</div>
+<div class="flex flex-col items-center gap-1 opacity-50">
+<span class="font-label-md text-outline text-[10px] uppercase">Final</span>
+<span class="material-symbols-outlined text-[14px]">lock</span>
+</div>
+</div>
+<!-- Syllabus Progress -->
+<div class="mt-sm">
+<div class="flex justify-between items-center mb-1">
+<span class="font-label-md text-on-surface-variant">Syllabus Progress</span>
+<span class="font-label-md text-primary">82%</span>
+</div>
+<div class="w-full bg-surface-container-highest h-2 rounded-full overflow-hidden">
+<div class="h-full primary-gradient rounded-full" style="width: 82%"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Class Card 3 -->
+<div class="bg-surface shadow-1 border border-surface-container-high rounded-xl overflow-hidden hover:shadow-3 transition-shadow duration-300">
+<div class="p-md">
+<div class="flex justify-between items-start mb-sm">
+<div>
+<h3 class="font-headline-sm text-headline-sm text-on-background">Computer Science</h3>
+<div class="flex items-center gap-2 mt-1">
+<span class="bg-secondary-container/30 text-secondary px-2 py-0.5 rounded text-label-md font-semibold">Form 1B</span>
+<span class="text-on-surface-variant text-label-md flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px]">groups</span>
+                                    35 Students
+                                </span>
+</div>
+</div>
+<a class="text-primary font-label-lg hover:underline flex items-center gap-1 group" href="#">
+                            View Class 
+                            <span class="material-symbols-outlined text-[18px] group-hover:translate-x-1 transition-transform">arrow_forward</span>
+</a>
+</div>
+<!-- Assessment Status Strip -->
+<div class="bg-surface-container-low rounded-lg p-3 my-md grid grid-cols-4 gap-2">
+<div class="flex flex-col items-center gap-1">
+<span class="font-label-md text-outline text-[10px] uppercase">CAT 1</span>
+<span class="bg-primary-container/20 text-primary text-[10px] px-2 py-0.5 rounded-full font-bold border border-primary/20">Open</span>
+</div>
+<div class="flex flex-col items-center gap-1">
+<span class="font-label-md text-outline text-[10px] uppercase">CAT 2</span>
+<span class="material-symbols-outlined text-[14px] text-outline/50">lock</span>
+</div>
+<div class="flex flex-col items-center gap-1">
+<span class="font-label-md text-outline text-[10px] uppercase">Midterm</span>
+<span class="material-symbols-outlined text-[14px] text-outline/50">lock</span>
+</div>
+<div class="flex flex-col items-center gap-1 opacity-50">
+<span class="font-label-md text-outline text-[10px] uppercase">Final</span>
+<span class="material-symbols-outlined text-[14px]">lock</span>
+</div>
+</div>
+<!-- Syllabus Progress -->
+<div class="mt-sm">
+<div class="flex justify-between items-center mb-1">
+<span class="font-label-md text-on-surface-variant">Syllabus Progress</span>
+<span class="font-label-md text-primary">28%</span>
+</div>
+<div class="w-full bg-surface-container-highest h-2 rounded-full overflow-hidden">
+<div class="h-full primary-gradient rounded-full" style="width: 28%"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- BottomNavBar Shell -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-2 py-3 bg-surface dark:bg-inverse-surface shadow-lg rounded-t-xl dark:border-t dark:border-outline/20">
+<!-- Home (Active) -->
+<a class="flex flex-col items-center justify-center bg-primary-container dark:bg-primary-fixed text-on-primary-container dark:text-on-primary-fixed-variant rounded-full px-4 py-1 scale-90 duration-150" href="#">
+<span class="material-symbols-outlined" data-weight="fill">dashboard</span>
+<span class="font-label-md text-label-md">Home</span>
+</a>
+<!-- Attendance -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant hover:bg-surface-variant dark:hover:bg-surface-container-highest px-4 py-1 transition-all" href="#">
+<span class="material-symbols-outlined">how_to_reg</span>
+<span class="font-label-md text-label-md">Attendance</span>
+</a>
+<!-- Marks -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant hover:bg-surface-variant dark:hover:bg-surface-container-highest px-4 py-1 transition-all" href="#">
+<span class="material-symbols-outlined">edit_note</span>
+<span class="font-label-md text-label-md">Marks</span>
+</a>
+<!-- Schedule -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant hover:bg-surface-variant dark:hover:bg-surface-container-highest px-4 py-1 transition-all" href="#">
+<span class="material-symbols-outlined">calendar_month</span>
+<span class="font-label-md text-label-md">Schedule</span>
+</a>
+<!-- Menu -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant hover:bg-surface-variant dark:hover:bg-surface-container-highest px-4 py-1 transition-all" href="#">
+<span class="material-symbols-outlined">menu</span>
+<span class="font-label-md text-label-md">Menu</span>
+</a>
+</nav>
+<script>
+        // Micro-interaction for class cards
+        document.querySelectorAll('.shadow-1').forEach(card => {
+            card.addEventListener('touchstart', function() {
+                this.classList.add('scale-[0.98]');
+                this.classList.add('duration-200');
+            });
+            card.addEventListener('touchend', function() {
+                this.classList.remove('scale-[0.98]');
+            });
+        });
+    </script>
+</body></html>

@@ -11,6 +11,9 @@ export class ClassesService {
 
   private validateClassShape(dto: { educationStage?: string | null; level: number; terminalYear?: boolean; name: string }): void {
     const stage = dto.educationStage ?? 'O_LEVEL';
+    if ((stage === 'NURSERY' || stage === 'PRE_UNIT') && dto.level !== 1) {
+      throw new BadRequestException(`${dto.name} must use level 1 for Nursery and Pre-Unit`);
+    }
     if (stage === 'PRIMARY' && (dto.level < 1 || dto.level > 7)) {
       throw new BadRequestException('Primary class level must be between 1 and 7');
     }
@@ -20,7 +23,7 @@ export class ClassesService {
     if (stage === 'A_LEVEL' && ![5, 6].includes(dto.level)) {
       throw new BadRequestException('A-Level class level must be Form 5 or Form 6');
     }
-    if ((stage === 'O_LEVEL' && dto.level === 4) || (stage === 'A_LEVEL' && dto.level === 6)) {
+    if ((stage === 'PRE_UNIT' && dto.level === 1) || (stage === 'O_LEVEL' && dto.level === 4) || (stage === 'A_LEVEL' && dto.level === 6)) {
       if (dto.terminalYear === false) {
         throw new BadRequestException(`${dto.name} must be marked as a terminal year class`);
       }

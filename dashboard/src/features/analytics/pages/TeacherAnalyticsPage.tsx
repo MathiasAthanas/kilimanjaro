@@ -1,12 +1,13 @@
 import { useState } from 'react';
-import { BarChart3, CheckCircle2 } from 'lucide-react';
+import { BarChart3, CheckCircle2, FileDown } from 'lucide-react';
 import { Badge } from '../../../components/common/Badge';
 import { useAcademicYears, useTerms } from '../../admin/api/admin.hooks';
 import { TeacherWorkspaceShell } from '../../teacher/components/TeacherWorkspaceShell';
 import { useTeacherMyDashboard } from '../api/analytics.hooks';
 import { BarChart, LineChart, StatCard, ChartSkeleton, StatSkeleton } from '../components/Charts';
+import { getLogoBase64 } from '../../finance/components/FinanceWorkspaceShell';
 
-function YearTermBar({ yearId, termId, onYear, onTerm }: { yearId: string; termId: string; onYear(v: string): void; onTerm(v: string): void }) {
+function YearTermBar({ yearId, termId, onYear, onTerm, onDownload }: { yearId: string; termId: string; onYear(v: string): void; onTerm(v: string): void; onDownload?(): void }) {
   const { data: years = [] } = useAcademicYears();
   const { data: allTerms = [] } = useTerms();
   const terms = (allTerms as any[]).filter((t: any) => !yearId || t.academicYearId === yearId);
@@ -21,6 +22,11 @@ function YearTermBar({ yearId, termId, onYear, onTerm }: { yearId: string; termI
         <option value="">All Terms</option>
         {(terms as any[]).map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}
       </select>
+      {onDownload && (
+        <button onClick={onDownload} className="ml-auto flex items-center gap-1.5 rounded-lg bg-ks-navy px-3 py-1.5 text-xs font-black text-white hover:opacity-90">
+          <FileDown className="h-3.5 w-3.5" /> Download Report
+        </button>
+      )}
     </div>
   );
 }
@@ -126,6 +132,118 @@ function AttentionQueue({ queue }: { queue: any[] }) {
   );
 }
 
+const NAVY = '#00334f';
+const GOLD = '#d59a1b';
+
+async function generateTeacherPdf(summary: any, courses: any[], attentionQueue: any[]) {
+  const [{ jsPDF }, logo] = await Promise.all([import('jspdf'), getLogoBase64()]);
+  const doc = new (jsPDF as any)({ orientation: 'portrait', unit: 'mm', format: 'a4' }) as any;
+  const W = 210, M = 14, now = new Date();
+
+  const addHeader = (title: string) => {
+    doc.setFillColor(NAVY); doc.rect(0, 0, W, 38, 'F');
+    if (logo) doc.addImage(logo, 'PNG', M, 5, 26, 26, undefined, 'FAST');
+    doc.setTextColor('#ffffff'); doc.setFont('helvetica', 'bold'); doc.setFontSize(15);
+    doc.text('Kilimanjaro Schools', M + 30, 16);
+    doc.setFontSize(10); doc.setFont('helvetica', 'normal');
+    doc.text(title, M + 30, 24);
+    doc.setFontSize(8); doc.text(`Generated: ${now.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' })}`, M + 30, 31);
+    doc.setFillColor(GOLD); doc.rect(0, 38, W, 2.5, 'F');
+  };
+
+  const addFooter = (pg: number) => {
+    doc.setFillColor(NAVY); doc.rect(0, 285, W, 12, 'F');
+    doc.setTextColor('#ffffff'); doc.setFontSize(7); doc.setFont('helvetica', 'normal');
+    doc.text('Kilimanjaro Schools Management System — Confidential', M, 292);
+    doc.text(`Page ${pg}`, W - M, 292, { align: 'right' });
+  };
+
+  const sectionTitle = (text: string, y: number) => {
+    doc.setFillColor('#f1f5f9'); doc.rect(M, y, W - M * 2, 7, 'F');
+    doc.setTextColor(NAVY); doc.setFont('helvetica', 'bold'); doc.setFontSize(9);
+    doc.text(text, M + 2, y + 5);
+    return y + 10;
+  };
+
+  // ── Page 1 ──
+  addHeader('Teaching Performance Report');
+  let y = 48;
+
+  // KPI row
+  const kpis = [
+    { label: 'Overall Pass Rate', value: `${(summary.overallPassRate ?? 0).toFixed(1)}%` },
+    { label: 'Classes Assigned', value: String(summary.totalClasses ?? courses.length) },
+    { label: 'Total Students', value: String(summary.totalStudents ?? 0) },
+    { label: 'Attention Needed', value: String(attentionQueue.length) },
+  ];
+  const cw = (W - M * 2) / 4;
+  kpis.forEach((k, i) => {
+    const x = M + i * cw;
+    doc.setFillColor('#f8fafc'); doc.roundedRect(x, y, cw - 2, 18, 2, 2, 'F');
+    doc.setDrawColor('#e2e8f0'); doc.roundedRect(x, y, cw - 2, 18, 2, 2, 'S');
+    doc.setTextColor(NAVY); doc.setFont('helvetica', 'bold'); doc.setFontSize(13);
+    doc.text(k.value, x + (cw - 2) / 2, y + 10, { align: 'center' });
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor('#64748b');
+    doc.text(k.label, x + (cw - 2) / 2, y + 15.5, { align: 'center' });
+  });
+  y += 24;
+
+  // Courses table
+  y = sectionTitle('My Course Performance', y);
+  const courseHdrs = ['Subject', 'Class', 'Students', 'Avg Score', 'Pass Rate', 'Coverage'];
+  const colW = [50, 35, 22, 22, 22, 22];
+  const rowH = 7;
+  doc.setFillColor(NAVY);
+  doc.rect(M, y, W - M * 2, rowH, 'F');
+  let cx = M;
+  courseHdrs.forEach((h, i) => {
+    doc.setTextColor('#ffffff'); doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5);
+    doc.text(h, cx + 2, y + 5); cx += colW[i];
+  });
+  y += rowH;
+  courses.forEach((c: any, idx: number) => {
+    const cov = c.topicsCovered != null && c.totalTopics ? Math.round((c.topicsCovered / c.totalTopics) * 100) : null;
+    doc.setFillColor(idx % 2 === 0 ? '#ffffff' : '#f8fafc');
+    doc.rect(M, y, W - M * 2, rowH, 'F');
+    doc.setTextColor('#1e293b'); doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5);
+    const cells = [c.subjectName || '—', c.className || '—', String(c.totalStudents ?? '—'),
+      `${(c.averageScore || 0).toFixed(1)}`, `${(c.passRate || 0).toFixed(1)}%`, cov !== null ? `${cov}%` : '—'];
+    cx = M;
+    cells.forEach((v, i) => { doc.text(v, cx + 2, y + 5); cx += colW[i]; });
+    y += rowH;
+    if (y > 268) { addFooter(doc.getNumberOfPages()); doc.addPage(); addHeader('Teaching Performance Report (cont.)'); y = 48; }
+  });
+  y += 6;
+
+  // Attention queue
+  if (attentionQueue.length > 0) {
+    y = sectionTitle('Student Attention Queue', y);
+    const aqHdrs = ['Student Name', 'Class', 'Subject', 'Alert Type', 'Priority'];
+    const aqW = [52, 30, 36, 40, 24];
+    doc.setFillColor(NAVY); doc.rect(M, y, W - M * 2, rowH, 'F');
+    cx = M;
+    aqHdrs.forEach((h, i) => {
+      doc.setTextColor('#ffffff'); doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5);
+      doc.text(h, cx + 2, y + 5); cx += aqW[i];
+    });
+    y += rowH;
+    attentionQueue.slice(0, 20).forEach((s: any, idx: number) => {
+      doc.setFillColor(idx % 2 === 0 ? '#ffffff' : '#f8fafc');
+      doc.rect(M, y, W - M * 2, rowH, 'F');
+      doc.setTextColor('#1e293b'); doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5);
+      const cells = [s.studentName || '—', s.className || '—', s.subjectName || '—',
+        (s.alertType || s.type || '').replace(/_/g, ' '), s.severity || s.priority || 'MEDIUM'];
+      cx = M;
+      cells.forEach((v, i) => { doc.text(v, cx + 2, y + 5); cx += aqW[i]; });
+      y += rowH;
+      if (y > 268) { addFooter(doc.getNumberOfPages()); doc.addPage(); addHeader('Teaching Performance Report (cont.)'); y = 48; }
+    });
+  }
+
+  addFooter(doc.getNumberOfPages());
+  doc.save(`Teacher_Analytics_Report_${now.toISOString().slice(0, 10)}.pdf`);
+}
+
 export function TeacherAnalyticsPage() {
   const [yearId, setYearId] = useState('');
   const [termId, setTermId] = useState('');
@@ -141,7 +259,8 @@ export function TeacherAnalyticsPage() {
 
   return (
     <TeacherWorkspaceShell title="My Teaching Analytics" eyebrow="Teaching Performance Overview">
-      <YearTermBar yearId={yearId} termId={termId} onYear={setYearId} onTerm={setTermId} />
+      <YearTermBar yearId={yearId} termId={termId} onYear={setYearId} onTerm={setTermId}
+        onDownload={() => generateTeacherPdf(summary, courses, attentionQueue)} />
 
       {/* Summary stats */}
       {isLoading ? (

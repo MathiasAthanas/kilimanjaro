@@ -50,11 +50,26 @@ class AnnouncementModel {
       title: json['title'] as String? ?? '',
       body: json['body'] as String? ?? json['content'] as String? ?? '',
       priority: _parsePriority(json['priority'] as String? ?? 'NORMAL'),
-      authorName: json['authorName'] as String? ?? (json['author'] as Map<String, dynamic>?)?['name'] as String? ?? '',
+      authorName: _parseAuthorName(json),
       authorRole: json['authorRole'] as String? ?? (json['author'] as Map<String, dynamic>?)?['role'] as String? ?? '',
       publishedAt: DateTime.parse(json['publishedAt'] as String? ?? json['createdAt'] as String? ?? DateTime.now().toIso8601String()),
       attachment: rawAttachment != null ? AnnouncementAttachment.fromJson(rawAttachment) : null,
     );
+  }
+
+  static String _parseAuthorName(Map<String, dynamic> json) {
+    if (json['authorName'] is String && (json['authorName'] as String).isNotEmpty) {
+      return json['authorName'] as String;
+    }
+    final author = json['author'] as Map<String, dynamic>?;
+    if (author != null) {
+      final first = author['firstName'] as String? ?? '';
+      final last = author['lastName'] as String? ?? '';
+      final combined = '$first $last'.trim();
+      if (combined.isNotEmpty) return combined;
+      if ((author['name'] as String? ?? '').isNotEmpty) return author['name'] as String;
+    }
+    return '';
   }
 
   static AnnouncementPriority _parsePriority(String raw) {

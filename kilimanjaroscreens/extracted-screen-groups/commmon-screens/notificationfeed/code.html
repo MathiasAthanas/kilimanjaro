@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Notifications Feed - Kilimanjaro Schools</title>
+<!-- Fonts -->
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-secondary-fixed-variant": "#004e5c",
+                        "surface-variant": "#dae2fd",
+                        "tertiary-fixed-dim": "#c0c1ff",
+                        "background": "#faf8ff",
+                        "tertiary": "#494bd6",
+                        "outline-variant": "#bec8d2",
+                        "surface-container-highest": "#dae2fd",
+                        "on-primary-fixed-variant": "#004c6e",
+                        "primary-fixed-dim": "#89ceff",
+                        "on-secondary": "#ffffff",
+                        "tertiary-fixed": "#e1e0ff",
+                        "on-error-container": "#93000a",
+                        "primary-container": "#0ea5e9",
+                        "secondary-fixed-dim": "#4cd7f6",
+                        "error-container": "#ffdad6",
+                        "surface-container-high": "#e2e7ff",
+                        "inverse-on-surface": "#eef0ff",
+                        "on-tertiary": "#ffffff",
+                        "on-secondary-container": "#006172",
+                        "surface": "#faf8ff",
+                        "on-tertiary-fixed": "#07006c",
+                        "on-surface": "#131b2e",
+                        "primary-fixed": "#c9e6ff",
+                        "primary": "#006591",
+                        "inverse-primary": "#89ceff",
+                        "surface-container": "#eaedff",
+                        "tertiary-container": "#8d90ff",
+                        "inverse-surface": "#283044",
+                        "on-surface-variant": "#3e4850",
+                        "secondary-fixed": "#acedff",
+                        "surface-dim": "#d2d9f4",
+                        "on-secondary-fixed": "#001f26",
+                        "on-error": "#ffffff",
+                        "on-tertiary-fixed-variant": "#2f2ebe",
+                        "on-primary": "#ffffff",
+                        "surface-container-lowest": "#ffffff",
+                        "secondary": "#00687a",
+                        "outline": "#6e7881",
+                        "on-tertiary-container": "#1407ad",
+                        "surface-tint": "#006591",
+                        "on-primary-container": "#003751",
+                        "on-background": "#131b2e",
+                        "secondary-container": "#57dffe",
+                        "surface-container-low": "#f2f3ff",
+                        "on-primary-fixed": "#001e2f",
+                        "error": "#ba1a1a",
+                        "surface-bright": "#faf8ff"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "xl": "32px",
+                        "sm": "12px",
+                        "base": "4px",
+                        "md": "16px",
+                        "xs": "8px",
+                        "lg": "24px",
+                        "container-padding": "20px"
+                    },
+                    "fontFamily": {
+                        "body-md": ["Plus Jakarta Sans"],
+                        "display-lg": ["Space Grotesk"],
+                        "label-lg": ["Plus Jakarta Sans"],
+                        "headline-lg": ["Space Grotesk"],
+                        "headline-sm": ["Space Grotesk"],
+                        "headline-md": ["Space Grotesk"],
+                        "body-lg": ["Plus Jakarta Sans"],
+                        "label-md": ["Plus Jakarta Sans"],
+                        "body-sm": ["Plus Jakarta Sans"]
+                    },
+                    "fontSize": {
+                        "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                        "display-lg": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "label-lg": ["14px", {"lineHeight": "20px", "letterSpacing": "0.01em", "fontWeight": "600"}],
+                        "headline-lg": ["30px", {"lineHeight": "36px", "fontWeight": "600"}],
+                        "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "500"}],
+                        "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                        "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                        "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.04em", "fontWeight": "600"}],
+                        "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .shadow1 { box-shadow: 0 2px 4px rgba(14, 165, 233, 0.05); }
+        .shadow5 { box-shadow: 0 20px 25px rgba(14, 165, 233, 0.18); }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background font-body-md min-h-screen">
+<!-- TopAppBar -->
+<header class="fixed top-0 left-0 w-full z-50 bg-background h-16 flex items-center justify-between px-container-padding shadow1">
+<div class="flex items-center gap-md">
+<button class="flex items-center justify-center w-10 h-10 rounded-full hover:bg-surface-container-high transition-colors active:scale-95">
+<span class="material-symbols-outlined text-primary">arrow_back</span>
+</button>
+<h1 class="font-headline-sm text-on-surface font-bold">Notifications</h1>
+</div>
+<button class="font-label-lg text-primary hover:bg-surface-container-high px-md py-xs rounded-full transition-colors active:scale-95">
+            Mark all read
+        </button>
+</header>
+<!-- Pinned Filter Bar -->
+<nav class="fixed top-16 left-0 w-full z-40 bg-background/80 backdrop-blur-md px-container-padding py-md overflow-x-auto no-scrollbar border-b border-outline-variant/30">
+<div class="flex gap-xs items-center">
+<button class="bg-primary-container text-on-primary-container px-lg py-xs rounded-full font-label-lg whitespace-nowrap active:scale-95 transition-transform">All</button>
+<button class="bg-surface-container-high text-on-surface-variant px-lg py-xs rounded-full font-label-lg whitespace-nowrap hover:bg-surface-variant transition-colors active:scale-95">Unread</button>
+<button class="bg-surface-container-high text-on-surface-variant px-lg py-xs rounded-full font-label-lg whitespace-nowrap hover:bg-surface-variant transition-colors active:scale-95">Academic</button>
+<button class="bg-surface-container-high text-on-surface-variant px-lg py-xs rounded-full font-label-lg whitespace-nowrap hover:bg-surface-variant transition-colors active:scale-95">Finance</button>
+</div>
+</nav>
+<!-- Main Content -->
+<main class="pt-40 pb-24 px-container-padding">
+<!-- Today Section -->
+<section class="mb-lg">
+<header class="sticky top-[128px] bg-background py-xs z-30">
+<h2 class="font-label-md text-on-surface-variant uppercase tracking-wider opacity-60">Today</h2>
+</header>
+<div class="space-y-md mt-xs">
+<!-- Payment Confirmed Card -->
+<div class="bg-surface-container-lowest p-md rounded-xl shadow1 border border-surface flex gap-md relative overflow-hidden group">
+<div class="flex-shrink-0 w-12 h-12 rounded-xl bg-green-100 flex items-center justify-center text-green-600">
+<span class="material-symbols-outlined" data-weight="fill" style="font-variation-settings: 'FILL' 1;">payments</span>
+</div>
+<div class="flex-1">
+<div class="flex justify-between items-start mb-xs">
+<h3 class="font-label-lg text-on-surface">Payment Confirmed</h3>
+<span class="font-label-md text-on-surface-variant/60">2h ago</span>
+</div>
+<p class="font-body-sm text-on-surface-variant">Your tuition payment for Term 2 has been successfully processed. Receipt #KS-9921 is available for download.</p>
+</div>
+<!-- Unread Dot -->
+<div class="absolute top-md right-md w-2 h-2 bg-primary rounded-full"></div>
+</div>
+<!-- Results Published Card -->
+<div class="bg-surface-container-lowest p-md rounded-xl shadow1 border border-surface flex gap-md relative overflow-hidden group">
+<div class="flex-shrink-0 w-12 h-12 rounded-xl bg-sky-100 flex items-center justify-center text-sky-600">
+<span class="material-symbols-outlined" data-weight="fill" style="font-variation-settings: 'FILL' 1;">school</span>
+</div>
+<div class="flex-1">
+<div class="flex justify-between items-start mb-xs">
+<h3 class="font-label-lg text-on-surface">Results Published</h3>
+<span class="font-label-md text-on-surface-variant/60">5h ago</span>
+</div>
+<p class="font-body-sm text-on-surface-variant">The Physics Mid-term results are now available on the Academic portal. Great progress, Sarah!</p>
+</div>
+<div class="absolute top-md right-md w-2 h-2 bg-primary rounded-full"></div>
+</div>
+</div>
+</section>
+<!-- Yesterday Section -->
+<section class="mb-lg">
+<header class="sticky top-[128px] bg-background py-xs z-30">
+<h2 class="font-label-md text-on-surface-variant uppercase tracking-wider opacity-60">Yesterday</h2>
+</header>
+<div class="space-y-md mt-xs">
+<!-- Attendance Alert Card -->
+<div class="bg-surface-container-lowest p-md rounded-xl shadow1 border border-surface flex gap-md opacity-80">
+<div class="flex-shrink-0 w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center text-amber-600">
+<span class="material-symbols-outlined" data-weight="fill" style="font-variation-settings: 'FILL' 1;">calendar_today</span>
+</div>
+<div class="flex-1">
+<div class="flex justify-between items-start mb-xs">
+<h3 class="font-label-lg text-on-surface">Attendance Alert</h3>
+<span class="font-label-md text-on-surface-variant/60">Yesterday</span>
+</div>
+<p class="font-body-sm text-on-surface-variant">Morning session (Mathematics) marked as 'Late'. Please ensure arrival by 08:00 AM.</p>
+</div>
+</div>
+<!-- Announcement Card -->
+<div class="bg-surface-container-lowest p-md rounded-xl shadow1 border border-surface flex gap-md opacity-80">
+<div class="flex-shrink-0 w-12 h-12 rounded-xl bg-purple-100 flex items-center justify-center text-purple-600">
+<span class="material-symbols-outlined" data-weight="fill" style="font-variation-settings: 'FILL' 1;">campaign</span>
+</div>
+<div class="flex-1">
+<div class="flex justify-between items-start mb-xs">
+<h3 class="font-label-lg text-on-surface">School Assembly</h3>
+<span class="font-label-md text-on-surface-variant/60">Yesterday</span>
+</div>
+<p class="font-body-sm text-on-surface-variant">Mandatory assembly scheduled for Friday morning in the Main Hall. Formal uniform required.</p>
+</div>
+</div>
+</div>
+</section>
+<!-- Earlier Section -->
+<section class="mb-lg">
+<header class="sticky top-[128px] bg-background py-xs z-30">
+<h2 class="font-label-md text-on-surface-variant uppercase tracking-wider opacity-60">Earlier</h2>
+</header>
+<div class="space-y-md mt-xs">
+<!-- Archive Card -->
+<div class="bg-surface-container-lowest p-md rounded-xl shadow1 border border-surface flex gap-md opacity-80">
+<div class="flex-shrink-0 w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center text-blue-600">
+<span class="material-symbols-outlined" data-weight="fill" style="font-variation-settings: 'FILL' 1;">library_books</span>
+</div>
+<div class="flex-1">
+<div class="flex justify-between items-start mb-xs">
+<h3 class="font-label-lg text-on-surface">New Library Books</h3>
+<span class="font-label-md text-on-surface-variant/60">Mar 12</span>
+</div>
+<p class="font-body-sm text-on-surface-variant">20 new STEM titles have been added to the library catalog. Reservation is now open.</p>
+</div>
+</div>
+</div>
+</section>
+<!-- Empty State (Hidden by default, shown via logic if needed) -->
+<div class="hidden flex-col items-center justify-center py-24 text-center">
+<div class="w-48 h-48 mb-lg bg-surface-container-high rounded-full flex items-center justify-center">
+<span class="material-symbols-outlined text-[64px] text-outline">notifications_off</span>
+</div>
+<h3 class="font-headline-md text-on-surface mb-xs">All Caught Up!</h3>
+<p class="font-body-md text-on-surface-variant max-w-[280px]">You have no new notifications. We'll let you know when something important happens.</p>
+</div>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 bg-surface-container-lowest h-20 pb-safe px-lg flex justify-around items-center rounded-t-xl shadow5 border-t border-outline-variant/30">
+<a class="flex flex-col items-center justify-center text-on-surface-variant opacity-70 hover:opacity-100 transition-opacity" href="#">
+<span class="material-symbols-outlined">home</span>
+</a>
+<a class="flex flex-col items-center justify-center bg-primary-container text-on-primary-container rounded-full w-12 h-12 active:scale-90 transition-transform" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">notifications</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant opacity-70 hover:opacity-100 transition-opacity" href="#">
+<span class="material-symbols-outlined">school</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant opacity-70 hover:opacity-100 transition-opacity" href="#">
+<span class="material-symbols-outlined">person</span>
+</a>
+</nav>
+<!-- Visual Polish: Gradient overlay for bottom tab bar clearance -->
+<div class="fixed bottom-20 left-0 w-full h-8 bg-gradient-to-t from-background to-transparent pointer-events-none z-10"></div>
+</body></html>

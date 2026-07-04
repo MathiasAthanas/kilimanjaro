@@ -6,6 +6,15 @@ import '../../../models/teacher_models.dart';
 import '../../config/app_config.dart';
 import '../interfaces/teacher_service_interface.dart';
 
+String _buildName(Map<String, dynamic> json) {
+  final first = json['firstName'] as String? ?? '';
+  final last = json['lastName'] as String? ?? '';
+  final combined = '$first $last'.trim();
+  return combined.isNotEmpty
+      ? combined
+      : (json['name'] as String? ?? json['fullName'] as String? ?? '');
+}
+
 class ApiTeacherService implements ITeacherService {
   ApiTeacherService(this._storage) : _dio = _buildDio();
 
@@ -76,7 +85,7 @@ class ApiTeacherService implements ITeacherService {
   TeacherStudent _studentFromJson(Map<String, dynamic> json) {
     return TeacherStudent(
       id: json['id'] as String? ?? '',
-      name: json['name'] as String? ?? '',
+      name: _buildName(json),
       registrationNumber: json['registrationNumber'] as String? ?? '',
       classLabel: json['classLabel'] as String? ?? (json['class'] as Map<String, dynamic>?)?['name'] as String? ?? '',
       averageScore: (json['averageScore'] as num?)?.toDouble() ?? 0.0,

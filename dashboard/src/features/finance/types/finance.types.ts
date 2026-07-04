@@ -69,6 +69,8 @@ export type FeeCategory = {
   mandatory: boolean;
   active: boolean;
   usedByStructures: number;
+  usedByAssignments?: number;
+  usedByInvoices?: number;
 };
 
 export type FeeStructure = {
@@ -96,8 +98,18 @@ export type FeeAssignment = {
 export type Asset = {
   id: string;
   name: string;
+  assetNumber?: string;
+  isGroup?: boolean;
+  groupType?: string;
+  parentAssetId?: string;
+  childCount?: number;
+  groupPurchaseCost?: number;
+  groupCurrentValue?: number;
+  childAssets?: Asset[];
   category: string;
   type: string;
+  quantity?: number;
+  unitCost?: number;
   brand: string;
   serial: string;
   purchaseDate: string;

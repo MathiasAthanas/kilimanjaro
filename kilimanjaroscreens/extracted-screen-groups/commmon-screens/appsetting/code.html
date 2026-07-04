@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport"/>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-secondary-fixed-variant": "#004e5c",
+                    "surface-variant": "#dae2fd",
+                    "tertiary-fixed-dim": "#c0c1ff",
+                    "background": "#faf8ff",
+                    "tertiary": "#494bd6",
+                    "outline-variant": "#bec8d2",
+                    "surface-container-highest": "#dae2fd",
+                    "on-primary-fixed-variant": "#004c6e",
+                    "primary-fixed-dim": "#89ceff",
+                    "on-secondary": "#ffffff",
+                    "tertiary-fixed": "#e1e0ff",
+                    "on-error-container": "#93000a",
+                    "primary-container": "#0ea5e9",
+                    "secondary-fixed-dim": "#4cd7f6",
+                    "error-container": "#ffdad6",
+                    "surface-container-high": "#e2e7ff",
+                    "inverse-on-surface": "#eef0ff",
+                    "on-tertiary": "#ffffff",
+                    "on-secondary-container": "#006172",
+                    "surface": "#faf8ff",
+                    "on-tertiary-fixed": "#07006c",
+                    "on-surface": "#131b2e",
+                    "primary-fixed": "#c9e6ff",
+                    "primary": "#006591",
+                    "inverse-primary": "#89ceff",
+                    "surface-container": "#eaedff",
+                    "tertiary-container": "#8d90ff",
+                    "inverse-surface": "#283044",
+                    "on-surface-variant": "#3e4850",
+                    "secondary-fixed": "#acedff",
+                    "surface-dim": "#d2d9f4",
+                    "on-secondary-fixed": "#001f26",
+                    "on-error": "#ffffff",
+                    "on-tertiary-fixed-variant": "#2f2ebe",
+                    "on-primary": "#ffffff",
+                    "surface-container-lowest": "#ffffff",
+                    "secondary": "#00687a",
+                    "outline": "#6e7881",
+                    "on-tertiary-container": "#1407ad",
+                    "surface-tint": "#006591",
+                    "on-primary-container": "#003751",
+                    "on-background": "#131b2e",
+                    "secondary-container": "#57dffe",
+                    "surface-container-low": "#f2f3ff",
+                    "on-primary-fixed": "#001e2f",
+                    "error": "#ba1a1a",
+                    "surface-bright": "#faf8ff"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "2xl": "1rem",
+                    "full": "9999px"
+            },
+            "boxShadow": {
+                "shadow1": "0 2px 4px rgba(14, 165, 233, 0.05)",
+                "shadow3": "0 10px 15px rgba(14, 165, 233, 0.12)",
+                "shadow5": "0 20px 25px rgba(14, 165, 233, 0.18)"
+            },
+            "spacing": {
+                    "xl": "32px",
+                    "sm": "12px",
+                    "base": "4px",
+                    "md": "16px",
+                    "xs": "8px",
+                    "lg": "24px",
+                    "container-padding": "20px"
+            },
+            "fontFamily": {
+                    "body-md": ["Plus Jakarta Sans"],
+                    "display-lg": ["Space Grotesk"],
+                    "label-lg": ["Plus Jakarta Sans"],
+                    "headline-lg": ["Space Grotesk"],
+                    "headline-sm": ["Space Grotesk"],
+                    "headline-md": ["Space Grotesk"],
+                    "body-lg": ["Plus Jakarta Sans"],
+                    "label-md": ["Plus Jakarta Sans"],
+                    "body-sm": ["Plus Jakarta Sans"]
+            },
+            "fontSize": {
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "display-lg": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "label-lg": ["14px", {"lineHeight": "20px", "letterSpacing": "0.01em", "fontWeight": "600"}],
+                    "headline-lg": ["30px", {"lineHeight": "36px", "fontWeight": "600"}],
+                    "headline-sm-mobile": ["20px", {"lineHeight": "28px", "fontWeight": "500"}],
+                    "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                    "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                    "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.04em", "fontWeight": "600"}],
+                    "label-lg-mobile": ["14px", {"lineHeight": "20px", "letterSpacing": "0.01em", "fontWeight": "600"}],
+                    "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .shadow1 { box-shadow: 0 2px 4px rgba(14, 165, 233, 0.05); }
+        .shadow5 { box-shadow: 0 20px 25px rgba(14, 165, 233, 0.18); }
+        
+        /* Custom slider thumb styling */
+        input[type='range']::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 24px;
+            height: 24px;
+            background: #0ea5e9;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 4px solid #ffffff;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background font-body-md min-h-screen pb-24">
+<!-- TopAppBar -->
+<header class="bg-background dark:bg-surface fixed top-0 h-[64px] z-50 flex items-center justify-between px-container-padding w-full shadow1">
+<div class="flex items-center gap-md">
+<button class="text-primary dark:text-inverse-primary hover:bg-surface-container-high transition-colors duration-200 p-base active:scale-95 transition-transform duration-150 rounded-full flex items-center justify-center">
+<span class="material-symbols-outlined" data-icon="arrow_back">arrow_back</span>
+</button>
+<h1 class="font-headline-sm text-headline-sm-mobile font-bold text-on-surface dark:text-inverse-on-surface">App Settings</h1>
+</div>
+<div class="w-10 h-10 rounded-full overflow-hidden border-2 border-primary-container">
+<img alt="User Profile" class="w-full h-full object-cover" data-alt="A close-up high-quality portrait of a professional African educator in a bright, modern setting. The lighting is soft and natural, emphasizing a warm and approachable expression. The background is a clean, minimalist educational environment with sky-blue accents that reflect the Kilimanjaro Schools brand identity. The overall mood is inspirational and sophisticated." src="https://lh3.googleusercontent.com/aida-public/AB6AXuC2aQQS65bxrt-K-cfkBHQxLlrJ1wLuPDefOP7wAqC4Kx2CQsT5IkOjxQMGRU9NxDMQd108fNtbs1SLWSul7rZbYgzYQ0_934CrA5mStpeD5C8zQpF9oo_n-ucX53LnIXIZaSLmdFfa5z-dJEWLznw08PJZlwryz-q2gkf1pSVlRB7tLDXTaSdh86y3u7l9Bc8j09ungvgVLwXjTkLr6yI2ahzJSWqEahhTMP745uyLy6beKnn-SPnN8mlxfISlX40cvU0Mx4FXNA"/>
+</div>
+</header>
+<main class="mt-xl pt-lg px-container-padding space-y-lg">
+<!-- Appearance Section -->
+<section class="space-y-sm">
+<h2 class="font-label-lg text-label-lg-mobile text-on-surface-variant px-base">Appearance</h2>
+<div class="bg-surface-container-lowest shadow1 border border-outline-variant/30 rounded-2xl p-md space-y-lg">
+<!-- Theme Segment Control -->
+<div class="space-y-xs">
+<label class="font-label-md text-label-md text-on-surface-variant">Display Theme</label>
+<div class="flex p-base bg-surface-container-low rounded-xl">
+<button class="flex-1 py-xs px-sm rounded-lg font-label-md text-label-md flex items-center justify-center gap-xs bg-surface-container-lowest text-primary shadow1">
+<span class="material-symbols-outlined text-[18px]" data-icon="light_mode">light_mode</span>
+                            Light
+                        </button>
+<button class="flex-1 py-xs px-sm rounded-lg font-label-md text-label-md flex items-center justify-center gap-xs text-on-surface-variant hover:bg-surface-container-high transition-colors">
+<span class="material-symbols-outlined text-[18px]" data-icon="settings_brightness">settings_brightness</span>
+                            System
+                        </button>
+<button class="flex-1 py-xs px-sm rounded-lg font-label-md text-label-md flex items-center justify-center gap-xs text-on-surface-variant hover:bg-surface-container-high transition-colors">
+<span class="material-symbols-outlined text-[18px]" data-icon="dark_mode">dark_mode</span>
+                            Dark
+                        </button>
+</div>
+</div>
+<!-- Font Size Slider -->
+<div class="space-y-xs">
+<div class="flex justify-between items-center">
+<label class="font-label-md text-label-md text-on-surface-variant">Font Size</label>
+<span class="font-label-md text-label-md text-primary">Medium</span>
+</div>
+<div class="flex items-center gap-md">
+<span class="font-body-sm text-body-sm text-on-surface-variant">A</span>
+<input class="w-full h-1.5 bg-surface-container-high rounded-lg appearance-none cursor-pointer accent-primary" max="5" min="1" type="range" value="3"/>
+<span class="font-headline-md text-headline-md text-on-surface-variant">A</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Security Section -->
+<section class="space-y-sm">
+<h2 class="font-label-lg text-label-lg-mobile text-on-surface-variant px-base">Security</h2>
+<div class="bg-surface-container-lowest shadow1 border border-outline-variant/30 rounded-2xl overflow-hidden">
+<!-- Biometric Toggle -->
+<div class="flex items-center justify-between p-md hover:bg-surface-container-low transition-colors duration-200">
+<div class="flex items-center gap-md">
+<div class="w-10 h-10 rounded-xl bg-primary-container/10 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined" data-icon="fingerprint">fingerprint</span>
+</div>
+<div>
+<p class="font-label-lg text-label-lg text-on-surface">Biometric Login</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Face ID or Fingerprint</p>
+</div>
+</div>
+<div class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-11 h-6 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-container"></div>
+</div>
+</div>
+<div class="mx-md border-t border-outline-variant/20"></div>
+<!-- Change Password Link -->
+<button class="w-full flex items-center justify-between p-md hover:bg-surface-container-low transition-colors duration-200 text-left">
+<div class="flex items-center gap-md">
+<div class="w-10 h-10 rounded-xl bg-tertiary-container/10 flex items-center justify-center text-tertiary">
+<span class="material-symbols-outlined" data-icon="lock_reset">lock_reset</span>
+</div>
+<div>
+<p class="font-label-lg text-label-lg text-on-surface">Change Password</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Update your account credentials</p>
+</div>
+</div>
+<span class="material-symbols-outlined text-outline" data-icon="chevron_right">chevron_right</span>
+</button>
+</div>
+</section>
+<!-- About Section -->
+<section class="space-y-sm">
+<h2 class="font-label-lg text-label-lg-mobile text-on-surface-variant px-base">About</h2>
+<div class="bg-surface-container-lowest shadow1 border border-outline-variant/30 rounded-2xl overflow-hidden">
+<div class="flex items-center justify-between p-md">
+<div class="flex items-center gap-md">
+<div class="w-10 h-10 rounded-xl bg-secondary-container/10 flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined" data-icon="info">info</span>
+</div>
+<div>
+<p class="font-label-lg text-label-lg text-on-surface">Version Info</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">v2.4.0 (Build 892)</p>
+</div>
+</div>
+</div>
+<div class="mx-md border-t border-outline-variant/20"></div>
+<button class="w-full flex items-center justify-between p-md hover:bg-surface-container-low transition-colors duration-200 text-left">
+<div class="flex items-center gap-md">
+<div class="w-10 h-10 rounded-xl bg-primary-container/10 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined" data-icon="policy">policy</span>
+</div>
+<p class="font-label-lg text-label-lg text-on-surface">Privacy Policy</p>
+</div>
+<span class="material-symbols-outlined text-outline" data-icon="open_in_new">open_in_new</span>
+</button>
+</div>
+</section>
+<!-- Sign Out -->
+<section class="pt-md">
+<button class="group w-full bg-surface-container-lowest shadow1 border-l-4 border-l-error rounded-2xl flex items-center justify-between p-md hover:bg-error-container/10 transition-colors duration-200 text-left active:scale-[0.98] transition-transform">
+<div class="flex items-center gap-md">
+<div class="w-10 h-10 rounded-xl bg-error-container/20 flex items-center justify-center text-error">
+<span class="material-symbols-outlined" data-icon="logout">logout</span>
+</div>
+<div>
+<p class="font-label-lg text-label-lg text-error font-bold">Sign Out</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Logged in as admin_kilimanjaro</p>
+</div>
+</div>
+</button>
+</section>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center h-20 pb-safe px-lg bg-surface-container-lowest dark:bg-surface-dim border-t border-outline-variant dark:border-outline shadow5">
+<button class="flex flex-col items-center justify-center text-on-surface-variant opacity-70 hover:opacity-100 transition-opacity">
+<span class="material-symbols-outlined" data-icon="home">home</span>
+<span class="font-label-md text-label-md">Home</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant opacity-70 hover:opacity-100 transition-opacity">
+<span class="material-symbols-outlined" data-icon="school">school</span>
+<span class="font-label-md text-label-md">Classes</span>
+</button>
+<button class="flex flex-col items-center justify-center bg-primary-container text-on-primary-container rounded-full w-12 h-12 shadow3 active:scale-90 transition-transform">
+<span class="material-symbols-outlined" data-icon="person" style="font-variation-settings: 'FILL' 1;">person</span>
+</button>
+</nav>
+</body></html>

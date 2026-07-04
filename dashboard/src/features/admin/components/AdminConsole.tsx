@@ -748,12 +748,18 @@ export function CsvImportZone({ entity }: { entity: string }) {
 
 // ─── Assessment type inline editor ───────────────────────────────────────────
 
+const STAGE_LABELS: Record<string, string> = {
+  NURSERY: 'Nursery', PRE_UNIT: 'Pre-Unit', PRIMARY: 'Primary', O_LEVEL: 'O-Level', A_LEVEL: 'A-Level',
+};
+
 export function AssessmentTypeEditor({
-  types, onSave, loading = false,
+  types, onSave, loading = false, defaultStage, defaultAcademicYearId,
 }: {
   types: Array<{ id: string; name: string; code?: string; weight: number; maxScore: number; scope: string; academicYearId?: string; educationStage?: string; classLevel?: string; subjectId?: string }>;
   onSave?: (payload: { rows: Array<{ id: string; name: string; code: string; weightPercentage: number; academicYearId: string; educationStage?: string; classLevel?: number; subjectId?: string; isActive: boolean }>; deactivateIds: string[] }) => void;
   loading?: boolean;
+  defaultStage?: string;
+  defaultAcademicYearId?: string;
 }) {
   const [rows, setRows] = useState(types.map((t) => ({ ...t })));
   const [removedIds, setRemovedIds] = useState<string[]>([]);
@@ -761,7 +767,11 @@ export function AssessmentTypeEditor({
     setRows(types.map((t) => ({ ...t })));
     setRemovedIds([]);
   }, [types]);
-  const total = rows.reduce((s, r) => s + r.weight, 0);
+  // Only count rows that belong to this stage tab
+  const stageRows = defaultStage
+    ? rows.filter((r) => (r.educationStage || r.scope || defaultStage).toUpperCase().replace(/-/g, '_') === defaultStage)
+    : rows;
+  const total = stageRows.reduce((s, r) => s + r.weight, 0);
   const valid = Math.abs(total - 100) < 0.001;
 
   const update = (i: number, field: string, val: string | number) =>
@@ -780,7 +790,7 @@ export function AssessmentTypeEditor({
         code: String(row.code || codeFor(row.name, index)),
         weightPercentage: Number(row.weight),
         academicYearId: String(row.academicYearId),
-        educationStage: row.educationStage || undefined,
+        educationStage: defaultStage ?? row.educationStage ?? undefined,
         classLevel: row.classLevel ? Number(row.classLevel) : undefined,
         subjectId: row.subjectId || undefined,
         isActive: true,
@@ -836,15 +846,9 @@ export function AssessmentTypeEditor({
                 />
               </td>
               <td className="px-5 py-3">
-                <select
-                  value={row.educationStage || row.scope}
-                  onChange={(e) => update(i, 'educationStage', e.target.value)}
-                  className="h-9 cursor-pointer rounded-lg border border-slate-200 bg-white px-3 font-semibold outline-none transition focus:border-[#4338CA]"
-                >
-                  <option value="PRIMARY">Primary</option>
-                  <option value="O_LEVEL">O-Level</option>
-                  <option value="A_LEVEL">A-Level</option>
-                </select>
+                <span className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-black text-slate-600">
+                  {STAGE_LABELS[defaultStage ?? (row.educationStage || row.scope)?.toUpperCase().replace(/-/g, '_')] ?? (row.educationStage || row.scope)}
+                </span>
               </td>
               <td className="px-5 py-3 text-right">
                 <button
@@ -872,16 +876,16 @@ export function AssessmentTypeEditor({
             code: '',
             weight: 0,
             maxScore: 100,
-            scope: prev[0]?.scope ?? 'O_LEVEL',
-            academicYearId: prev[0]?.academicYearId ?? '',
-            educationStage: prev[0]?.educationStage ?? 'O_LEVEL',
+            scope: prev[0]?.scope ?? defaultStage ?? 'O_LEVEL',
+            academicYearId: prev[0]?.academicYearId ?? defaultAcademicYearId ?? '',
+            educationStage: prev[0]?.educationStage ?? defaultStage ?? 'O_LEVEL',
             classLevel: prev[0]?.classLevel ?? '',
             subjectId: prev[0]?.subjectId ?? '',
           }])}
         >
           <Plus className="h-3.5 w-3.5" /> Add Type
         </Button>
-        <Button disabled={!valid || !rows.length} loading={loading} className="ml-auto rounded-xl bg-[#4338CA]" onClick={save}>
+        <Button disabled={!valid || !stageRows.length} loading={loading} className="ml-auto rounded-xl bg-[#4338CA]" onClick={save}>
           Save Assessment Types
         </Button>
       </div>

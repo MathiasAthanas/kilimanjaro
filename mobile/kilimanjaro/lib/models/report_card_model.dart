@@ -50,6 +50,7 @@ class ReportCardModel {
     this.combinationCode,
     this.reportTemplateCode,
     this.divisionSummary,
+    this.generatedAt,
   });
 
   final String termId;
@@ -66,8 +67,14 @@ class ReportCardModel {
   final String? combinationCode;
   final String? reportTemplateCode;
   final String? divisionSummary;
+  final DateTime? generatedAt;
 
   factory ReportCardModel.fromJson(Map<String, dynamic> json) {
+    DateTime? _parseDate(dynamic v) {
+      if (v == null) return null;
+      try { return DateTime.parse(v as String); } catch (_) { return null; }
+    }
+
     return ReportCardModel(
       termId: json['termId'] as String? ?? '',
       title: json['title'] as String? ?? json['overallRemark'] as String? ?? '',
@@ -87,6 +94,7 @@ class ReportCardModel {
       combinationCode: json['combinationCode'] as String?,
       reportTemplateCode: json['reportTemplateCode'] as String?,
       divisionSummary: json['divisionSummary']?.toString(),
+      generatedAt: _parseDate(json['generatedAt'] ?? json['createdAt']),
     );
   }
 

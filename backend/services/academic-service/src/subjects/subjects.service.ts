@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateClassSubjectDto } from './dto/create-class-subject.dto';
 import { CreateSubjectDto } from './dto/create-subject.dto';
@@ -8,12 +8,16 @@ import { BulkStudentSubjectEnrollmentDto } from './dto/bulk-student-subject-enro
 import { UpdateClassSubjectDto } from './dto/update-class-subject.dto';
 import { UpdateSubjectDto } from './dto/update-subject.dto';
 import { RedisService } from '../redis/redis.service';
+import { ROLES } from '../common/constants/roles';
+import { RequestUser } from '../common/interfaces/request-user.interface';
+import { StudentClientService } from '../student-client/student-client.service';
 
 @Injectable()
 export class SubjectsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
+    private readonly studentClient: StudentClientService,
   ) {}
 
   async createSubject(dto: CreateSubjectDto) {
@@ -81,7 +85,33 @@ export class SubjectsService {
     await this.redis.del('subjects:all');
   }
 
-  async createClassSubject(dto: CreateClassSubjectDto) {
+  private async getHodDepartment(user: RequestUser, academicYearId?: string): Promise<{ id: string; name?: string } | null> {
+    const response = await this.studentClient.get<{ id?: string; name?: string; data?: { id: string; name?: string } } | null>(
+      `/students/internal/departments/by-user/${user.id}`,
+      academicYearId ? { academicYearId } : undefined,
+    );
+    if (!response) return null;
+    return response.data ?? (response.id ? response as { id: string; name?: string } : null);
+  }
+
+  private async assertHodSubjectScope(user: RequestUser | undefined, subjectId: string, academicYearId?: string): Promise<void> {
+    if (user?.role !== ROLES.HEAD_OF_DEPARTMENT) return;
+    const department = await this.getHodDepartment(user, academicYearId);
+    if (!department?.id) {
+      throw new ForbiddenException('HOD is not assigned to an active department');
+    }
+    const subject = await this.prisma.subject.findUnique({
+      where: { id: subjectId },
+      select: { departmentId: true, name: true },
+    });
+    if (!subject) throw new NotFoundException('Subject not found');
+    if (subject.departmentId !== department.id) {
+      throw new ForbiddenException('HOD can only manage class-subject assignments for their department');
+    }
+  }
+
+  async createClassSubject(dto: CreateClassSubjectDto, user?: RequestUser) {
+    await this.assertHodSubjectScope(user, dto.subjectId, dto.academicYearId);
     return this.prisma.classSubject.create({
       data: {
         ...dto,
@@ -99,13 +129,29 @@ export class SubjectsService {
     educationStage?: string;
     classLevel?: number;
     combinationId?: string;
-  }) {
+  }, user?: RequestUser) {
+    let scopedSubjectIds: string[] | undefined;
+    if (user?.role === ROLES.HEAD_OF_DEPARTMENT) {
+      const department = await this.getHodDepartment(user, filters.academicYearId);
+      if (!department?.id) return [];
+      const subjects = await this.prisma.subject.findMany({
+        where: { departmentId: department.id, isActive: true },
+        select: { id: true },
+      });
+      scopedSubjectIds = subjects.map((subject) => subject.id);
+      if (scopedSubjectIds.length === 0) return [];
+    }
+
     return this.prisma.classSubject.findMany({
       where: {
         classId: filters.classId,
         academicYearId: filters.academicYearId,
         teacherId: filters.teacherId,
-        subjectId: filters.subjectId,
+        subjectId: scopedSubjectIds
+          ? filters.subjectId
+            ? scopedSubjectIds.includes(filters.subjectId) ? filters.subjectId : '__forbidden_subject__'
+            : { in: scopedSubjectIds }
+          : filters.subjectId,
         educationStage: filters.educationStage as any,
         classLevel: filters.classLevel,
         combinationId: filters.combinationId,
@@ -115,11 +161,12 @@ export class SubjectsService {
     });
   }
 
-  async updateClassSubject(id: string, dto: UpdateClassSubjectDto) {
+  async updateClassSubject(id: string, dto: UpdateClassSubjectDto, user?: RequestUser) {
     const existing = await this.prisma.classSubject.findUnique({ where: { id } });
     if (!existing) {
       throw new NotFoundException('Class subject not found');
     }
+    await this.assertHodSubjectScope(user, dto.subjectId ?? existing.subjectId, dto.academicYearId ?? existing.academicYearId);
 
     return this.prisma.classSubject.update({ where: { id }, data: dto, include: { subject: true, combination: true } });
   }

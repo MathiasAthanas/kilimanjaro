@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Subject Detail Analytics | Kilimanjaro Schools</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+        .primary-gradient {
+            background: linear-gradient(135deg, #006591 0%, #0ea5e9 100%);
+        }
+        .chart-bar-hover:hover {
+            filter: brightness(1.1);
+            transform: scaleY(1.05);
+            transition: all 0.2s ease;
+        }
+    </style>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "surface-container": "#eaedff",
+                    "on-tertiary-fixed": "#07006c",
+                    "inverse-primary": "#89ceff",
+                    "on-primary-container": "#003751",
+                    "on-tertiary-container": "#1407ad",
+                    "surface-dim": "#d2d9f4",
+                    "tertiary-container": "#8d90ff",
+                    "error-container": "#ffdad6",
+                    "surface-variant": "#dae2fd",
+                    "on-secondary-fixed": "#001f26",
+                    "outline": "#6e7881",
+                    "surface-container-highest": "#dae2fd",
+                    "primary-fixed": "#c9e6ff",
+                    "tertiary": "#494bd6",
+                    "on-surface-variant": "#3e4850",
+                    "on-error-container": "#93000a",
+                    "error": "#ba1a1a",
+                    "surface-tint": "#006591",
+                    "secondary": "#00687a",
+                    "tertiary-fixed": "#e1e0ff",
+                    "on-tertiary-fixed-variant": "#2f2ebe",
+                    "surface-container-high": "#e2e7ff",
+                    "on-tertiary": "#ffffff",
+                    "on-primary-fixed": "#001e2f",
+                    "on-secondary-fixed-variant": "#004e5c",
+                    "on-secondary": "#ffffff",
+                    "secondary-fixed": "#acedff",
+                    "inverse-on-surface": "#eef0ff",
+                    "inverse-surface": "#283044",
+                    "background": "#faf8ff",
+                    "secondary-fixed-dim": "#4cd7f6",
+                    "on-primary": "#ffffff",
+                    "outline-variant": "#bec8d2",
+                    "on-error": "#ffffff",
+                    "surface": "#faf8ff",
+                    "primary-fixed-dim": "#89ceff",
+                    "tertiary-fixed-dim": "#c0c1ff",
+                    "on-background": "#131b2e",
+                    "on-surface": "#131b2e",
+                    "primary-container": "#0ea5e9",
+                    "primary": "#006591",
+                    "surface-container-lowest": "#ffffff",
+                    "on-secondary-container": "#006172",
+                    "surface-bright": "#faf8ff",
+                    "surface-container-low": "#f2f3ff",
+                    "secondary-container": "#57dffe",
+                    "on-primary-fixed-variant": "#004c6e"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "lg": "24px",
+                    "base": "4px",
+                    "container-padding": "20px",
+                    "xs": "8px",
+                    "xl": "32px",
+                    "sm": "12px",
+                    "md": "16px"
+            },
+            "fontFamily": {
+                    "label-md": ["Plus Jakarta Sans"],
+                    "display-lg": ["Space Grotesk"],
+                    "headline-lg": ["Space Grotesk"],
+                    "body-md": ["Plus Jakarta Sans"],
+                    "body-lg": ["Plus Jakarta Sans"],
+                    "headline-md": ["Space Grotesk"],
+                    "headline-sm": ["Space Grotesk"],
+                    "body-sm": ["Plus Jakarta Sans"],
+                    "label-lg": ["Plus Jakarta Sans"]
+            },
+            "fontSize": {
+                    "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.04em", "fontWeight": "600"}],
+                    "display-lg": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "headline-lg": ["30px", {"lineHeight": "36px", "fontWeight": "600"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                    "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                    "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "500"}],
+                    "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                    "label-lg": ["14px", {"lineHeight": "20px", "letterSpacing": "0.01em", "fontWeight": "600"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-surface min-h-screen pb-24">
+<!-- TopAppBar -->
+<header class="flex justify-between items-center px-container-padding h-16 w-full fixed top-0 z-50 bg-surface shadow-sm">
+<div class="flex items-center gap-3">
+<button class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-container-high transition-colors">
+<span class="material-symbols-outlined text-primary">arrow_back</span>
+</button>
+<h1 class="font-headline-sm text-primary font-bold tracking-tight">Chemistry Analytics</h1>
+</div>
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-on-surface-variant">search</span>
+<div class="w-8 h-8 rounded-full overflow-hidden border border-outline-variant">
+<img alt="Teacher Profile" data-alt="A professional close-up portrait of a senior educator with a warm, confident expression. The teacher is set against a brightly lit, minimalist office background with soft bokeh. The lighting is high-key and modern, emphasizing clean lines and a professional, corporate educational aesthetic consistent with a high-contrast tech environment." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDLJtTaqb63s-lgXMn2sEEUH8sOsCHSyl3J40UO236NEWuAnydvtHTKQS7HwBRpmuu0fpigpyhP9WfFzWQhEg0rvGB8EzMnOzWL0c3AnhrP3Q6mOW-Wke3FjYSiXBNGXveYXlhT_H78Mh7uyVJHLxIWt-lF8foPgc4L_94PpSd7Fw6iGnEhVs-d-lYxPb6nPTyMZMs_s6KabE2J15OqGSf9-vDBK_jkzX5RUE1AWxFjvqJmYEPhkte34YV1CFnxPkvDRfNwqrnTPg"/>
+</div>
+</div>
+</header>
+<main class="mt-20 px-container-padding max-w-5xl mx-auto space-y-lg">
+<!-- Hero Analytics Card -->
+<section class="primary-gradient rounded-xl p-lg text-on-primary shadow-lg relative overflow-hidden">
+<div class="absolute -top-10 -right-10 w-40 h-40 bg-white/10 rounded-full blur-3xl"></div>
+<div class="relative z-10 grid grid-cols-2 gap-md">
+<div class="space-y-xs">
+<p class="font-label-lg opacity-90">Average Performance</p>
+<h2 class="font-display-lg">78.4%</h2>
+<div class="flex items-center gap-1 text-secondary-fixed font-label-md">
+<span class="material-symbols-outlined text-[16px]">trending_up</span>
+<span>+4.2% from Mid-term</span>
+</div>
+</div>
+<div class="space-y-xs border-l border-white/20 pl-md">
+<p class="font-label-lg opacity-90">Overall Pass Rate</p>
+<h2 class="font-display-lg">92%</h2>
+<div class="flex items-center gap-1 text-secondary-fixed font-label-md">
+<span class="material-symbols-outlined text-[16px]">verified</span>
+<span>Target: 95%</span>
+</div>
+</div>
+</div>
+<div class="mt-lg pt-md border-t border-white/10 flex justify-between items-end">
+<div class="flex gap-4">
+<div class="text-center">
+<p class="font-label-md opacity-70">Enrolled</p>
+<p class="font-headline-sm">184</p>
+</div>
+<div class="text-center">
+<p class="font-label-md opacity-70">Distinctions</p>
+<p class="font-headline-sm">42</p>
+</div>
+</div>
+<button class="bg-white/20 hover:bg-white/30 px-md py-xs rounded-lg font-label-lg transition-all flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">download</span>
+                    Full Report
+                </button>
+</div>
+</section>
+<!-- Bento Grid Section: Score Distribution & Class Comparison -->
+<section class="grid grid-cols-1 md:grid-cols-3 gap-lg">
+<!-- Score Distribution (2/3 width on desktop) -->
+<div class="md:col-span-2 bg-surface-container-lowest border border-outline-variant p-md rounded-xl shadow-sm">
+<div class="flex justify-between items-center mb-lg">
+<h3 class="font-headline-sm text-on-surface">Score Distribution</h3>
+<select class="bg-surface border-none text-label-lg text-primary focus:ring-0 rounded-lg">
+<option>Annual Exam 2023</option>
+<option>Mid-term 2023</option>
+</select>
+</div>
+<div class="h-48 flex items-end justify-between gap-2 px-2">
+<!-- Histogram Bars -->
+<div class="flex-1 flex flex-col items-center gap-2">
+<div class="w-full bg-error/20 rounded-t-lg chart-bar-hover" style="height: 15%"></div>
+<span class="font-label-md text-on-surface-variant">0-40</span>
+</div>
+<div class="flex-1 flex flex-col items-center gap-2">
+<div class="w-full bg-secondary-container/40 rounded-t-lg chart-bar-hover" style="height: 35%"></div>
+<span class="font-label-md text-on-surface-variant">41-60</span>
+</div>
+<div class="flex-1 flex flex-col items-center gap-2">
+<div class="w-full bg-primary-container rounded-t-lg chart-bar-hover" style="height: 85%"></div>
+<span class="font-label-md text-on-surface-variant">61-80</span>
+</div>
+<div class="flex-1 flex flex-col items-center gap-2">
+<div class="w-full bg-primary rounded-t-lg chart-bar-hover" style="height: 55%"></div>
+<span class="font-label-md text-on-surface-variant">81-90</span>
+</div>
+<div class="flex-1 flex flex-col items-center gap-2">
+<div class="w-full bg-tertiary-container rounded-t-lg chart-bar-hover" style="height: 25%"></div>
+<span class="font-label-md text-on-surface-variant">91-100</span>
+</div>
+</div>
+<p class="mt-md font-body-sm text-outline text-center">Standard bell-curve distribution observed with positive skew towards high performance.</p>
+</div>
+<!-- Class-vs-Class Comparison (1/3 width) -->
+<div class="bg-surface-container-lowest border border-outline-variant p-md rounded-xl shadow-sm">
+<h3 class="font-headline-sm text-on-surface mb-md">Class Comparison</h3>
+<div class="space-y-md">
+<div class="space-y-xs">
+<div class="flex justify-between font-label-lg">
+<span>Grade 10A</span>
+<span class="text-primary">84%</span>
+</div>
+<div class="h-2 w-full bg-surface-container rounded-full overflow-hidden">
+<div class="h-full bg-primary rounded-full" style="width: 84%"></div>
+</div>
+</div>
+<div class="space-y-xs">
+<div class="flex justify-between font-label-lg">
+<span>Grade 10B</span>
+<span class="text-primary">76%</span>
+</div>
+<div class="h-2 w-full bg-surface-container rounded-full overflow-hidden">
+<div class="h-full bg-primary/70 rounded-full" style="width: 76%"></div>
+</div>
+</div>
+<div class="space-y-xs">
+<div class="flex justify-between font-label-lg">
+<span>Grade 10C</span>
+<span class="text-primary">72%</span>
+</div>
+<div class="h-2 w-full bg-surface-container rounded-full overflow-hidden">
+<div class="h-full bg-primary/50 rounded-full" style="width: 72%"></div>
+</div>
+</div>
+</div>
+<button class="w-full mt-lg py-xs border border-primary text-primary rounded-lg font-label-lg hover:bg-primary/5 transition-colors">
+                    Compare All 12 Classes
+                </button>
+</div>
+</section>
+<!-- Performance Lists: At-Risk & Top Performers -->
+<section class="grid grid-cols-1 md:grid-cols-2 gap-lg">
+<!-- Top Performers -->
+<div class="space-y-md">
+<div class="flex items-center gap-2 px-xs">
+<span class="material-symbols-outlined text-tertiary">workspace_premium</span>
+<h3 class="font-headline-sm">Top Performers</h3>
+</div>
+<div class="bg-surface-container-lowest rounded-xl overflow-hidden border border-outline-variant">
+<div class="divide-y divide-outline-variant/30">
+<!-- Student Item -->
+<div class="p-md flex items-center justify-between hover:bg-surface-container-low transition-colors">
+<div class="flex items-center gap-md">
+<div class="w-10 h-10 rounded-full bg-tertiary-fixed text-on-tertiary-fixed flex items-center justify-center font-bold">AK</div>
+<div>
+<p class="font-label-lg">Amani K. Johnson</p>
+<p class="font-body-sm text-outline">Grade 10A • Distantion</p>
+</div>
+</div>
+<div class="text-right">
+<p class="font-headline-sm text-tertiary">98%</p>
+<span class="text-[10px] uppercase font-bold tracking-widest text-outline">Rank #1</span>
+</div>
+</div>
+<!-- Student Item -->
+<div class="p-md flex items-center justify-between hover:bg-surface-container-low transition-colors">
+<div class="flex items-center gap-md">
+<div class="w-10 h-10 rounded-full bg-primary-fixed text-on-primary-fixed flex items-center justify-center font-bold">SM</div>
+<div>
+<p class="font-label-lg">Sarah M. Mwangi</p>
+<p class="font-body-sm text-outline">Grade 10B • Distantion</p>
+</div>
+</div>
+<div class="text-right">
+<p class="font-headline-sm text-tertiary">95%</p>
+<span class="text-[10px] uppercase font-bold tracking-widest text-outline">Rank #2</span>
+</div>
+</div>
+<!-- Student Item -->
+<div class="p-md flex items-center justify-between hover:bg-surface-container-low transition-colors">
+<div class="flex items-center gap-md">
+<div class="w-10 h-10 rounded-full bg-secondary-fixed text-on-secondary-fixed flex items-center justify-center font-bold">DO</div>
+<div>
+<p class="font-label-lg">David O. Tunde</p>
+<p class="font-body-sm text-outline">Grade 10A • Distantion</p>
+</div>
+</div>
+<div class="text-right">
+<p class="font-headline-sm text-tertiary">94%</p>
+<span class="text-[10px] uppercase font-bold tracking-widest text-outline">Rank #3</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- At-Risk Students -->
+<div class="space-y-md">
+<div class="flex items-center gap-2 px-xs">
+<span class="material-symbols-outlined text-error">warning</span>
+<h3 class="font-headline-sm">Students At-Risk</h3>
+</div>
+<div class="bg-surface-container-lowest rounded-xl overflow-hidden border border-outline-variant">
+<div class="divide-y divide-outline-variant/30">
+<!-- Student Item -->
+<div class="p-md flex items-center justify-between hover:bg-error-container/10 transition-colors">
+<div class="flex items-center gap-md">
+<div class="w-10 h-10 rounded-full bg-error-container text-on-error-container flex items-center justify-center font-bold">EM</div>
+<div>
+<p class="font-label-lg text-on-error-container">Esther M. Peters</p>
+<p class="font-body-sm text-outline">Grade 10C • Declining</p>
+</div>
+</div>
+<div class="text-right">
+<p class="font-headline-sm text-error">38%</p>
+<button class="text-primary font-label-md hover:underline">Assign Mentor</button>
+</div>
+</div>
+<!-- Student Item -->
+<div class="p-md flex items-center justify-between hover:bg-error-container/10 transition-colors">
+<div class="flex items-center gap-md">
+<div class="w-10 h-10 rounded-full bg-error-container text-on-error-container flex items-center justify-center font-bold">JK</div>
+<div>
+<p class="font-label-lg text-on-error-container">Joel K. Soko</p>
+<p class="font-body-sm text-outline">Grade 10C • At-Risk</p>
+</div>
+</div>
+<div class="text-right">
+<p class="font-headline-sm text-error">42%</p>
+<button class="text-primary font-label-md hover:underline">Assign Mentor</button>
+</div>
+</div>
+</div>
+<div class="p-md bg-error-container/5">
+<p class="text-center font-label-md text-error">8 Total students identified below 45% threshold.</p>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-2 py-3 bg-surface shadow-[0_-2px_10px_rgba(14,165,233,0.08)] rounded-t-xl md:hidden">
+<div class="flex flex-col items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-label-md">Home</span>
+</div>
+<div class="flex flex-col items-center justify-center bg-primary-container text-on-primary-container rounded-full px-4 py-1 scale-90">
+<span class="material-symbols-outlined">edit_note</span>
+<span class="font-label-md">Marks</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined">how_to_reg</span>
+<span class="font-label-md">Attendance</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined">calendar_month</span>
+<span class="font-label-md">Schedule</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined">menu</span>
+<span class="font-label-md">Menu</span>
+</div>
+</nav>
+<script>
+        // Simple micro-interaction for the report button
+        document.querySelector('button.bg-white\\/20').addEventListener('click', function() {
+            this.classList.add('scale-95');
+            setTimeout(() => this.classList.remove('scale-95'), 150);
+            alert('Preparing high-resolution PDF report...');
+        });
+
+        // Hover effect for bars
+        const bars = document.querySelectorAll('.chart-bar-hover');
+        bars.forEach(bar => {
+            bar.addEventListener('mouseenter', () => {
+                const height = bar.style.height;
+                console.log(`Score group density: ${height}`);
+            });
+        });
+    </script>
+</body></html>

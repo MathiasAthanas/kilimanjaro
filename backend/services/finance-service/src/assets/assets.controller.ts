@@ -32,6 +32,12 @@ export class AssetsController {
     return this.assetsService.summary();
   }
 
+  @Get('reports/fixed-asset-register')
+  @Roles(ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN, ROLES.MANAGING_DIRECTOR, ROLES.BOARD_DIRECTOR)
+  fixedAssetRegister() {
+    return this.assetsService.fixedAssetRegister();
+  }
+
   @Get(':id')
   @Roles(ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN, ROLES.MANAGING_DIRECTOR)
   byId(@Param('id') id: string) {

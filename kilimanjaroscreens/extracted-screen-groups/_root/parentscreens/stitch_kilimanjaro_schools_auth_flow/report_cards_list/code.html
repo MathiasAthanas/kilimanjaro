@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Amina's Report Cards | Kilimanjaro Schools</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "surface-bright": "#faf8ff",
+                    "tertiary-fixed": "#e1e0ff",
+                    "on-tertiary": "#ffffff",
+                    "secondary-fixed-dim": "#4cd7f6",
+                    "on-secondary-fixed-variant": "#004e5c",
+                    "surface-container": "#eaedff",
+                    "surface-container-high": "#e2e7ff",
+                    "primary-fixed-dim": "#89ceff",
+                    "primary-container": "#0ea5e9",
+                    "on-tertiary-container": "#1407ad",
+                    "tertiary-fixed-dim": "#c0c1ff",
+                    "on-primary": "#ffffff",
+                    "primary-fixed": "#c9e6ff",
+                    "on-surface-variant": "#3e4850",
+                    "surface-dim": "#d2d9f4",
+                    "on-error-container": "#93000a",
+                    "inverse-primary": "#89ceff",
+                    "primary": "#006591",
+                    "surface-container-highest": "#dae2fd",
+                    "surface-tint": "#006591",
+                    "on-primary-fixed": "#001e2f",
+                    "surface": "#faf8ff",
+                    "secondary": "#00687a",
+                    "error-container": "#ffdad6",
+                    "on-background": "#131b2e",
+                    "inverse-surface": "#283044",
+                    "background": "#faf8ff",
+                    "tertiary-container": "#8d90ff",
+                    "on-error": "#ffffff",
+                    "secondary-fixed": "#acedff",
+                    "on-secondary": "#ffffff",
+                    "secondary-container": "#57dffe",
+                    "surface-container-lowest": "#ffffff",
+                    "surface-variant": "#dae2fd",
+                    "outline-variant": "#bec8d2",
+                    "on-primary-fixed-variant": "#004c6e",
+                    "on-tertiary-fixed-variant": "#2f2ebe",
+                    "inverse-on-surface": "#eef0ff",
+                    "tertiary": "#494bd6",
+                    "on-surface": "#131b2e",
+                    "outline": "#6e7881",
+                    "error": "#ba1a1a",
+                    "on-secondary-container": "#006172",
+                    "on-tertiary-fixed": "#07006c",
+                    "surface-container-low": "#f2f3ff",
+                    "on-primary-container": "#003751",
+                    "on-secondary-fixed": "#001f26"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "xl": "32px",
+                    "md": "16px",
+                    "xs": "8px",
+                    "lg": "24px",
+                    "sm": "12px",
+                    "container-padding": "20px",
+                    "base": "4px"
+            },
+            "fontFamily": {
+                    "label-lg": ["Plus Jakarta Sans"],
+                    "body-lg": ["Plus Jakarta Sans"],
+                    "display-lg": ["Space Grotesk"],
+                    "label-md": ["Plus Jakarta Sans"],
+                    "headline-lg": ["Space Grotesk"],
+                    "headline-md": ["Space Grotesk"],
+                    "body-sm": ["Plus Jakarta Sans"],
+                    "headline-sm": ["Space Grotesk"],
+                    "body-md": ["Plus Jakarta Sans"]
+            },
+            "fontSize": {
+                    "label-lg": ["14px", {"lineHeight": "20px", "letterSpacing": "0.01em", "fontWeight": "600"}],
+                    "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                    "display-lg": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.04em", "fontWeight": "600"}],
+                    "headline-lg": ["30px", {"lineHeight": "36px", "fontWeight": "600"}],
+                    "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                    "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                    "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "500"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+      .material-symbols-outlined {
+        font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      }
+      .shadow1 { box-shadow: 0 2px 4px rgba(14, 165, 233, 0.05); }
+      .shadow3 { box-shadow: 0 10px 15px rgba(14, 165, 233, 0.12); }
+      .primary-gradient { background: linear-gradient(135deg, #006591 0%, #0ea5e9 100%); }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-surface font-body-md min-h-screen pb-32">
+<!-- TopAppBar -->
+<header class="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-container-padding h-14 bg-surface-bright shadow1">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full overflow-hidden bg-primary-container flex items-center justify-center border border-outline-variant">
+<img alt="Amina Profile" class="w-full h-full object-cover" data-alt="A professional studio headshot of a smiling young African student against a soft, clean blue background. She is wearing a neat school uniform, symbolizing the corporate modern and high-contrast educational brand. The lighting is bright and optimistic, reflecting a high-key light-mode aesthetic with crisp details and vibrant clarity." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBWUlzipiu_ajtle7As5Auh_7svEK4cJcbjwiT_4DgRGLgcHVh-38t1Y03pVbZ1x-tDPslKrG-wMfpDDbiUslsKAc-Z05AzspiOJWsSDgjPc8NTgI2QyXGZXisn7QWl6S8jo8fOIr-s-aCw63sL6wo8qQVehCo7OJSKJjFqjzZ6Bl0cz2KDDzHU-Toh40Yoow8gIlPtxRJOUtW79mSX3lzoKRtY7l2SzO-7nU4eE5-hs-d8kUvFKXrx0tlGd1rmE86UJx25bwk2wg"/>
+</div>
+<h1 class="font-headline-sm text-headline-sm-mobile text-primary font-bold">Kilimanjaro Schools</h1>
+</div>
+<div class="flex items-center">
+<button class="p-2 rounded-full hover:bg-surface-container transition-colors text-primary active:scale-95 transition-transform duration-150">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+</div>
+</header>
+<main class="pt-20 px-container-padding space-y-lg max-w-2xl mx-auto">
+<!-- Page Title & Child Switcher -->
+<section class="space-y-md">
+<div class="flex items-center justify-between">
+<h2 class="font-headline-md text-headline-md-mobile text-on-surface">Amina's Report Cards</h2>
+<div class="flex -space-x-2">
+<div class="w-10 h-10 rounded-full border-2 border-primary ring-2 ring-background overflow-hidden active:scale-95 transition-transform">
+<img alt="Active Child Amina" class="w-full h-full object-cover" data-alt="A bright and cheerful portrait of a young girl student with a confident smile, representing academic excellence. The setting is a minimalist, modern educational environment with soft sky-blue tones. The image is clean, sharp, and high-contrast, fitting a premium corporate school management interface." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAfVlEDckiqMI0MV9kwStgwa9qkP9seFm6PcLQe1-DI-u9iF8Vk_MPRZIULE5ntk85YqU43FviMydolhebaXMNZInyVszjT5wENjWxeyFybrnrpObHHhqPNsc8dll85kYDjW5lI6W1LPwHrFtYW_ObKcIY3BpGAhvtKSHTbjjaIjFW-CJOhq_Ror7oZetCNvMCghV9pgHF95Ei25HMzMLs869oq_8ybefHfFYBEyvQ9ZKwGrAmQ4HxM76syqktx3vquTzZyVs4pVg"/>
+</div>
+<div class="w-10 h-10 rounded-full border-2 border-white overflow-hidden opacity-40 grayscale hover:opacity-100 hover:grayscale-0 transition-all cursor-pointer">
+<img alt="Sibling profile" class="w-full h-full object-cover" data-alt="A side profile of a young boy student looking thoughtful in a modern classroom setting. The lighting is natural and bright, with a cool-toned color palette consisting of sky blues and soft whites. The visual style is institutional yet aspirational, following the Kilimanjaro Schools brand identity." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAZ4QlvnehbFWxBy9XR4d1ZARNQjdiwY1A7srCCin1sVDUnnkZ7_ArzsMj5eXl4Og-PtKxHyAS0hciMdyLtr1_0_HKNe2Beord6Nv0K8-6aZEizM4hElcS2UVpf0V_UJQ494qjhzxQladvxIhOBivRm_atBkcMKpJcKOvJ3t6q3-qtYy8aQ4BJI7zUUssBUn6iwP9UEs1kW_sh0xuBrfb4NflrZzdBii7JxEBekhew14B1Hf_OZhxeO1POOXaKgi0WsDhgz_zLgyw"/>
+</div>
+</div>
+</div>
+<!-- Info Banner -->
+<div class="flex gap-3 p-md bg-surface-container-low rounded-xl border border-outline-variant/30">
+<span class="material-symbols-outlined text-primary">info</span>
+<p class="font-body-sm text-on-surface-variant">Official academic report cards are generated at the end of each term.</p>
+</div>
+</section>
+<!-- Report Card List -->
+<div class="space-y-md">
+<!-- Card Item 1 (Active/Current Year) -->
+<div class="bg-surface-container-lowest rounded-xl border border-outline-variant shadow1 p-md flex flex-col gap-md transition-all hover:shadow3">
+<div class="flex justify-between items-start">
+<div>
+<span class="inline-block px-2 py-0.5 rounded-full bg-primary-container/10 text-on-primary-container font-label-md text-label-md mb-xs">Academic Year 2025/2026</span>
+<h3 class="font-headline-sm text-headline-sm-mobile text-on-surface">Term 1 2025/2026</h3>
+</div>
+<div class="text-right">
+<div class="text-primary font-display-lg text-2xl leading-none font-bold">79.3%</div>
+<div class="font-label-lg text-primary">Grade B</div>
+</div>
+</div>
+<div class="flex items-center gap-4 py-sm border-t border-b border-outline-variant/20">
+<div class="flex-1">
+<div class="text-label-md text-on-surface-variant uppercase tracking-wider mb-xs">Class Rank</div>
+<div class="font-label-lg text-on-surface">12th of 45</div>
+</div>
+<div class="w-px h-8 bg-outline-variant/30"></div>
+<div class="flex-1">
+<div class="text-label-md text-on-surface-variant uppercase tracking-wider mb-xs">Attendance</div>
+<div class="font-label-lg text-on-surface">98.5%</div>
+</div>
+</div>
+<button class="w-full h-[54px] rounded-[14px] primary-gradient text-white font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-all">
+<span class="material-symbols-outlined">download</span>
+<span>Download PDF Report</span>
+</button>
+</div>
+<!-- Card Item 2 (Previous Term) -->
+<div class="bg-surface-container-lowest rounded-xl border border-outline-variant shadow1 p-md flex flex-col gap-md transition-all hover:shadow3">
+<div class="flex justify-between items-start">
+<div>
+<span class="inline-block px-2 py-0.5 rounded-full bg-surface-variant text-on-surface-variant font-label-md text-label-md mb-xs">Academic Year 2024/2025</span>
+<h3 class="font-headline-sm text-headline-sm-mobile text-on-surface">Term 3 2024/2025</h3>
+</div>
+<div class="text-right">
+<div class="text-on-surface font-display-lg text-2xl leading-none font-bold">82.1%</div>
+<div class="font-label-lg text-on-surface-variant">Grade A-</div>
+</div>
+</div>
+<button class="w-full h-[54px] rounded-[14px] border-2 border-primary-container text-primary font-bold flex items-center justify-center gap-2 hover:bg-surface-container-low transition-all active:scale-[0.98]">
+<span class="material-symbols-outlined">download</span>
+<span>Download PDF Report</span>
+</button>
+</div>
+<!-- Card Item 3 -->
+<div class="bg-surface-container-lowest rounded-xl border border-outline-variant shadow1 p-md flex flex-col gap-md transition-all hover:shadow3">
+<div class="flex justify-between items-start">
+<div>
+<span class="inline-block px-2 py-0.5 rounded-full bg-surface-variant text-on-surface-variant font-label-md text-label-md mb-xs">Academic Year 2024/2025</span>
+<h3 class="font-headline-sm text-headline-sm-mobile text-on-surface">Term 2 2024/2025</h3>
+</div>
+<div class="text-right">
+<div class="text-on-surface font-display-lg text-2xl leading-none font-bold">75.8%</div>
+<div class="font-label-lg text-on-surface-variant">Grade B-</div>
+</div>
+</div>
+<button class="w-full h-[54px] rounded-[14px] border-2 border-primary-container text-primary font-bold flex items-center justify-center gap-2 hover:bg-surface-container-low transition-all active:scale-[0.98]">
+<span class="material-symbols-outlined">download</span>
+<span>Download PDF Report</span>
+</button>
+</div>
+</div>
+<!-- Secondary CTA: Progress Tracker -->
+<section class="pt-lg">
+<div class="relative overflow-hidden bg-inverse-surface rounded-2xl p-lg text-on-tertiary shadow3">
+<div class="relative z-10 space-y-sm">
+<h4 class="font-headline-sm text-white">Academic Progress Track</h4>
+<p class="font-body-sm text-primary-fixed-dim">View comprehensive analytics and trends across all years.</p>
+<button class="mt-md px-lg py-sm bg-primary-container text-white rounded-full font-label-lg active:scale-95 transition-transform">
+                        View Analytics
+                    </button>
+</div>
+<!-- Abstract Design Elements -->
+<div class="absolute -right-10 -bottom-10 w-40 h-40 bg-primary-container/20 rounded-full blur-3xl"></div>
+<div class="absolute right-0 top-0 opacity-10 p-4">
+<span class="material-symbols-outlined text-[80px]" style="font-variation-settings: 'wght' 200;">insights</span>
+</div>
+</div>
+</section>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 pb-4 pt-2 bg-surface-container-lowest rounded-t-xl shadow-lg border-t border-outline-variant">
+<a class="flex flex-col items-center justify-center text-on-surface-variant px-5 py-1 hover:bg-surface-container-high rounded-full transition-all" href="#">
+<span class="material-symbols-outlined">home</span>
+<span class="font-label-md text-label-md-mobile mt-1">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center bg-primary-container text-on-primary-container rounded-full px-5 py-1 active:scale-90 transition-all duration-200" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">school</span>
+<span class="font-label-md text-label-md-mobile mt-1">Academics</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant px-5 py-1 hover:bg-surface-container-high rounded-full transition-all" href="#">
+<span class="material-symbols-outlined">payments</span>
+<span class="font-label-md text-label-md-mobile mt-1">Payments</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant px-5 py-1 hover:bg-surface-container-high rounded-full transition-all" href="#">
+<span class="material-symbols-outlined">chat_bubble</span>
+<span class="font-label-md text-label-md-mobile mt-1">Contact</span>
+</a>
+</nav>
+</body></html>

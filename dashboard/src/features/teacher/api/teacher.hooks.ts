@@ -334,7 +334,8 @@ export function useTeacherSyllabus() {
           const subjectObj = cs.subject as Record<string, unknown> | undefined;
           return {
             ...s,
-            id: String(s.id ?? crypto.randomUUID()),
+            id: String(s.id ?? ''),
+            termId: String(s.termId ?? ''),
             classSubjectId: String(s.classSubjectId ?? cs.id ?? ''),
             subject: resolveName(subjectObj ?? s.subjectName) || 'Subject',
             className: classLabel(cs.class, cs.educationStage, cs.classLevel) || '—',
@@ -348,12 +349,24 @@ export function useTeacherSyllabus() {
   });
 }
 
+export function useCurrentTerm() {
+  return useQuery({
+    queryKey: [...teacherKeys.all, 'current-term'],
+    queryFn: () =>
+      api.get('/students/terms').then((r) => {
+        const terms = arrayFromApi(payloadOf(r), ['terms']) as Record<string, unknown>[];
+        return terms.find((t) => t.isCurrent) ?? terms[terms.length - 1] ?? null;
+      }),
+    staleTime: 60_000,
+  });
+}
+
 export function useTeacherAnnouncements() {
   return useQuery({
     queryKey: teacherKeys.announcements(),
     queryFn: () =>
       api
-        .get('/notifications/announcements')
+        .get('/notifications/announcements/active')
         .then((r) => arrayFromApi(payloadOf(r), ['announcements'])),
     staleTime: 30_000,
   });
@@ -428,9 +441,21 @@ export function useCreateInterventionMutation() {
 export function useUpdateSyllabusMutation() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, coveredTopics, notes }: { id: string; coveredTopics: number; notes?: string }) =>
+    mutationFn: ({
+      classSubjectId,
+      termId,
+      totalTopics,
+      coveredTopics,
+      notes,
+    }: {
+      classSubjectId: string;
+      termId: string;
+      totalTopics: number;
+      coveredTopics: number;
+      notes?: string;
+    }) =>
       api
-        .patch(`/academics/syllabus/${id}`, { coveredTopics, notes })
+        .post('/academics/syllabus', { classSubjectId, termId, totalTopics, coveredTopics, notes })
         .then((r) => r.data?.data ?? r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: teacherKeys.syllabus() });
@@ -458,5 +483,37 @@ export function useCreateAnnouncementMutation() {
         .post('/notifications/announcements', payload)
         .then((r) => r.data?.data ?? r.data),
     onSuccess: () => qc.invalidateQueries({ queryKey: teacherKeys.announcements() }),
+  });
+}
+
+// ─── Report Card Remarks ──────────────────────────────────────────────────────
+
+export const reportCardKeys = {
+  all: ['report-cards'] as const,
+  forStudent: (studentId: string) => [...reportCardKeys.all, 'student', studentId] as const,
+};
+
+export function useStudentReportCards(studentId: string) {
+  return useQuery({
+    queryKey: reportCardKeys.forStudent(studentId),
+    enabled: !!studentId,
+    queryFn: () =>
+      api.get(`/academics/report-cards/student/${studentId}`).then((r) => {
+        const data = r.data?.data ?? r.data ?? [];
+        return (Array.isArray(data) ? data : [data]) as Record<string, unknown>[];
+      }),
+    staleTime: 60_000,
+  });
+}
+
+export function useUpdateReportCardCommentsMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, teacherComment }: { id: string; teacherComment: string }) =>
+      api.patch(`/academics/report-cards/${id}/comments`, { teacherComment }).then((r) => r.data?.data ?? r.data),
+    onSuccess: (_data, variables) => {
+      const studentId = String(_data?.studentId ?? '');
+      if (studentId) qc.invalidateQueries({ queryKey: reportCardKeys.forStudent(studentId) });
+    },
   });
 }

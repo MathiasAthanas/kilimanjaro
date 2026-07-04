@@ -8,9 +8,10 @@ export class StudentProfileGenerator {
       {
         heading: 'Identity',
         rows: [
-          ['Student ID', data.student?.id || 'N/A'],
+          ['Student Name', data.student?.fullName || 'N/A'],
           ['Registration Number', data.student?.registrationNumber || 'N/A'],
           ['Class', data.student?.currentClass?.className || 'N/A'],
+          ['Current Status', data.summaryCard?.overallStatus ?? 'N/A'],
         ],
       },
       {

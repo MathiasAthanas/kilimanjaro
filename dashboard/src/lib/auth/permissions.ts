@@ -26,7 +26,7 @@ export function isMobilePrimaryRole(role: UserRole) {
 export function canAccessRoute(role: UserRole | undefined, route: string) {
   if (!role) return false;
   if (route.startsWith('/app')) return true;
-  if (route.startsWith('/teacher')) return role === 'TEACHER' || role === 'ADMIN';
+  if (route.startsWith('/teacher')) return role === 'TEACHER' || role === 'HOD' || role === 'ADMIN';
   if (route.startsWith('/hod')) return role === 'HOD' || role === 'ADMIN';
   if (route.startsWith('/aqa')) return role === 'AQA' || role === 'ADMIN';
   if (route.startsWith('/finance')) return role === 'FINANCE' || role === 'PRINCIPAL' || role === 'ADMIN';

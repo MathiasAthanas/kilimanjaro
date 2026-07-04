@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-bright": "#faf8ff",
+                        "tertiary-fixed": "#e1e0ff",
+                        "on-tertiary": "#ffffff",
+                        "secondary-fixed-dim": "#4cd7f6",
+                        "on-secondary-fixed-variant": "#004e5c",
+                        "surface-container": "#eaedff",
+                        "surface-container-high": "#e2e7ff",
+                        "primary-fixed-dim": "#89ceff",
+                        "primary-container": "#0ea5e9",
+                        "on-tertiary-container": "#1407ad",
+                        "tertiary-fixed-dim": "#c0c1ff",
+                        "on-primary": "#ffffff",
+                        "primary-fixed": "#c9e6ff",
+                        "on-surface-variant": "#3e4850",
+                        "surface-dim": "#d2d9f4",
+                        "on-error-container": "#93000a",
+                        "inverse-primary": "#89ceff",
+                        "primary": "#006591",
+                        "surface-container-highest": "#dae2fd",
+                        "surface-tint": "#006591",
+                        "on-primary-fixed": "#001e2f",
+                        "surface": "#faf8ff",
+                        "secondary": "#00687a",
+                        "error-container": "#ffdad6",
+                        "on-background": "#131b2e",
+                        "inverse-surface": "#283044",
+                        "background": "#faf8ff",
+                        "tertiary-container": "#8d90ff",
+                        "on-error": "#ffffff",
+                        "secondary-fixed": "#acedff",
+                        "on-secondary": "#ffffff",
+                        "secondary-container": "#57dffe",
+                        "surface-container-lowest": "#ffffff",
+                        "surface-variant": "#dae2fd",
+                        "outline-variant": "#bec8d2",
+                        "on-primary-fixed-variant": "#004c6e",
+                        "on-tertiary-fixed-variant": "#2f2ebe",
+                        "inverse-on-surface": "#eef0ff",
+                        "tertiary": "#494bd6",
+                        "on-surface": "#131b2e",
+                        "outline": "#6e7881",
+                        "error": "#ba1a1a",
+                        "on-secondary-container": "#006172",
+                        "on-tertiary-fixed": "#07006c",
+                        "surface-container-low": "#f2f3ff",
+                        "on-primary-container": "#003751",
+                        "on-secondary-fixed": "#001f26"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "xl": "32px",
+                        "md": "16px",
+                        "xs": "8px",
+                        "lg": "24px",
+                        "sm": "12px",
+                        "container-padding": "20px",
+                        "base": "4px"
+                    },
+                    "fontFamily": {
+                        "label-lg": ["Plus Jakarta Sans"],
+                        "body-lg": ["Plus Jakarta Sans"],
+                        "display-lg": ["Space Grotesk"],
+                        "label-md": ["Plus Jakarta Sans"],
+                        "headline-lg": ["Space Grotesk"],
+                        "headline-md": ["Space Grotesk"],
+                        "body-sm": ["Plus Jakarta Sans"],
+                        "headline-sm": ["Space Grotesk"],
+                        "body-md": ["Plus Jakarta Sans"]
+                    },
+                    "fontSize": {
+                        "label-lg": ["14px", {"lineHeight": "20px", "letterSpacing": "0.01em", "fontWeight": "600"}],
+                        "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                        "display-lg": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.04em", "fontWeight": "600"}],
+                        "headline-lg": ["30px", {"lineHeight": "36px", "fontWeight": "600"}],
+                        "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                        "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                        "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "500"}],
+                        "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                        "headline-md-mobile": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                        "label-lg-mobile": ["13px", {"lineHeight": "18px", "letterSpacing": "0.01em", "fontWeight": "600"}],
+                        "label-md-mobile": ["11px", {"lineHeight": "14px", "letterSpacing": "0.04em", "fontWeight": "600"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-surface font-body-md min-h-screen pb-32">
+<!-- TopAppBar Shell -->
+<header class="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-container-padding h-14 bg-surface-bright shadow-sm">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full overflow-hidden bg-primary-container flex items-center justify-center">
+<img alt="Amina Profile" class="w-full h-full object-cover" data-alt="A professional and warm close-up portrait of a Tanzanian woman with a friendly smile, representing Amina. She is set against a soft-focus background of a modern educational setting. The lighting is bright and airy, reflecting a clean and modern Light Mode UI aesthetic with a palette of soft blues and whites." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCJ_UlsYTWt_xpQUQVqnlDmcxu7IcgVyhDWqbSyG17avO7rfbYPKLmDg-ThBPpGVrH5riJ-AT0McAaVo65ObOYoezriyAhTjN9cT_a9AyekBdFID7qDyLLKccxcCKZQP3RnjB2CgJk2eSQwD7HXGtsmu1K1NvmLPpLKaDA_nz79TRLYeYrUC_salzQGe23pi8XcAa2J-glKdLFASO7s-ri4dLy0mX_LJBtq-O4Pe6sZIV1svV-hOrkknlNN6W7JSZpPCL3elVEK8Q"/>
+</div>
+<h1 class="font-headline-sm text-headline-sm text-primary font-bold">Kilimanjaro Schools</h1>
+</div>
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-primary cursor-pointer">notifications</span>
+</div>
+</header>
+<main class="mt-20 px-container-padding space-y-lg">
+<!-- School Emblem & Hours -->
+<section class="flex flex-col items-center text-center space-y-xs pb-4">
+<div class="w-20 h-20 bg-primary-container rounded-2xl flex items-center justify-center shadow-md mb-2">
+<span class="material-symbols-outlined text-on-primary text-5xl" style="font-variation-settings: 'FILL' 1;">school</span>
+</div>
+<h2 class="font-headline-md text-headline-md-mobile text-on-surface">Kilimanjaro Schools</h2>
+<div class="flex items-center gap-2 bg-surface-container-low px-4 py-2 rounded-full border border-outline-variant">
+<span class="material-symbols-outlined text-secondary text-sm">schedule</span>
+<p class="font-label-lg text-label-lg-mobile text-on-surface-variant">Hours: M-F 7:30 - 4:30</p>
+</div>
+</section>
+<!-- Get In Touch Grid -->
+<section class="space-y-md">
+<h3 class="font-headline-sm text-on-surface pl-1">Get in Touch</h3>
+<div class="grid grid-cols-2 gap-4">
+<!-- WhatsApp Tile (Highlighted) -->
+<div class="col-span-2 relative overflow-hidden bg-primary text-on-primary p-md rounded-2xl shadow-lg border border-primary-container flex flex-col justify-between h-32 active:scale-95 transition-transform">
+<div class="flex justify-between items-start">
+<div class="bg-white/20 p-2 rounded-xl">
+<span class="material-symbols-outlined text-white">chat_bubble</span>
+</div>
+<span class="bg-secondary-fixed-dim text-on-secondary-fixed-variant font-label-md text-[10px] px-2 py-0.5 rounded-full uppercase tracking-wider">Priority</span>
+</div>
+<div>
+<p class="font-label-lg text-white">WhatsApp Chat</p>
+<p class="text-xs text-white/80">Response within 2 hours</p>
+</div>
+</div>
+<!-- Phone Tile -->
+<div class="bg-surface-container-lowest border border-outline-variant p-md rounded-2xl flex flex-col justify-between h-28 hover:bg-surface-container-high transition-colors active:scale-95">
+<div class="bg-primary-container/10 w-fit p-2 rounded-xl">
+<span class="material-symbols-outlined text-primary">call</span>
+</div>
+<p class="font-label-lg text-on-surface">Call Reception</p>
+</div>
+<!-- Email Tile -->
+<div class="bg-surface-container-lowest border border-outline-variant p-md rounded-2xl flex flex-col justify-between h-28 hover:bg-surface-container-high transition-colors active:scale-95">
+<div class="bg-primary-container/10 w-fit p-2 rounded-xl">
+<span class="material-symbols-outlined text-primary">mail</span>
+</div>
+<p class="font-label-lg text-on-surface">Official Email</p>
+</div>
+<!-- Map Tile -->
+<div class="col-span-2 h-40 rounded-2xl overflow-hidden relative border border-outline-variant shadow-sm">
+<img class="w-full h-full object-cover" data-alt="A stylized, top-down clean minimalist map view showing a structured campus layout in Moshi, Tanzania. The map uses a light color palette of whites, light greys, and sky blues to match the school's corporate modern identity. It highlights the school's main administrative building with a subtle blue marker." data-location="Moshi, Tanzania" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDpWNfIJDqpi7tFhWN8QBOddHY_bmPQDLu0qFa6Qr_DjdAPOM_ZPDDRMug5ryiSRfLtjoiDdKz6XkqK_8kvEOz5c6uv_NPZBz89fF_sLtZr-5oMe1_U0PdBz2YxhZrS29pDpdz_d9QLGAb25VvdfyT__qT9ajM_azXmd62PvsnR76R9OPagVZeO9Jri_e2a2kY3Rzi0ScBzttbAqZ3vQMi2Doc8TrymITqDoKXYtmCGMSTdgOCikPgFxtRCt0CXcR5Hr4Aqaznoig"/>
+<div class="absolute bottom-3 left-3 right-3 glass-card p-3 rounded-xl flex items-center justify-between border border-white/40">
+<div>
+<p class="font-label-lg text-on-surface">School Campus</p>
+<p class="text-xs text-on-surface-variant">Arusha-Himo Road, Moshi</p>
+</div>
+<span class="material-symbols-outlined text-primary">directions</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Amina's Teachers -->
+<section class="space-y-md">
+<h3 class="font-headline-sm text-on-surface pl-1">Amina's Teachers</h3>
+<div class="space-y-sm">
+<!-- Teacher 1 -->
+<div class="bg-surface-container-lowest p-4 rounded-2xl border border-outline-variant flex items-center justify-between shadow-sm">
+<div class="flex items-center gap-3">
+<img alt="Mwalimu Rose" class="w-12 h-12 rounded-full object-cover" data-alt="A professional portrait of an East African woman teacher with a kind and authoritative expression, wearing business casual attire. The lighting is soft and focused, set in a bright classroom environment. The overall visual style is corporate yet warm, consistent with a premium education app." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBSfw11BluaY81X31KcYt-N9qKgLALgQnPPVMeYlTbhzYfp994KoTGwY2JGsU5ZmxYHZHs8pp2vUYgqDk7Ptyf4B2ZqQlDN5b-HqmT4PdTuwwYJC2JtU-xiZY_43ow0udNH15vxjuzrfpNhh6RJ6ih-uGPFO6HxsQ16BHYk8b5YenZyuPhiqTnvNNDrKptM-jjM3plZN7vkkfap0nb9iTaOpKuEzsW3tQo_9Jh5Y10UlPGGVs4MZ6OBNGdpQJWJ4P3ldu84TYe6Pg"/>
+<div>
+<p class="font-label-lg text-on-surface">Mwalimu Rose</p>
+<p class="text-xs text-on-surface-variant">Class Teacher • Grade 5</p>
+</div>
+</div>
+<button class="bg-primary-container text-on-primary-container w-10 h-10 rounded-full flex items-center justify-center active:scale-90 transition-transform">
+<span class="material-symbols-outlined text-sm">call</span>
+</button>
+</div>
+<!-- Teacher 2 -->
+<div class="bg-surface-container-lowest p-4 rounded-2xl border border-outline-variant flex items-center justify-between shadow-sm">
+<div class="flex items-center gap-3">
+<img alt="Mr. Emmanuel" class="w-12 h-12 rounded-full object-cover" data-alt="A dignified portrait of a male Tanzanian teacher in a crisp shirt, standing before a library backdrop. He has a welcoming and professional demeanor. The image features a bright, clean, high-contrast aesthetic with soft lighting and professional photographic quality." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCFhUXEqEitV3-1sKFsiCmaDi76QksZXDvWfuof-P2QKYJu6-tyz0pSTsu2ySGneLxY7RHZv_9fG_ezq2PL93zEx1AmsCYdXCjiIa8qeWGe3rSMiy2v1IMYPjYKeSN8pZ6gm0tj4z1xm8X0OLPMjjSNOKGZJm79ZFlfhNYVQsig_duC_zhtrYjVea9K4imX17suB8TOAJimcLUXsi_qZVbJcbPwvIcPPZ66m87JTBwMGMbK6rXSnrmi8fGBC-nENFVZGHwNn4czLw"/>
+<div>
+<p class="font-label-lg text-on-surface">Mr. Emmanuel</p>
+<p class="text-xs text-on-surface-variant">Form Teacher • Mathematics</p>
+</div>
+</div>
+<button class="bg-primary-container text-on-primary-container w-10 h-10 rounded-full flex items-center justify-center active:scale-90 transition-transform">
+<span class="material-symbols-outlined text-sm">call</span>
+</button>
+</div>
+</div>
+</section>
+<!-- FAQ Section -->
+<section class="space-y-md">
+<h3 class="font-headline-sm text-on-surface pl-1">Frequently Asked Questions</h3>
+<div class="space-y-xs">
+<!-- Accordion Item 1 -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl p-4 flex justify-between items-center group cursor-pointer hover:bg-surface-container">
+<p class="font-label-lg text-on-surface">When are results published?</p>
+<span class="material-symbols-outlined text-on-surface-variant">expand_more</span>
+</div>
+<!-- Accordion Item 2 -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl p-4 flex justify-between items-center group cursor-pointer hover:bg-surface-container">
+<p class="font-label-lg text-on-surface">How do I pay fees?</p>
+<span class="material-symbols-outlined text-on-surface-variant">expand_more</span>
+</div>
+<!-- Accordion Item 3 -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl p-4 flex justify-between items-center group cursor-pointer hover:bg-surface-container">
+<p class="font-label-lg text-on-surface">Transportation routes</p>
+<span class="material-symbols-outlined text-on-surface-variant">expand_more</span>
+</div>
+</div>
+</section>
+<!-- Emergency Contact Footer -->
+<section class="pb-10">
+<div class="bg-error-container text-on-error-container p-lg rounded-2xl border border-error flex items-center gap-4 shadow-lg shadow-error/10">
+<div class="bg-error w-12 h-12 rounded-full flex items-center justify-center text-on-error shrink-0">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">emergency</span>
+</div>
+<div>
+<p class="font-headline-sm font-bold">Emergency Line</p>
+<p class="font-label-md text-on-error-container/80">Available 24/7 for urgent matters</p>
+<p class="text-headline-md font-bold mt-1">+255 700 000 000</p>
+</div>
+</div>
+</section>
+</main>
+<!-- BottomNavBar Shell -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 pb-4 pt-2 bg-surface-container-lowest rounded-t-xl shadow-lg border-t border-outline-variant">
+<div class="flex flex-col items-center justify-center text-on-surface-variant px-5 py-1 hover:bg-surface-container-high transition-all rounded-full cursor-pointer">
+<span class="material-symbols-outlined">home</span>
+<span class="font-label-md text-label-md-mobile">Home</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-surface-variant px-5 py-1 hover:bg-surface-container-high transition-all rounded-full cursor-pointer">
+<span class="material-symbols-outlined">school</span>
+<span class="font-label-md text-label-md-mobile">Academics</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-surface-variant px-5 py-1 hover:bg-surface-container-high transition-all rounded-full cursor-pointer">
+<span class="material-symbols-outlined">payments</span>
+<span class="font-label-md text-label-md-mobile">Payments</span>
+</div>
+<div class="flex flex-col items-center justify-center bg-primary-container text-on-primary-container rounded-full px-5 py-1 scale-90 transition-all cursor-pointer shadow-md">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">chat_bubble</span>
+<span class="font-label-md text-label-md-mobile">Contact</span>
+</div>
+</nav>
+</body></html>

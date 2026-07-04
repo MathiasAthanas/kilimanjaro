@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Forgot Password - Kilimanjaro Schools</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "primary": "#006591",
+                        "on-secondary-fixed": "#001f26",
+                        "surface-container-highest": "#dae2fd",
+                        "surface-container-high": "#e2e7ff",
+                        "surface-variant": "#dae2fd",
+                        "surface-dim": "#d2d9f4",
+                        "error": "#ba1a1a",
+                        "on-error": "#ffffff",
+                        "inverse-primary": "#89ceff",
+                        "background": "#faf8ff",
+                        "error-container": "#ffdad6",
+                        "tertiary-fixed-dim": "#c0c1ff",
+                        "on-primary-fixed-variant": "#004c6e",
+                        "surface": "#faf8ff",
+                        "on-primary-fixed": "#001e2f",
+                        "primary-fixed": "#c9e6ff",
+                        "on-tertiary": "#ffffff",
+                        "outline-variant": "#bec8d2",
+                        "on-primary-container": "#003751",
+                        "on-surface": "#131b2e",
+                        "surface-bright": "#faf8ff",
+                        "tertiary-fixed": "#e1e0ff",
+                        "on-surface-variant": "#3e4850",
+                        "surface-tint": "#006591",
+                        "primary-container": "#0ea5e9",
+                        "outline": "#6e7881",
+                        "on-error-container": "#93000a",
+                        "inverse-on-surface": "#eef0ff",
+                        "surface-container-low": "#f2f3ff",
+                        "tertiary": "#494bd6",
+                        "on-secondary-container": "#006172",
+                        "surface-container-lowest": "#ffffff",
+                        "on-secondary": "#ffffff",
+                        "inverse-surface": "#283044",
+                        "on-primary": "#ffffff",
+                        "secondary-fixed": "#acedff",
+                        "tertiary-container": "#8d90ff",
+                        "surface-container": "#eaedff",
+                        "primary-fixed-dim": "#89ceff",
+                        "on-tertiary-fixed-variant": "#2f2ebe",
+                        "on-tertiary-fixed": "#07006c",
+                        "secondary": "#00687a",
+                        "on-background": "#131b2e",
+                        "secondary-fixed-dim": "#4cd7f6",
+                        "secondary-container": "#57dffe",
+                        "on-tertiary-container": "#1407ad",
+                        "on-secondary-fixed-variant": "#004e5c"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "md": "16px",
+                        "container-padding": "20px",
+                        "xl": "32px",
+                        "lg": "24px",
+                        "xs": "8px",
+                        "sm": "12px",
+                        "base": "4px"
+                    },
+                    "fontFamily": {
+                        "label-md": ["Plus Jakarta Sans"],
+                        "body-sm": ["Plus Jakarta Sans"],
+                        "display-lg": ["Space Grotesk"],
+                        "headline-md": ["Space Grotesk"],
+                        "headline-lg": ["Space Grotesk"],
+                        "body-lg": ["Plus Jakarta Sans"],
+                        "headline-sm": ["Space Grotesk"],
+                        "body-md": ["Plus Jakarta Sans"],
+                        "label-lg": ["Plus Jakarta Sans"]
+                    },
+                    "fontSize": {
+                        "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.04em", "fontWeight": "600"}],
+                        "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                        "display-lg": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                        "headline-lg": ["30px", {"lineHeight": "36px", "fontWeight": "600"}],
+                        "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                        "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "500"}],
+                        "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                        "label-lg": ["14px", {"lineHeight": "20px", "letterSpacing": "0.01em", "fontWeight": "600"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .shadow1 { box-shadow: 0 2px 4px rgba(14, 165, 233, 0.05); }
+        .shadow3 { box-shadow: 0 10px 15px rgba(14, 165, 233, 0.12); }
+        .primary-gradient {
+            background: linear-gradient(135deg, #006591 0%, #0ea5e9 100%);
+        }
+        .pulsing-ring {
+            box-shadow: 0 0 0 0 rgba(14, 165, 233, 0.4);
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(14, 165, 233, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(14, 165, 233, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(14, 165, 233, 0); }
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background min-h-screen font-body-md flex flex-col">
+<!-- TopAppBar -->
+<header class="flex items-center justify-between px-container-padding w-full h-16 z-50 bg-background/80 backdrop-blur-md sticky top-0">
+<div class="flex items-center gap-4">
+<button class="w-10 h-10 flex items-center justify-center rounded-xl bg-surface-container hover:bg-surface-container-high transition-colors text-primary active:scale-95 duration-150">
+<span class="material-symbols-outlined" data-icon="arrow_back">arrow_back</span>
+</button>
+<h1 class="font-headline-sm text-headline-sm-mobile font-bold text-on-surface">Forgot Password</h1>
+</div>
+</header>
+<main class="flex-1 px-container-padding py-lg flex flex-col items-center">
+<!-- Step Indicator -->
+<div class="flex items-center justify-center gap-xs mb-xl">
+<div class="flex flex-col items-center gap-base">
+<div class="w-10 h-10 rounded-full primary-gradient flex items-center justify-center text-on-primary pulsing-ring">
+<span class="material-symbols-outlined" data-icon="mail">mail</span>
+</div>
+<span class="font-label-md text-label-md text-primary">Email</span>
+</div>
+<div class="w-12 h-0.5 bg-outline-variant rounded-full mt-[-20px]"></div>
+<div class="flex flex-col items-center gap-base opacity-40">
+<div class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined" data-icon="lock_reset">lock_reset</span>
+</div>
+<span class="font-label-md text-label-md">Verify</span>
+</div>
+<div class="w-12 h-0.5 bg-outline-variant rounded-full mt-[-20px]"></div>
+<div class="flex flex-col items-center gap-base opacity-40">
+<div class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined" data-icon="check_circle">check_circle</span>
+</div>
+<span class="font-label-md text-label-md">Done</span>
+</div>
+</div>
+<!-- Illustration Area -->
+<div class="relative w-40 h-40 mb-lg flex items-center justify-center">
+<div class="absolute inset-0 bg-primary-container/10 rounded-full"></div>
+<div class="relative w-24 h-24 flex items-center justify-center text-primary-container">
+<span class="material-symbols-outlined text-[80px]" data-icon="drafts" style="font-variation-settings: 'wght' 200;">drafts</span>
+<div class="absolute bottom-1 right-1 bg-amber-500 text-white w-10 h-10 rounded-full flex items-center justify-center border-4 border-background shadow3">
+<span class="material-symbols-outlined text-[20px]" data-icon="lock" data-weight="fill" style="font-variation-settings: 'FILL' 1;">lock</span>
+</div>
+</div>
+</div>
+<!-- Text Content -->
+<div class="text-center mb-xl w-full max-w-[340px]">
+<h2 class="font-headline-lg-mobile text-headline-lg-mobile font-bold text-on-surface mb-xs">Reset your password</h2>
+<p class="font-body-md text-body-md text-on-surface-variant px-4">
+                Enter the email address linked to your Kilimanjaro Schools account
+            </p>
+</div>
+<!-- Input Section -->
+<div class="w-full max-w-[400px] flex flex-col gap-lg">
+<div class="flex flex-col gap-xs">
+<div class="relative">
+<div class="absolute inset-y-0 left-md flex items-center pointer-events-none text-on-surface-variant">
+<span class="material-symbols-outlined" data-icon="mail">mail</span>
+</div>
+<input autofocus="" class="w-full h-[56px] pl-[48px] pr-md bg-surface border border-outline-variant rounded-[14px] text-body-md focus:ring-2 focus:ring-primary-container focus:border-primary-container transition-all outline-none" placeholder="school.email@kilimanjaro.edu" type="email"/>
+</div>
+<div class="flex items-center gap-xs px-base text-on-surface-variant">
+<span class="material-symbols-outlined text-[16px]" data-icon="info">info</span>
+<span class="font-label-md text-label-md">We'll send a 6-digit OTP to this address</span>
+</div>
+</div>
+<!-- Button Section -->
+<button class="w-full h-[54px] rounded-[14px] primary-gradient text-on-primary font-bold shadow3 active:scale-95 transition-transform duration-150 flex items-center justify-center gap-xs">
+<span>SEND OTP</span>
+<span class="material-symbols-outlined" data-icon="arrow_forward">arrow_forward</span>
+</button>
+</div>
+<!-- Supportive Action -->
+<div class="mt-auto py-lg">
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+                Remember your password? 
+                <a class="text-primary font-bold hover:underline" href="#">Log in</a>
+</p>
+</div>
+</main>
+<!-- Visual Polish: Decorative Element -->
+<div class="fixed bottom-[-100px] right-[-100px] w-[300px] h-[300px] bg-primary-container opacity-[0.03] rounded-full blur-[100px] pointer-events-none"></div>
+<div class="fixed top-[10%] left-[-50px] w-[200px] h-[200px] bg-tertiary-container opacity-[0.03] rounded-full blur-[80px] pointer-events-none"></div>
+</body></html>

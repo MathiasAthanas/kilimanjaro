@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { BarChart3 } from 'lucide-react';
+import { BarChart3, FileDown } from 'lucide-react';
 import { Badge } from '../../../components/common/Badge';
 import { useAcademicYears, useTerms } from '../../admin/api/admin.hooks';
 import { HodWorkspaceShell } from '../../hod/components/HodWorkspaceShell';
@@ -9,8 +9,9 @@ import {
   useDepartmentSubject,
 } from '../api/analytics.hooks';
 import { BarChart, StatCard, ChartSkeleton, StatSkeleton } from '../components/Charts';
+import { getLogoBase64 } from '../../finance/components/FinanceWorkspaceShell';
 
-function YearTermBar({ yearId, termId, onYear, onTerm }: { yearId: string; termId: string; onYear(v: string): void; onTerm(v: string): void }) {
+function YearTermBar({ yearId, termId, onYear, onTerm, onDownload }: { yearId: string; termId: string; onYear(v: string): void; onTerm(v: string): void; onDownload?(): void }) {
   const { data: years = [] } = useAcademicYears();
   const { data: allTerms = [] } = useTerms();
   const terms = (allTerms as any[]).filter((t: any) => !yearId || t.academicYearId === yearId);
@@ -25,8 +26,128 @@ function YearTermBar({ yearId, termId, onYear, onTerm }: { yearId: string; termI
         <option value="">All Terms</option>
         {(terms as any[]).map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}
       </select>
+      {onDownload && (
+        <button onClick={onDownload} className="ml-auto flex items-center gap-1.5 rounded-lg bg-ks-navy px-3 py-1.5 text-xs font-black text-white hover:opacity-90">
+          <FileDown className="h-3.5 w-3.5" /> Download Report
+        </button>
+      )}
     </div>
   );
+}
+
+const NAVY = '#00334f';
+const GOLD = '#d59a1b';
+
+async function generateHodPdf(teachers: any[], subjects: any[], atRisk: any[], avgPass: number, avgCoverage: number) {
+  const [{ jsPDF }, logo] = await Promise.all([import('jspdf'), getLogoBase64()]);
+  const doc = new (jsPDF as any)({ orientation: 'portrait', unit: 'mm', format: 'a4' }) as any;
+  const W = 210, M = 14, now = new Date();
+  const rowH = 7;
+
+  const addHeader = (title: string) => {
+    doc.setFillColor(NAVY); doc.rect(0, 0, W, 38, 'F');
+    if (logo) doc.addImage(logo, 'PNG', M, 5, 26, 26, undefined, 'FAST');
+    doc.setTextColor('#ffffff'); doc.setFont('helvetica', 'bold'); doc.setFontSize(15);
+    doc.text('Kilimanjaro Schools', M + 30, 16);
+    doc.setFontSize(10); doc.setFont('helvetica', 'normal');
+    doc.text(title, M + 30, 24);
+    doc.setFontSize(8); doc.text(`Generated: ${now.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' })}`, M + 30, 31);
+    doc.setFillColor(GOLD); doc.rect(0, 38, W, 2.5, 'F');
+  };
+  const addFooter = (pg: number) => {
+    doc.setFillColor(NAVY); doc.rect(0, 285, W, 12, 'F');
+    doc.setTextColor('#ffffff'); doc.setFontSize(7); doc.setFont('helvetica', 'normal');
+    doc.text('Kilimanjaro Schools Management System — Confidential', M, 292);
+    doc.text(`Page ${pg}`, W - M, 292, { align: 'right' });
+  };
+  const sectionTitle = (text: string, y: number) => {
+    doc.setFillColor('#f1f5f9'); doc.rect(M, y, W - M * 2, 7, 'F');
+    doc.setTextColor(NAVY); doc.setFont('helvetica', 'bold'); doc.setFontSize(9);
+    doc.text(text, M + 2, y + 5); return y + 10;
+  };
+
+  addHeader('Department Analytics Report');
+  let y = 48;
+
+  // KPI row
+  const kpis = [
+    { label: 'Dept Avg Pass Rate', value: `${avgPass.toFixed(1)}%` },
+    { label: 'Teachers Active', value: String(teachers.length) },
+    { label: 'Avg Coverage', value: `${avgCoverage}%` },
+    { label: 'At-Risk Students', value: String(atRisk.length) },
+  ];
+  const cw = (W - M * 2) / 4;
+  kpis.forEach((k, i) => {
+    const x = M + i * cw;
+    doc.setFillColor('#f8fafc'); doc.roundedRect(x, y, cw - 2, 18, 2, 2, 'F');
+    doc.setDrawColor('#e2e8f0'); doc.roundedRect(x, y, cw - 2, 18, 2, 2, 'S');
+    doc.setTextColor(NAVY); doc.setFont('helvetica', 'bold'); doc.setFontSize(13);
+    doc.text(k.value, x + (cw - 2) / 2, y + 10, { align: 'center' });
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor('#64748b');
+    doc.text(k.label, x + (cw - 2) / 2, y + 15.5, { align: 'center' });
+  });
+  y += 24;
+
+  // Teacher performance table
+  y = sectionTitle('Teacher Performance Summary', y);
+  const tHdrs = ['Teacher', 'Subject', 'Class', 'Pass Rate', 'Coverage', 'Assessments'];
+  const tW = [40, 36, 28, 22, 22, 24];
+  doc.setFillColor(NAVY); doc.rect(M, y, W - M * 2, rowH, 'F');
+  let cx = M;
+  tHdrs.forEach((h, i) => { doc.setTextColor('#ffffff'); doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.text(h, cx + 2, y + 5); cx += tW[i]; });
+  y += rowH;
+  teachers.forEach((t: any, idx: number) => {
+    const cov = t.topicsCovered != null ? Math.round((t.topicsCovered / Math.max(t.totalTopics || 1, 1)) * 100) : null;
+    doc.setFillColor(idx % 2 === 0 ? '#ffffff' : '#f8fafc'); doc.rect(M, y, W - M * 2, rowH, 'F');
+    doc.setTextColor('#1e293b'); doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5);
+    const cells = [t.teacherName || t.name || '—', t.subjectName || '—', t.className || '—',
+      `${(t.passRate || 0).toFixed(1)}%`, cov !== null ? `${cov}%` : '—', String(t.assessmentCount ?? '—')];
+    cx = M; cells.forEach((v, i) => { doc.text(v, cx + 2, y + 5); cx += tW[i]; });
+    y += rowH;
+    if (y > 268) { addFooter(doc.getNumberOfPages()); doc.addPage(); addHeader('Department Analytics Report (cont.)'); y = 48; }
+  });
+  y += 6;
+
+  // Subject rankings
+  y = sectionTitle('Subject Rankings', y);
+  const sHdrs = ['Subject', 'Pass Rate', 'Assessments', 'Coverage'];
+  const sW = [70, 30, 30, 30];
+  doc.setFillColor(NAVY); doc.rect(M, y, W - M * 2, rowH, 'F');
+  cx = M;
+  sHdrs.forEach((h, i) => { doc.setTextColor('#ffffff'); doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.text(h, cx + 2, y + 5); cx += sW[i]; });
+  y += rowH;
+  [...subjects].sort((a, b) => (b.passRate || 0) - (a.passRate || 0)).forEach((s: any, idx: number) => {
+    const cov = s.topicsCovered != null ? Math.round((s.topicsCovered / Math.max(s.totalTopics || 1, 1)) * 100) : null;
+    doc.setFillColor(idx % 2 === 0 ? '#ffffff' : '#f8fafc'); doc.rect(M, y, W - M * 2, rowH, 'F');
+    doc.setTextColor('#1e293b'); doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5);
+    const cells = [s.subjectName || '—', `${(s.passRate || 0).toFixed(1)}%`, String(s.assessmentCount ?? '—'), cov !== null ? `${cov}%` : '—'];
+    cx = M; cells.forEach((v, i) => { doc.text(v, cx + 2, y + 5); cx += sW[i]; });
+    y += rowH;
+    if (y > 268) { addFooter(doc.getNumberOfPages()); doc.addPage(); addHeader('Department Analytics Report (cont.)'); y = 48; }
+  });
+  y += 6;
+
+  // At-risk
+  if (atRisk.length > 0) {
+    y = sectionTitle('At-Risk Students in Department', y);
+    const aHdrs = ['Student', 'Class', 'Alert Type', 'Subject'];
+    const aW = [55, 35, 50, 42];
+    doc.setFillColor(NAVY); doc.rect(M, y, W - M * 2, rowH, 'F');
+    cx = M;
+    aHdrs.forEach((h, i) => { doc.setTextColor('#ffffff'); doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.text(h, cx + 2, y + 5); cx += aW[i]; });
+    y += rowH;
+    atRisk.slice(0, 20).forEach((s: any, idx: number) => {
+      doc.setFillColor(idx % 2 === 0 ? '#ffffff' : '#f8fafc'); doc.rect(M, y, W - M * 2, rowH, 'F');
+      doc.setTextColor('#1e293b'); doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5);
+      const cells = [s.studentName || '—', s.className || '—', (s.alertType || '').replace(/_/g, ' '), s.subject || s.subjectName || '—'];
+      cx = M; cells.forEach((v, i) => { doc.text(v, cx + 2, y + 5); cx += aW[i]; });
+      y += rowH;
+      if (y > 268) { addFooter(doc.getNumberOfPages()); doc.addPage(); addHeader('Department Analytics Report (cont.)'); y = 48; }
+    });
+  }
+
+  addFooter(doc.getNumberOfPages());
+  doc.save(`HOD_Department_Analytics_${now.toISOString().slice(0, 10)}.pdf`);
 }
 
 function TeacherCards({ teachers }: { teachers: any[] }) {
@@ -165,7 +286,8 @@ export function HodAnalyticsPage() {
 
   return (
     <HodWorkspaceShell title="Department Analytics" eyebrow="Department Intelligence Hub">
-      <YearTermBar yearId={yearId} termId={termId} onYear={setYearId} onTerm={setTermId} />
+      <YearTermBar yearId={yearId} termId={termId} onYear={setYearId} onTerm={setTermId}
+        onDownload={() => generateHodPdf(teachers, subjects, atRisk as any[], avgPass, avgCoverage)} />
 
       {/* Department health stats */}
       {acLoading ? (

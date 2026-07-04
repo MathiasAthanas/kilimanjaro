@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Marks Entry | Kilimanjaro Teachers</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Shared Tailwind Config -->
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "tertiary-container": "#8d90ff",
+                    "surface": "#faf8ff",
+                    "secondary-fixed": "#acedff",
+                    "primary": "#006591",
+                    "surface-container-lowest": "#ffffff",
+                    "primary-fixed-dim": "#89ceff",
+                    "surface-container-highest": "#dae2fd",
+                    "surface-bright": "#faf8ff",
+                    "on-secondary-container": "#006172",
+                    "on-background": "#131b2e",
+                    "primary-fixed": "#c9e6ff",
+                    "outline-variant": "#bec8d2",
+                    "on-primary-container": "#003751",
+                    "surface-variant": "#dae2fd",
+                    "background": "#faf8ff",
+                    "on-primary-fixed": "#001e2f",
+                    "on-primary": "#ffffff",
+                    "surface-tint": "#006591",
+                    "outline": "#6e7881",
+                    "on-secondary-fixed": "#001f26",
+                    "tertiary-fixed-dim": "#c0c1ff",
+                    "inverse-on-surface": "#eef0ff",
+                    "error-container": "#ffdad6",
+                    "tertiary": "#494bd6",
+                    "on-primary-fixed-variant": "#004c6e",
+                    "on-secondary": "#ffffff",
+                    "primary-container": "#0ea5e9",
+                    "surface-container": "#eaedff",
+                    "secondary-container": "#57dffe",
+                    "error": "#ba1a1a",
+                    "surface-dim": "#d2d9f4",
+                    "on-error": "#ffffff",
+                    "on-tertiary-container": "#1407ad",
+                    "surface-container-high": "#e2e7ff",
+                    "secondary": "#00687a",
+                    "inverse-surface": "#283044",
+                    "inverse-primary": "#89ceff",
+                    "tertiary-fixed": "#e1e0ff",
+                    "on-secondary-fixed-variant": "#004e5c",
+                    "on-tertiary-fixed-variant": "#2f2ebe",
+                    "on-tertiary-fixed": "#07006c",
+                    "on-tertiary": "#ffffff",
+                    "surface-container-low": "#f2f3ff",
+                    "secondary-fixed-dim": "#4cd7f6",
+                    "on-surface": "#131b2e",
+                    "on-error-container": "#93000a",
+                    "on-surface-variant": "#3e4850"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "xl": "32px",
+                    "lg": "24px",
+                    "container-padding": "20px",
+                    "xs": "8px",
+                    "md": "16px",
+                    "base": "4px",
+                    "sm": "12px"
+            },
+            "fontFamily": {
+                    "headline-md": ["Space Grotesk"],
+                    "label-lg": ["Plus Jakarta Sans"],
+                    "body-md": ["Plus Jakarta Sans"],
+                    "display-lg": ["Space Grotesk"],
+                    "headline-sm": ["Space Grotesk"],
+                    "headline-lg": ["Space Grotesk"],
+                    "label-md": ["Plus Jakarta Sans"],
+                    "body-lg": ["Plus Jakarta Sans"],
+                    "body-sm": ["Plus Jakarta Sans"]
+            },
+            "fontSize": {
+                    "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                    "label-lg": ["14px", {"lineHeight": "20px", "letterSpacing": "0.01em", "fontWeight": "600"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "display-lg": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "500"}],
+                    "headline-lg": ["30px", {"lineHeight": "36px", "fontWeight": "600"}],
+                    "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.04em", "fontWeight": "600"}],
+                    "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                    "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            background-color: #faf8ff;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(226, 232, 240, 0.5);
+        }
+        .custom-shadow-1 {
+            box-shadow: 0 2px 4px rgba(14, 165, 233, 0.05);
+        }
+        .primary-gradient-btn {
+            background: linear-gradient(135deg, #006591 0%, #0ea5e9 100%);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="font-body-md text-on-surface">
+<!-- TopAppBar -->
+<header class="flex justify-between items-center px-container-padding h-16 w-full fixed top-0 z-50 bg-surface dark:bg-inverse-surface shadow-sm dark:shadow-none border-b border-outline-variant dark:border-outline/30">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full overflow-hidden border-2 border-primary-container">
+<img alt="Teacher profile photo" class="w-full h-full object-cover" data-alt="A professional close-up portrait of a Tanzanian educator with a warm, confident expression. She is wearing a neat, patterned blazer against a soft, bright office background with bookshelves. The lighting is crisp and natural, highlighting her friendly yet authoritative demeanor, perfectly suited for a high-end educational portal UI." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDGiolvo3hSCN_2qoguVXRb9YVmH96_Ml4c3PfhLm5qwh1UR4nOeJRNeGDbYIFtBWd1781348ElrANOegTaih6lxoQ8nj2fVjmVkrWTY__sVljbH7nJxKkVZ2Uzd7rQzhv8W0nJHUKjTwfKCpnOSIoFtvEFAWQ_ujPRStHbD_jv4Jc91F0Ya26X1wzoyoSG-ZejXP6tqSuuTnHE30co3vc8CXzUTzfYKnodAENXoxyP5G293Gbq4Hu7MXKt1OiZDMg17OtngYy91g"/>
+</div>
+<h1 class="font-headline-sm text-primary dark:text-primary-fixed-dim font-bold tracking-tight">Kilimanjaro Teachers</h1>
+</div>
+<div class="flex items-center gap-2">
+<button class="p-2 rounded-full hover:bg-surface-container-high dark:hover:bg-surface-variant transition-colors active:opacity-80 active:scale-95">
+<span class="material-symbols-outlined text-on-surface-variant">notifications</span>
+</button>
+</div>
+</header>
+<!-- Navigation Drawer (Desktop) -->
+<aside class="hidden md:flex fixed left-0 top-0 h-full z-[60] flex flex-col py-6 gap-4 bg-surface dark:bg-inverse-surface border-r border-outline-variant dark:border-outline/20 w-80 shadow-5 dark:shadow-none">
+<div class="px-6 mb-4">
+<span class="font-headline-md text-primary dark:text-primary-fixed-dim font-black">KJS Portal</span>
+</div>
+<div class="px-6 mb-6 flex flex-col gap-1">
+<span class="font-headline-sm text-headline-sm text-on-surface">S. Kilimanjaro</span>
+<span class="font-body-md text-body-md text-on-surface-variant">Senior Educator • Grade 10</span>
+<span class="font-label-md text-label-md text-outline">Staff ID: KJS-102</span>
+</div>
+<nav class="flex flex-col gap-1 overflow-y-auto">
+<a class="flex items-center gap-3 py-3 px-4 mx-2 rounded-lg text-on-surface-variant hover:bg-surface-container-low transition-all" href="#">
+<span class="material-symbols-outlined">home</span>
+<span class="font-label-lg">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 py-3 px-4 mx-2 rounded-lg text-on-surface-variant hover:bg-surface-container-low transition-all" href="#">
+<span class="material-symbols-outlined">fact_check</span>
+<span class="font-label-lg">Attendance Log</span>
+</a>
+<a class="flex items-center gap-3 py-3 px-4 mx-2 rounded-lg bg-primary-container text-on-primary-container font-bold transition-all" href="#">
+<span class="material-symbols-outlined">app_registration</span>
+<span class="font-label-lg">Marks Entry</span>
+</a>
+<a class="flex items-center gap-3 py-3 px-4 mx-2 rounded-lg text-on-surface-variant hover:bg-surface-container-low transition-all" href="#">
+<span class="material-symbols-outlined">analytics</span>
+<span class="font-label-lg">Syllabus Progress</span>
+</a>
+<a class="flex items-center gap-3 py-3 px-4 mx-2 rounded-lg text-on-surface-variant hover:bg-surface-container-low transition-all" href="#">
+<span class="material-symbols-outlined">grid_view</span>
+<span class="font-label-lg">Weekly Timetable</span>
+</a>
+<a class="flex items-center gap-3 py-3 px-4 mx-2 rounded-lg text-on-surface-variant hover:bg-surface-container-low transition-all" href="#">
+<span class="material-symbols-outlined">event_note</span>
+<span class="font-label-lg">Academic Calendar</span>
+</a>
+<div class="mt-auto pt-4">
+<a class="flex items-center gap-3 py-3 px-4 mx-2 rounded-lg text-on-surface-variant hover:bg-surface-container-low transition-all" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-label-lg">Portal Settings</span>
+</a>
+</div>
+</nav>
+</aside>
+<!-- Main Content -->
+<main class="pt-20 pb-28 md:pl-80 px-container-padding max-w-7xl mx-auto">
+<!-- Header Section -->
+<div class="mb-lg mt-md">
+<h2 class="font-headline-lg text-on-surface mb-xs">Marks Assessment</h2>
+<p class="font-body-md text-on-surface-variant">Review and enter student grades for your current class modules.</p>
+</div>
+<!-- Filter Chips Section -->
+<div class="flex gap-sm overflow-x-auto pb-4 scrollbar-hide no-wrap">
+<button class="flex-none px-md py-2 rounded-full border border-primary bg-primary text-on-primary font-label-lg transition-all active:scale-95">
+                All Assessments
+            </button>
+<button class="flex-none px-md py-2 rounded-full border border-outline-variant bg-surface text-on-surface-variant font-label-lg hover:border-primary hover:text-primary transition-all active:scale-95">
+                Open
+            </button>
+<button class="flex-none px-md py-2 rounded-full border border-outline-variant bg-surface text-on-surface-variant font-label-lg hover:border-primary hover:text-primary transition-all active:scale-95">
+                Submitted
+            </button>
+<button class="flex-none px-md py-2 rounded-full border border-outline-variant bg-surface text-on-surface-variant font-label-lg hover:border-primary hover:text-primary transition-all active:scale-95">
+                Rejected
+            </button>
+<button class="flex-none px-md py-2 rounded-full border border-outline-variant bg-surface text-on-surface-variant font-label-lg hover:border-primary hover:text-primary transition-all active:scale-95">
+                Locked
+            </button>
+</div>
+<!-- Bento Grid Layout for Assessment Items -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-lg mt-md">
+<!-- Assessment Item 1 -->
+<div class="glass-card rounded-xl p-md flex flex-col gap-md custom-shadow-1 group hover:shadow-lg transition-shadow">
+<div class="flex justify-between items-start">
+<div class="flex flex-col gap-1">
+<span class="font-label-md text-primary bg-primary-container/20 px-2 py-0.5 rounded uppercase tracking-wider">Mathematics</span>
+<h3 class="font-headline-sm text-on-surface">Form 2A — CAT 2</h3>
+</div>
+<span class="flex items-center gap-1 font-label-lg text-secondary px-3 py-1 bg-secondary-container/30 rounded-full">
+<span class="material-symbols-outlined text-[18px]">lock_open</span>
+                        Open
+                    </span>
+</div>
+<div class="flex items-center justify-between mt-base">
+<div class="flex flex-col gap-1 w-full mr-lg">
+<div class="flex justify-between font-label-md text-on-surface-variant mb-1">
+<span>Grading Progress</span>
+<span>0/38 Marked</span>
+</div>
+<div class="w-full bg-surface-container rounded-full h-2 overflow-hidden">
+<div class="bg-primary-container h-full w-[2%] rounded-full transition-all duration-700"></div>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-between gap-md mt-md">
+<div class="flex -space-x-2">
+<img alt="Student" class="w-8 h-8 rounded-full border-2 border-surface" data-alt="Close up avatar of a young male student with glasses in a school uniform, high resolution digital photography style." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBv3V2ih2ysJgM7pRLhBhPNXKJugbxC4VFwSxctNu1JMQ4kqt9NBUO0OIfPRjxITQW6pP-3OwpMEq-HtIsPi5cUDtHEmTZj2kB9bw60YMlFTRFGnRao5F5Nz54_suycugrcMmNDaGJNmnxskkTNSCIeHEsuNqtZk6o9BUM0W59wdEogDISPc9D7D3H4--WH0ZWoEVvqjJCYiqiJPr9MFoEO36O3vkzTICVpLxy2VoAUNOnbvGxg7ma2vTDt-zgbaasrTSI462xBPg"/>
+<img alt="Student" class="w-8 h-8 rounded-full border-2 border-surface" data-alt="Portrait of a female student smiling with braided hair, high-quality professional lighting, clean school setting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDmYNQRPtB6UXnz1sNVdtOLSIXKqeTDCesdP2LkwaLBjt_LCE_BZiMydgnuTMVFqUt4YxHO6p0AEd1WUer_4QYRjl5GWHTLJfhgsiPXzR8lZCczciHSaD2uzRgTCJstT1OkmH3lQ2vak6hpqwVfpxTiHpaOCHmV0LKosJ5jpM1DaNJM5Mu2rTfU4HmEDRavgfP8qbaMqBlUFeQ6YOltr3JLYnw0lDROLurXNfE6YnO5n3KqRch_Cq07aJfdi4_zg6z4T_ZVVM7Sjw"/>
+<div class="w-8 h-8 rounded-full border-2 border-surface bg-surface-container-highest flex items-center justify-center font-label-md text-on-surface-variant">+36</div>
+</div>
+<button class="primary-gradient-btn text-on-primary font-label-lg px-lg py-3 rounded-xl flex items-center gap-2 active:scale-95 transition-all shadow-md">
+<span>Enter Marks</span>
+<span class="material-symbols-outlined">chevron_right</span>
+</button>
+</div>
+</div>
+<!-- Assessment Item 2 -->
+<div class="glass-card rounded-xl p-md flex flex-col gap-md custom-shadow-1 group hover:shadow-lg transition-shadow">
+<div class="flex justify-between items-start">
+<div class="flex flex-col gap-1">
+<span class="font-label-md text-primary bg-primary-container/20 px-2 py-0.5 rounded uppercase tracking-wider">Mathematics</span>
+<h3 class="font-headline-sm text-on-surface">Form 3A — Midterm</h3>
+</div>
+<span class="flex items-center gap-1 font-label-lg text-secondary px-3 py-1 bg-secondary-container/30 rounded-full">
+<span class="material-symbols-outlined text-[18px]">lock_open</span>
+                        Open
+                    </span>
+</div>
+<div class="flex items-center justify-between mt-base">
+<div class="flex flex-col gap-1 w-full mr-lg">
+<div class="flex justify-between font-label-md text-on-surface-variant mb-1">
+<span>Grading Progress</span>
+<span>12/42 Marked</span>
+</div>
+<div class="w-full bg-surface-container rounded-full h-2 overflow-hidden">
+<div class="bg-primary-container h-full w-[28%] rounded-full transition-all duration-700"></div>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-between gap-md mt-md">
+<div class="flex -space-x-2">
+<img alt="Student" class="w-8 h-8 rounded-full border-2 border-surface" data-alt="Professional student portrait of a male student in a white collared shirt, modern educational portal aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCLOT3Q6300hkG8PzcUme5dprgfqgzxS44KVW0Gq5f-xCkTfI9GomvF0smIpQ8B_vVGbjkDEPFcbUH1Qd98QwPyj_5A-W_WLKzBORB64l1IrYOwqywSbCOYFbnRWHAzXy2c47vEI8AAzVoQI41_tuthIP7vmGYkXOKTOppmJZOvtapxCsaoLkwrIdVmhpOkVuqT3qEoyD3mh5fU18qGE9tl0rp9c-hD49SPMP5wlt3sFqLm_Cq7GWeQoZ1XR68PjCFcSd9BtzuQpg"/>
+<img alt="Student" class="w-8 h-8 rounded-full border-2 border-surface" data-alt="Cheerful female student with a backpack in a sunlit hallway, soft focus background, high-end commercial photography." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAllnwMOuz1mVhrEYu5kQzcVZd64aPkWmdcApW5WjJU10cJBL9EDmPfsKXEHOIF8AMee0Q6SgxszG5NTBFHOravA8HFhRXmzMoG_IQoDMghudF_wdUQWmvRTfSDTjn4yHJJuV3uLArV5ALXjtcHpWuefuscENnHWRkPL-iG2yutKqE1KFtQIE4K4tNh_DRdHCDLCuw5Efwk95Nw_z9Q7fB9hKIBAy9HyL0KUninKiHC4jDzBQPHinxj49ABjMbkWpEdFxGaN_l2LA"/>
+<div class="w-8 h-8 rounded-full border-2 border-surface bg-surface-container-highest flex items-center justify-center font-label-md text-on-surface-variant">+40</div>
+</div>
+<button class="primary-gradient-btn text-on-primary font-label-lg px-lg py-3 rounded-xl flex items-center gap-2 active:scale-95 transition-all shadow-md">
+<span>Enter Marks</span>
+<span class="material-symbols-outlined">chevron_right</span>
+</button>
+</div>
+</div>
+<!-- Assessment Item 3 (Locked/Placeholder) -->
+<div class="bg-surface-container-low border border-outline-variant/30 border-dashed rounded-xl p-md flex flex-col gap-md opacity-70 group">
+<div class="flex justify-between items-start">
+<div class="flex flex-col gap-1">
+<span class="font-label-md text-outline bg-outline-variant/10 px-2 py-0.5 rounded uppercase tracking-wider">Physics</span>
+<h3 class="font-headline-sm text-on-surface-variant">Form 4C — Final Exam</h3>
+</div>
+<span class="flex items-center gap-1 font-label-lg text-outline px-3 py-1 bg-outline-variant/10 rounded-full">
+<span class="material-symbols-outlined text-[18px]">lock</span>
+                        Locked
+                    </span>
+</div>
+<div class="flex-grow flex flex-col items-center justify-center py-6 text-center">
+<span class="material-symbols-outlined text-4xl text-outline mb-2">event_available</span>
+<p class="font-body-sm text-on-surface-variant">Opening on Nov 15th, 2024</p>
+</div>
+</div>
+<!-- Assessment Item 4 (Submitted) -->
+<div class="glass-card rounded-xl p-md flex flex-col gap-md border-tertiary/20 bg-tertiary-fixed/5 group">
+<div class="flex justify-between items-start">
+<div class="flex flex-col gap-1">
+<span class="font-label-md text-tertiary bg-tertiary-container/10 px-2 py-0.5 rounded uppercase tracking-wider">Chemistry</span>
+<h3 class="font-headline-sm text-on-surface">Form 3B — Lab Report</h3>
+</div>
+<span class="flex items-center gap-1 font-label-lg text-tertiary px-3 py-1 bg-tertiary-container/20 rounded-full">
+<span class="material-symbols-outlined text-[18px]">verified</span>
+                        Submitted
+                    </span>
+</div>
+<div class="flex items-center justify-between mt-base">
+<div class="flex flex-col gap-1 w-full mr-lg">
+<div class="flex justify-between font-label-md text-tertiary mb-1">
+<span>Completed</span>
+<span>35/35 Marked</span>
+</div>
+<div class="w-full bg-surface-container rounded-full h-2 overflow-hidden">
+<div class="bg-tertiary h-full w-[100%] rounded-full"></div>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-between gap-md mt-md">
+<div class="text-on-surface-variant font-body-sm italic flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">schedule</span>
+                        Last updated 2 days ago
+                    </div>
+<button class="border border-tertiary text-tertiary font-label-lg px-lg py-3 rounded-xl flex items-center gap-2 hover:bg-tertiary hover:text-on-tertiary transition-all active:scale-95">
+<span>View Results</span>
+<span class="material-symbols-outlined">visibility</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Asymmetric Stats Section -->
+<div class="mt-xl grid grid-cols-1 md:grid-cols-3 gap-lg">
+<div class="md:col-span-2 bg-inverse-surface rounded-3xl p-lg text-inverse-on-surface relative overflow-hidden flex flex-col justify-between h-[240px]">
+<div class="relative z-10">
+<h4 class="font-headline-md mb-xs">Academic Integrity Reminder</h4>
+<p class="font-body-md opacity-80 max-w-md">Please ensure all marks are entered by the Friday deadline. Double-check for entry errors before finalizing submission to the Head of Department.</p>
+</div>
+<div class="relative z-10 flex gap-sm">
+<button class="bg-primary-container text-on-primary-container font-label-lg px-lg py-sm rounded-xl hover:opacity-90 transition-all">Review Guidelines</button>
+<button class="text-inverse-on-surface font-label-lg px-lg py-sm rounded-xl hover:bg-white/10 transition-all">Download Log</button>
+</div>
+<!-- Abstract BG Element -->
+<div class="absolute -right-20 -bottom-20 w-64 h-64 bg-primary rounded-full blur-[100px] opacity-30"></div>
+</div>
+<div class="glass-card rounded-3xl p-lg flex flex-col justify-center items-center text-center border-2 border-primary/10">
+<span class="material-symbols-outlined text-5xl text-primary mb-md" style="font-variation-settings: 'FILL' 1;">analytics</span>
+<span class="font-display-lg text-on-surface">82%</span>
+<span class="font-label-lg text-on-surface-variant">Overall Grading Complete</span>
+<div class="w-full h-1 bg-surface-container mt-md rounded-full overflow-hidden">
+<div class="bg-primary h-full w-[82%]"></div>
+</div>
+</div>
+</div>
+</main>
+<!-- Bottom Navigation Bar (Mobile) -->
+<nav class="md:hidden fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-2 py-3 bg-surface dark:bg-inverse-surface shadow-lg rounded-t-xl dark:border-t dark:border-outline/20">
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant hover:bg-surface-variant dark:hover:bg-surface-container-highest transition-colors rounded-full px-4 py-1" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-label-md">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant hover:bg-surface-variant dark:hover:bg-surface-container-highest transition-colors rounded-full px-4 py-1" href="#">
+<span class="material-symbols-outlined">how_to_reg</span>
+<span class="font-label-md">Attendance</span>
+</a>
+<a class="flex flex-col items-center justify-center bg-primary-container dark:bg-primary-fixed text-on-primary-container dark:text-on-primary-fixed-variant rounded-full px-4 py-1 active:scale-90 duration-150" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">edit_note</span>
+<span class="font-label-md">Marks</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant hover:bg-surface-variant dark:hover:bg-surface-container-highest transition-colors rounded-full px-4 py-1" href="#">
+<span class="material-symbols-outlined">calendar_month</span>
+<span class="font-label-md">Schedule</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant hover:bg-surface-variant dark:hover:bg-surface-container-highest transition-colors rounded-full px-4 py-1" href="#">
+<span class="material-symbols-outlined">menu</span>
+<span class="font-label-md">Menu</span>
+</a>
+</nav>
+<script>
+        // Micro-interactions and subtle effects
+        document.querySelectorAll('.glass-card').forEach(card => {
+            card.addEventListener('mousemove', (e) => {
+                const rect = card.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                card.style.setProperty('--mouse-x', `${x}px`);
+                card.style.setProperty('--mouse-y', `${y}px`);
+            });
+        });
+
+        // Simple tab active state toggling
+        const filterChips = document.querySelectorAll('.flex-none.px-md.py-2');
+        filterChips.forEach(chip => {
+            chip.addEventListener('click', () => {
+                filterChips.forEach(c => {
+                    c.classList.remove('bg-primary', 'text-on-primary', 'border-primary');
+                    c.classList.add('bg-surface', 'text-on-surface-variant', 'border-outline-variant');
+                });
+                chip.classList.add('bg-primary', 'text-on-primary', 'border-primary');
+                chip.classList.remove('bg-surface', 'text-on-surface-variant', 'border-outline-variant');
+            });
+        });
+    </script>
+</body></html>

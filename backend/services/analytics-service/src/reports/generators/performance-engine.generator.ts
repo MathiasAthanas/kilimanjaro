@@ -7,7 +7,32 @@ export class PerformanceEngineGenerator {
     const alertTypeBullets = Object.entries(data.alertsSummary?.byType || {}).map(([type, count]) => `${type}: ${count}`);
     const alertSeverityBullets = Object.entries(data.alertsSummary?.bySeverity || {}).map(([severity, count]) => `${severity}: ${count}`);
     const interventionBullets = Object.entries(data.interventionSummary?.byType || {}).map(([type, count]) => `${type}: ${count}`);
+    const unresolved = Number(data.alertsSummary?.unresolvedCount ?? 0);
+    const followUpRate = Number(data.interventionSummary?.followUpRate ?? 0);
+    const effectiveness = Number(data.pairingSummary?.effectivenessRate ?? 0);
+    const managementActions = [
+      unresolved > 0
+        ? `${unresolved} unresolved alerts require named owners, target dates, and escalation criteria.`
+        : 'No unresolved alerts are currently returned by the performance engine.',
+      followUpRate < 75 && Number(data.interventionSummary?.totalInterventions ?? 0) > 0
+        ? `Intervention follow-up is ${followUpRate.toFixed(2)}%; HODs should audit interventions without follow-up dates.`
+        : `Intervention follow-up rate is ${followUpRate.toFixed(2)}%.`,
+      effectiveness > 0
+        ? `Peer pairing effectiveness is ${effectiveness.toFixed(2)}%; continue monitoring completed outcomes.`
+        : 'No positive peer pairing effectiveness is currently available for this period.',
+    ];
+
     await createPdf(filePath, 'Performance Engine Report', [
+      {
+        heading: 'AQA Management Actions',
+        rows: [
+          ['Unresolved Alerts', data.alertsSummary?.unresolvedCount ?? 0],
+          ['Resolution Rate', data.alertsSummary?.resolutionRate ?? 0],
+          ['Follow-Up Rate', data.interventionSummary?.followUpRate ?? 0],
+          ['Pairing Effectiveness', data.pairingSummary?.effectivenessRate ?? 0],
+        ],
+        bullets: managementActions,
+      },
       {
         heading: 'Alerts Summary',
         rows: [
@@ -17,7 +42,9 @@ export class PerformanceEngineGenerator {
           ['Resolution Rate', data.alertsSummary?.resolutionRate ?? 0],
           ['Average Resolution Days', data.alertsSummary?.averageResolutionDays ?? 0],
         ],
-        bullets: [...alertTypeBullets, ...alertSeverityBullets],
+        bullets: [...alertTypeBullets, ...alertSeverityBullets].length
+          ? [...alertTypeBullets, ...alertSeverityBullets]
+          : ['No alert breakdown records were returned for this period.'],
       },
       {
         heading: 'Pairing Summary',
@@ -47,7 +74,13 @@ export class PerformanceEngineGenerator {
           ...interventionBullets,
           ...(data.mostAlertedSubjects || []).slice(0, 10).map((row: any) => `${row.subjectName}: ${row.alertCount || 0} alerts, ${row.resolvedCount || 0} resolved`),
           ...(data.chronicUnderperformers || []).slice(0, 10).map((row: any) => `${row.studentName}: ${row.subjectCount || 0} active concern subjects`),
-        ],
+        ].length
+          ? [
+              ...interventionBullets,
+              ...(data.mostAlertedSubjects || []).slice(0, 10).map((row: any) => `${row.subjectName}: ${row.alertCount || 0} alerts, ${row.resolvedCount || 0} resolved.`),
+              ...(data.chronicUnderperformers || []).slice(0, 10).map((row: any) => `${row.studentName}: ${row.subjectCount || 0} active concern subjects.`),
+            ]
+          : ['No intervention, hotspot, or chronic-underperformance records were returned for this period.'],
       },
       {
         heading: 'Success Stories',

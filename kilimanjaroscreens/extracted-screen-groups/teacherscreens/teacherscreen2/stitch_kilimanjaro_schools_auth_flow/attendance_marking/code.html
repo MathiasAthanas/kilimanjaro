@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Attendance Marking | Kilimanjaro Teachers</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Plus+Jakarta+Sans:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind Configuration -->
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                "surface-variant": "#dae2fd",
+                "tertiary": "#494bd6",
+                "background": "#faf8ff",
+                "on-background": "#131b2e",
+                "primary-fixed": "#c9e6ff",
+                "surface-container-highest": "#dae2fd",
+                "surface-container-low": "#f2f3ff",
+                "on-secondary-fixed": "#001f26",
+                "on-primary-fixed": "#001e2f",
+                "on-tertiary-fixed": "#07006c",
+                "on-secondary": "#ffffff",
+                "on-error": "#ffffff",
+                "error": "#ba1a1a",
+                "on-error-container": "#93000a",
+                "surface-container-lowest": "#ffffff",
+                "on-tertiary": "#ffffff",
+                "on-primary-fixed-variant": "#004c6e",
+                "inverse-on-surface": "#eef0ff",
+                "tertiary-fixed-dim": "#c0c1ff",
+                "on-tertiary-fixed-variant": "#2f2ebe",
+                "surface-bright": "#faf8ff",
+                "outline-variant": "#bec8d2",
+                "error-container": "#ffdad6",
+                "surface-container": "#eaedff",
+                "secondary-fixed-dim": "#4cd7f6",
+                "secondary": "#00687a",
+                "primary-container": "#0ea5e9",
+                "on-tertiary-container": "#1407ad",
+                "on-primary": "#ffffff",
+                "tertiary-fixed": "#e1e0ff",
+                "surface-dim": "#d2d9f4",
+                "surface": "#faf8ff",
+                "on-surface": "#131b2e",
+                "surface-container-high": "#e2e7ff",
+                "surface-tint": "#006591",
+                "inverse-primary": "#89ceff",
+                "on-primary-container": "#003751",
+                "tertiary-container": "#8d90ff",
+                "on-surface-variant": "#3e4850",
+                "primary-fixed-dim": "#89ceff",
+                "on-secondary-fixed-variant": "#004e5c",
+                "secondary-fixed": "#acedff",
+                "on-secondary-container": "#006172",
+                "secondary-container": "#57dffe",
+                "outline": "#6e7881",
+                "inverse-surface": "#283044",
+                "primary": "#006591"
+            },
+            "borderRadius": {
+                "DEFAULT": "0.25rem",
+                "lg": "0.5rem",
+                "xl": "0.75rem",
+                "full": "9999px"
+            },
+            "spacing": {
+                "xl": "32px",
+                "base": "4px",
+                "lg": "24px",
+                "md": "16px",
+                "sm": "12px",
+                "xs": "8px",
+                "container-padding": "20px"
+            },
+            "fontFamily": {
+                "headline-md": ["Space Grotesk"],
+                "body-md": ["Plus Jakarta Sans"],
+                "body-sm": ["Plus Jakarta Sans"],
+                "headline-sm": ["Space Grotesk"],
+                "headline-lg": ["Space Grotesk"],
+                "label-md": ["Plus Jakarta Sans"],
+                "label-lg": ["Plus Jakarta Sans"],
+                "body-lg": ["Plus Jakarta Sans"],
+                "display-lg": ["Space Grotesk"]
+            },
+            "fontSize": {
+                "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "500"}],
+                "headline-lg": ["30px", {"lineHeight": "36px", "fontWeight": "600"}],
+                "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.04em", "fontWeight": "600"}],
+                "label-lg": ["14px", {"lineHeight": "20px", "letterSpacing": "0.01em", "fontWeight": "600"}],
+                "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                "display-lg": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            user-select: none;
+        }
+        .status-btn.active-P { background-color: #10b981; color: white; border-color: #10b981; }
+        .status-btn.active-A { background-color: #f43f5e; color: white; border-color: #f43f5e; }
+        .status-btn.active-L { background-color: #f59e0b; color: white; border-color: #f59e0b; }
+        .status-btn.active-E { background-color: #6366f1; color: white; border-color: #6366f1; }
+        
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+
+        .progress-transition { transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background font-body-md antialiased min-h-screen pb-32">
+<!-- Top AppBar (from JSON) -->
+<header class="flex justify-between items-center px-container-padding h-16 w-full fixed top-0 z-50 bg-surface shadow-sm border-b border-outline-variant">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full overflow-hidden bg-surface-container">
+<img alt="Teacher profile photo" class="w-full h-full object-cover" data-alt="A professional headshot portrait of a confident East African male teacher in a bright modern classroom setting. He is wearing a crisp light blue shirt and has a warm, approachable smile. The background is softly blurred, showing a contemporary educational environment with clean white walls and natural sunlight streaming through a window. The aesthetic is bright, high-contrast, and clinical." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCgk19d5kjRp-XUIpzjEwFIsW0-uOWcUmbDlBAdXhZIzmrX996PwCHbkA5EkIzsKQIBavrw00HruvWmntlpTFTiKrMpdG0tSUefir8l0Xo1j-BRcSWnsMon2cxhOz-paFguBJ9EbQQPrqxtTEClDJfHJgPGN4RXGReJ-YXjH9lqEGGvNiQG-H0zPMhrw2MiUW_T1G1wr4tDT-l1rtwQGdUd5nZdxTJuIIh74v5LSWDqwgEIG2YzHRT0CRTS3Cbh_icAWaPSFiUWbA"/>
+</div>
+<span class="font-headline-sm text-primary font-bold tracking-tight">Kilimanjaro Teachers</span>
+</div>
+<button class="material-symbols-outlined p-2 rounded-full hover:bg-surface-container-high transition-colors active:opacity-80 active:scale-95 text-on-surface-variant">
+            notifications
+        </button>
+</header>
+<main class="pt-20 px-container-padding max-w-4xl mx-auto">
+<!-- Dashboard Header -->
+<div class="flex flex-col gap-lg mb-lg">
+<div class="flex items-end justify-between gap-md">
+<div class="flex-1">
+<label class="font-label-md text-on-surface-variant block mb-xs">Academic Period</label>
+<div class="flex items-center gap-sm bg-surface-container-low px-md py-sm rounded-xl border border-outline-variant">
+<span class="material-symbols-outlined text-primary">event</span>
+<span class="font-label-lg" id="current-date">October 24, 2023</span>
+</div>
+</div>
+<div class="flex-1">
+<label class="font-label-md text-on-surface-variant block mb-xs">Class Section</label>
+<div class="flex items-center justify-between gap-sm bg-surface-container-low px-md py-sm rounded-xl border border-outline-variant">
+<div class="flex items-center gap-sm">
+<span class="material-symbols-outlined text-primary">school</span>
+<span class="font-label-lg">Math — Form 2A</span>
+</div>
+<span class="material-symbols-outlined">expand_more</span>
+</div>
+</div>
+</div>
+<!-- Progress Card -->
+<div class="bg-surface border border-outline-variant rounded-xl p-md shadow-[0_2px_4px_rgba(14,165,233,0.05)]">
+<div class="flex justify-between items-center mb-sm">
+<h2 class="font-headline-sm text-primary">Session Progress</h2>
+<span class="font-label-lg text-on-surface-variant" id="progress-text">0 / 38 marked</span>
+</div>
+<div class="w-full bg-surface-container-high h-2.5 rounded-full overflow-hidden">
+<div class="progress-transition bg-primary h-full w-0" id="progress-bar"></div>
+</div>
+</div>
+</div>
+<!-- Student List -->
+<div class="flex flex-col gap-xs" id="student-list">
+<!-- Student rows will be injected by JS -->
+</div>
+</main>
+<!-- Bottom Action Bar -->
+<footer class="fixed bottom-0 left-0 w-full z-50 bg-surface border-t border-outline-variant px-container-padding py-md flex items-center justify-between gap-md shadow-[0_-2px_10px_rgba(14,165,233,0.08)]">
+<div class="flex flex-col">
+<span class="font-label-md text-on-surface-variant">Attendance Summary</span>
+<div class="flex gap-sm mt-1">
+<span class="font-label-md text-[#10b981]" id="count-P">P: 0</span>
+<span class="font-label-md text-[#f43f5e]" id="count-A">A: 0</span>
+<span class="font-label-md text-[#f59e0b]" id="count-L">L: 0</span>
+<span class="font-label-md text-[#6366f1]" id="count-E">E: 0</span>
+</div>
+</div>
+<button class="h-[54px] px-xl rounded-[14px] bg-outline-variant text-white font-bold opacity-50 cursor-not-allowed transition-all duration-300 flex items-center gap-2" disabled="" id="submit-btn">
+<span>Submit Records</span>
+<span class="material-symbols-outlined">send</span>
+</button>
+</footer>
+<!-- Bottom Nav Bar (From JSON - Selective Display) -->
+<!-- Hidden on this screen as it's a "Task-Focused" sub-page according to rules, but kept for UI structure reference -->
+<nav class="md:hidden hidden fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-2 py-3 bg-surface border-t border-outline-variant">
+<!-- Rendered if requested by global context, but suppressed for focused marking task -->
+</nav>
+<script>
+        const students = [
+            { id: 1, name: "Amani Mwangi", avatar: "7.x/avataaars/svg?seed=Amani" },
+            { id: 2, name: "Bahati Juma", avatar: "7.x/avataaars/svg?seed=Bahati" },
+            { id: 3, name: "Chausiku Simba", avatar: "7.x/avataaars/svg?seed=Chausiku" },
+            { id: 4, name: "Desta Tadesse", avatar: "7.x/avataaars/svg?seed=Desta" },
+            { id: 5, name: "Ebele Okoro", avatar: "7.x/avataaars/svg?seed=Ebele" },
+            { id: 6, name: "Faraji Zungu", avatar: "7.x/avataaars/svg?seed=Faraji" },
+            { id: 7, name: "Garnet Kamau", avatar: "7.x/avataaars/svg?seed=Garnet" },
+            { id: 8, name: "Hadiya Omar", avatar: "7.x/avataaars/svg?seed=Hadiya" },
+            { id: 9, name: "Imani Kibaki", avatar: "7.x/avataaars/svg?seed=Imani" },
+            { id: 10, name: "Jabari Mwinyi", avatar: "7.x/avataaars/svg?seed=Jabari" },
+            { id: 11, name: "Kafilat Bello", avatar: "7.x/avataaars/svg?seed=Kafilat" },
+            { id: 12, name: "Lulu Hassan", avatar: "7.x/avataaars/svg?seed=Lulu" },
+        ];
+
+        let attendanceData = {};
+        const totalStudents = 38; // As per prompt requirement
+
+        function updateProgress() {
+            const markedCount = Object.keys(attendanceData).length;
+            const progressPercent = (markedCount / totalStudents) * 100;
+            
+            document.getElementById('progress-bar').style.width = `${progressPercent}%`;
+            document.getElementById('progress-text').innerText = `${markedCount} / ${totalStudents} marked`;
+
+            // Update stats
+            const stats = { P: 0, A: 0, L: 0, E: 0 };
+            Object.values(attendanceData).forEach(val => stats[val]++);
+            
+            ['P', 'A', 'L', 'E'].forEach(type => {
+                document.getElementById(`count-${type}`).innerText = `${type}: ${stats[type]}`;
+            });
+
+            // Submit Button Logic
+            const btn = document.getElementById('submit-btn');
+            if (markedCount === totalStudents) {
+                btn.disabled = false;
+                btn.classList.remove('bg-outline-variant', 'opacity-50', 'cursor-not-allowed');
+                btn.classList.add('bg-primary-container', 'shadow-lg', 'active:scale-95');
+            } else {
+                btn.disabled = true;
+                btn.classList.add('bg-outline-variant', 'opacity-50', 'cursor-not-allowed');
+                btn.classList.remove('bg-primary-container', 'shadow-lg');
+            }
+        }
+
+        function setStatus(studentId, status) {
+            attendanceData[studentId] = status;
+            
+            // UI Update for the specific row
+            const buttons = document.querySelectorAll(`[data-student="${studentId}"]`);
+            buttons.forEach(btn => {
+                btn.classList.remove('active-P', 'active-A', 'active-L', 'active-E', 'text-white');
+                if(btn.dataset.status === status) {
+                    btn.classList.add(`active-${status}`);
+                }
+            });
+
+            updateProgress();
+        }
+
+        function cycleStatus(studentId) {
+            const statuses = ['P', 'A', 'L', 'E'];
+            const current = attendanceData[studentId];
+            const nextIdx = current ? (statuses.indexOf(current) + 1) % statuses.length : 0;
+            setStatus(studentId, statuses[nextIdx]);
+        }
+
+        function renderStudents() {
+            const container = document.getElementById('student-list');
+            // Generating 12 students visually, but logic accounts for 38 for the "clinical" feel
+            students.forEach(student => {
+                const row = document.createElement('div');
+                row.className = "flex items-center justify-between bg-surface p-sm rounded-xl border border-surface transition-all hover:border-primary-container cursor-pointer group";
+                row.onclick = (e) => {
+                    if(!e.target.closest('button')) cycleStatus(student.id);
+                };
+
+                row.innerHTML = `
+                    <div class="flex items-center gap-md">
+                        <div class="w-12 h-12 rounded-full overflow-hidden bg-surface-container-low border border-outline-variant">
+                            <img src="https://api.dicebear.com/${student.avatar}" data-alt="A clean, clinical portrait of a young African student for a digital school record. Soft studio lighting on a neutral grey background emphasizing professional educational software aesthetics." class="w-full h-full object-cover">
+                        </div>
+                        <div>
+                            <p class="font-label-lg text-on-surface group-hover:text-primary transition-colors">${student.name}</p>
+                            <p class="font-label-md text-on-surface-variant">ID: STU-00${student.id}</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center bg-surface-container-low rounded-lg p-1 border border-outline-variant/30">
+                        <button data-student="${student.id}" data-status="P" onclick="setStatus(${student.id}, 'P')" class="status-btn w-10 h-10 rounded-md font-bold text-on-surface-variant hover:bg-white transition-all">P</button>
+                        <button data-student="${student.id}" data-status="A" onclick="setStatus(${student.id}, 'A')" class="status-btn w-10 h-10 rounded-md font-bold text-on-surface-variant hover:bg-white transition-all">A</button>
+                        <button data-student="${student.id}" data-status="L" onclick="setStatus(${student.id}, 'L')" class="status-btn w-10 h-10 rounded-md font-bold text-on-surface-variant hover:bg-white transition-all">L</button>
+                        <button data-student="${student.id}" data-status="E" onclick="setStatus(${student.id}, 'E')" class="status-btn w-10 h-10 rounded-md font-bold text-on-surface-variant hover:bg-white transition-all">E</button>
+                    </div>
+                `;
+                container.appendChild(row);
+            });
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            renderStudents();
+            const now = new Date();
+            const options = { year: 'numeric', month: 'long', day: 'numeric' };
+            document.getElementById('current-date').innerText = now.toLocaleDateString('en-US', options);
+        });
+
+        // Submit Interaction
+        document.getElementById('submit-btn').addEventListener('click', () => {
+            alert('Attendance data synced successfully to the Kilimanjaro School Portal.');
+        });
+    </script>
+</body></html>

@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Kilimanjaro Teachers - Pairing Detail</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Plus+Jakarta+Sans:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "tertiary-container": "#8d90ff",
+                        "surface": "#faf8ff",
+                        "secondary-fixed": "#acedff",
+                        "primary": "#006591",
+                        "surface-container-lowest": "#ffffff",
+                        "primary-fixed-dim": "#89ceff",
+                        "surface-container-highest": "#dae2fd",
+                        "surface-bright": "#faf8ff",
+                        "on-secondary-container": "#006172",
+                        "on-background": "#131b2e",
+                        "primary-fixed": "#c9e6ff",
+                        "outline-variant": "#bec8d2",
+                        "on-primary-container": "#003751",
+                        "surface-variant": "#dae2fd",
+                        "background": "#faf8ff",
+                        "on-primary-fixed": "#001e2f",
+                        "on-primary": "#ffffff",
+                        "surface-tint": "#006591",
+                        "outline": "#6e7881",
+                        "on-secondary-fixed": "#001f26",
+                        "tertiary-fixed-dim": "#c0c1ff",
+                        "inverse-on-surface": "#eef0ff",
+                        "error-container": "#ffdad6",
+                        "tertiary": "#494bd6",
+                        "on-primary-fixed-variant": "#004c6e",
+                        "on-secondary": "#ffffff",
+                        "primary-container": "#0ea5e9",
+                        "surface-container": "#eaedff",
+                        "secondary-container": "#57dffe",
+                        "error": "#ba1a1a",
+                        "surface-dim": "#d2d9f4",
+                        "on-error": "#ffffff",
+                        "on-tertiary-container": "#1407ad",
+                        "surface-container-high": "#e2e7ff",
+                        "secondary": "#00687a",
+                        "inverse-surface": "#283044",
+                        "inverse-primary": "#89ceff",
+                        "tertiary-fixed": "#e1e0ff",
+                        "on-secondary-fixed-variant": "#004e5c",
+                        "on-tertiary-fixed-variant": "#2f2ebe",
+                        "on-tertiary-fixed": "#07006c",
+                        "on-tertiary": "#ffffff",
+                        "surface-container-low": "#f2f3ff",
+                        "secondary-fixed-dim": "#4cd7f6",
+                        "on-surface": "#131b2e",
+                        "on-error-container": "#93000a",
+                        "on-surface-variant": "#3e4850"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "xl": "32px",
+                        "lg": "24px",
+                        "container-padding": "20px",
+                        "xs": "8px",
+                        "md": "16px",
+                        "base": "4px",
+                        "sm": "12px"
+                    },
+                    "fontFamily": {
+                        "headline-md": ["Space Grotesk"],
+                        "label-lg": ["Plus Jakarta Sans"],
+                        "body-md": ["Plus Jakarta Sans"],
+                        "display-lg": ["Space Grotesk"],
+                        "headline-sm": ["Space Grotesk"],
+                        "headline-lg": ["Space Grotesk"],
+                        "label-md": ["Plus Jakarta Sans"],
+                        "body-lg": ["Plus Jakarta Sans"],
+                        "body-sm": ["Plus Jakarta Sans"]
+                    },
+                    "fontSize": {
+                        "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                        "label-lg": ["14px", {"lineHeight": "20px", "letterSpacing": "0.01em", "fontWeight": "600"}],
+                        "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                        "display-lg": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "500"}],
+                        "headline-lg": ["30px", {"lineHeight": "36px", "fontWeight": "600"}],
+                        "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.04em", "fontWeight": "600"}],
+                        "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                        "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .primary-gradient {
+            background: linear-gradient(135deg, #006591 0%, #0ea5e9 100%);
+        }
+        .sky-shadow {
+            box-shadow: 0 10px 15px rgba(14, 165, 233, 0.12);
+        }
+        .inset-divider {
+            position: relative;
+        }
+        .inset-divider::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 16px;
+            right: 16px;
+            height: 1px;
+            background-color: #bec8d2;
+            opacity: 0.3;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-surface font-body-md min-h-screen pb-32">
+<!-- TopAppBar -->
+<header class="flex justify-between items-center px-container-padding h-16 w-full fixed top-0 z-50 bg-surface shadow-sm border-b border-outline-variant">
+<div class="flex items-center gap-4">
+<button class="p-2 hover:bg-surface-container-high transition-colors rounded-full text-on-surface-variant">
+<span class="material-symbols-outlined" data-icon="arrow_back">arrow_back</span>
+</button>
+<h1 class="font-headline-sm text-primary font-bold tracking-tight">Kilimanjaro Teachers</h1>
+</div>
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary" data-icon="notifications">notifications</span>
+<div class="w-8 h-8 rounded-full bg-surface-variant overflow-hidden">
+<img alt="Teacher profile photo" class="w-full h-full object-cover" data-alt="A professional headshot of a senior educator with a warm and approachable expression, set against a blurred academic background. The lighting is bright and natural, reflecting the high-contrast tech edge of Kilimanjaro Schools' modern branding. The overall mood is inspirational and authoritative yet accessible." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBsuzPPBF-W_Sho7ptp7UMj5V0jJWhAVQAkX3S4MY_U80VVex7u3-B2tE81ZYbV4vtFfOTCNli-J4p6T39KmqK0FQTxWB1h2bv4vTFOEpZFeu3_TFGCHjeFkTUUCqhwbvIBtlbd10DQCCCN3HEzlrZlOZ_f1oGGyf_J-YzExe0PfdKNGsbz0Fi4vVd1ZDnaM1EOjlo6rHmGTQHJR2RmMVjLKXEyPvdg6X3p-pqX7NQKyeCSpOlf__5rHE2cCIJOibhPcplk859Okw"/>
+</div>
+</div>
+</header>
+<main class="pt-20 px-container-padding max-w-screen-md mx-auto">
+<!-- Header Section -->
+<div class="mb-lg">
+<span class="font-label-md text-primary uppercase tracking-widest px-3 py-1 bg-primary-container/20 rounded-full mb-xs inline-block">AI Suggested Pairing</span>
+<h2 class="font-headline-lg text-headline-lg-mobile text-on-background mt-2">Study Synergy: Peer Mentorship</h2>
+<p class="text-on-surface-variant mt-2 font-body-sm">Analysis based on Mathematics Grade 10 performance trends and behavioral compatibility.</p>
+</div>
+<!-- Student Profiles Side-by-Side -->
+<div class="grid grid-cols-2 gap-md mb-lg">
+<!-- Mentor Student -->
+<div class="bg-surface-container-low border border-outline-variant rounded-xl p-md sky-shadow">
+<div class="flex flex-col items-center text-center">
+<div class="relative mb-sm">
+<img alt="Student 1" class="w-16 h-16 rounded-full object-cover border-2 border-primary" data-alt="A portrait of a confident teenage student in a modern school uniform, smiling gently. The photography is crisp with vibrant sky-based gradients in the soft-focus background, maintaining a corporate modern aesthetic. High-key lighting emphasizes clarity and academic potential." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBX3gkx5xrr2-w9Kzy7a0AMWnvQYVeYDxIuOQh-9CsZ7C3ypDWED5GxvVdqA0yNm2KbROZPmOq-xnVASVieu5RC85syqLZIZtZw2_poCj5ErJZw8aOpdrzbz6lcIj1uGlOgcHQyGWdSOMSfvIcPu4HLE6KnDGnTummu5hinCR-qQvuvsPn5_PcehyQJ9anbR1J9_-iPQ4asdOQy3dnv21jhtVrzwL3PPsrw_0hLKJS0LL5BQBMN87y_dfj85d6Bpu5withafAA_mA"/>
+<span class="absolute -bottom-1 -right-1 bg-primary text-on-primary rounded-full p-1 text-[10px] font-bold">MENTOR</span>
+</div>
+<h3 class="font-label-lg text-on-surface">Elena K.</h3>
+<p class="text-[10px] text-on-surface-variant uppercase font-bold">Top Quartile</p>
+<div class="mt-xs w-full bg-surface-container-highest rounded-full h-1.5 overflow-hidden">
+<div class="bg-primary h-full w-[94%]"></div>
+</div>
+<span class="text-[10px] text-primary font-bold mt-1">94% Mastery</span>
+</div>
+</div>
+<!-- Mentee Student -->
+<div class="bg-surface-container-low border border-outline-variant rounded-xl p-md sky-shadow">
+<div class="flex flex-col items-center text-center">
+<div class="relative mb-sm">
+<img alt="Student 2" class="w-16 h-16 rounded-full object-cover border-2 border-tertiary" data-alt="A portrait of a focused male student looking thoughtful, captured in a clean, bright school environment. The visual style is high-contrast with a tech-forward feel, using soft blue shadows. The image suggests a learner with high potential ready for growth and mentorship." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCJt5tEOIEdE-7LidZLZNHjjI04qoRQt9xbMJfoaRjKywfm3Jtig2f5ukvmKemXC_Myw9Hyq9dKpplqdKiXkE-_12QbUqvVlhpnC9ZWJ5XjjTXXo2klXZB22__ObBe4OvAtMttWTGVuapKWiQ98EWuW1ymlO31NaOjAze5uBcfGE54hz5DGA7M4Pc-1F0u8cvw74VMKgyk60WbV1I8IUg2LTMDE0UtJu61nLH-L5k8QXkZPb71OJ3Pw-BveFnGk9ExdVsjGpwNwrQ"/>
+<span class="absolute -bottom-1 -right-1 bg-tertiary text-on-tertiary rounded-full p-1 text-[10px] font-bold">LEARNER</span>
+</div>
+<h3 class="font-label-lg text-on-surface">Marcus L.</h3>
+<p class="text-[10px] text-on-surface-variant uppercase font-bold">At Risk</p>
+<div class="mt-xs w-full bg-surface-container-highest rounded-full h-1.5 overflow-hidden">
+<div class="bg-tertiary h-full w-[62%]"></div>
+</div>
+<span class="text-[10px] text-tertiary font-bold mt-1">62% Mastery</span>
+</div>
+</div>
+</div>
+<!-- Reasoning Section - Bento Style -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-sm mb-lg">
+<div class="bg-white border border-outline-variant p-md rounded-xl md:col-span-2">
+<div class="flex items-center gap-3 mb-sm">
+<span class="material-symbols-outlined text-primary" data-icon="auto_awesome">auto_awesome</span>
+<h4 class="font-label-lg text-primary">AI Reasoning</h4>
+</div>
+<p class="text-body-sm text-on-surface-variant leading-relaxed">
+                    Elena excels in <span class="text-on-surface font-semibold">Calculus &amp; Algebra</span>, exactly where Marcus shows a significant knowledge gap. Their collaborative behavioral score is 92/100, suggesting a high probability of effective communication.
+                </p>
+</div>
+<div class="bg-surface-container-high p-md rounded-xl">
+<div class="flex items-center gap-2 mb-2">
+<span class="material-symbols-outlined text-secondary text-sm" data-icon="insights">insights</span>
+<span class="font-label-md text-on-surface">Complementary Skills</span>
+</div>
+<div class="flex flex-wrap gap-1">
+<span class="bg-secondary/10 text-secondary text-[10px] px-2 py-0.5 rounded-full font-bold">Logic</span>
+<span class="bg-secondary/10 text-secondary text-[10px] px-2 py-0.5 rounded-full font-bold">Speed</span>
+<span class="bg-secondary/10 text-secondary text-[10px] px-2 py-0.5 rounded-full font-bold">Accuracy</span>
+</div>
+</div>
+<div class="bg-surface-container-high p-md rounded-xl">
+<div class="flex items-center gap-2 mb-2">
+<span class="material-symbols-outlined text-tertiary text-sm" data-icon="psychology">psychology</span>
+<span class="font-label-md text-on-surface">Social Dynamics</span>
+</div>
+<div class="flex flex-wrap gap-1">
+<span class="bg-tertiary/10 text-tertiary text-[10px] px-2 py-0.5 rounded-full font-bold">Patience</span>
+<span class="bg-tertiary/10 text-tertiary text-[10px] px-2 py-0.5 rounded-full font-bold">Curiosity</span>
+</div>
+</div>
+</div>
+<!-- Expected Outcome Card -->
+<div class="bg-primary-container/10 border border-primary/20 p-md rounded-xl mb-xl">
+<h4 class="font-label-lg text-primary mb-xs">Expected Outcome</h4>
+<div class="flex items-center justify-between">
+<p class="text-body-sm text-on-primary-container max-w-[70%]">
+                    Projected <span class="font-bold">+15% improvement</span> in Marcus's term assessment score within 4 weeks.
+                </p>
+<div class="text-right">
+<span class="text-headline-md text-primary font-bold">88%</span>
+<p class="text-[10px] text-on-surface-variant uppercase">Confidence</p>
+</div>
+</div>
+</div>
+<!-- Action Buttons -->
+<div class="flex flex-col gap-sm">
+<button class="primary-gradient h-[54px] rounded-[14px] flex items-center justify-center gap-2 text-on-primary font-bold sky-shadow hover:scale-[1.02] active:scale-[0.98] transition-all" id="activateBtn">
+<span class="material-symbols-outlined" data-icon="bolt">bolt</span>
+                ACTIVATE PAIRING
+            </button>
+<button class="h-[54px] rounded-[14px] border-2 border-outline-variant text-on-surface-variant font-bold hover:bg-surface-variant/30 transition-colors flex items-center justify-center gap-2">
+<span class="material-symbols-outlined" data-icon="close">close</span>
+                REJECT SUGGESTION
+            </button>
+</div>
+</main>
+<!-- Navigation suppressed for task-focused detail screen as per "Relevance Check" -->
+<script>
+        // Micro-interactions
+        document.getElementById('activateBtn').addEventListener('click', function() {
+            const btn = this;
+            const originalText = btn.innerHTML;
+            
+            btn.innerHTML = `
+                <span class="animate-spin material-symbols-outlined" data-icon="sync">sync</span>
+                PROCESSING...
+            `;
+            btn.style.opacity = "0.8";
+            
+            setTimeout(() => {
+                btn.innerHTML = `
+                    <span class="material-symbols-outlined" data-icon="check_circle">check_circle</span>
+                    PAIRING ACTIVATED
+                `;
+                btn.classList.remove('primary-gradient');
+                btn.classList.add('bg-secondary');
+                
+                // Haptic feedback simulation
+                if (window.navigator.vibrate) {
+                    window.navigator.vibrate(50);
+                }
+            }, 1500);
+        });
+
+        // Entrance animation
+        window.addEventListener('DOMContentLoaded', () => {
+            const cards = document.querySelectorAll('.grid > div, h2, p, button');
+            cards.forEach((card, index) => {
+                card.style.opacity = '0';
+                card.style.transform = 'translateY(10px)';
+                card.style.transition = 'all 0.4s ease-out';
+                setTimeout(() => {
+                    card.style.opacity = '1';
+                    card.style.transform = 'translateY(0)';
+                }, 100 * index);
+            });
+        });
+    </script>
+</body></html>

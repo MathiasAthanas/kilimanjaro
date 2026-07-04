@@ -2,6 +2,8 @@ import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post
 import { ApiTags } from '@nestjs/swagger';
 import { Roles } from '../common/decorators/roles.decorator';
 import { ROLES } from '../common/constants/roles';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { RequestUser } from '../common/interfaces/request-user.interface';
 import { CreateClassSubjectDto } from './dto/create-class-subject.dto';
 import { CreateSubjectDto } from './dto/create-subject.dto';
 import { CreateSubjectCombinationDto } from './dto/create-subject-combination.dto';
@@ -52,9 +54,9 @@ export class SubjectsController {
   }
 
   @Post('class-subjects')
-  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA)
-  createClassSubject(@Body() dto: CreateClassSubjectDto) {
-    return this.subjectsService.createClassSubject(dto);
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA, ROLES.HEAD_OF_DEPARTMENT)
+  createClassSubject(@Body() dto: CreateClassSubjectDto, @CurrentUser() user?: RequestUser) {
+    return this.subjectsService.createClassSubject(dto, user);
   }
 
   @Get('class-subjects')
@@ -73,6 +75,7 @@ export class SubjectsController {
     @Query('educationStage') educationStage?: string,
     @Query('classLevel') classLevel?: string,
     @Query('combinationId') combinationId?: string,
+    @CurrentUser() user?: RequestUser,
   ) {
     return this.subjectsService.listClassSubjects({
       classId,
@@ -82,13 +85,13 @@ export class SubjectsController {
       educationStage,
       classLevel: classLevel ? Number(classLevel) : undefined,
       combinationId,
-    });
+    }, user);
   }
 
   @Patch('class-subjects/:id')
-  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA)
-  updateClassSubject(@Param('id') id: string, @Body() dto: UpdateClassSubjectDto) {
-    return this.subjectsService.updateClassSubject(id, dto);
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA, ROLES.HEAD_OF_DEPARTMENT)
+  updateClassSubject(@Param('id') id: string, @Body() dto: UpdateClassSubjectDto, @CurrentUser() user?: RequestUser) {
+    return this.subjectsService.updateClassSubject(id, dto, user);
   }
 
   @Post('subject-combinations')

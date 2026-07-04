@@ -420,11 +420,16 @@ model Asset {
   assetNumber        String         @unique
   name               String
   description        String?
+  isGroup            Boolean        @default(false)
+  groupType          String?
+  parentAssetId      String?
   category           AssetCategory
   type               AssetType
   serialNumber       String?
   brand              String?
   model              String?
+  quantity           Decimal        @default(1) @db.Decimal(12, 2)
+  unitCost           Decimal?       @db.Decimal(12, 2)
   purchaseDate       DateTime?
   purchaseCost       Decimal?       @db.Decimal(12, 2)
   currentValue       Decimal?       @db.Decimal(12, 2)
@@ -443,8 +448,12 @@ model Asset {
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
   updatedById        String?
+  parentAsset        Asset?         @relation("AssetGroupItems", fields: [parentAssetId], references: [id], onDelete: Cascade)
+  childAssets        Asset[]        @relation("AssetGroupItems")
 
   @@index([status, category])
+  @@index([parentAssetId])
+  @@index([isGroup, status])
   @@schema("finance")
 }
 

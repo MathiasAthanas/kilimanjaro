@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .shadow1 { box-shadow: 0 2px 4px rgba(14, 165, 233, 0.05); }
+        .shadow3 { box-shadow: 0 10px 15px rgba(14, 165, 233, 0.12); }
+        .shadow5 { box-shadow: 0 20px 25px rgba(14, 165, 233, 0.18); }
+        
+        .primary-gradient {
+            background: linear-gradient(135deg, #006591 0%, #0ea5e9 100%);
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-error": "#ffffff",
+                        "tertiary-fixed-dim": "#c0c1ff",
+                        "surface-container-highest": "#dae2fd",
+                        "tertiary-fixed": "#e1e0ff",
+                        "on-secondary-fixed-variant": "#004e5c",
+                        "tertiary": "#494bd6",
+                        "surface-tint": "#006591",
+                        "surface-container": "#eaedff",
+                        "primary": "#006591",
+                        "on-tertiary-container": "#1407ad",
+                        "on-surface": "#131b2e",
+                        "secondary-fixed-dim": "#4cd7f6",
+                        "secondary-fixed": "#acedff",
+                        "on-tertiary-fixed-variant": "#2f2ebe",
+                        "surface-container-high": "#e2e7ff",
+                        "on-secondary-container": "#006172",
+                        "primary-fixed": "#c9e6ff",
+                        "on-error-container": "#93000a",
+                        "inverse-surface": "#283044",
+                        "outline-variant": "#bec8d2",
+                        "on-primary-fixed-variant": "#004c6e",
+                        "on-surface-variant": "#3e4850",
+                        "on-primary-container": "#003751",
+                        "secondary": "#00687a",
+                        "primary-fixed-dim": "#89ceff",
+                        "outline": "#6e7881",
+                        "on-secondary-fixed": "#001f26",
+                        "inverse-primary": "#89ceff",
+                        "surface": "#faf8ff",
+                        "surface-container-low": "#f2f3ff",
+                        "primary-container": "#0ea5e9",
+                        "on-background": "#131b2e",
+                        "inverse-on-surface": "#eef0ff",
+                        "surface-bright": "#faf8ff",
+                        "surface-variant": "#dae2fd",
+                        "surface-dim": "#d2d9f4",
+                        "on-tertiary": "#ffffff",
+                        "on-primary": "#ffffff",
+                        "error-container": "#ffdad6",
+                        "secondary-container": "#57dffe",
+                        "error": "#ba1a1a",
+                        "on-tertiary-fixed": "#07006c",
+                        "surface-container-lowest": "#ffffff",
+                        "tertiary-container": "#8d90ff",
+                        "on-primary-fixed": "#001e2f",
+                        "on-secondary": "#ffffff",
+                        "background": "#faf8ff"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "lg": "24px",
+                        "md": "16px",
+                        "container-padding": "20px",
+                        "base": "4px",
+                        "xs": "8px",
+                        "sm": "12px",
+                        "xl": "32px"
+                    },
+                    "fontFamily": {
+                        "label-md": ["Plus Jakarta Sans"],
+                        "body-lg": ["Plus Jakarta Sans"],
+                        "label-lg": ["Plus Jakarta Sans"],
+                        "headline-lg": ["Space Grotesk"],
+                        "body-sm": ["Plus Jakarta Sans"],
+                        "headline-md": ["Space Grotesk"],
+                        "display-lg": ["Space Grotesk"],
+                        "body-md": ["Plus Jakarta Sans"],
+                        "headline-sm": ["Space Grotesk"]
+                    },
+                    "fontSize": {
+                        "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.04em", "fontWeight": "600"}],
+                        "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                        "label-lg": ["14px", {"lineHeight": "20px", "letterSpacing": "0.01em", "fontWeight": "600"}],
+                        "headline-lg": ["30px", {"lineHeight": "36px", "fontWeight": "600"}],
+                        "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                        "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                        "display-lg": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                        "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "500"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background min-h-screen flex flex-col font-body-md">
+<!-- TopAppBar -->
+<header class="bg-background dark:bg-surface fixed top-0 h-[64px] z-50 flex items-center justify-between px-container-padding w-full shadow1">
+<div class="flex items-center gap-md">
+<button class="text-primary dark:text-inverse-primary hover:bg-surface-container-high transition-colors duration-200 p-2 rounded-full active:scale-95 transition-transform duration-150">
+<span class="material-symbols-outlined" data-icon="arrow_back">arrow_back</span>
+</button>
+<h1 class="font-headline-sm text-[20px] font-bold text-on-surface dark:text-inverse-on-surface">Kilimanjaro Schools</h1>
+</div>
+<div class="w-10 h-10"></div> <!-- Placeholder to maintain center-alignment logic if needed -->
+</header>
+<!-- Main Content Canvas -->
+<main class="flex-1 mt-16 px-container-padding pb-lg overflow-y-auto">
+<!-- Context-Specific Icon Header -->
+<section class="mt-xl flex flex-col items-center text-center">
+<div class="w-20 h-20 primary-gradient rounded-[20px] flex items-center justify-center text-white shadow3 mb-md">
+<span class="material-symbols-outlined text-[40px]" data-icon="school" style="font-variation-settings: 'FILL' 1;">school</span>
+</div>
+<div class="flex items-center gap-xs mb-sm">
+<span class="bg-secondary-container/10 text-secondary px-sm py-1 rounded-full font-label-md text-label-md">IN-APP</span>
+<span class="text-on-surface-variant font-label-md text-label-md opacity-70">2 hours ago</span>
+</div>
+</section>
+<!-- Primary Notification Card -->
+<section class="mt-lg">
+<div class="bg-surface-container-lowest border border-surface rounded-xl p-md shadow1">
+<h2 class="font-headline-md text-headline-md text-primary mb-sm">Results Published</h2>
+<div class="space-y-md text-on-surface-variant font-body-md text-body-md leading-relaxed">
+<p>Dear Student/Parent,</p>
+<p>The Mid-Term examination results for the First Semester of the academic year 2023/2024 have been officially verified and published. Your performance records are now available for review within the student portal.</p>
+<p>Please note that these results include weighted assessments from both continuous tests and the formal mid-term sit-down examinations. If you have any queries regarding the grading, please contact the Registrar's office before Friday.</p>
+</div>
+</div>
+</section>
+<!-- Details Grid (Bento Style) -->
+<section class="mt-lg grid grid-cols-2 gap-sm">
+<div class="bg-surface-container-low p-md rounded-xl border border-outline-variant/30 flex flex-col gap-xs">
+<span class="text-on-surface-variant font-label-md text-label-md uppercase tracking-wider opacity-60">Subject</span>
+<span class="font-headline-sm text-headline-sm text-on-surface">Physics II</span>
+</div>
+<div class="bg-surface-container-low p-md rounded-xl border border-outline-variant/30 flex flex-col gap-xs">
+<span class="text-on-surface-variant font-label-md text-label-md uppercase tracking-wider opacity-60">Grade</span>
+<span class="font-headline-sm text-headline-sm text-primary">Distinction</span>
+</div>
+</section>
+<!-- Image Reference for Context -->
+<section class="mt-lg">
+<div class="w-full h-48 rounded-xl overflow-hidden shadow3">
+<img alt="Graduation and academic success" class="w-full h-full object-cover" data-alt="A cinematic, high-contrast shot of a university graduation ceremony at Kilimanjaro Schools. The image features a vibrant blue sky gradient and modern architectural elements of the school campus. The lighting is crisp and optimistic, with students in premium navy graduation gowns celebrating under soft, late-afternoon sunlight. The aesthetic is professional, academic, and inspiring, reflecting the peak performance of the educational institution." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCpFbOu7L0joTUaguaCi3u-myDw8H2CFoXsy7htuZooiZI63CYZXGUztDwPc7y1lvScimBLob6lnoxmql8kn17MMv9OJeUuN9IuYSMvDqtT7s6hXu8RUSVobJZLkM3BwVuySyTHFKAv9CtNDlOl3MQVOwJCpefoo9t2XAoi_sV-xSnlFhsfCGqay-NaoV5GVbwFUiBAi3T2WEQO5sjkjZ0D8U73gLGGyst5AMrx3BC4tK_VdRsWqr_1xnKpfwJ_hwuw7zb6Wc3QdQ"/>
+</div>
+</section>
+<!-- Action Card -->
+<section class="mt-lg mb-xl">
+<div class="bg-surface-container-highest p-md rounded-xl border border-primary-container/20 flex flex-col gap-md items-center">
+<p class="font-label-lg text-label-lg text-center text-on-primary-container">Download your full performance report as a PDF for offline viewing and records.</p>
+<button class="w-full h-[54px] rounded-[14px] border-2 border-primary text-primary font-bold hover:bg-primary/5 transition-colors active:scale-95 duration-150 flex items-center justify-center gap-sm">
+<span class="material-symbols-outlined" data-icon="visibility">visibility</span>
+<span class="font-label-lg text-label-lg uppercase tracking-wide">View Results</span>
+</button>
+</div>
+</section>
+</main>
+<!-- Navigation Suppressed as per Task-Focused/Sub-page rule (Back button present) -->
+</body></html>

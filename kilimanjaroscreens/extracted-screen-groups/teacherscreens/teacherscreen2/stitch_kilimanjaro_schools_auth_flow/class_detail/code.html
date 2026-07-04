@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Mathematics — Form 2A | Kilimanjaro Teachers</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&amp;family=Plus+Jakarta+Sans:wght@300..800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "tertiary-container": "#8d90ff",
+                        "surface": "#faf8ff",
+                        "secondary-fixed": "#acedff",
+                        "primary": "#006591",
+                        "surface-container-lowest": "#ffffff",
+                        "primary-fixed-dim": "#89ceff",
+                        "surface-container-highest": "#dae2fd",
+                        "surface-bright": "#faf8ff",
+                        "on-secondary-container": "#006172",
+                        "on-background": "#131b2e",
+                        "primary-fixed": "#c9e6ff",
+                        "outline-variant": "#bec8d2",
+                        "on-primary-container": "#003751",
+                        "surface-variant": "#dae2fd",
+                        "background": "#faf8ff",
+                        "on-primary-fixed": "#001e2f",
+                        "on-primary": "#ffffff",
+                        "surface-tint": "#006591",
+                        "outline": "#6e7881",
+                        "on-secondary-fixed": "#001f26",
+                        "tertiary-fixed-dim": "#c0c1ff",
+                        "inverse-on-surface": "#eef0ff",
+                        "error-container": "#ffdad6",
+                        "tertiary": "#494bd6",
+                        "on-primary-fixed-variant": "#004c6e",
+                        "on-secondary": "#ffffff",
+                        "primary-container": "#0ea5e9",
+                        "surface-container": "#eaedff",
+                        "secondary-container": "#57dffe",
+                        "error": "#ba1a1a",
+                        "surface-dim": "#d2d9f4",
+                        "on-error": "#ffffff",
+                        "on-tertiary-container": "#1407ad",
+                        "surface-container-high": "#e2e7ff",
+                        "secondary": "#00687a",
+                        "inverse-surface": "#283044",
+                        "inverse-primary": "#89ceff",
+                        "tertiary-fixed": "#e1e0ff",
+                        "on-secondary-fixed-variant": "#004e5c",
+                        "on-tertiary-fixed-variant": "#2f2ebe",
+                        "on-tertiary-fixed": "#07006c",
+                        "on-tertiary": "#ffffff",
+                        "surface-container-low": "#f2f3ff",
+                        "secondary-fixed-dim": "#4cd7f6",
+                        "on-surface": "#131b2e",
+                        "on-error-container": "#93000a",
+                        "on-surface-variant": "#3e4850"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "xl": "32px",
+                        "lg": "24px",
+                        "container-padding": "20px",
+                        "xs": "8px",
+                        "md": "16px",
+                        "base": "4px",
+                        "sm": "12px"
+                    },
+                    "fontFamily": {
+                        "headline-md": ["Space Grotesk"],
+                        "label-lg": ["Plus Jakarta Sans"],
+                        "body-md": ["Plus Jakarta Sans"],
+                        "display-lg": ["Space Grotesk"],
+                        "headline-sm": ["Space Grotesk"],
+                        "headline-lg": ["Space Grotesk"],
+                        "label-md": ["Plus Jakarta Sans"],
+                        "body-lg": ["Plus Jakarta Sans"],
+                        "body-sm": ["Plus Jakarta Sans"]
+                    },
+                    "fontSize": {
+                        "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                        "label-lg": ["14px", {"lineHeight": "20px", "letterSpacing": "0.01em", "fontWeight": "600"}],
+                        "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                        "display-lg": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "500"}],
+                        "headline-lg": ["30px", {"lineHeight": "36px", "fontWeight": "600"}],
+                        "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.04em", "fontWeight": "600"}],
+                        "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                        "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+        .primary-gradient {
+            background: linear-gradient(135deg, #006591 0%, #0ea5e9 100%);
+        }
+        .sky-shadow {
+            box-shadow: 0 10px 15px rgba(14, 165, 233, 0.12);
+        }
+        body {
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-surface text-on-surface font-body-md min-h-screen pb-24">
+<!-- TopAppBar -->
+<header class="flex justify-between items-center px-container-padding h-16 w-full fixed top-0 z-50 bg-surface shadow-sm border-b border-outline-variant">
+<div class="flex items-center gap-3">
+<button class="w-10 h-10 flex items-center justify-center hover:bg-surface-container-high rounded-full transition-all">
+<span class="material-symbols-outlined text-primary">arrow_back</span>
+</button>
+<h1 class="font-headline-sm text-primary font-bold tracking-tight">Kilimanjaro Teachers</h1>
+</div>
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-on-surface-variant hover:bg-surface-container-high p-2 rounded-full cursor-pointer transition-colors">notifications</span>
+<div class="w-10 h-10 rounded-full border-2 border-primary-container overflow-hidden">
+<img alt="Teacher profile photo" class="w-full h-full object-cover" data-alt="A professional portrait of a senior high school teacher, a man of East African descent with a warm smile and spectacles, wearing a crisp white shirt. He is standing in a brightly lit, modern school corridor with blurred lockers in the background. The lighting is soft and natural, emphasizing a professional yet approachable educator's persona in a clean, light-mode aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAhGVHTZi3Z9_xeD3fSMwDbRD4cE5bsCp_c2jrBIs1lX3DDcA8t5mGAAqfmfPCpO4NPTDGUPU2j5fqCf6GrdAg_sQKZMXK8dXOJPjbzJpDpHpkIc6t7uj1SsyF3Oa8mPiT6g-NfYLz1S5NAeiQrwkXynfALX4CbSdp_VQkzc6ll3eqy0CgnoPAy_a-H3_SUR8gQclB4wBrWRCZWSKJGj6vaXNmT9fk9j9_fLJxbnQ3gWvHgs_NBVGNoixb9Sw6fB_ACMxBD6OJBgw"/>
+</div>
+</div>
+</header>
+<main class="mt-16 px-container-padding pt-6 max-w-5xl mx-auto space-y-lg">
+<!-- Hero Card (Asymmetric Bento Style) -->
+<section class="grid grid-cols-1 md:grid-cols-3 gap-md">
+<div class="md:col-span-2 primary-gradient p-xl rounded-xl text-on-primary flex flex-col justify-between sky-shadow relative overflow-hidden min-h-[220px]">
+<div class="z-10">
+<span class="font-label-lg opacity-90 uppercase tracking-widest">Current Course</span>
+<h2 class="font-headline-lg text-white mt-1">Mathematics — Form 2A</h2>
+<p class="font-body-md opacity-80 mt-2 max-w-sm">Focusing on Algebraic Expressions and Geometric Principles for the second semester.</p>
+</div>
+<div class="flex gap-lg z-10 mt-xl">
+<div class="flex flex-col">
+<span class="font-display-lg leading-none">38</span>
+<span class="font-label-md opacity-80 uppercase">Students</span>
+</div>
+<div class="flex flex-col">
+<span class="font-display-lg leading-none">68%</span>
+<span class="font-label-md opacity-80 uppercase">Avg. Grade</span>
+</div>
+</div>
+<!-- Decorative Abstract Shape -->
+<div class="absolute -right-12 -bottom-12 w-48 h-48 bg-white/10 rounded-full blur-3xl"></div>
+<div class="absolute right-10 top-10">
+<span class="material-symbols-outlined text-[80px] opacity-10">functions</span>
+</div>
+</div>
+<div class="bg-surface-container-high p-md rounded-xl flex flex-col gap-sm border border-outline-variant/30">
+<div class="flex justify-between items-center">
+<h3 class="font-headline-sm text-primary">Syllabus</h3>
+<button class="bg-primary text-on-primary font-label-lg px-4 py-2 rounded-full hover:scale-95 transition-transform">Update</button>
+</div>
+<div class="flex-1 flex flex-col justify-center">
+<div class="flex justify-between items-end mb-2">
+<span class="font-display-lg text-primary leading-none">66.7%</span>
+<span class="font-label-md text-on-surface-variant mb-1">2/3 Covered</span>
+</div>
+<div class="w-full bg-surface-container-lowest h-3 rounded-full overflow-hidden border border-outline-variant/20">
+<div class="bg-primary h-full rounded-full w-[66.7%] shadow-[0_0_8px_rgba(0,101,145,0.4)]"></div>
+</div>
+</div>
+<p class="font-body-sm text-on-surface-variant">Current Topic: Quadratic Equations and Factorization.</p>
+</div>
+</section>
+<!-- Assessments Section -->
+<section class="space-y-sm">
+<div class="flex justify-between items-center">
+<h3 class="font-headline-md text-on-background">Assessments</h3>
+<span class="font-label-md text-primary cursor-pointer hover:underline">View All</span>
+</div>
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-md">
+<!-- CAT 1 -->
+<div class="bg-white p-md rounded-xl shadow-sm border border-outline-variant/50 hover:shadow-md transition-shadow group">
+<div class="flex justify-between items-start mb-sm">
+<div class="bg-tertiary-container/10 p-2 rounded-lg text-tertiary">
+<span class="material-symbols-outlined">description</span>
+</div>
+<span class="bg-surface-container-highest text-on-surface-variant font-label-md px-2 py-0.5 rounded">Locked</span>
+</div>
+<h4 class="font-label-lg text-on-background">CAT 1</h4>
+<p class="font-body-sm text-on-surface-variant mt-1">Completed: Mar 12</p>
+<div class="mt-md pt-md border-t border-outline-variant/20 flex justify-between items-center">
+<span class="font-label-md text-on-surface-variant">Mean: 72%</span>
+<span class="material-symbols-outlined text-primary opacity-0 group-hover:opacity-100 transition-opacity">chevron_right</span>
+</div>
+</div>
+<!-- CAT 2 -->
+<div class="bg-white p-md rounded-xl shadow-sm border border-primary-container/30 hover:shadow-md transition-shadow group relative overflow-hidden">
+<div class="absolute top-0 left-0 w-1 h-full bg-primary-container"></div>
+<div class="flex justify-between items-start mb-sm">
+<div class="bg-primary-container/10 p-2 rounded-lg text-primary">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">edit_note</span>
+</div>
+<span class="bg-secondary-container text-on-secondary-container font-label-md px-2 py-0.5 rounded">Open</span>
+</div>
+<h4 class="font-label-lg text-on-background">CAT 2</h4>
+<p class="font-body-sm text-on-surface-variant mt-1">Deadline: Apr 05</p>
+<div class="mt-md pt-md border-t border-outline-variant/20 flex justify-between items-center">
+<span class="font-label-md text-primary font-bold">14 Submissions</span>
+<span class="material-symbols-outlined text-primary">arrow_forward</span>
+</div>
+</div>
+<!-- Midterm -->
+<div class="bg-white p-md rounded-xl shadow-sm border border-outline-variant/50 hover:shadow-md transition-shadow group">
+<div class="flex justify-between items-start mb-sm">
+<div class="bg-surface-variant p-2 rounded-lg text-on-surface-variant">
+<span class="material-symbols-outlined">pending_actions</span>
+</div>
+<span class="bg-surface-container text-on-surface-variant font-label-md px-2 py-0.5 rounded">Draft</span>
+</div>
+<h4 class="font-label-lg text-on-background">Midterm Exam</h4>
+<p class="font-body-sm text-on-surface-variant mt-1">Scheduled: May 15</p>
+<div class="mt-md pt-md border-t border-outline-variant/20 flex justify-between items-center">
+<span class="font-label-md text-on-surface-variant">Not started</span>
+<span class="material-symbols-outlined text-outline">lock</span>
+</div>
+</div>
+<!-- Final -->
+<div class="bg-white p-md rounded-xl shadow-sm border border-outline-variant/50 hover:shadow-md transition-shadow group">
+<div class="flex justify-between items-start mb-sm">
+<div class="bg-surface-variant p-2 rounded-lg text-on-surface-variant">
+<span class="material-symbols-outlined">grading</span>
+</div>
+<span class="bg-surface-container text-on-surface-variant font-label-md px-2 py-0.5 rounded">Draft</span>
+</div>
+<h4 class="font-label-lg text-on-background">Final Assessment</h4>
+<p class="font-body-sm text-on-surface-variant mt-1">Scheduled: July 20</p>
+<div class="mt-md pt-md border-t border-outline-variant/20 flex justify-between items-center">
+<span class="font-label-md text-on-surface-variant">Unpublished</span>
+<span class="material-symbols-outlined text-outline">lock</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Student List Preview -->
+<section class="bg-white rounded-xl shadow-sm border border-outline-variant/50 overflow-hidden">
+<div class="px-md py-4 border-b border-outline-variant/30 flex justify-between items-center">
+<h3 class="font-headline-sm text-on-background">Student Roll</h3>
+<div class="flex gap-2">
+<button class="w-8 h-8 flex items-center justify-center border border-outline-variant rounded hover:bg-surface-container transition-colors">
+<span class="material-symbols-outlined text-body-sm">search</span>
+</button>
+<button class="w-8 h-8 flex items-center justify-center border border-outline-variant rounded hover:bg-surface-container transition-colors">
+<span class="material-symbols-outlined text-body-sm">filter_list</span>
+</button>
+</div>
+</div>
+<div class="divide-y divide-outline-variant/20">
+<!-- Student 1 -->
+<div class="px-md py-4 flex items-center justify-between hover:bg-surface-container-lowest transition-colors cursor-pointer">
+<div class="flex items-center gap-md">
+<div class="w-10 h-10 rounded-full bg-primary-fixed flex items-center justify-center text-primary font-bold">AK</div>
+<div>
+<p class="font-label-lg text-on-background">Amani Kipkoech</p>
+<p class="font-body-sm text-on-surface-variant">ID: KJS-F2A-001</p>
+</div>
+</div>
+<div class="text-right hidden sm:block">
+<p class="font-label-md text-on-background">Grade: A</p>
+<p class="font-body-sm text-secondary">Attendance: 98%</p>
+</div>
+<span class="material-symbols-outlined text-outline">chevron_right</span>
+</div>
+<!-- Student 2 -->
+<div class="px-md py-4 flex items-center justify-between hover:bg-surface-container-lowest transition-colors cursor-pointer">
+<div class="flex items-center gap-md">
+<img class="w-10 h-10 rounded-full object-cover" data-alt="A portrait of a focused female high school student of East African descent, looking directly at the camera with a slight smile. She is wearing a green school blazer over a white shirt. The background is a brightly lit classroom with soft focus. High-key lighting highlights her professional and determined expression." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCRI1k9NxXRatlD5a30B2Oa81g5EH2zfO45ZIUCIcrpaRZyLT7AcvhtMu-la_C0DIxolet0PycjyIrGXitJ7xvxqncXmqL-Yc-CH8mEMIsPCGecJwIPwIYfWnya77FrZZITvG4mtJSMjXmXB3YO7hrf_ypG7SRnSC3wloSu5TKTGq-oF1i6g6zqpptBSTYzCS23ZIBXID4ELFfUJB4j2HPVzvwcwyB1J71JFwI6WYsTCjJY2lZ7EJr7o1_jyDp7cBIhJHmAlhGiDw"/>
+<div>
+<p class="font-label-lg text-on-background">Baraka Mwangi</p>
+<p class="font-body-sm text-on-surface-variant">ID: KJS-F2A-002</p>
+</div>
+</div>
+<div class="text-right hidden sm:block">
+<p class="font-label-md text-on-background">Grade: B+</p>
+<p class="font-body-sm text-secondary">Attendance: 85%</p>
+</div>
+<span class="material-symbols-outlined text-outline">chevron_right</span>
+</div>
+<!-- Student 3 -->
+<div class="px-md py-4 flex items-center justify-between hover:bg-surface-container-lowest transition-colors cursor-pointer">
+<div class="flex items-center gap-md">
+<div class="w-10 h-10 rounded-full bg-tertiary-fixed flex items-center justify-center text-tertiary font-bold">CO</div>
+<div>
+<p class="font-label-lg text-on-background">Chiamaka Okafor</p>
+<p class="font-body-sm text-on-surface-variant">ID: KJS-F2A-003</p>
+</div>
+</div>
+<div class="text-right hidden sm:block">
+<p class="font-label-md text-on-background">Grade: A-</p>
+<p class="font-body-sm text-secondary">Attendance: 92%</p>
+</div>
+<span class="material-symbols-outlined text-outline">chevron_right</span>
+</div>
+<!-- Student 4 -->
+<div class="px-md py-4 flex items-center justify-between hover:bg-surface-container-lowest transition-colors cursor-pointer">
+<div class="flex items-center gap-md">
+<div class="w-10 h-10 rounded-full bg-secondary-fixed flex items-center justify-center text-secondary font-bold">DS</div>
+<div>
+<p class="font-label-lg text-on-background">David Sempala</p>
+<p class="font-body-sm text-on-surface-variant">ID: KJS-F2A-004</p>
+</div>
+</div>
+<div class="text-right hidden sm:block">
+<p class="font-label-md text-on-background">Grade: C</p>
+<p class="font-body-sm text-error">Attendance: 74%</p>
+</div>
+<span class="material-symbols-outlined text-outline">chevron_right</span>
+</div>
+<!-- Student 5 -->
+<div class="px-md py-4 flex items-center justify-between hover:bg-surface-container-lowest transition-colors cursor-pointer">
+<div class="flex items-center gap-md">
+<img class="w-10 h-10 rounded-full object-cover" data-alt="A portrait of a male high school student with a friendly and inquisitive look. He has short hair and is wearing a dark blue school uniform. The background shows a modern library with books in soft bokeh. The lighting is bright and airy, reflecting a positive academic environment." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCg1ltoay45hW41pMxRMG6179xNVQbvlbD6LYGtSgQglzgEKP7X3H6HdpY9UUMr0pJEKHkJtmrIEB65KvQt2xWMeebiyHTgRPtlJXIrTHYp9YlpxceiHH5jcbpKFnCTr9L7_E-9SjsMmB1QjB-kLYhRBd8wiBb5cJfx16JFwdjxSF7G4KRZBGUcDAvq7ZGGsHhdBTrSJdqAIwfS5aHlf8iHanPEGWvJNKfe4mNKtMj0v7ujpTcXj0xTJhq9B2jbod0zzaOcat_3HA"/>
+<div>
+<p class="font-label-lg text-on-background">Esther Tadesse</p>
+<p class="font-body-sm text-on-surface-variant">ID: KJS-F2A-005</p>
+</div>
+</div>
+<div class="text-right hidden sm:block">
+<p class="font-label-md text-on-background">Grade: B</p>
+<p class="font-body-sm text-secondary">Attendance: 100%</p>
+</div>
+<span class="material-symbols-outlined text-outline">chevron_right</span>
+</div>
+</div>
+<button class="w-full py-4 bg-surface-container-lowest text-primary font-label-lg hover:bg-surface-container-high transition-colors text-center border-t border-outline-variant/20">
+                View All 38 Students
+            </button>
+</section>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-2 py-3 bg-surface shadow-[0_-2px_10px_rgba(14,165,233,0.08)] rounded-t-xl md:hidden">
+<div class="flex flex-col items-center justify-center text-on-surface-variant hover:bg-surface-variant transition-colors rounded-full px-4 py-1">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-label-md">Home</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-surface-variant hover:bg-surface-variant transition-colors rounded-full px-4 py-1">
+<span class="material-symbols-outlined">how_to_reg</span>
+<span class="font-label-md">Attendance</span>
+</div>
+<div class="flex flex-col items-center justify-center bg-primary-container text-on-primary-container rounded-full px-4 py-1 scale-90 duration-150">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">edit_note</span>
+<span class="font-label-md">Marks</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-surface-variant hover:bg-surface-variant transition-colors rounded-full px-4 py-1">
+<span class="material-symbols-outlined">calendar_month</span>
+<span class="font-label-md">Schedule</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-surface-variant hover:bg-surface-variant transition-colors rounded-full px-4 py-1">
+<span class="material-symbols-outlined">menu</span>
+<span class="font-label-md">Menu</span>
+</div>
+</nav>
+<!-- Floating Action Button - Contextual for Marks -->
+<button class="fixed bottom-24 right-6 w-14 h-14 primary-gradient text-white rounded-full sky-shadow flex items-center justify-center active:scale-95 transition-all z-40 md:bottom-10">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">add</span>
+</button>
+<script>
+        // Simple micro-interaction for the progress bar on load
+        window.addEventListener('DOMContentLoaded', () => {
+            const progress = document.querySelector('.w-full.bg-surface-container-lowest .bg-primary');
+            if (progress) {
+                progress.style.width = '0%';
+                setTimeout(() => {
+                    progress.style.transition = 'width 1.5s cubic-bezier(0.65, 0, 0.35, 1)';
+                    progress.style.width = '66.7%';
+                }, 300);
+            }
+        });
+    </script>
+</body></html>

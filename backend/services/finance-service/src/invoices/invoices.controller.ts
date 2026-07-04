@@ -66,19 +66,19 @@ export class InvoicesController {
   }
 
   @Patch(':id/discount')
-  @Roles(ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN)
+  @Roles(ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN)
   discount(@Param('id') id: string, @Body() dto: ApplyDiscountDto, @CurrentUser() user?: RequestUser) {
     return this.invoicesService.applyDiscount(id, dto.discountAmount, dto.discountReason, user!);
   }
 
   @Patch(':id/cancel')
-  @Roles(ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN)
+  @Roles(ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN)
   cancel(@Param('id') id: string, @Body() dto: CancelInvoiceDto, @CurrentUser() user?: RequestUser) {
     return this.invoicesService.cancel(id, dto.cancellationReason, user!);
   }
 
   @Patch(':id/waive')
-  @Roles(ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN)
+  @Roles(ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN)
   waive(@Param('id') id: string, @Body() dto: WaiveInvoiceDto, @CurrentUser() user?: RequestUser) {
     return this.invoicesService.waive(id, dto.waiverReason, user!);
   }

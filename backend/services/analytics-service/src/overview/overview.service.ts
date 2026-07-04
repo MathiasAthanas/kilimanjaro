@@ -14,7 +14,7 @@ export class OverviewService {
 
   async getOverview(academicYearId?: string) {
     const yearId = academicYearId || (await this.currentYearId()) || undefined;
-    const cacheKey = `analytics:overview:${yearId || 'current'}`;
+    const cacheKey = `analytics:overview:v2:${yearId || 'current'}`;
     const cached = await this.redis.get<any>(cacheKey);
     if (cached) return cached;
 
@@ -64,7 +64,25 @@ export class OverviewService {
 
     const notifDelivered = notifications.filter((n) => n.status === 'DELIVERED').length;
 
-    const termLabels = terms.map((t) => `${yearId || ''}-${t.name}`);
+    const subjectBuckets = termResults.reduce<Record<string, { total: number; passing: number; scores: number[] }>>((acc, row) => {
+      const subject = row.subjectName || 'Unknown Subject';
+      if (!acc[subject]) acc[subject] = { total: 0, passing: 0, scores: [] };
+      acc[subject].total += 1;
+      if (row.isPassing) acc[subject].passing += 1;
+      acc[subject].scores.push(row.weightedTotal);
+      return acc;
+    }, {});
+
+    const subjectPassRates = Object.entries(subjectBuckets)
+      .map(([subjectName, item]) => ({
+        subjectName,
+        passRate: item.total ? (item.passing / item.total) * 100 : 0,
+        average: mean(item.scores),
+        results: item.total,
+      }))
+      .sort((a, b) => b.passRate - a.passRate);
+
+    const termLabels = terms.map((t) => t.name || 'Term');
     const result = {
       enrolment: {
         totalStudents: students,
@@ -85,7 +103,7 @@ export class OverviewService {
         improvingStudentCount: improving,
         activePairingCount: pairings.length,
         pairingSuccessRate: pairingSuccess,
-        subjectPassRates: [],
+        subjectPassRates,
       },
       finance: {
         totalBilledThisTerm: totalBilled,

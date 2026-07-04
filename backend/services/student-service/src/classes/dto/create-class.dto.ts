@@ -1,6 +1,8 @@
 import { IsBoolean, IsEnum, IsInt, IsOptional, IsString, Min } from 'class-validator';
 
 export enum EducationStageDto {
+  NURSERY = 'NURSERY',
+  PRE_UNIT = 'PRE_UNIT',
   PRIMARY = 'PRIMARY',
   O_LEVEL = 'O_LEVEL',
   A_LEVEL = 'A_LEVEL',

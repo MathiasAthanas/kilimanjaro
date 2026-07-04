@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Biology Performance - Kilimanjaro Schools</title>
+<!-- Google Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+    .shadow1 { box-shadow: 0 2px 4px rgba(14, 165, 233, 0.05); }
+    .shadow3 { box-shadow: 0 10px 15px rgba(14, 165, 233, 0.12); }
+    .glass-effect {
+      background: rgba(255, 255, 255, 0.8);
+      backdrop-filter: blur(8px);
+    }
+  </style>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "surface-bright": "#faf8ff",
+            "tertiary-fixed": "#e1e0ff",
+            "on-tertiary": "#ffffff",
+            "secondary-fixed-dim": "#4cd7f6",
+            "on-secondary-fixed-variant": "#004e5c",
+            "surface-container": "#eaedff",
+            "surface-container-high": "#e2e7ff",
+            "primary-fixed-dim": "#89ceff",
+            "primary-container": "#0ea5e9",
+            "on-tertiary-container": "#1407ad",
+            "tertiary-fixed-dim": "#c0c1ff",
+            "on-primary": "#ffffff",
+            "primary-fixed": "#c9e6ff",
+            "on-surface-variant": "#3e4850",
+            "surface-dim": "#d2d9f4",
+            "on-error-container": "#93000a",
+            "inverse-primary": "#89ceff",
+            "primary": "#006591",
+            "surface-container-highest": "#dae2fd",
+            "surface-tint": "#006591",
+            "on-primary-fixed": "#001e2f",
+            "surface": "#faf8ff",
+            "secondary": "#00687a",
+            "error-container": "#ffdad6",
+            "on-background": "#131b2e",
+            "inverse-surface": "#283044",
+            "background": "#faf8ff",
+            "tertiary-container": "#8d90ff",
+            "on-error": "#ffffff",
+            "secondary-fixed": "#acedff",
+            "on-secondary": "#ffffff",
+            "secondary-container": "#57dffe",
+            "surface-container-lowest": "#ffffff",
+            "surface-variant": "#dae2fd",
+            "outline-variant": "#bec8d2",
+            "on-primary-fixed-variant": "#004c6e",
+            "on-tertiary-fixed-variant": "#2f2ebe",
+            "inverse-on-surface": "#eef0ff",
+            "tertiary": "#494bd6",
+            "on-surface": "#131b2e",
+            "outline": "#6e7881",
+            "error": "#ba1a1a",
+            "on-secondary-container": "#006172",
+            "on-tertiary-fixed": "#07006c",
+            "surface-container-low": "#f2f3ff",
+            "on-primary-container": "#003751",
+            "on-secondary-fixed": "#001f26"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+          "spacing": {
+            "xl": "32px",
+            "md": "16px",
+            "xs": "8px",
+            "lg": "24px",
+            "sm": "12px",
+            "container-padding": "20px",
+            "base": "4px"
+          },
+          "fontFamily": {
+            "label-lg": ["Plus Jakarta Sans"],
+            "body-lg": ["Plus Jakarta Sans"],
+            "display-lg": ["Space Grotesk"],
+            "label-md": ["Plus Jakarta Sans"],
+            "headline-lg": ["Space Grotesk"],
+            "headline-md": ["Space Grotesk"],
+            "body-sm": ["Plus Jakarta Sans"],
+            "headline-sm": ["Space Grotesk"],
+            "body-md": ["Plus Jakarta Sans"]
+          },
+          "fontSize": {
+            "label-lg": ["14px", {"lineHeight": "20px", "letterSpacing": "0.01em", "fontWeight": "600"}],
+            "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+            "display-lg": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+            "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.04em", "fontWeight": "600"}],
+            "headline-lg": ["30px", {"lineHeight": "36px", "fontWeight": "600"}],
+            "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+            "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+            "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "500"}],
+            "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}]
+          }
+        },
+      },
+    }
+  </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-surface min-h-screen pb-24 font-body-md text-body-md">
+<!-- TopAppBar -->
+<header class="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-container-padding h-14 shadow1 bg-surface-bright dark:bg-inverse-surface">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-primary-container flex items-center justify-center text-on-primary">
+<span class="material-symbols-outlined text-body-lg">arrow_back</span>
+</div>
+<h1 class="font-headline-sm text-headline-sm text-primary dark:text-primary-fixed-dim font-bold">Biology</h1>
+</div>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">notifications</span>
+<div class="w-8 h-8 rounded-full overflow-hidden border border-outline-variant">
+<img alt="Amina Profile" data-alt="Close-up portrait of a professional African woman with a warm, confident expression, set against a soft-focus office background. The lighting is bright and natural, reflecting a high-contrast corporate modern aesthetic with clean white and blue highlights, emphasizing professional reliability and friendly authority." src="https://lh3.googleusercontent.com/aida-public/AB6AXuB2gdIIAWqEW9bDOkTwYr76oXyX2trLxheaThj2COzsaUeFqpBAxFVlfeJbVWr2zyQSYjwwtywqUHf7NTqOwlkirbxVIzINtM9B7gXlWMBdjuyKGtG2Lp_Qgls91ZzvLTQbsTZ-FNZYMN41Ek3cYGWX9gIRXWxxHwz-mOJHQMwQRY87TaypBslz-fVfd2a7zC_AIwyCIWaEagkOjvLOYRtpYXvuSXD9C_Fqb1t8yRiD1HPONcN1lWaWB5shd7MM1gyaXeBo0VCjXg"/>
+</div>
+</div>
+</header>
+<main class="pt-20 px-container-padding space-y-lg">
+<!-- Hero Score Card: Bento Style -->
+<section class="grid grid-cols-2 gap-md">
+<div class="col-span-2 bg-gradient-to-br from-primary-container to-primary text-white p-lg rounded-3xl shadow3 relative overflow-hidden">
+<div class="relative z-10 flex justify-between items-start">
+<div>
+<p class="font-label-md text-label-md opacity-90 uppercase tracking-widest">Current Standing</p>
+<h2 class="font-display-lg text-display-lg mt-base">65%</h2>
+<div class="flex items-center gap-2 mt-base">
+<span class="bg-white/20 px-3 py-1 rounded-full font-label-lg text-label-lg">Grade C</span>
+<span class="bg-amber-400 text-on-primary-container px-3 py-1 rounded-full font-label-lg text-label-lg font-bold">At Risk</span>
+</div>
+</div>
+<div class="text-right">
+<p class="font-label-md text-label-md opacity-90">Rank</p>
+<p class="font-headline-md text-headline-md">18<span class="text-label-lg opacity-70">/42</span></p>
+</div>
+</div>
+<!-- Decorative abstract shape -->
+<div class="absolute -bottom-10 -right-10 w-40 h-40 bg-white/10 rounded-full blur-3xl"></div>
+</div>
+</section>
+<!-- Performance Insights Bento -->
+<section class="grid grid-cols-1 md:grid-cols-2 gap-md">
+<!-- Assessment Breakdown Chart -->
+<div class="bg-surface-container-lowest p-md rounded-2xl shadow1 border border-surface">
+<div class="flex justify-between items-center mb-md">
+<h3 class="font-headline-sm text-headline-sm text-primary">Assessment Breakdown</h3>
+<span class="material-symbols-outlined text-outline">bar_chart</span>
+</div>
+<div class="space-y-sm h-48 flex items-end justify-between px-2">
+<div class="flex flex-col items-center gap-2 w-1/5">
+<div class="w-full bg-surface-container rounded-t-lg relative" style="height: 55%;">
+<div class="absolute -top-6 left-0 right-0 text-center font-label-md text-label-md">55%</div>
+</div>
+<span class="font-label-md text-label-md text-outline">CAT1</span>
+</div>
+<div class="flex flex-col items-center gap-2 w-1/5">
+<div class="w-full bg-surface-container rounded-t-lg relative" style="height: 72%;">
+<div class="absolute -top-6 left-0 right-0 text-center font-label-md text-label-md">72%</div>
+</div>
+<span class="font-label-md text-label-md text-outline">CAT2</span>
+</div>
+<div class="flex flex-col items-center gap-2 w-1/5">
+<div class="w-full bg-primary-container rounded-t-lg relative" style="height: 60%;">
+<div class="absolute -top-6 left-0 right-0 text-center font-label-md text-label-md font-bold">60%</div>
+</div>
+<span class="font-label-md text-label-md text-outline">Mid</span>
+</div>
+<div class="flex flex-col items-center gap-2 w-1/5">
+<div class="w-full bg-surface-container-highest rounded-t-lg relative" style="height: 65%;">
+<div class="absolute -top-6 left-0 right-0 text-center font-label-md text-label-md">65%</div>
+</div>
+<span class="font-label-md text-label-md text-outline">Final</span>
+</div>
+</div>
+</div>
+<!-- Trend Line Chart -->
+<div class="bg-surface-container-lowest p-md rounded-2xl shadow1 border border-surface">
+<div class="flex justify-between items-center mb-md">
+<h3 class="font-headline-sm text-headline-sm text-primary">Score History</h3>
+<span class="material-symbols-outlined text-outline">show_chart</span>
+</div>
+<div class="relative h-40 mt-lg">
+<!-- SVG Path for Trend -->
+<svg class="w-full h-full overflow-visible" preserveaspectratio="none" viewbox="0 0 100 40">
+<path class="text-primary" d="M 0 30 Q 25 10 50 25 T 100 5" fill="none" stroke="currentColor" stroke-width="2"></path>
+<circle class="fill-primary" cx="0" cy="30" r="1.5"></circle>
+<circle class="fill-primary" cx="50" cy="25" r="1.5"></circle>
+<circle class="fill-primary" cx="100" cy="5" r="2.5"></circle>
+</svg>
+<div class="flex justify-between mt-sm">
+<span class="font-label-md text-label-md text-outline">Term 1</span>
+<span class="font-label-md text-label-md text-outline">Term 2</span>
+<span class="font-label-md text-label-md text-primary font-bold">Term 3</span>
+</div>
+</div>
+</div>
+</section>
+<!-- vs Class Average Section -->
+<section class="bg-surface-container-low p-md rounded-2xl">
+<h3 class="font-label-lg text-label-lg text-on-surface-variant mb-md uppercase tracking-wider">vs Class Average</h3>
+<div class="space-y-lg">
+<div class="space-y-xs">
+<div class="flex justify-between font-label-md text-label-md">
+<span>Student (K. Mwangi)</span>
+<span class="font-bold">65%</span>
+</div>
+<div class="h-3 w-full bg-surface-container rounded-full overflow-hidden">
+<div class="h-full bg-primary-container rounded-full" style="width: 65%;"></div>
+</div>
+</div>
+<div class="space-y-xs">
+<div class="flex justify-between font-label-md text-label-md">
+<span>Class Average</span>
+<span class="font-bold">70%</span>
+</div>
+<div class="h-3 w-full bg-surface-container rounded-full overflow-hidden">
+<div class="h-full bg-outline-variant rounded-full" style="width: 70%;"></div>
+</div>
+</div>
+</div>
+</section>
+<!-- Notice Section / Alert Card -->
+<section class="bg-error-container/30 border border-error/10 p-md rounded-2xl flex gap-md">
+<div class="bg-error-container p-2 rounded-xl h-fit">
+<span class="material-symbols-outlined text-on-error-container">warning</span>
+</div>
+<div class="space-y-xs">
+<h4 class="font-label-lg text-label-lg text-on-error-container font-bold">Academic Support Required</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+          Biology performance has dipped below the class average. Specifically, 'Cell Biology' concepts remain a challenge. 
+        </p>
+<div class="bg-white/60 p-sm rounded-lg mt-sm flex items-center gap-sm">
+<img alt="Brian Mwangi" class="w-10 h-10 rounded-full border border-outline-variant" data-alt="Portrait of a friendly, scholarly young man wearing a crisp white lab coat and glasses, looking directly at the camera with a helpful and encouraging smile. The background is a modern science laboratory with clean surfaces and technological equipment, rendered in a bright, corporate professional style." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDQY23zXyN0DiuwbWrTVU_sim_KeS1EsZWBTp6pGesMidkY3qVgz9s9Ihxtz-NYDPS0Niz4vWUraWRqVRnYCbtqz_0g079R6Ad6_-aALiJhFZ_wO_Xu3H6uZCqPyphmd_ijXwF8r-8TdTtGD7eMc0Df-6AhDyF2lsmejfhDefZGccH8_7nzVkKhzp6YXC2--Zr8ORZB1EYwEXRm_OL9UuwEX2rjA1e_oIKC3tIy3mQA7G-vvfm8C8-PHTno09q_b_GAYsJSRWKVQg"/>
+<div>
+<p class="font-label-md text-label-md text-on-surface">Peer Pairing Active</p>
+<p class="font-body-sm text-body-sm text-primary">Assigned: <strong>Brian Mwangi</strong> (Biology Lead)</p>
+</div>
+</div>
+</div>
+</section>
+<!-- Recent Feedback List -->
+<section class="space-y-md">
+<h3 class="font-headline-sm text-headline-sm text-on-surface">Recent Feedback</h3>
+<div class="bg-surface-container-lowest rounded-2xl shadow1 overflow-hidden divide-y divide-outline-variant/30 border border-surface">
+<div class="p-md flex justify-between items-start">
+<div class="space-y-1">
+<p class="font-label-lg text-label-lg text-primary">Lab Practical: Dissection</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Good technique, but conclusion lacks depth.</p>
+</div>
+<span class="bg-secondary-container text-on-secondary-container px-2 py-0.5 rounded text-label-md font-bold">B-</span>
+</div>
+<div class="p-md flex justify-between items-start">
+<div class="space-y-1">
+<p class="font-label-lg text-label-lg text-primary">Weekly Quiz 4</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Needs to review Mitosis phases.</p>
+</div>
+<span class="bg-error-container text-on-error-container px-2 py-0.5 rounded text-label-md font-bold">D+</span>
+</div>
+</div>
+</section>
+<!-- Call to Action -->
+<button class="w-full h-[54px] bg-gradient-to-r from-primary-container to-primary text-white font-label-lg rounded-[14px] shadow3 flex items-center justify-center gap-2">
+<span class="material-symbols-outlined">mail</span>
+      Contact Subject Teacher
+    </button>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 pb-4 pt-2 bg-surface-container-lowest dark:bg-inverse-surface border-t border-outline-variant dark:border-none shadow-lg rounded-t-xl">
+<div class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant px-5 py-1 hover:bg-surface-container-high transition-all rounded-full">
+<span class="material-symbols-outlined">home</span>
+<span class="font-label-md text-label-md-mobile">Home</span>
+</div>
+<div class="flex flex-col items-center justify-center bg-primary-container dark:bg-on-primary-fixed-variant text-on-primary-container dark:text-primary-fixed rounded-full px-5 py-1 active:scale-90 transition-all duration-200">
+<span class="material-symbols-outlined">school</span>
+<span class="font-label-md text-label-md-mobile">Academics</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant px-5 py-1 hover:bg-surface-container-high transition-all rounded-full">
+<span class="material-symbols-outlined">payments</span>
+<span class="font-label-md text-label-md-mobile">Payments</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant px-5 py-1 hover:bg-surface-container-high transition-all rounded-full">
+<span class="material-symbols-outlined">chat_bubble</span>
+<span class="font-label-md text-label-md-mobile">Contact</span>
+</div>
+</nav>
+</body></html>

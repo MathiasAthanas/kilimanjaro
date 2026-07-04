@@ -2,7 +2,7 @@ enum UserRole {
   student('STUDENT'),
   parent('PARENT'),
   teacher('TEACHER'),
-  hod('HOD'),
+  hod('HEAD_OF_DEPARTMENT'),
   academicQa('ACADEMIC_QA'),
   principal('PRINCIPAL'),
   finance('FINANCE'),
@@ -34,7 +34,10 @@ enum UserRole {
       };
 
   static UserRole fromValue(String role) {
-    return UserRole.values.firstWhere((item) => item.value == role);
+    return UserRole.values.firstWhere(
+      (item) => item.value == role,
+      orElse: () => UserRole.student,
+    );
   }
 }
 
@@ -64,11 +67,16 @@ class AuthUser {
   final String? bio;
 
   factory AuthUser.fromJson(Map<String, dynamic> json) {
+    final first = json['firstName'] as String? ?? '';
+    final last = json['lastName'] as String? ?? '';
+    final combinedName = '$first $last'.trim();
     final joinedRaw = json['joinedAt'] as String? ?? json['createdAt'] as String?;
     final lastLoginRaw = json['lastLoginAt'] as String?;
     return AuthUser(
       id: json['id'] as String? ?? '',
-      name: json['name'] as String? ?? json['fullName'] as String? ?? '',
+      name: combinedName.isNotEmpty
+          ? combinedName
+          : (json['name'] as String? ?? json['fullName'] as String? ?? ''),
       role: UserRole.fromValue(json['role'] as String? ?? 'STUDENT'),
       email: json['email'] as String?,
       registrationNumber: json['registrationNumber'] as String?,
