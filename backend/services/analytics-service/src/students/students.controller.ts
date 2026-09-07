@@ -1,3 +1,4 @@
+import { hasRole, hasAnyRole, isTeacherOnly, isSelfService } from '@kilimanjaro/security';
 import { Controller, Get, Param, Query, ForbiddenException } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ROLES } from '../common/constants/roles';
@@ -77,7 +78,7 @@ export class StudentsController {
     @Query('academicYearId') academicYearId?: string,
     @Query('termId') termId?: string,
   ) {
-    const parentId = user.role === 'PARENT' ? user.id : childId;
+    const parentId = (user && isSelfService(user) && hasRole(user, 'PARENT')) ? user.id : childId;
     return this.service.parentChildDashboard(childId, parentId, academicYearId, termId);
   }
 

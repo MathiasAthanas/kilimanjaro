@@ -11,6 +11,9 @@ datasource db {
 }
 
 model OperationRecord {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   collection String
   id         String
   data       Json

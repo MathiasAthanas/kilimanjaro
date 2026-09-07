@@ -11,6 +11,6 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
   if ((session.user.requiresPasswordChange || session.user.mustChangePassword) && location.pathname !== '/app/change-password') {
     return <Navigate to="/app/change-password" replace />;
   }
-  if (!canAccessRoute(session.user.role, location.pathname)) return <Navigate to="/app/403" replace />;
+  if (!canAccessRoute(session.user.roles ?? [session.user.role], location.pathname)) return <Navigate to="/app/403" replace />;
   return children;
 }

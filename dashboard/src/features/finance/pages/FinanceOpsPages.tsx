@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { AlertTriangle, ArrowRight, Plus, Send, X, PackagePlus, ArrowDownToLine, ArrowUpFromLine, Sliders, FileText, AlertCircle, BarChart3, ClipboardList } from 'lucide-react';
+import { AlertTriangle, Plus, Send, X, PackagePlus, ArrowDownToLine, ArrowUpFromLine, Sliders, FileText, AlertCircle, BarChart3, ClipboardList } from 'lucide-react';
 import { Button } from '../../../components/common/Button';
 import { Badge } from '../../../components/common/Badge';
 import { EmptyState } from '../../../components/feedback/EmptyState';

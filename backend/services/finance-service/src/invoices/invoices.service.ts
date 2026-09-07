@@ -1,3 +1,4 @@
+import { hasRole, hasAnyRole, isTeacherOnly, isSelfService } from '@kilimanjaro/security';
 import {
   BadRequestException,
   ConflictException,
@@ -299,7 +300,7 @@ export class InvoicesService {
     const page = Math.max(1, Number(filters.page || 1));
     const limit = Math.min(100, Math.max(1, Number(filters.limit || 20)));
 
-    if (['MANAGING_DIRECTOR', 'BOARD_DIRECTOR'].includes(user.role)) {
+    if (hasAnyRole(user, ['MANAGING_DIRECTOR', 'BOARD_DIRECTOR'])) {
       if (filters.studentId) {
         throw new ForbiddenException('Director roles can only access aggregate finance data');
       }
@@ -318,7 +319,7 @@ export class InvoicesService {
 
     let studentFilter: string | undefined = filters.studentId;
 
-    if (user.role === 'STUDENT') {
+    if ((isSelfService(user) && hasRole(user, 'STUDENT'))) {
       const ownStudentId = await this.accessControl.resolveStudentIdForAuthUser(user.id);
       if (!ownStudentId) {
         throw new ForbiddenException('Student profile not found');
@@ -329,7 +330,7 @@ export class InvoicesService {
       studentFilter = ownStudentId;
     }
 
-    if (user.role === 'PARENT') {
+    if ((isSelfService(user) && hasRole(user, 'PARENT'))) {
       const studentIds = await this.accessControl.resolveGuardianStudentIds(user.id);
       if (!studentIds.length) {
         return [];
@@ -370,17 +371,17 @@ export class InvoicesService {
   }
 
   async byId(id: string, user: RequestUser) {
-    if (['MANAGING_DIRECTOR', 'BOARD_DIRECTOR'].includes(user.role)) {
+    if (hasAnyRole(user, ['MANAGING_DIRECTOR', 'BOARD_DIRECTOR'])) {
       throw new ForbiddenException('Director roles can only access aggregate finance data');
     }
 
     const invoice = await this.prisma.invoice.findUnique({ where: { id }, include: { lineItems: true, payments: true } });
     if (!invoice) throw new NotFoundException('Invoice not found');
 
-    if (user.role === 'PARENT') {
+    if ((isSelfService(user) && hasRole(user, 'PARENT'))) {
       await this.accessControl.assertParentOwnsStudent(user.id, invoice.studentId);
     }
-    if (user.role === 'STUDENT') {
+    if ((isSelfService(user) && hasRole(user, 'STUDENT'))) {
       await this.accessControl.assertStudentOwnsRecord(user.id, invoice.studentId);
     }
 
@@ -388,14 +389,14 @@ export class InvoicesService {
   }
 
   async byStudent(studentId: string, user: RequestUser) {
-    if (['MANAGING_DIRECTOR', 'BOARD_DIRECTOR'].includes(user.role)) {
+    if (hasAnyRole(user, ['MANAGING_DIRECTOR', 'BOARD_DIRECTOR'])) {
       throw new ForbiddenException('Director roles can only access aggregate finance data');
     }
 
-    if (user.role === 'PARENT') {
+    if ((isSelfService(user) && hasRole(user, 'PARENT'))) {
       await this.accessControl.assertParentOwnsStudent(user.id, studentId);
     }
-    if (user.role === 'STUDENT') {
+    if ((isSelfService(user) && hasRole(user, 'STUDENT'))) {
       await this.accessControl.assertStudentOwnsRecord(user.id, studentId);
     }
 

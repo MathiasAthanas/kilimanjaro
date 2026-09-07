@@ -6,6 +6,7 @@ export type FinanceStatus =
   | 'APPROVED'
   | 'REJECTED'
   | 'VOID'
+  | 'CANCELLED'
   | 'ACTIVE'
   | 'INACTIVE'
   | 'DISPOSED';
@@ -24,7 +25,7 @@ export type Invoice = {
   total: number;
   paid: number;
   outstanding: number;
-  status: Extract<FinanceStatus, 'PAID' | 'PARTIAL' | 'OVERDUE' | 'VOID'>;
+  status: Extract<FinanceStatus, 'PAID' | 'PARTIAL' | 'OVERDUE' | 'VOID' | 'CANCELLED'>;
   dueDate: string;
   lastPayment: string;
   lineItems: Array<{ category: string; amount: number; mandatory: boolean }>;

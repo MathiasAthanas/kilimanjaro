@@ -1,3 +1,4 @@
+import { runWithIdentity, requireSchool } from '@kilimanjaro/security';
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Channel, ConsumeMessage } from 'amqplib';
 import { PrismaService } from '../prisma/prisma.service';
@@ -45,6 +46,8 @@ export class RabbitMqConsumer implements OnModuleInit {
 
     try {
       const payload = JSON.parse(message.content.toString());
+      await runWithIdentity({ id: 'event-consumer', role: 'SYSTEM_ADMIN', schoolId: payload.schoolId }, async () => {
+        requireSchool();
 
       if (routingKey === 'performance.snapshot.ready') {
         await this.engine.ingestSnapshot(payload);
@@ -55,6 +58,7 @@ export class RabbitMqConsumer implements OnModuleInit {
       }
 
       channel.ack(message);
+      });
     } catch (error) {
       this.logger.error(`Failed to process event ${routingKey}`, error as Error);
       channel.ack(message);
@@ -64,6 +68,7 @@ export class RabbitMqConsumer implements OnModuleInit {
   private async handleUserCreated(payload: {
     userId?: string;
     role?: string;
+    roles?: string[];
     registrationNumber?: string;
     phoneNumber?: string;
   }): Promise<void> {
@@ -71,7 +76,7 @@ export class RabbitMqConsumer implements OnModuleInit {
       return;
     }
 
-    if (payload.role === 'STUDENT' && payload.registrationNumber) {
+    if ((payload.roles || [payload.role]).includes('STUDENT') && payload.registrationNumber) {
       await this.prisma.student.updateMany({
         where: {
           registrationNumber: payload.registrationNumber,
@@ -85,7 +90,7 @@ export class RabbitMqConsumer implements OnModuleInit {
       });
     }
 
-    if (payload.role === 'PARENT' && payload.phoneNumber) {
+    if ((payload.roles || [payload.role]).includes('PARENT') && payload.phoneNumber) {
       await this.prisma.guardian.updateMany({
         where: {
           phoneNumber: payload.phoneNumber,

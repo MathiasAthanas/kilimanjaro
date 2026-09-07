@@ -1,3 +1,4 @@
+import { runWithIdentity, requireSchool } from '@kilimanjaro/security';
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ReportType } from '../../generated/prisma';
@@ -42,6 +43,8 @@ export class RabbitMqConsumer implements OnModuleInit {
         if (!msg) return;
         try {
           const payload = JSON.parse(msg.content.toString() || '{}');
+          await runWithIdentity({ id: 'event-consumer', role: 'SYSTEM_ADMIN', schoolId: payload.schoolId }, async () => {
+            requireSchool();
           const eventType = payload.eventType || msg.fields.routingKey || 'unknown';
           await this.prisma.metricEvent.create({
             data: {
@@ -51,6 +54,7 @@ export class RabbitMqConsumer implements OnModuleInit {
             },
           });
           await this.handleEvent(eventType, payload);
+          });
         } catch (error: any) {
           this.logger.error(`Failed to handle message from ${binding.queue}: ${error.message}`);
         } finally {

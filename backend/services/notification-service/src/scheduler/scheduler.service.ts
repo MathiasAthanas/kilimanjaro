@@ -1,3 +1,4 @@
+import { SchoolJob } from '@kilimanjaro/security';
 import { Injectable } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { AnnouncementsService } from '../announcements/announcements.service';
@@ -17,16 +18,19 @@ export class SchedulerService {
   ) {}
 
   @Cron('*/5 * * * *')
+  @SchoolJob()
   async publishScheduledAnnouncements() {
     await this.announcements.publishScheduled();
   }
 
   @Cron('0 1 * * *')
+  @SchoolJob()
   async expireOldAnnouncements() {
     await this.announcements.expireOld();
   }
 
   @Cron('*/30 * * * *')
+  @SchoolJob()
   async retryFailedNotifications() {
     const failed = await this.prisma.notification.findMany({ where: { status: 'FAILED', attemptCount: { lt: 3 } }, take: 500 });
     for (const n of failed) {
@@ -38,11 +42,13 @@ export class SchedulerService {
   }
 
   @Cron('0 3 * * 0')
+  @SchoolJob()
   async cleanupTokens() {
     await this.prisma.deviceToken.deleteMany({ where: { isActive: false, lastUsedAt: { lt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } } });
   }
 
   @Cron('0 7 * * 1')
+  @SchoolJob()
   async weeklyPerformanceDigest() {
     const alerts = (await this.downstream.activeHighAlerts()) || [];
     const grouped = alerts.reduce<Record<string, any[]>>((acc, item) => {

@@ -1,3 +1,4 @@
+import { cacheKey } from '@kilimanjaro/security';
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
@@ -28,20 +29,20 @@ export class RedisService implements OnModuleDestroy {
   async get<T>(key: string): Promise<T | null> {
     await this.ensureConnection();
     try {
-      const value = await this.client.get(key);
+      const value = await this.client.get(cacheKey(key));
       return value ? (JSON.parse(value) as T) : null;
     } catch { return null; }
   }
 
   async set(key: string, value: unknown, ttlSeconds: number) {
     await this.ensureConnection();
-    try { await this.client.set(key, JSON.stringify(value), 'EX', ttlSeconds); } catch {}
+    try { await this.client.set(cacheKey(key), JSON.stringify(value), 'EX', ttlSeconds); } catch {}
   }
 
   async del(...keys: string[]) {
     if (!keys.length) return;
     await this.ensureConnection();
-    try { await this.client.del(...keys); } catch {}
+    try { await this.client.del(...keys.map(cacheKey)); } catch {}
   }
 
   async delByPattern(pattern: string) {
@@ -49,9 +50,9 @@ export class RedisService implements OnModuleDestroy {
     try {
       let cursor = '0';
       do {
-        const [next, keys] = await this.client.scan(cursor, 'MATCH', pattern, 'COUNT', 300);
+        const [next, keys] = await this.client.scan(cursor, 'MATCH', cacheKey(pattern), 'COUNT', 300);
         cursor = next;
-        if (keys.length) await this.client.del(...keys);
+        if (keys.length) await this.client.del(...keys.map(cacheKey));
       } while (cursor !== '0');
     } catch {}
   }

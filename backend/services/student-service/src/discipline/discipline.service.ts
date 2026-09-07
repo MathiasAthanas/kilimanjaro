@@ -1,4 +1,5 @@
-import { ForbiddenException, Injectable } from '@nestjs/common';
+import { authorizeStudent } from '../common/helpers/student-access.helper';
+import { Injectable } from '@nestjs/common';
 import { Prisma, DisciplineCategory, DisciplineSeverity } from '../../generated/prisma';
 import { PrismaService } from '../prisma/prisma.service';
 import { RabbitMqService } from '../rabbitmq/rabbitmq.service';
@@ -62,25 +63,7 @@ export class DisciplineService {
   }
 
   async studentRecords(studentId: string, currentUser?: { id: string; role: string }): Promise<unknown> {
-    if (currentUser?.role === 'PARENT') {
-      const link = await this.prisma.studentGuardianLink.findFirst({
-        where: {
-          studentId,
-          isActive: true,
-          guardian: { authUserId: currentUser.id },
-        },
-      });
-      if (!link) {
-        throw new ForbiddenException('Parent access denied');
-      }
-    }
-
-    if (currentUser?.role === 'STUDENT') {
-      const student = await this.prisma.student.findUnique({ where: { id: studentId } });
-      if (!student || student.authUserId !== currentUser.id) {
-        throw new ForbiddenException('Student access denied');
-      }
-    }
+    await authorizeStudent(this.prisma, studentId, currentUser);
 
     return this.prisma.disciplineRecord.findMany({
       where: { studentId },

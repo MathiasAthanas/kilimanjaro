@@ -1,3 +1,4 @@
+import { runWithIdentity, requireSchool } from '@kilimanjaro/security';
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Channel, connect } from 'amqplib';
@@ -82,7 +83,10 @@ export class RabbitMqConsumer implements OnModuleInit {
       const eventType = msg.fields.routingKey;
       try {
         const payload = JSON.parse(msg.content.toString('utf8'));
+        await runWithIdentity({ id: 'event-consumer', role: 'SYSTEM_ADMIN', schoolId: payload.schoolId }, async () => {
+          requireSchool();
         await this.dispatch.dispatchFromEvent(eventType, payload, sourceService);
+        });
       } catch (error) {
         this.logger.warn(`Failed to process ${exchange}/${eventType}: ${(error as Error).message}`);
       } finally {

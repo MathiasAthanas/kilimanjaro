@@ -21,8 +21,9 @@ export function ElearningShell({ title, eyebrow, children, action }: { title: st
   );
 }
 
-export function ElButton({ to, children }: { to: string; children: ReactNode }) {
-  return <NavLink to={to} className="rounded-2xl bg-[#6C63FF] px-5 py-3 text-sm font-black text-white shadow-lg shadow-indigo-200 transition hover:bg-[#3D35CC]">{children}</NavLink>;
+export function ElButton({ to, onClick, children }: { children: ReactNode } & ({ to: string; onClick?: never } | { to?: never; onClick: () => void })) {
+  const className = 'rounded-2xl bg-[#6C63FF] px-5 py-3 text-sm font-black text-white shadow-lg shadow-indigo-200 transition hover:bg-[#3D35CC]';
+  return to !== undefined ? <NavLink to={to} className={className}>{children}</NavLink> : <button type="button" onClick={onClick} className={className}>{children}</button>;
 }
 
 export function ElStat({ label, value, detail }: { label: string; value: string; detail: string }) {

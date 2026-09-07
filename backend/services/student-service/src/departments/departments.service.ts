@@ -1,3 +1,4 @@
+import { SchoolJob, requireSchool } from '@kilimanjaro/security';
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateDepartmentDto } from './dto/create-department.dto';
@@ -18,10 +19,11 @@ const SYSTEM_DEFAULTS = [
 export class DepartmentsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  @SchoolJob()
   async seedSystemDefaults(): Promise<void> {
     for (const dept of SYSTEM_DEFAULTS) {
       await this.prisma.department.upsert({
-        where: { code: dept.code },
+        where: { schoolId_code: { schoolId: requireSchool(), code: dept.code } },
         create: dept,
         update: { name: dept.name, isSystemDefault: dept.isSystemDefault },
       });

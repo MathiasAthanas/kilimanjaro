@@ -1,3 +1,4 @@
+import { SchoolJob } from '@kilimanjaro/security';
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
@@ -13,6 +14,7 @@ export class JobsService {
   ) {}
 
   @Cron('0 8 * * 1,3,5')
+  @SchoolJob()
   async pendingSubmissionReminder(): Promise<void> {
     const assessments = await this.prisma.assessment.findMany({
       where: { status: 'OPEN' },
@@ -33,6 +35,7 @@ export class JobsService {
   }
 
   @Cron('0 9 * * 1')
+  @SchoolJob()
   async syllabusCompletionAlert(): Promise<void> {
     const trackers = await this.prisma.syllabusTracker.findMany({
       where: { completionPercentage: { lt: 80 } },
@@ -53,6 +56,7 @@ export class JobsService {
   }
 
   @Cron('0 8 * * 2,4')
+  @SchoolJob()
   async pendingApprovalReminder(): Promise<void> {
     const cutoff = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
 

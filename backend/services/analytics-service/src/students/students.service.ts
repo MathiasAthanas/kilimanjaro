@@ -1,3 +1,4 @@
+import { hasRole, hasAnyRole, isTeacherOnly, isSelfService } from '@kilimanjaro/security';
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma';
 import { createHash } from 'crypto';
@@ -34,14 +35,13 @@ export class StudentsService {
   }
 
   private async canAccessStudent(studentId: string, user?: RequestUser) {
-    if (!user) return true;
-    if (user.role === 'STUDENT') return user.id === studentId;
-    if (user.role !== 'PARENT') return true;
-
-    const link = await this.prisma.studentGuardianLink.findFirst({ where: { guardianId: user.id, studentId } });
-    if (link) return true;
-    const ids = await this.downstream.guardianStudentIds(user.id);
-    return ids.includes(studentId);
+    if (!user || !isSelfService(user)) return true;
+    if (hasRole(user, 'STUDENT') && await this.downstream.studentIdByAuth(user.id) === studentId) return true;
+    if (hasRole(user, 'PARENT')) {
+      const ids = await this.downstream.guardianStudentIds(user.id);
+      return ids.includes(studentId);
+    }
+    return false;
   }
 
   private recommendedActions(args: {
@@ -70,7 +70,7 @@ export class StudentsService {
     const yearId = await this.resolveYear(academicYearId);
     const key = `analytics:student:${studentId}:${yearId || 'current'}`;
     const cached = await this.redis.get<any>(key);
-    if (cached) return applyRoleFilter(cached, user?.role || 'SYSTEM_ADMIN');
+    if (cached) return applyRoleFilter(cached, user?.roles ?? [user?.role || 'SYSTEM_ADMIN']);
 
     const student = await this.prisma.student.findUnique({ where: { id: studentId } });
     if (!student) throw new NotFoundException('Student not found');
@@ -455,7 +455,7 @@ export class StudentsService {
     };
 
     await this.redis.set(key, profile, 600);
-    return applyRoleFilter(profile, user?.role || 'SYSTEM_ADMIN');
+    return applyRoleFilter(profile, user?.roles ?? [user?.role || 'SYSTEM_ADMIN']);
   }
 
   async list(params: {

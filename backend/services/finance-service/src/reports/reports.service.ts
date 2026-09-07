@@ -1,3 +1,4 @@
+import { hasRole, hasAnyRole, isTeacherOnly, isSelfService } from '@kilimanjaro/security';
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma';
 import { AccessControlService } from '../common/helpers/access-control.service';
@@ -102,14 +103,14 @@ export class ReportsService {
   }
 
   async studentStatement(studentId: string, filters: { academicYearId?: string }, user: RequestUser) {
-    if (['MANAGING_DIRECTOR', 'BOARD_DIRECTOR'].includes(user.role)) {
+    if (hasAnyRole(user, ['MANAGING_DIRECTOR', 'BOARD_DIRECTOR'])) {
       throw new ForbiddenException('Director roles can only access aggregate finance data');
     }
 
-    if (user.role === 'PARENT') {
+    if ((isSelfService(user) && hasRole(user, 'PARENT'))) {
       await this.accessControl.assertParentOwnsStudent(user.id, studentId);
     }
-    if (user.role === 'STUDENT') {
+    if ((isSelfService(user) && hasRole(user, 'STUDENT'))) {
       await this.accessControl.assertStudentOwnsRecord(user.id, studentId);
     }
 

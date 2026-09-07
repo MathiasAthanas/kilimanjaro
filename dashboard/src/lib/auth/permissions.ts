@@ -23,7 +23,8 @@ export function isMobilePrimaryRole(role: UserRole) {
   return role === 'STUDENT' || role === 'PARENT';
 }
 
-export function canAccessRoute(role: UserRole | undefined, route: string) {
+export function canAccessRoute(role: UserRole | UserRole[] | undefined, route: string): boolean {
+  if (Array.isArray(role)) return role.some(item => canAccessRoute(item, route));
   if (!role) return false;
   if (route.startsWith('/app')) return true;
   if (route.startsWith('/teacher')) return role === 'TEACHER' || role === 'HOD' || role === 'ADMIN';

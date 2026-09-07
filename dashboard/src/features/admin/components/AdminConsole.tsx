@@ -1,3 +1,4 @@
+import { SchoolSelect } from './UserAccountForm';
 import {
   AlertTriangle, ArrowRight, CheckCircle2, ChevronDown, Copy,
   Download, Eye, FileText, Lock, Plus, Settings,
@@ -247,16 +248,11 @@ type CsvPreviewState = {
   allRows: Record<string, string>[];
 };
 
-type ImportLookup = {
-  classes: Array<{ id: string; name?: string; academicYearId?: string }>;
-  academicYears: Array<{ id: string; name?: string; isCurrent?: boolean }>;
-};
-
 const CSV_TEMPLATES: Record<string, { comments: string[]; headers: string[]; sample: string[] }> = {
   'staff user': {
     comments: [],
-    headers: ['first_name', 'last_name', 'email', 'role', 'phone_number'],
-    sample: ['John', 'Doe', 'john.doe@school.ac.tz', 'TEACHER', '+255712345678'],
+    headers: ['first_name', 'last_name', 'email', 'roles', 'primary_role', 'department', 'phone_number'],
+    sample: ['John', 'Doe', 'john.doe@school.ac.tz', 'TEACHER|HEAD_OF_DEPARTMENT', 'HEAD_OF_DEPARTMENT', 'Science', '+255712345678'],
   },
   student: {
     comments: [],
@@ -271,14 +267,15 @@ const CSV_TEMPLATES: Record<string, { comments: string[]; headers: string[]; sam
 const CSV_GUIDE: Record<string, Array<{ col: string; note: string }>> = {
   'staff user': [
     { col: 'first_name',   note: 'First name only' },
-    { col: 'last_name',    note: 'Last name — also used as the initial password' },
+    { col: 'last_name',    note: 'Last name' },
     { col: 'email',        note: 'Work email address' },
-    { col: 'role',         note: 'TEACHER · FINANCE · PRINCIPAL · HEAD_OF_DEPARTMENT · ACADEMIC_QA · SYSTEM_ADMIN' },
+    { col: 'roles', note: 'Separate roles with |, for example TEACHER|HEAD_OF_DEPARTMENT' },
+    { col: 'primary_role', note: 'Optional; must be one of the assigned roles' },
     { col: 'phone_number', note: 'Optional. Include country code e.g. +255712345678' },
   ],
   student: [
     { col: 'first_name',        note: 'First name only' },
-    { col: 'last_name',         note: 'Last name — also used as the initial password' },
+    { col: 'last_name',         note: 'Last name' },
     { col: 'date_of_birth',     note: 'Format: YYYY-MM-DD e.g. 2010-03-15' },
     { col: 'gender',            note: 'MALE or FEMALE' },
     { col: 'class_name',        note: 'Must match exactly e.g. Form 2 A' },
@@ -329,11 +326,7 @@ function parseCsvContent(text: string): { headers: string[]; rows: Record<string
 function requiredHeaders(entity: string): string[] {
   return entity === 'student'
     ? ['first_name', 'last_name', 'date_of_birth', 'gender', 'class_name', 'guardian_first_name', 'guardian_phone']
-    : ['first_name', 'last_name', 'email', 'role'];
-}
-
-function upperLastNamePassword(row: Record<string, string>): string {
-  return (row.last_name || row.lastName || '').replace(/[^a-z0-9]/gi, '').toUpperCase();
+    : ['first_name', 'last_name', 'email', 'roles'];
 }
 
 function isIsoDate(value: string): boolean {
@@ -342,6 +335,7 @@ function isIsoDate(value: string): boolean {
 
 function validateCsvRows(entity: string, headers: string[], rows: Record<string, string>[]): string[] {
   const errors: string[] = [];
+  if (headers.some(h => ['school_id', 'schoolId', 'password'].includes(h))) errors.push('School and password columns are not allowed. Select the school above the CSV.');
   if (rows.length > 500) errors.push('CSV limit is 500 rows.');
   for (const header of requiredHeaders(entity)) {
     if (!headers.includes(header)) errors.push(`Column "${header}" is missing. Make sure the first row has the exact column names shown in the guide.`);
@@ -353,9 +347,6 @@ function validateCsvRows(entity: string, headers: string[], rows: Record<string,
     for (const header of requiredHeaders(entity)) {
       if (!String(row[header] ?? '').trim()) errors.push(`Row ${line}: ${header} is required.`);
     }
-    if (!upperLastNamePassword(row)) {
-      errors.push(`Row ${line}: last_name must contain at least one letter or number for the account password.`);
-    }
     if (entity === 'student') {
       if (row.date_of_birth && !isIsoDate(row.date_of_birth)) errors.push(`Row ${line}: date_of_birth must be YYYY-MM-DD.`);
       if (row.admission_date && !isIsoDate(row.admission_date)) errors.push(`Row ${line}: admission_date must be YYYY-MM-DD.`);
@@ -364,8 +355,8 @@ function validateCsvRows(entity: string, headers: string[], rows: Record<string,
         errors.push(`Row ${line}: guardian_relationship "${row.guardian_relationship}" is invalid — valid values: FATHER · MOTHER · GUARDIAN · SIBLING · OTHER`);
       }
     } else {
-      const role = String(row.role ?? '').toUpperCase();
-      if (role && !STAFF_ROLES.has(role)) errors.push(`Row ${line}: role "${role}" is invalid — valid roles: TEACHER · FINANCE · PRINCIPAL · HEAD_OF_DEPARTMENT · ACADEMIC_QA · SYSTEM_ADMIN · BOARD_DIRECTOR · MANAGING_DIRECTOR`);
+      const role = String(row.roles ?? '').toUpperCase();
+      if (role && role.split('|').some(r => !STAFF_ROLES.has(r.trim()))) errors.push(`Row ${line}: role "${role}" is invalid — valid roles: TEACHER · FINANCE · PRINCIPAL · HEAD_OF_DEPARTMENT · ACADEMIC_QA · SYSTEM_ADMIN · BOARD_DIRECTOR · MANAGING_DIRECTOR`);
       const email = String(row.email ?? '').trim().toLowerCase();
       if (email) {
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.push(`Row ${line}: email is invalid.`);
@@ -382,147 +373,24 @@ function validateCsvRows(entity: string, headers: string[], rows: Record<string,
   return errors;
 }
 
-async function loadImportLookup(): Promise<ImportLookup> {
-  const [classesResponse, yearsResponse] = await Promise.all([
-    api.get('/students/classes'),
-    api.get('/students/academic-years'),
-  ]);
-  const classesPayload = classesResponse.data?.data ?? classesResponse.data;
-  const yearsPayload = yearsResponse.data?.data ?? yearsResponse.data;
-  const classes = Array.isArray(classesPayload) ? classesPayload : classesPayload?.items ?? classesPayload?.classes ?? [];
-  const academicYears = Array.isArray(yearsPayload) ? yearsPayload : yearsPayload?.items ?? yearsPayload?.academicYears ?? yearsPayload?.years ?? [];
-  return { classes, academicYears };
-}
-
-function findByName<T extends { name?: string }>(items: T[], name: string): T | undefined {
-  return items.find((item) => String(item.name ?? '').trim().toLowerCase() === name.trim().toLowerCase());
-}
-
-async function importStaffUsers(rows: Record<string, string>[]) {
-  const created = [];
-  for (const row of rows) {
-    const user = await api.post('/auth/users', {
-      firstName: row.first_name.trim(),
-      lastName: row.last_name.trim(),
-      email: row.email.trim(),
-      phoneNumber: row.phone_number?.trim() || undefined,
-      role: row.role.trim().toUpperCase(),
-      department: row.department?.trim() || undefined,
-      registrationNumber: row.registration_number?.trim() || undefined,
-      password: upperLastNamePassword(row),
-      isActive: true,
-    }).then((r) => r.data?.data ?? r.data);
-    created.push(user);
-  }
-  return created;
-}
-
-function normalisePhone(phone: string): string {
-  const digits = phone.replace(/[^\d]/g, '');
-  if (digits.startsWith('255')) return `+${digits}`;
-  if (digits.startsWith('0')) return `+255${digits.slice(1)}`;
-  if (digits.length === 9) return `+255${digits}`;
-  return `+${digits}`;
-}
-
-function parentDefaultPassword(phone: string): string {
-  const last4 = normalisePhone(phone).replace(/[^\d]/g, '').slice(-4);
-  return `Parent@${last4}`;
-}
-
-async function importStudents(rows: Record<string, string>[]) {
-  const lookup = await loadImportLookup();
-  const currentYear = lookup.academicYears.find((year) => Boolean(year.isCurrent)) ?? lookup.academicYears[0];
-  if (!currentYear) {
-    throw new Error('No academic year exists. Create an academic year before importing students.');
-  }
-
-  const resolvedRows = rows.map((row, index) => {
-    const line = index + 2;
-    const cls = findByName(lookup.classes, row.class_name);
-    if (!cls) throw new Error(`Row ${line}: class_name "${row.class_name}" does not match any class in the system — go to Academic → Classes to see exact names.`);
-    const academicYear = row.academic_year?.trim()
-      ? findByName(lookup.academicYears, row.academic_year)
-      : currentYear;
-    if (!academicYear) throw new Error(`Row ${line}: academic_year "${row.academic_year}" does not match an existing year.`);
-    return { row, cls, academicYear };
-  });
-
-  // Cache: normalised phone → parent auth user id (deduplicates within this batch and against DB)
-  const parentCache = new Map<string, string>();
-
-  async function resolveParentAuthId(row: Record<string, string>): Promise<string> {
-    const phone = normalisePhone(row.guardian_phone.trim());
-
-    if (parentCache.has(phone)) return parentCache.get(phone)!;
-
-    // Check if this parent already has an auth account
-    const existing = await api.get('/auth/users', { params: { role: 'PARENT', phoneNumber: phone, limit: 1 } })
-      .then((r) => r.data?.data ?? r.data);
-    const items: { id: string }[] = Array.isArray(existing) ? existing : (existing?.items ?? []);
-    if (items.length > 0) {
-      parentCache.set(phone, items[0].id);
-      return items[0].id;
-    }
-
-    // Create a new PARENT auth account
-    const newParent = await api.post('/auth/users', {
-      firstName: row.guardian_first_name.trim(),
-      lastName: row.guardian_last_name?.trim() || row.last_name.trim(),
-      role: 'PARENT',
-      phoneNumber: phone,
-      password: parentDefaultPassword(row.guardian_phone.trim()),
-      isActive: true,
-    }).then((r) => r.data?.data ?? r.data);
-
-    parentCache.set(phone, newParent.id);
-    return newParent.id;
-  }
-
-  const created = [];
-  for (const { row, cls, academicYear } of resolvedRows) {
-    const authUser = await api.post('/auth/users', {
-      firstName: row.first_name.trim(),
-      lastName: row.last_name.trim(),
-      role: 'STUDENT',
-      password: upperLastNamePassword(row),
-      isActive: true,
-    }).then((r) => r.data?.data ?? r.data);
-
-    const parentAuthId = await resolveParentAuthId(row);
-
-    const student = await api.post('/students', {
-      authUserId: authUser.id,
-      firstName: row.first_name.trim(),
-      middleName: row.middle_name?.trim() || undefined,
-      lastName: row.last_name.trim(),
-      dateOfBirth: row.date_of_birth,
-      gender: row.gender.trim().toUpperCase(),
-      nationality: row.nationality?.trim() || 'Tanzanian',
-      admissionDate: row.admission_date?.trim() || new Date().toISOString().slice(0, 10),
-      classId: cls.id,
-      academicYearId: academicYear.id,
-      guardians: [{
-        authUserId: parentAuthId,
-        firstName: row.guardian_first_name.trim(),
-        lastName: row.guardian_last_name?.trim() || row.last_name.trim(),
-        relationship: (row.guardian_relationship?.trim() || 'GUARDIAN').toUpperCase(),
-        phoneNumber: normalisePhone(row.guardian_phone.trim()),
-        email: row.guardian_email?.trim() || undefined,
-        isPrimary: true,
-      }],
-    }).then((r) => r.data?.data ?? r.data);
-
-    if (student?.registrationNumber) {
-      await api.patch(`/auth/users/${authUser.id}`, { registrationNumber: student.registrationNumber });
-    }
-    created.push({ user: authUser, student });
-  }
-  return created;
+async function submitImport(entity: string, rows: Record<string, string>[], schoolId: string, mode: 'VALIDATE_ONLY' | 'COMMIT', batchId: string) {
+  const payloadRows = entity === 'student' ? rows : rows.map((row, index) => ({
+    rowNumber: index + 2, firstName: row.first_name.trim(), lastName: row.last_name.trim(),
+    email: row.email.trim(), phoneNumber: row.phone_number?.trim() || undefined,
+    department: row.department?.trim() || undefined,
+    roles: (row.roles || row.role || '').split('|').map(r => r.trim().toUpperCase()),
+    primaryRole: row.primary_role?.trim().toUpperCase() || (row.roles || row.role || '').split('|')[0].trim().toUpperCase(),
+  }));
+  return api.post(entity === 'student' ? '/auth/users/bulk-students' : '/auth/users/bulk', {
+    schoolId, mode, rows: payloadRows, ...(entity === 'student' ? { batchId } : {}),
+  }, { timeout: 600000 }).then(r => r.data?.data ?? r.data);
 }
 
 export function CsvImportZone({ entity }: { entity: string }) {
   const qc = useQueryClient();
+  const [schoolId, setSchoolId] = useState('');
+  const [validated, setValidated] = useState(false);
+  const [batchId, setBatchId] = useState(() => crypto.randomUUID());
   const [dragging, setDragging] = useState(false);
   const [preview, setPreview] = useState<CsvPreviewState | null>(null);
   const [importing, setImporting] = useState(false);
@@ -544,6 +412,8 @@ export function CsvImportZone({ entity }: { entity: string }) {
   }
 
   function handleFile(file: File) {
+    if (!schoolId) { setResult({ ok: false, errors: ['Select a school first.'] }); return; }
+    setValidated(false); setBatchId(crypto.randomUUID());
     setResult(null);
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -573,13 +443,13 @@ export function CsvImportZone({ entity }: { entity: string }) {
         setResult({ ok: false, errors });
         return;
       }
-      if (entity === 'student') {
-        await importStudents(preview.allRows);
-      } else {
-        await importStaffUsers(preview.allRows);
-      }
-      const count = preview.allRows.length;
-      setResult({ ok: true, message: `Successfully imported ${count} ${entity}${count !== 1 ? 's' : ''}.` });
+      const mode = validated ? 'COMMIT' : 'VALIDATE_ONLY';
+      if (validated && !window.confirm(`Import ${preview.allRows.length} users into the selected school?`)) return;
+      const response = await submitImport(entity, preview.allRows, schoolId, mode, batchId);
+      if (!response.valid) { setValidated(false); setResult({ ok: false, errors: response.errors.map((e: { rowNumber: number; message: string }) => `Row ${e.rowNumber}: ${e.message}`) }); return; }
+      if (mode === 'VALIDATE_ONLY') { setValidated(true); setResult({ ok: true, message: 'Validation passed. Confirm import to create these users.' }); return; }
+      setValidated(false);
+      setResult({ ok: true, message: `Imported ${response.createdCount} ${entity}s. Batch: ${response.batchId}` });
       setPreview(null);
       if (fileRef.current) fileRef.current.value = '';
       if (entity === 'student') {
@@ -608,6 +478,7 @@ export function CsvImportZone({ entity }: { entity: string }) {
 
   return (
     <div className="space-y-3">
+      <SchoolSelect value={schoolId} onChange={id => { setSchoolId(id); setValidated(false); setBatchId(crypto.randomUUID()); }} />
       {/* Column guide */}
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-5 py-3">
@@ -687,7 +558,7 @@ export function CsvImportZone({ entity }: { entity: string }) {
                 onClick={handleImport}
                 disabled={importing}
               >
-                {importing ? 'Importing…' : `Import ${preview.allRows.length} Record${preview.allRows.length !== 1 ? 's' : ''}`}
+                {importing ? 'Processing…' : validated ? `Confirm import of ${preview.allRows.length} records` : 'Validate import'}
               </Button>
             </div>
           </div>

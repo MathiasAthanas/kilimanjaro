@@ -1,5 +1,6 @@
+import { SchoolSelect, UserAccountForm } from '../components/UserAccountForm';
 ﻿import { AlertTriangle, ArrowLeft, CheckCircle2, ChevronDown, Database, Download, Edit2, Key, Lock, Play, Plus, Shield, Trash2, Unlock, UserPlus, X } from 'lucide-react';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { downloadReportWhenReady } from '../../operations/api/operations.hooks';
 import { NavLink, useNavigate, useParams } from 'react-router-dom';
 import { toast } from '../../../lib/toast';
@@ -18,6 +19,7 @@ import {
   useAdminStudents,
   useAdminSubjects,
   useAdminUsers,
+  useAdminUser,
   useAcademicYears,
   useTerms,
   useAssessmentTypes,
@@ -32,7 +34,6 @@ import {
   useDeactivateUserMutation,
   useActivateUserMutation,
   useResetUserPwMutation,
-  useCreateUserMutation,
   useCreateStudentMutation,
   useCreateClassMutation,
   useCreateClassPathwayMutation,
@@ -44,7 +45,6 @@ import {
   useCreateCombinationMutation,
   useDeleteCombinationMutation,
   useCreateSubjectMutation,
-  useUpdateUserMutation,
   useRunEngineAdminMutation,
   useSendManualNotificationMutation,
   useCreateAcademicYearMutation,
@@ -96,7 +96,7 @@ import {
   NotificationTemplateEditor,
   SelectField, Td,
 } from '../components/AdminConsole';
-import { assessmentWeightsTotal, roleRisk } from '../utils/adminValidation';
+import { assessmentWeightsTotal } from '../utils/adminValidation';
 import { DataError } from '../../../components/feedback/DataError';
 import { EmptyState } from '../../../components/feedback/EmptyState';
 import { SkeletonTable } from '../../../components/common/SkeletonTable';
@@ -179,7 +179,8 @@ export function AdminUsersPage() {
 }
 
 function UsersTable() {
-  const { data: apiUsers = [] as typeof adminUsers, isLoading, isError, refetch } = useAdminUsers() as unknown as { data: typeof adminUsers; isLoading: boolean; isError: boolean; refetch: () => void };
+  const [schoolFilter, setSchoolFilter] = useState('');
+  const { data: apiUsers = [], isLoading, isError, refetch } = useAdminUsers(schoolFilter || undefined);
   const deactivateMutation = useDeactivateUserMutation();
   const activateMutation = useActivateUserMutation();
   const resetPwMutation = useResetUserPwMutation();
@@ -220,15 +221,16 @@ function UsersTable() {
   const visibleUsers = userSearch.trim().length > 0
     ? apiUsers.filter((u) => {
         const q = userSearch.toLowerCase();
-        return u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q) || u.role.toLowerCase().includes(q);
+        return u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q) || u.roles.some(role => role.toLowerCase().includes(q));
       })
     : apiUsers;
 
   if (isLoading) return <SkeletonTable cols={7} />;
   if (isError) return <DataError onRetry={refetch} />;
-  if (!apiUsers.length) return <EmptyState title="No users found" description="Create the first user account to get started." />;
+  if (!apiUsers.length) return <><SchoolSelect value={schoolFilter} onChange={setSchoolFilter} /><EmptyState title="No users found" description="Create a user or select another school." /></>;
   return (
     <div className="space-y-4">
+      <SchoolSelect value={schoolFilter} onChange={setSchoolFilter} />
       {resetResult && (
         <div className="flex items-start gap-4 rounded-2xl border border-amber-200 bg-amber-50 p-5">
           <div className="flex-1">
@@ -248,7 +250,7 @@ function UsersTable() {
           <button onClick={() => setResetResult(null)} className="shrink-0 text-amber-400 hover:text-amber-600">✕</button>
         </div>
       )}
-      <AdminDataTable columns={['Name', 'Email', 'Role', 'Status', 'Linked Entity', 'Last Login', 'Actions']} onSearch={setUserSearch}>
+      <AdminDataTable columns={['Name', 'Email', 'Role', 'Status', 'Department / School', 'Last Login', 'Actions']} onSearch={setUserSearch}>
         {visibleUsers.map((user) => (
           <tr key={user.id} className="hover:bg-slate-50">
             <Td>
@@ -256,7 +258,7 @@ function UsersTable() {
             </Td>
             <Td className="text-slate-500">{user.email}</Td>
             <Td>
-              <Badge tone={user.role === 'SYSTEM_ADMIN' || user.role === 'ADMIN' ? 'rose' : 'blue'}>{roleLabel(user.role)}</Badge>
+              {((user as unknown as { roles?: string[] }).roles ?? [user.role]).map(role => <Badge key={role} tone={role === 'SYSTEM_ADMIN' ? 'rose' : 'blue'}>{roleLabel(role)}</Badge>)}
             </Td>
             <Td>
               <Badge tone={user.status === 'ACTIVE' ? 'emerald' : user.status === 'LOCKED' ? 'amber' : 'slate'}>
@@ -306,182 +308,8 @@ function roleLabel(role: string): string {
   return ROLE_LABELS[role] ?? role;
 }
 
-const ROLE_OPTIONS = [
-  { value: 'TEACHER',            label: 'Teacher'                       },
-  { value: 'HEAD_OF_DEPARTMENT', label: 'Head of Department'            },
-  { value: 'ACADEMIC_QA',        label: 'AQA Officer'                   },
-  { value: 'FINANCE',            label: 'Finance Officer'               },
-  { value: 'PRINCIPAL',          label: 'Head master / Head of School'  },
-  { value: 'SYSTEM_ADMIN',       label: 'System Admin'                  },
-];
-
-const STATUS_OPTIONS = [
-  { value: 'ACTIVE',   label: 'Active'   },
-  { value: 'INACTIVE', label: 'Inactive' },
-  { value: 'PENDING',  label: 'Pending'  },
-];
-
-const DEPARTMENT_OPTIONS = [
-  { value: 'Science Department', label: 'Science Department' },
-  { value: 'Mathematics Department', label: 'Mathematics Department' },
-  { value: 'Languages Department', label: 'Languages Department' },
-  { value: 'Humanities Department', label: 'Humanities Department' },
-  { value: 'Business Department', label: 'Business Department' },
-  { value: 'ICT Department', label: 'ICT Department' },
-  { value: 'Primary Department', label: 'Primary Department' },
-  { value: 'Academic Quality Assurance', label: 'Academic Quality Assurance' },
-  { value: 'Finance Office', label: 'Finance Office' },
-  { value: 'Principal Office', label: 'Headmaster\'s Office' },
-  { value: 'System Administration', label: 'System Administration' },
-];
-
-function departmentOptionsForRole(role: string) {
-  if (role === 'FINANCE') return DEPARTMENT_OPTIONS.filter((option) => option.value === 'Finance Office');
-  if (role === 'PRINCIPAL') return DEPARTMENT_OPTIONS.filter((option) => option.value === 'Principal Office');
-  if (role === 'ACADEMIC_QA') return DEPARTMENT_OPTIONS.filter((option) => option.value === 'Academic Quality Assurance');
-  if (role === 'SYSTEM_ADMIN') return DEPARTMENT_OPTIONS.filter((option) => option.value === 'System Administration');
-  return DEPARTMENT_OPTIONS.filter(
-    (option) => !['Finance Office', 'Principal Office', 'System Administration'].includes(option.value),
-  );
-}
-
-function defaultDepartmentForRole(role: string) {
-  return departmentOptionsForRole(role)[0]?.value ?? '';
-}
-
-function rolePermissions(role: string): string[] {
-  const map: Record<string, string[]> = {
-    TEACHER: ['Marks entry and attendance', 'Class analytics', 'Announcements inbox'],
-    HEAD_OF_DEPARTMENT: ['Marks approval queue', 'Department analytics', 'Teacher performance view'],
-    ACADEMIC_QA: ['Performance engine access', 'Academic alerts', 'Exam & moderation tools'],
-    FINANCE: ['Invoice management', 'Payment recording', 'Fee structure management'],
-    PRINCIPAL: ['School health dashboard', 'Executive approvals', 'Full analytics read'],
-    SYSTEM_ADMIN: ['User management', 'System settings', 'All modules - read / write'],
-  };
-  return map[role] ?? ['Standard workspace access'];
-}
-
 export function CreateUserPage() {
-  const navigate = useNavigate();
-  const createMutation = useCreateUserMutation();
-  const [role, setRole] = useState('TEACHER');
-  const [form, setForm] = useState({
-    name: '',
-    email: '',
-    phone: '',
-    linked: defaultDepartmentForRole('TEACHER'),
-    status: 'ACTIVE',
-  });
-  const [createdPassword, setCreatedPassword] = useState('');
-  const isPrivileged = roleRisk(role) === 'high';
-
-  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
-    setForm((f) => ({ ...f, [k]: e.target.value }));
-
-  const handleRoleChange = (nextRole: string) => {
-    setRole(nextRole);
-    setForm((f) => ({ ...f, linked: defaultDepartmentForRole(nextRole) }));
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!form.name.trim() || !form.email.trim()) { toast('Name and email are required', 'warning'); return; }
-
-    const names = form.name.trim().split(/\s+/);
-    const firstName = names[0] ?? form.name.trim();
-    const lastName = names.slice(1).join(' ') || firstName;
-
-    createMutation.mutate({
-      email: form.email.trim().toLowerCase(),
-      role,
-      firstName,
-      lastName,
-      phoneNumber: form.phone.trim() || undefined,
-      department: form.linked,
-      isActive: form.status === 'ACTIVE',
-    }, {
-      onSuccess: (created: any) => {
-        const tempPassword = String(created?.temporaryPassword ?? '');
-        setCreatedPassword(tempPassword);
-        toast(tempPassword ? `User created. First password: ${tempPassword}` : 'User created successfully', 'success');
-      },
-      onError: (error) => toast(error instanceof Error ? error.message : 'Failed to create user.', 'error'),
-    });
-  };
-
-  return (
-    <AdminShell title="Create User" eyebrow="Identity and role provisioning">
-      <form onSubmit={handleSubmit}>
-        <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_340px]">
-          <div className="space-y-gutter">
-            <AdminFormSection title="Identity" subtitle="Staff name, email address, and contact number">
-              <div className="grid gap-4 md:grid-cols-3">
-                <Field label="Full Name" value={form.name} onChange={set('name')} placeholder="e.g. Amina Rashidi" />
-                <Field label="Email Address" type="email" value={form.email} onChange={set('email')} placeholder="name@school.ac.tz" />
-                <Field label="Phone Number" type="tel" value={form.phone} onChange={set('phone')} placeholder="+255 7XX XXX XXX" />
-              </div>
-            </AdminFormSection>
-
-            <AdminFormSection title="Role & Access" subtitle="Role determines the workspace and permission set assigned">
-              <div className="grid gap-4 md:grid-cols-3">
-                <SelectField label="Role" options={ROLE_OPTIONS} value={role} onChange={handleRoleChange} />
-                <SelectField
-                  key={`department-${role}`}
-                  label="Linked Entity / Department"
-                  options={departmentOptionsForRole(role)}
-                  value={form.linked}
-                  onChange={(value) => setForm((f) => ({ ...f, linked: value }))}
-                />
-                <SelectField label="Account Status" options={STATUS_OPTIONS} value={form.status} onChange={(v) => setForm((f) => ({ ...f, status: v }))} />
-              </div>
-              {isPrivileged && (
-                <div className="mt-4 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
-                  <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
-                  <p className="text-sm font-semibold text-amber-800">
-                    <span className="font-black">{roleLabel(role)}</span> is a privileged role with elevated system access.
-                    Confirm this assignment is authorised before creating.
-                  </p>
-                </div>
-              )}
-            </AdminFormSection>
-
-            <div className="flex gap-3">
-              <Button type="submit" className="rounded-xl bg-[#4338CA]" disabled={createMutation.isPending}>
-                <UserPlus className="h-4 w-4" /> {createMutation.isPending ? 'Creating...' : 'Create User'}
-              </Button>
-              <Button type="button" variant="secondary" className="rounded-xl" onClick={() => navigate('/admin/users')}>
-                Cancel
-              </Button>
-            </div>
-            {createdPassword && (
-              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-                <p className="text-sm font-black text-emerald-900">User created successfully</p>
-                <p className="mt-1 text-sm font-semibold text-emerald-800">
-                  First login password: <span className="font-mono font-black">{createdPassword}</span>
-                </p>
-                <p className="mt-1 text-xs font-semibold text-emerald-700">
-                  The user must change this password after first login.
-                </p>
-              </div>
-            )}
-          </div>
-
-          {/* Permissions preview sidebar */}
-          <div className="h-fit rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">Permissions for {roleLabel(role)}</p>
-            <ul className="mt-4 space-y-2.5">
-              {rolePermissions(role).map((perm) => (
-                <li key={perm} className="flex items-start gap-2 text-sm font-semibold text-slate-700">
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
-                  {perm}
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      </form>
-    </AdminShell>
-  );
+  return <AdminShell title="Create user" eyebrow="User administration"><UserAccountForm /></AdminShell>;
 }
 
 export function UserDetailPage() {
@@ -557,7 +385,7 @@ export function UserDetailPage() {
               <div>
                 <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">Role</p>
                 <div className="mt-1">
-                  <Badge tone={user.role === 'SYSTEM_ADMIN' || user.role === 'ADMIN' ? 'rose' : 'blue'}>{roleLabel(user.role)}</Badge>
+                  {((user as unknown as { roles?: string[] }).roles ?? [user.role]).map(role => <Badge key={role} tone={role === 'SYSTEM_ADMIN' ? 'rose' : 'blue'}>{roleLabel(role)}</Badge>)}
                 </div>
               </div>
               <div>
@@ -655,75 +483,7 @@ export function UserDetailPage() {
 }
 
 export function EditUserPage() {
-  const { loading, user } = useUser();
-  const navigate = useNavigate();
-  const updateMutation = useUpdateUserMutation();
-  const [role, setRole] = useState('');
-  const [linked, setLinked] = useState('');
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
-
-  useEffect(() => {
-    if (user) {
-      setRole(user.role);
-      setLinked(DEPARTMENT_OPTIONS.some((o) => o.value === user.linked) ? user.linked : defaultDepartmentForRole(user.role));
-      setName(user.name ?? '');
-    }
-  }, [user?.id]);
-
-  const isPrivileged = roleRisk(role) === 'high';
-  const handleRoleChange = (nextRole: string) => { setRole(nextRole); setLinked(defaultDepartmentForRole(nextRole)); };
-
-  if (loading) return <AdminShell title="Loading…" eyebrow="Account update"><SkeletonTable cols={3} /></AdminShell>;
-  if (!user) return <AdminShell title="Not Found" eyebrow="Account update"><EmptyState title="User not found" description="This user account does not exist." /></AdminShell>;
-
-  const handleSave = () => {
-    updateMutation.mutate({ id: user.id, body: { name: name || user.name, phone: phone || undefined, role, linked } }, {
-      onSuccess: () => { toast('User updated successfully', 'success'); navigate('/admin/users'); },
-      onError: () => toast('Failed to update user. Please try again.', 'error'),
-    });
-  };
-
-  return (
-    <AdminShell title={`Edit ${user.name}`} eyebrow="Account update">
-      <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_340px]">
-        <div className="space-y-gutter">
-          <AdminFormSection title="Identity" subtitle="Name, email, and contact details">
-            <div className="grid gap-4 md:grid-cols-3">
-              <Field label="Full Name" value={name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)} />
-              <Field label="Email Address" type="email" value={user.email} readOnly />
-              <Field label="Phone Number" type="tel" value={phone} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPhone(e.target.value)} placeholder="+255 7XX XXX XXX" />
-            </div>
-          </AdminFormSection>
-          <AdminFormSection title="Role & Access" subtitle="Role and linked entity assignment">
-            <div className="grid gap-4 md:grid-cols-2">
-              <SelectField label="Role" options={ROLE_OPTIONS} value={role} onChange={handleRoleChange} />
-              <SelectField key={`edit-department-${role}`} label="Linked Entity / Department" options={departmentOptionsForRole(role)} value={linked} onChange={setLinked} />
-            </div>
-            {isPrivileged && (
-              <div className="mt-4 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
-                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
-                <p className="text-sm font-semibold text-amber-800"><span className="font-black">{roleLabel(role)}</span> is a privileged role. Confirm authorisation before saving.</p>
-              </div>
-            )}
-          </AdminFormSection>
-          <Button className="rounded-xl bg-[#4338CA]" disabled={updateMutation.isPending} onClick={handleSave}>
-            {updateMutation.isPending ? 'Saving…' : 'Save User'}
-          </Button>
-        </div>
-        <div className="h-fit rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">Permissions for {roleLabel(role)}</p>
-          <ul className="mt-4 space-y-2.5">
-            {rolePermissions(role).map((perm) => (
-              <li key={perm} className="flex items-start gap-2 text-sm font-semibold text-slate-700">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />{perm}
-              </li>
-            ))}
-          </ul>
-        </div>
-      </div>
-    </AdminShell>
-  );
+  const { id } = useParams(); return <AdminShell title="Edit user" eyebrow="User administration"><UserAccountForm userId={id} /></AdminShell>;
 }
 
 // â"€â"€â"€ Academic setup hub â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
@@ -3082,8 +2842,10 @@ function safeDate(value: string, fallback: string) {
 }
 
 export function EnrolStudentPage() {
-  const { data: enrolClasses = [] as typeof adminClasses } = useAdminClasses() as unknown as { data: typeof adminClasses };
-  const { data: academicYears = [] } = useAcademicYears();
+  const [schoolId, setSchoolId] = useState('');
+  const [enrolBatchId, setEnrolBatchId] = useState(() => crypto.randomUUID());
+  const { data: enrolClasses = [] as typeof adminClasses } = useAdminClasses(schoolId) as unknown as { data: typeof adminClasses };
+  const { data: academicYears = [] } = useAcademicYears(schoolId);
   const createStudentMutation = useCreateStudentMutation();
   const [step, setStep] = useState(0);
   const today = new Date().toISOString().slice(0, 10);
@@ -3141,26 +2903,19 @@ export function EnrolStudentPage() {
     }
 
     createStudentMutation.mutate({
-      authUserId: `pending-student-${Date.now()}`,
-      firstName: form.firstName.trim(),
-      middleName: form.middleName.trim() || undefined,
-      lastName: form.lastName.trim(),
-      dateOfBirth: safeDate(form.dateOfBirth, '2010-01-01'),
-      gender: form.gender,
-      nationality: 'Tanzanian',
-      admissionDate: safeDate(form.admissionDate, today),
-      classId: activeClassId,
-      academicYearId: activeYearId,
-      guardians: [{
-        firstName: form.guardianFirstName.trim(),
-        lastName: form.guardianLastName.trim() || form.lastName.trim(),
-        relationship: form.guardianRelationship,
-        phoneNumber: form.guardianPhone.trim(),
-        email: form.guardianEmail.trim() || undefined,
-        isPrimary: true,
+      schoolId, batchId: enrolBatchId, mode: 'COMMIT', rows: [{
+        first_name: form.firstName.trim(), middle_name: form.middleName.trim(), last_name: form.lastName.trim(),
+        date_of_birth: safeDate(form.dateOfBirth, '2010-01-01'), gender: form.gender,
+        admission_date: safeDate(form.admissionDate, today), nationality: 'Tanzanian',
+        class_id: activeClassId, academic_year_id: activeYearId,
+        guardian_first_name: form.guardianFirstName.trim(),
+        guardian_last_name: form.guardianLastName.trim() || form.lastName.trim(),
+        guardian_relationship: form.guardianRelationship,
+        guardian_phone: form.guardianPhone.trim(), guardian_email: form.guardianEmail.trim(),
       }],
     }, {
       onSuccess: (student: any) => {
+        setEnrolBatchId(crypto.randomUUID());
         toast(`Student enrolled: ${student?.registrationNumber ?? 'record created'}`, 'success');
       },
       onError: (error) => toast(error instanceof Error ? error.message : 'Failed to enrol student', 'error'),
@@ -3169,6 +2924,7 @@ export function EnrolStudentPage() {
 
   return (
     <AdminShell title="Enrol Student" eyebrow="Admission workflow">
+      <SchoolSelect value={schoolId} onChange={id => { setSchoolId(id); setEnrolBatchId(crypto.randomUUID()); setForm(current => ({ ...current, classId: '', academicYearId: '' })); }} />
       {/* Step progress bar */}
       <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white px-6 py-4 shadow-sm">
         <div className="flex min-w-max items-center gap-0">
@@ -5185,9 +4941,13 @@ export function DepartmentsPage() {
 
 function useUser() {
   const { id } = useParams();
-  const { data: apiUsers = [] as typeof adminUsers, isLoading } = useAdminUsers() as unknown as { data: typeof adminUsers; isLoading: boolean };
-  return useMemo(() => ({
-    loading: isLoading,
-    user: isLoading ? null : (apiUsers.find((u) => u.id === id) ?? null),
-  }), [id, apiUsers, isLoading]);
+  const { data, isLoading } = useAdminUser(id);
+  const raw = data as Record<string, any> | undefined;
+  return { loading: isLoading, user: raw ? {
+    ...raw, id: String(raw.id), name: [raw.firstName, raw.lastName].filter(Boolean).join(' '),
+    email: String(raw.email ?? ''), role: String(raw.primaryRole ?? raw.role),
+    status: raw.isActive === false ? 'INACTIVE' : raw.lockedUntil ? 'LOCKED' : 'ACTIVE',
+    linked: [raw.department, raw.school?.name].filter(Boolean).join(' / '),
+    lastLogin: String(raw.lastLoginAt ?? ''), createdAt: String(raw.createdAt ?? ''),
+  } as (typeof adminUsers)[number] : null };
 }

@@ -116,9 +116,12 @@ enum SubjectRole {
 }
 
 model Subject {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id             String         @id @default(uuid())
   name           String
-  code           String         @unique
+  code           String
   description    String?
   educationStage EducationStage?
   isCompulsory   Boolean        @default(true)
@@ -134,9 +137,14 @@ model Subject {
   timetable      Timetable[]
 
   @@schema("academics")
+
+  @@unique([schoolId, code])
 }
 
 model ClassSubject {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id             String           @id @default(uuid())
   classId        String
   subjectId      String
@@ -163,6 +171,9 @@ model ClassSubject {
 }
 
 model GradingScale {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id             String         @id @default(uuid())
   name           String
   academicYearId String
@@ -178,6 +189,9 @@ model GradingScale {
 }
 
 model GradeBoundary {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id             String       @id @default(uuid())
   gradingScaleId String
   grade          String
@@ -194,6 +208,9 @@ model GradeBoundary {
 }
 
 model AssessmentType {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id               String       @id @default(uuid())
   name             String
   code             String
@@ -212,6 +229,9 @@ model AssessmentType {
 }
 
 model Assessment {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id              String           @id @default(uuid())
   classSubjectId  String
   assessmentTypeId String
@@ -250,6 +270,9 @@ model Assessment {
 }
 
 model Mark {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id             String       @id @default(uuid())
   assessmentId   String
   classSubjectId String
@@ -272,6 +295,9 @@ model Mark {
 }
 
 model TermResult {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id                   String      @id @default(uuid())
   studentId            String
   classId              String
@@ -308,6 +334,9 @@ model TermResult {
 }
 
 model ReportCard {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id                   String    @id @default(uuid())
   studentId            String
   classId              String
@@ -353,6 +382,9 @@ model ReportCard {
 }
 
 model SubjectCombination {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id             String                      @id @default(uuid())
   code           String
   name           String
@@ -370,6 +402,9 @@ model SubjectCombination {
 }
 
 model SubjectCombinationSubject {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id            String             @id @default(uuid())
   combinationId String
   subjectId     String
@@ -388,6 +423,9 @@ model SubjectCombinationSubject {
 }
 
 model StudentSubjectEnrollment {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id             String              @id @default(uuid())
   studentId      String
   classId        String
@@ -408,6 +446,9 @@ model StudentSubjectEnrollment {
 }
 
 model ApprovalLog {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id              String         @id @default(uuid())
   assessmentId    String
   action          ApprovalAction
@@ -422,6 +463,9 @@ model ApprovalLog {
 }
 
 model Timetable {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id             String    @id @default(uuid())
   classId        String
   subjectId      String
@@ -443,6 +487,9 @@ model Timetable {
 }
 
 model SyllabusTracker {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id                   String       @id @default(uuid())
   classSubjectId       String
   termId               String
@@ -459,6 +506,9 @@ model SyllabusTracker {
 }
 
 model AcademicIntervention {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id              String           @id @default(uuid())
   alertId         String?
   pairingId       String?
@@ -481,6 +531,9 @@ model AcademicIntervention {
 }
 
 model AcademicAuditLog {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id            String   @id @default(uuid())
   action        String
   performedById String
@@ -494,6 +547,9 @@ model AcademicAuditLog {
 // ─── Timetable System ─────────────────────────────────────────────────────────
 
 model Venue {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id          String      @id @default(uuid())
   name        String
   type        VenueType   @default(CLASSROOM)
@@ -509,6 +565,9 @@ model Venue {
 }
 
 model TimetableActivity {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id              String           @id @default(uuid())
   name            String
   activityType    SlotActivityType @default(LESSON)
@@ -525,6 +584,9 @@ model TimetableActivity {
 }
 
 model TimetableSheet {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id             String        @id @default(uuid())
   name           String
   timetableType  TimetableType @default(CLASS)
@@ -545,6 +607,9 @@ model TimetableSheet {
 }
 
 model TimetableSlot {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id            String            @id @default(uuid())
   sheetId       String
   sheet         TimetableSheet    @relation(fields: [sheetId], references: [id], onDelete: Cascade)

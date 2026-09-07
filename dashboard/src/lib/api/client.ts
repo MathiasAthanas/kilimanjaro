@@ -31,7 +31,7 @@ api.interceptors.response.use(
           refreshToken: session.refreshToken,
         });
         const payload = response.data?.data ?? response.data;
-        useAuthStore.getState().setSession({ ...session, accessToken: payload.accessToken }, true);
+        useAuthStore.getState().setSession({ ...session, accessToken: payload.accessToken, refreshToken: payload.refreshToken ?? session.refreshToken }, !!localStorage.getItem('ks.web.session.v3'));
         original.headers.Authorization = `Bearer ${payload.accessToken}`;
         return api(original);
       } catch (refreshError) {

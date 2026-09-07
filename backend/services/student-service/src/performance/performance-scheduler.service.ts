@@ -1,3 +1,4 @@
+import { SchoolJob } from '@kilimanjaro/security';
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PerformanceEngineService } from './performance-engine.service';
@@ -13,6 +14,7 @@ export class PerformanceSchedulerService {
   ) {}
 
   @Cron('0 2 * * *')
+  @SchoolJob()
   async nightlyFullAnalysis(): Promise<void> {
     const start = Date.now();
     this.logger.log('Nightly full analysis started');
@@ -34,6 +36,7 @@ export class PerformanceSchedulerService {
   }
 
   @Cron('0 3 * * *')
+  @SchoolJob()
   async expireStalePairings(): Promise<void> {
     const start = Date.now();
     this.logger.log('Pairing expiry job started');
@@ -42,6 +45,7 @@ export class PerformanceSchedulerService {
   }
 
   @Cron('0 7 * * 1')
+  @SchoolJob()
   async weeklyDigest(): Promise<void> {
     const start = Date.now();
     this.logger.log('Weekly digest job started');
@@ -50,6 +54,7 @@ export class PerformanceSchedulerService {
   }
 
   @Cron('0 4 * * 0')
+  @SchoolJob()
   async attendanceImpactCheck(): Promise<void> {
     const start = Date.now();
     this.logger.log('Attendance correlation check started');

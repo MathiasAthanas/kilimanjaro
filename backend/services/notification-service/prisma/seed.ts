@@ -217,7 +217,8 @@ async function main() {
   for (const template of templates) {
     await prisma.notificationTemplate.upsert({
       where: {
-        eventType_channel_language: {
+        schoolId_eventType_channel_language: {
+          schoolId: process.env.SCHOOL_ID || '00000000-0000-4000-8000-000000000001',
           eventType: template.eventType,
           channel: template.channel,
           language: 'en',
@@ -233,6 +234,7 @@ async function main() {
         updatedById: 'seed',
       },
       create: {
+        schoolId: process.env.SCHOOL_ID || '00000000-0000-4000-8000-000000000001',
         eventType: template.eventType,
         channel: template.channel,
         name: template.name,

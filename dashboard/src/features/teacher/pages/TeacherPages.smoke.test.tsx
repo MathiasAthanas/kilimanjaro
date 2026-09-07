@@ -16,6 +16,9 @@ vi.mock('framer-motion', () => ({
 
 // ─── Mock teacher hooks ───────────────────────────────────────────────────────
 vi.mock('../api/teacher.hooks', () => ({
+  useTeacherSyllabus: () => ({ data: [], isLoading: false }),
+  useCurrentTerm: () => ({ data: null }),
+  useUpdateSyllabusMutation: () => ({ mutate: vi.fn(), isPending: false }),
   useTeacherClasses:               () => ({ data: [], isLoading: false, isError: false, refetch: vi.fn() }),
   useTeacherAssessments:           () => ({ data: [], isLoading: false, isError: false, refetch: vi.fn() }),
   useTeacherTimetable:             () => ({ data: [], isLoading: false }),

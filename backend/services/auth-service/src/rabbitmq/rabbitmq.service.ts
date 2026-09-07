@@ -1,3 +1,4 @@
+import { schoolEvent } from '@kilimanjaro/security';
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as amqplib from 'amqplib';
@@ -17,6 +18,7 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
       this.connection = await amqplib.connect(url);
       this.channel = await this.connection.createChannel();
       await this.channel.assertExchange(this.exchange, 'topic', { durable: true });
+      await this.channel.assertExchange('student.events', 'topic', { durable: true });
       this.logger.log('RabbitMQ connected');
     } catch (error) {
       this.logger.warn(`RabbitMQ unavailable; publishing disabled (${(error as Error).message})`);
@@ -28,12 +30,12 @@ export class RabbitMQService implements OnModuleInit, OnModuleDestroy {
     await this.connection?.close();
   }
 
-  async publish(routingKey: string, payload: Record<string, unknown>): Promise<void> {
+  async publish(routingKey: string, payload: Record<string, unknown>, exchange = this.exchange): Promise<void> {
     if (!this.channel) {
       return;
     }
 
-    this.channel.publish(this.exchange, routingKey, Buffer.from(JSON.stringify(payload)), {
+    this.channel.publish(exchange, routingKey, Buffer.from(JSON.stringify(schoolEvent(payload))), {
       contentType: 'application/json',
       persistent: true,
     });

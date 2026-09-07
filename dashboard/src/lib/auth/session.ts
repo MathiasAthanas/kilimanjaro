@@ -5,6 +5,10 @@ export type SessionUser = {
   name: string;
   email: string;
   role: UserRole;
+  roles?: UserRole[];
+  primaryRole?: UserRole;
+  schoolId?: string | null;
+  school?: { id: string; code: string; name: string } | null;
   phone?: string;
   department?: string;
   status?: string;
@@ -18,8 +22,8 @@ export type AuthSession = {
   user: SessionUser;
 };
 
-const key = 'ks.web.session.v2';
-const legacyKeys = ['ks.web.session'];
+const key = 'ks.web.session.v3';
+const legacyKeys = ['ks.web.session', 'ks.web.session.v2'];
 
 export function getStoredSession(): AuthSession | null {
   for (const legacyKey of legacyKeys) {

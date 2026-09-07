@@ -1,3 +1,5 @@
+import { BulkStudentsDto } from './dto/bulk-students.dto';
+import { BulkCreateUsersDto } from './dto/bulk-create-users.dto';
 import {
   Body,
   Controller,
@@ -29,6 +31,20 @@ import { AdminResetPasswordDto } from './dto/admin-reset-password.dto';
 @Roles(Role.SYSTEM_ADMIN)
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
+
+  @Get('schools')
+  schools(@CurrentUser() user: { sub: string }) { return this.usersService.schools(user.sub); }
+
+  @Post('bulk')
+  bulk(@Body() dto: BulkCreateUsersDto, @CurrentUser() user: { sub: string }) { return this.usersService.bulkCreate(dto, user.sub); }
+
+  @Post('bulk-students')
+  bulkStudents(@Body() dto: BulkStudentsDto, @CurrentUser() user: { sub: string }) { return this.usersService.bulkStudents(dto, user.sub); }
+
+  @Get(':userId')
+  async detail(@Param('userId') id: string, @CurrentUser() user: { sub: string }) {
+    return this.usersService.toSafeUser(await this.usersService.authorizeTarget(id, user.sub));
+  }
 
   @Post()
   async create(@Body() dto: CreateUserDto, @CurrentUser() user: { sub: string }) {
@@ -87,8 +103,8 @@ export class UsersController {
   }
 
   @Get(':userId/sessions')
-  async sessions(@Param('userId') userId: string) {
-    return this.usersService.listSessions(userId);
+  async sessions(@Param('userId') userId: string, @CurrentUser() user: { sub: string }) {
+    return this.usersService.listSessions(userId, user.sub);
   }
 
   @Delete(':userId/sessions/:sessionId')
@@ -107,7 +123,7 @@ export class UsersController {
 
   @Get()
   @Roles(Role.SYSTEM_ADMIN, Role.PRINCIPAL, Role.ACADEMIC_QA, Role.HEAD_OF_DEPARTMENT)
-  async list(@Query() query: ListUsersDto) {
-    return this.usersService.listUsers(query);
+  async list(@Query() query: ListUsersDto, @CurrentUser() user: { sub: string }) {
+    return this.usersService.listUsers(query, user.sub);
   }
 }

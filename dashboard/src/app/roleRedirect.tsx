@@ -9,7 +9,7 @@ export function RoleRedirect() {
   const session = useAuthStore((state) => state.session);
   if (!session) return <Navigate to="/login" replace />;
 
-  if (isMobilePrimaryRole(session.user.role)) {
+  if (isMobilePrimaryRole((session.user.primaryRole ?? session.user.role))) {
     return (
       <div className="grid min-h-[70vh] place-items-center">
         <Card className="max-w-lg p-8 text-center">
@@ -21,7 +21,7 @@ export function RoleRedirect() {
     );
   }
 
-  return <RoleRouterProgress target={getDefaultRouteForRole(session.user.role)} />;
+  return <RoleRouterProgress target={getDefaultRouteForRole((session.user.primaryRole ?? session.user.role))} />;
 }
 
 function RoleRouterProgress({ target }: { target: string }) {

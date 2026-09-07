@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowRight, Award, BarChart2, BookOpen, Calendar, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Clock, Copy, Download, FileText, Filter, GraduationCap, MessageSquarePlus, Scale, Search, Send, ShieldCheck, Star, TrendingDown, TrendingUp, Users, X, XCircle } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Award, BarChart2, BookOpen, Calendar, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Clock, Copy, Download, FileText, Filter, MessageSquarePlus, Scale, Search, Send, ShieldCheck, TrendingDown, TrendingUp, Users, X, XCircle } from 'lucide-react';
 import type { ReactNode } from 'react';
 import React, { useMemo, useState } from 'react';
 import { NavLink, useNavigate, useParams } from 'react-router-dom';
@@ -6,7 +6,7 @@ import { toast } from '../../../lib/toast';
 import { Badge } from '../../../components/common/Badge';
 import { Button } from '../../../components/common/Button';
 import { Card } from '../../../components/common/Card';
-import { hodAlerts, hodApprovals, hodInterventions, hodMarks, hodPairings, hodSubjects, hodTeachers } from '../api/hodApi';
+import { hodApprovals, hodInterventions, hodMarks, hodSubjects, hodTeachers } from '../api/hodApi';
 import { DataError } from '../../../components/feedback/DataError';
 import { EmptyState } from '../../../components/feedback/EmptyState';
 import { SkeletonTable } from '../../../components/common/SkeletonTable';
@@ -43,8 +43,6 @@ import {
   HodMetricStrip,
   HodTable,
   HodWorkspaceShell,
-  InterventionCard,
-  PairingReviewCard,
   ProgressBar,
   RiskFlagBadge,
   SubjectHealthCard,
@@ -1032,7 +1030,6 @@ export function DepartmentAlertsPage() {
                 const tone   = high ? 'rose' : med ? 'amber' : 'emerald';
                 const border = tone === 'rose' ? 'border-l-ks-rose' : tone === 'amber' ? 'border-l-ks-amber' : 'border-l-ks-emerald';
                 const bgTone = tone === 'rose' ? 'bg-ks-rose' : tone === 'amber' ? 'bg-ks-amber' : 'bg-ks-emerald';
-                const textTone = tone === 'rose' ? 'text-ks-rose' : tone === 'amber' ? 'text-ks-amber' : 'text-ks-emerald';
                 const badgeBg  = tone === 'rose' ? 'border-ks-rose/25 bg-ks-rose/10 text-ks-rose' : tone === 'amber' ? 'border-ks-amber/25 bg-ks-amber/10 text-ks-amber' : 'border-ks-emerald/25 bg-ks-emerald/10 text-ks-emerald';
                 const isOpen   = actionPanelId === alert.id;
                 return (
@@ -1685,7 +1682,7 @@ export function HodStudentPerformancePage() {
 
   const studentName = studentInfo.firstName
     ? `${studentInfo.firstName} ${studentInfo.lastName ?? ''}`.trim()
-    : (criticalAlert?.student ?? 'Student');
+    : String(criticalAlert?.student ?? 'Student');
 
   // Build per-subject data
   const subjectTrends = new Map<string, { scores: number[]; dates: string[] }>();
@@ -3144,31 +3141,6 @@ function MarksGradeDistribution({ marks }: { marks: typeof hodMarks }) {
   );
 }
 
-function SubmissionTimeline() {
-  const { data: apiApprovals = [] } = useHodPendingApprovals();
-  const nodes = (apiApprovals as Array<{ id: string; assessment: string; submittedHoursAgo: number }>).slice(0, 6);
-  return (
-    <Card className="rounded-xl p-5">
-      <SectionTitle title="Recent submissions" />
-      {nodes.length === 0 ? (
-        <p className="mt-4 text-sm font-semibold text-ks-muted">No recent submissions.</p>
-      ) : (
-        <div className="mt-6 flex items-center gap-3 overflow-x-auto pb-2">
-          {nodes.map((node) => {
-            const overdue = node.submittedHoursAgo >= 48;
-            return (
-              <div key={node.id} className="flex min-w-28 flex-col items-center">
-                <div className={`h-5 w-5 rounded-full border-4 border-white shadow ${overdue ? 'bg-ks-rose' : 'bg-ks-emerald'}`} />
-                <p className="mt-2 line-clamp-2 text-center text-xs font-bold text-ks-navy">{node.assessment}</p>
-                <p className="text-[10px] font-black uppercase text-ks-muted">{node.submittedHoursAgo}h ago</p>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </Card>
-  );
-}
 
 function SubjectTabs({ active }: { active: string }) {
   const { data: apiSubjects = [] as typeof hodSubjects } = useHodClassSubjects() as unknown as { data: typeof hodSubjects };
@@ -3206,39 +3178,6 @@ function FilterBar({ items }: { items: string[] }) {
           {item}
         </button>
       ))}
-    </Card>
-  );
-}
-
-// Action-to-route map for ActionPanel navigation
-const ACTION_ROUTES: Record<string, string> = {
-  'open class analytics':  '/hod/department',
-  'create support record': '/hod/interventions',
-  'export teacher report': '/hod/exports',
-};
-
-function ActionPanel({ title, actions }: { title: string; actions: string[] }) {
-  const navigate = useNavigate();
-  return (
-    <Card className="sticky top-24 h-fit rounded-xl border-l-4 border-l-ks-blue p-5">
-      <p className="text-[11px] font-black uppercase tracking-[0.22em] text-ks-muted">{title}</p>
-      <div className="mt-4 space-y-2">
-        {actions.map((action) => {
-          const route = ACTION_ROUTES[action.toLowerCase()];
-          if (!route) return null;
-          return (
-            <Button
-              key={action}
-              variant={action.toLowerCase().includes('reject') ? 'danger' : 'secondary'}
-              className="w-full justify-between rounded-xl"
-              onClick={() => navigate(route)}
-            >
-              {action}
-              <ArrowRight className="h-4 w-4" />
-            </Button>
-          );
-        })}
-      </div>
     </Card>
   );
 }

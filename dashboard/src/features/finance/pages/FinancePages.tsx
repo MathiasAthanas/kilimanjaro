@@ -29,10 +29,8 @@ import {
   Search,
   Send,
   ShieldCheck,
-  TrendingDown,
   TrendingUp,
   User,
-  Users,
   WalletCards,
   X,
   Zap,
@@ -106,7 +104,6 @@ import {
   useBankTransferMutation,
   useAddPaymentNoteMutation,
   useDailyCollections,
-  useFeeDefaulters,
 } from '../api/finance.hooks';
 import {
   ActionPanel,
@@ -116,21 +113,16 @@ import {
   AuditLogRow,
   CollectionRing,
   DenseBarChart,
-  FeeMatrixGrid,
   FinanceBreadcrumb,
   FinanceFilters,
   FinanceMetricStrip,
   FinanceStatusBadge,
   FinanceTable,
   FinanceWorkspaceShell,
-  InvoiceTable,
   MiniColumnChart,
-  PaymentForm,
   PaymentTable,
-  ReadOnlyApprovalNotice,
   ReceiptList,
   ReceiptPreview,
-  ReportCard,
   Td,
   downloadReceiptPdf,
   downloadInvoicePdf,
@@ -875,7 +867,7 @@ export function InvoiceDetailPage() {
   const invoicePayments = embeddedPayments.length > 0
     ? embeddedPayments
     : allPayments.filter((p) => p.invoiceId === invoice.id || p.invoiceNumber === invoice.number);
-  const hasConfirmedPayment = invoicePayments.some((p) => String(p.status).toUpperCase() === 'CONFIRMED');
+  const hasConfirmedPayment = invoicePayments.some((p: { status: string }) => String(p.status).toUpperCase() === 'CONFIRMED');
   const isPending = cancelMutation.isPending || discountMutation.isPending || waiveMutation.isPending || pdfLoading;
   const discountPreviewBalance = invoice.outstanding - (Number(discountForm.amount) || 0);
 
@@ -1166,7 +1158,7 @@ export function StudentLedgerPage() {
       generateStatement.mutate(
         { reportType: 'STUDENT_STATEMENT', params: { studentId: studentId ?? '' } },
         {
-          onSuccess: (job) => downloadReportWhenReady(job),
+          onSuccess: (job) => downloadReportWhenReady(String(job.id), 'student-statement.pdf'),
           onError: () => toast('Failed to generate statement', 'error'),
         },
       );
@@ -3998,7 +3990,6 @@ export function FinancialReportsPage() {
   );
 }
 
-const BAR_TONES = ['bg-[#00334f]', 'bg-[#d59a1b]', 'bg-[#10b981]', 'bg-[#64748b]', 'bg-[#e11d48]', 'bg-[#0ea5e9]'];
 
 export function CollectionSummaryReportPage() {
   const { data: summary } = useCollectionSummary() as unknown as {
@@ -4322,10 +4313,10 @@ export function OutstandingBalancesReportPage() {
   }, [activeBalances, search, sortField, sortDir]);
 
   function riskBadge(days: number) {
-    if (days <= 0) return <Badge variant="success">Current</Badge>;
-    if (days <= 30) return <Badge variant="success">Low</Badge>;
-    if (days <= 60) return <Badge variant="warning">Medium</Badge>;
-    if (days <= 90) return <Badge variant="error">High</Badge>;
+    if (days <= 0) return <Badge tone="emerald">Current</Badge>;
+    if (days <= 30) return <Badge tone="emerald">Low</Badge>;
+    if (days <= 60) return <Badge tone="amber">Medium</Badge>;
+    if (days <= 90) return <Badge tone="rose">High</Badge>;
     return <span className="inline-flex items-center rounded-full bg-[#991b1b] px-2 py-0.5 text-xs font-bold text-white">Critical</span>;
   }
 
@@ -5405,68 +5396,6 @@ export function FinanceNotReadyState() {
 
 // ─── Shared page components ───────────────────────────────────────────────────
 
-function ReportPage({
-  title,
-  reportBreadcrumb,
-  chartValues,
-  overdue = false,
-}: {
-  title: string;
-  reportBreadcrumb: string;
-  chartValues: Array<{ label: string; value: number; tone?: string }>;
-  overdue?: boolean;
-}) {
-  const { data: apiOverview = EMPTY_OVERVIEW } = useFinanceOverview() as unknown as { data: typeof financeOverview };
-  const { data: apiPayments = [] as typeof payments } = usePayments() as unknown as { data: typeof payments };
-  const generateMutation = useGenerateReportMutation();
-  const collected = overdue ? apiOverview.outstanding : apiOverview.totalCollected;
-  const collectedPct = apiOverview.totalInvoiced > 0 ? Math.round((collected / apiOverview.totalInvoiced) * 100) : 0;
-  const invoiceCount = apiPayments.length;
-  const today = new Date().toLocaleDateString();
-  // Real collection trend: bucket confirmed payments by day
-  const trendData = useMemo(() => {
-    const byDay = new Map<string, number>();
-    apiPayments.forEach((p) => {
-      const day = String(p.date ?? '').slice(0, 10);
-      if (!day) return;
-      byDay.set(day, (byDay.get(day) ?? 0) + (p.amount ?? 0));
-    });
-    return [...byDay.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([, v]) => v);
-  }, [apiPayments]);
-  return (
-    <FinanceWorkspaceShell title={title} eyebrow="Generated report workspace">
-      <FinanceBreadcrumb crumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Reports', to: '/finance/reports' }, { label: reportBreadcrumb }]} />
-      <FinanceMetricStrip items={[
-        { label: overdue ? 'Outstanding' : 'Collected', value: formatTZS(collected), detail: 'Current term', tone: overdue ? 'red' : 'green', trend: overdue ? 'down' : 'up', progress: collectedPct },
-        { label: 'Payments', value: String(invoiceCount), detail: 'Report scope', tone: 'navy' },
-        { label: 'Collection Rate', value: `${apiOverview.collectionRate}%`, detail: 'Term rate', tone: 'slate' },
-        { label: 'Generated', value: today, detail: 'Live report', tone: 'gold' },
-      ]} />
-      <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_340px]">
-        <div className="space-y-gutter">
-          <MiniColumnChart title="Collection Trend" subtitle={trendData.length ? `${trendData.length}-day view` : 'No dated payments yet'} data={trendData.length ? trendData : [collected]} startLabel="Earliest" endLabel="Latest" />
-          {chartValues.length ? <DenseBarChart values={chartValues} /> : null}
-        </div>
-        <div className="space-y-gutter sticky top-24 h-fit">
-          <div className="rounded-lg border border-[#d5dde6] bg-white p-5">
-            <p className="text-[11px] font-black uppercase tracking-widest text-[#64748b]">Report Actions</p>
-            <div className="mt-4 space-y-2">
-              <Button variant="secondary" className="w-full justify-between rounded"
-                onClick={async () => { toast('Generating PDF…', 'info'); try { const result = await generateMutation.mutateAsync({ type: 'finance-report', format: 'pdf', report: reportBreadcrumb }) as Record<string, unknown>; const jobId = String(result?.id ?? result?.jobId ?? ''); if (jobId) { await downloadReportWhenReady(jobId, `${reportBreadcrumb}.pdf`); toast('PDF downloaded', 'success'); } } catch { toast('Failed to generate PDF', 'error'); } }}>
-                <span>Download PDF</span><ArrowRight className="h-4 w-4" />
-              </Button>
-              <Button variant="secondary" className="w-full justify-between rounded"
-                onClick={async () => { toast('Generating CSV…', 'info'); try { const result = await generateMutation.mutateAsync({ type: 'finance-report', format: 'csv', report: reportBreadcrumb }) as Record<string, unknown>; const jobId = String(result?.id ?? result?.jobId ?? ''); if (jobId) { await downloadReportWhenReady(jobId, `${reportBreadcrumb}.csv`); toast('CSV downloaded', 'success'); } } catch { toast('Failed to generate CSV', 'error'); } }}>
-                <span>Export CSV</span><ArrowRight className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
-      <PaymentTable rows={apiPayments} />
-    </FinanceWorkspaceShell>
-  );
-}
 
 function SideSummary({ title, items }: { title: string; items: Array<[string, string]> }) {
   return (
@@ -5561,16 +5490,6 @@ function InvoiceActionPanel({ invoice, onRecordPayment, onDownloadPdf, onRegenPd
   );
 }
 
-function SectionTitle({ title, to }: { title: string; to: string }) {
-  return (
-    <div className="flex items-center justify-between">
-      <h2 className="font-display text-xl font-black text-[#00334f]">{title}</h2>
-      <NavLink to={to} className="flex items-center gap-1 text-xs font-black uppercase tracking-widest text-[#d59a1b]">
-        Open <ArrowRight className="h-3.5 w-3.5" />
-      </NavLink>
-    </div>
-  );
-}
 
 // ─── Param hooks — these are now unused (detail pages use hooks directly) ─────
 // Kept for any remaining internal uses

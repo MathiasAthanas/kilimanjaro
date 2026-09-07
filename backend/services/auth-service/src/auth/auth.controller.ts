@@ -118,13 +118,13 @@ export class AuthController {
 
   @UseGuards(InternalApiGuard)
   @Get('internal/user/:userId')
-  async getUserForGateway(@Param('userId') userId: string) {
-    return this.authService.getUserForGateway(userId);
+  async getUserForGateway(@Param('userId') userId: string, @Req() req: Request) {
+    return this.authService.getUserForGateway(userId, req.header('x-school-id'));
   }
 
   @UseGuards(InternalApiGuard)
   @Get('internal/users-by-role')
-  async getUsersByRole(@Query('roles') roles: string) {
-    return this.authService.getUsersByRoleInternal(roles || '');
+  async getUsersByRole(@Query('roles') roles: string, @Req() req: Request) {
+    return this.authService.getUsersByRoleInternal(roles || '', req.header('x-school-id'));
   }
 }

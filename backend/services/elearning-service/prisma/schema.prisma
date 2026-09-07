@@ -90,6 +90,9 @@ enum EducationStage {
 }
 
 model CourseSpace {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id             String       @id @default(uuid())
   classSubjectId String
   teacherId      String
@@ -131,6 +134,9 @@ model CourseSpace {
 }
 
 model Lesson {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id               String        @id @default(uuid())
   courseSpaceId    String
   courseSpace      CourseSpace   @relation(fields: [courseSpaceId], references: [id], onDelete: Cascade)
@@ -155,6 +161,9 @@ model Lesson {
 }
 
 model Material {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id               String        @id @default(uuid())
   lessonId         String
   lesson           Lesson        @relation(fields: [lessonId], references: [id], onDelete: Cascade)
@@ -186,6 +195,9 @@ model Material {
 }
 
 model Assignment {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id                  String         @id @default(uuid())
   courseSpaceId       String
   courseSpace         CourseSpace    @relation(fields: [courseSpaceId], references: [id], onDelete: Cascade)
@@ -216,6 +228,9 @@ model Assignment {
 }
 
 model Submission {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id               String           @id @default(uuid())
   assignmentId     String
   assignment       Assignment       @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
@@ -246,6 +261,9 @@ model Submission {
 }
 
 model Quiz {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id               String       @id @default(uuid())
   courseSpaceId    String
   courseSpace      CourseSpace  @relation(fields: [courseSpaceId], references: [id], onDelete: Cascade)
@@ -275,6 +293,9 @@ model Quiz {
 }
 
 model QuizQuestion {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id            String       @id @default(uuid())
   quizId        String
   quiz          Quiz         @relation(fields: [quizId], references: [id], onDelete: Cascade)
@@ -297,6 +318,9 @@ model QuizQuestion {
 }
 
 model QuizOption {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id          String       @id @default(uuid())
   questionId  String
   question    QuizQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
@@ -310,6 +334,9 @@ model QuizOption {
 }
 
 model QuizAttempt {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id               String        @id @default(uuid())
   quizId           String
   quiz             Quiz          @relation(fields: [quizId], references: [id], onDelete: Cascade)
@@ -336,6 +363,9 @@ model QuizAttempt {
 }
 
 model QuizAnswer {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id               String       @id @default(uuid())
   attemptId        String
   attempt          QuizAttempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
@@ -353,6 +383,9 @@ model QuizAnswer {
 }
 
 model CourseEnrollment {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id             String      @id @default(uuid())
   courseSpaceId  String
   courseSpace    CourseSpace @relation(fields: [courseSpaceId], references: [id], onDelete: Cascade)
@@ -368,6 +401,9 @@ model CourseEnrollment {
 }
 
 model MaterialProgress {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id             String      @id @default(uuid())
   materialId     String
   material       Material    @relation(fields: [materialId], references: [id], onDelete: Cascade)
@@ -386,6 +422,9 @@ model MaterialProgress {
 }
 
 model LessonProgress {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id             String      @id @default(uuid())
   lessonId       String
   lesson         Lesson      @relation(fields: [lessonId], references: [id], onDelete: Cascade)
@@ -402,6 +441,9 @@ model LessonProgress {
 }
 
 model CourseAnnouncement {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id            String        @id @default(uuid())
   courseSpaceId String
   courseSpace   CourseSpace   @relation(fields: [courseSpaceId], references: [id], onDelete: Cascade)
@@ -420,6 +462,9 @@ model CourseAnnouncement {
 }
 
 model DiscussionThread {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id            String      @id @default(uuid())
   courseSpaceId String
   courseSpace   CourseSpace @relation(fields: [courseSpaceId], references: [id], onDelete: Cascade)
@@ -443,6 +488,9 @@ model DiscussionThread {
 }
 
 model DiscussionReply {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id        String           @id @default(uuid())
   threadId  String
   thread    DiscussionThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
@@ -458,6 +506,9 @@ model DiscussionReply {
 }
 
 model ElearningAuditLog {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id         String   @id @default(uuid())
   action     String
   entityType String

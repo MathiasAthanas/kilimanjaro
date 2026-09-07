@@ -38,7 +38,8 @@
     "mathjs": "^15.1.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
-    "winston": "^3.18.3"
+    "winston": "^3.18.3",
+    "@kilimanjaro/security": "1.0.0"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.4.9",

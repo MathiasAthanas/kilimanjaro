@@ -1,4 +1,5 @@
-import { All, Controller, Req, UseGuards } from '@nestjs/common';
+import { identityHeaders } from '@kilimanjaro/security';
+import { ForbiddenException, All, Controller, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Request } from 'express';
 import { GatewayService } from './gateway.service';
@@ -25,7 +26,7 @@ function buildHeaders(req: Request): Record<string, string> {
     headers['x-school-id'] = String(payload.schoolId);
   }
 
-  return headers;
+  return { ...headers, ...identityHeaders(user), 'X-Internal-Api-Key': process.env.INTERNAL_API_KEY || '', 'X-Internal-Request': 'true' };
 }
 
 @ApiTags('Auth')
@@ -59,16 +60,8 @@ export class AuthProxyController {
 
   @All('internal/*')
   @Public()
-  async internal(@Req() req: Request) {
-    return this.gateway.proxy(
-      this.gateway.getServiceUrl('auth'),
-      req.originalUrl,
-      req.method,
-      req.body,
-      {
-        'x-internal-api-key': String(req.headers['x-internal-api-key'] || ''),
-      },
-    );
+  async internal() {
+    throw new ForbiddenException('Internal routes are not exposed through the gateway');
   }
 
   @All('*')

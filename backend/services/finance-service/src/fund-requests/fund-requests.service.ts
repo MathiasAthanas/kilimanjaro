@@ -1,3 +1,4 @@
+import { hasRole, hasAnyRole, isTeacherOnly, isSelfService } from '@kilimanjaro/security';
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { FinancialAuditAction, FundRequestStatus, Prisma } from '../../generated/prisma';
 import { PrismaService } from '../prisma/prisma.service';
@@ -76,7 +77,7 @@ export class FundRequestsService {
       ROLES.MANAGING_DIRECTOR,
       ROLES.BOARD_DIRECTOR,
     ];
-    if (!scopedRoles.includes(user.role)) {
+    if (!hasAnyRole(user, scopedRoles)) {
       where.requestedById = user.id;
     }
 
@@ -108,7 +109,7 @@ export class FundRequestsService {
       ROLES.MANAGING_DIRECTOR,
       ROLES.BOARD_DIRECTOR,
     ];
-    if (!privileged.includes(user.role) && row.requestedById !== user.id) {
+    if (!hasAnyRole(user, privileged) && row.requestedById !== user.id) {
       throw new ForbiddenException('You can only view your own requests');
     }
     return row;
@@ -182,7 +183,7 @@ export class FundRequestsService {
         rejectionReason: dto.reason,
         rejectedByRole: user.role,
         decidedAt: new Date(),
-        ...(user.role === ROLES.PRINCIPAL
+        ...(hasRole(user, 'PRINCIPAL')
           ? { principalId: user.id, principalName: dto.actorName }
           : { bursarId: existing.bursarId ?? user.id, bursarName: existing.bursarName ?? dto.actorName }),
         events: {
@@ -271,7 +272,7 @@ export class FundRequestsService {
     if (!existing) throw new NotFoundException('Fund request not found');
 
     const privileged: string[] = [ROLES.FINANCE, ROLES.SYSTEM_ADMIN];
-    if (existing.requestedById !== user.id && !privileged.includes(user.role)) {
+    if (existing.requestedById !== user.id && !hasAnyRole(user, privileged)) {
       throw new ForbiddenException('Only the requester can cancel this request');
     }
     if (![FundRequestStatus.SUBMITTED, FundRequestStatus.FORWARDED].includes(existing.status as any)) {
@@ -308,7 +309,7 @@ export class FundRequestsService {
       ROLES.MANAGING_DIRECTOR,
       ROLES.BOARD_DIRECTOR,
     ];
-    if (!scopedRoles.includes(user.role)) where.requestedById = user.id;
+    if (!hasAnyRole(user, scopedRoles)) where.requestedById = user.id;
 
     const byStatus = await this.prisma.fundRequest.groupBy({
       by: ['status'],

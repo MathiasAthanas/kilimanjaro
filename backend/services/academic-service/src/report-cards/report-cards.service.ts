@@ -1,3 +1,4 @@
+import { hasRole, hasAnyRole, isTeacherOnly, isSelfService } from '@kilimanjaro/security';
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
@@ -362,10 +363,10 @@ export class ReportCardsService {
       return cached;
     }
 
-    if (user.role === ROLES.PARENT) {
+    if ((isSelfService(user) && hasRole(user, 'PARENT'))) {
       await this.accessControl.assertParentOwnsStudent(user.id, studentId);
     }
-    if (user.role === ROLES.STUDENT) {
+    if ((isSelfService(user) && hasRole(user, 'STUDENT'))) {
       await this.accessControl.assertStudentOwnsRecord(user.id, studentId);
     }
 
@@ -377,7 +378,7 @@ export class ReportCardsService {
       throw new NotFoundException('Report card not found');
     }
 
-    if ([ROLES.PARENT, ROLES.STUDENT].includes(user.role as any) && !reportCard.isPublished) {
+    if (hasAnyRole(user, [ROLES.PARENT, ROLES.STUDENT]) && !reportCard.isPublished) {
       throw new ForbiddenException('Report card not published');
     }
 
@@ -386,17 +387,17 @@ export class ReportCardsService {
   }
 
   async listForStudent(studentId: string, user: RequestUser) {
-    if (user.role === ROLES.PARENT) {
+    if ((isSelfService(user) && hasRole(user, 'PARENT'))) {
       await this.accessControl.assertParentOwnsStudent(user.id, studentId);
     }
-    if (user.role === ROLES.STUDENT) {
+    if ((isSelfService(user) && hasRole(user, 'STUDENT'))) {
       await this.accessControl.assertStudentOwnsRecord(user.id, studentId);
     }
 
     return this.prisma.reportCard.findMany({
       where: {
         studentId,
-        ...(([ROLES.PARENT, ROLES.STUDENT] as string[]).includes(user.role) ? { isPublished: true } : {}),
+        ...(isSelfService(user) ? { isPublished: true } : {}),
       },
       orderBy: [{ academicYearId: 'desc' }, { termId: 'asc' }],
     });
@@ -418,10 +419,10 @@ export class ReportCardsService {
     }
 
     const data: any = {};
-    if (user.role === ROLES.TEACHER && dto.teacherComment !== undefined) {
+    if (isTeacherOnly(user) && dto.teacherComment !== undefined) {
       data.teacherComment = dto.teacherComment;
     }
-    if (user.role === ROLES.PRINCIPAL && dto.principalComment !== undefined) {
+    if (hasRole(user, 'PRINCIPAL') && dto.principalComment !== undefined) {
       data.principalComment = dto.principalComment;
       data.principalSignedAt = new Date();
       data.principalSignedById = user.id;

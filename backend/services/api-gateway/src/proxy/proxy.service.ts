@@ -1,4 +1,5 @@
-import { HttpException, HttpStatus, Injectable, ServiceUnavailableException } from '@nestjs/common';
+import { identityHeaders, context } from '@kilimanjaro/security';
+import { ForbiddenException, HttpException, HttpStatus, Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
@@ -28,6 +29,7 @@ export class ProxyService {
 
   resolveRoute(path: string): ResolvedRoute {
     const normalized = this.normalizePath(path);
+    if (/\/internal(?:\/|$)/.test(normalized)) throw new ForbiddenException('Internal routes are not exposed through the gateway');
     const urls = getServiceUrls(this.configService);
 
     if (normalized.startsWith('/auth/')) {
@@ -64,10 +66,10 @@ export class ProxyService {
   async forward(
     req: Request,
     route: ResolvedRoute,
-    auth?: { id: string; role: string; email?: string | null },
+    auth?: { id: string; role: string; email?: string | null; schoolId?: string | null; roles?: string[]; primaryRole?: string },
   ): Promise<ProxiedResponse> {
     const internalApiKey = this.configService.get<string>('INTERNAL_API_KEY') || '';
-    const timeoutMs = Number(this.configService.get<string>('PROXY_TIMEOUT_MS', '30000'));
+    const timeoutMs = /\/auth\/users\/bulk(?:-students)?$/.test(route.outboundPath) ? 600000 : Number(this.configService.get<string>('PROXY_TIMEOUT_MS', '30000'));
 
     const headers: Record<string, string> = {};
 
@@ -97,6 +99,7 @@ export class ProxyService {
       headers['X-User-Email'] = auth.email || '';
     }
 
+    Object.assign(headers, identityHeaders(context() || auth));
     const targetUrl = `${route.serviceUrl}${route.outboundPath}`;
     const wantsBinary = this.isBinaryRoute(route.outboundPath);
 

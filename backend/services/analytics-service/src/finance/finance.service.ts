@@ -1,3 +1,4 @@
+import { requireSchool } from '@kilimanjaro/security';
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma';
 import { PrismaService } from '../prisma/prisma.service';
@@ -29,11 +30,12 @@ export class FinanceAnalyticsService {
             COALESCE(SUM(COALESCE("waivedAmount", 0)), 0) AS "waivedAmount",
             COALESCE(SUM(COALESCE("discountAmount", 0)), 0) AS "discountedAmount"
           FROM finance."Invoice"
-          WHERE ($1::text IS NULL OR "academicYearId" = $1)
+          WHERE "schoolId" = $3 AND ($1::text IS NULL OR "academicYearId" = $1)
             AND ($2::text IS NULL OR "termId" = $2)
         `,
         academicYearId ?? null,
         termId ?? null,
+        requireSchool(),
       );
       const row = rows[0] || { waivedAmount: 0, discountedAmount: 0 };
       return {
@@ -63,10 +65,11 @@ export class FinanceAnalyticsService {
             COALESCE(SUM(ii."outstandingAmount"), 0) AS "outstandingAmount"
           FROM finance."InvoiceItem" ii
           INNER JOIN finance."FeeCategory" fc ON fc."id" = ii."feeCategoryId"
-          WHERE ii."invoiceId" = ANY($1)
+          WHERE ii."invoiceId" = ANY($1) AND ii."schoolId" = $2 AND fc."schoolId" = $2
           GROUP BY fc."name"
         `,
         invoiceIds,
+        requireSchool(),
       );
 
       return rows.map((row) => {
@@ -314,7 +317,8 @@ export class FinanceAnalyticsService {
     let assets: AssetRow[] = [];
     try {
       assets = await this.prisma.$queryRawUnsafe<AssetRow[]>(
-        'SELECT id, name, category, condition, "assetType", status, location, "purchaseCost", "currentValue" FROM finance."Asset"',
+        'SELECT id, name, category, condition, "assetType", status, location, "purchaseCost", "currentValue" FROM finance."Asset" WHERE "schoolId" = $1',
+        requireSchool(),
       );
     } catch {
       assets = [];

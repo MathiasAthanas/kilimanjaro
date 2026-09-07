@@ -1,3 +1,4 @@
+import { schoolEvent } from '@kilimanjaro/security';
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as amqplib from 'amqplib';
@@ -54,7 +55,7 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    this.channel.publish('finance.events', routingKey, Buffer.from(JSON.stringify(payload)), {
+    this.channel.publish('finance.events', routingKey, Buffer.from(JSON.stringify(schoolEvent(payload))), {
       contentType: 'application/json',
       persistent: true,
     });

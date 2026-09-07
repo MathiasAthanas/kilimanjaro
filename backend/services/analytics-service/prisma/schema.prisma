@@ -179,6 +179,9 @@ enum AnnouncementStatus {
 }
 
 model DashboardSnapshot {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id           String   @id @default(uuid())
   snapshotType String
   scope        String
@@ -195,6 +198,9 @@ model DashboardSnapshot {
 }
 
 model KpiHistory {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id             String   @id @default(uuid())
   kpiName         String
   scope           String
@@ -210,6 +216,9 @@ model KpiHistory {
 }
 
 model GeneratedReport {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id              String      @id @default(uuid())
   reportType      ReportType
   title           String
@@ -233,6 +242,9 @@ model GeneratedReport {
 }
 
 model MetricEvent {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id            String   @id @default(uuid())
   eventType     String
   sourceService String
@@ -244,6 +256,9 @@ model MetricEvent {
 }
 
 model Student {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id                 String   @id
   registrationNumber String
   firstName          String
@@ -259,6 +274,9 @@ model Student {
 }
 
 model Enrolment {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id             String   @id
   studentId      String
   classId        String
@@ -270,6 +288,9 @@ model Enrolment {
 }
 
 model Class {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id             String @id
   name           String
   level          Int
@@ -282,14 +303,22 @@ model Class {
 }
 
 model AcademicYear {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id        String @id
   name      String
   isCurrent Boolean
 
   @@schema("students")
+
+  @@unique([schoolId, name])
 }
 
 model Term {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id             String @id
   name           String
   academicYearId String
@@ -299,6 +328,9 @@ model Term {
 }
 
 model AttendanceRecord {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id        String   @id
   studentId String
   classId   String
@@ -310,6 +342,9 @@ model AttendanceRecord {
 }
 
 model DisciplineRecord {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id           String   @id
   studentId    String
   category     DisciplineCategory
@@ -322,6 +357,9 @@ model DisciplineRecord {
 }
 
 model PerformanceSnapshot {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id                  String @id
   studentId           String
   subjectId           String
@@ -338,6 +376,9 @@ model PerformanceSnapshot {
 }
 
 model PerformanceTrend {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id                      String @id
   studentId               String
   subjectId               String
@@ -354,6 +395,9 @@ model PerformanceTrend {
 }
 
 model PerformanceAlert {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id         String   @id
   studentId  String
   subjectId  String
@@ -369,6 +413,9 @@ model PerformanceAlert {
 }
 
 model PeerPairing {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id                   String   @id
   studentId            String
   peerId               String
@@ -386,6 +433,9 @@ model PeerPairing {
 }
 
 model StudentGuardianLink {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id         String @id
   studentId  String
   guardianId String
@@ -395,14 +445,22 @@ model StudentGuardianLink {
 }
 
 model Subject {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id   String @id
   name String
   code String
 
   @@schema("academics")
+
+  @@unique([schoolId, code])
 }
 
 model ClassSubject {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id             String @id
   classId        String
   subjectId      String
@@ -413,6 +471,9 @@ model ClassSubject {
 }
 
 model TermResult {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id                   String @id
   studentId            String
   classSubjectId       String
@@ -432,6 +493,9 @@ model TermResult {
 }
 
 model ReportCard {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id                   String @id
   studentId            String
   classId              String
@@ -449,6 +513,9 @@ model ReportCard {
 }
 
 model Assessment {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id               String @id
   classSubjectId   String
   assessmentTypeId String
@@ -459,6 +526,9 @@ model Assessment {
 }
 
 model SyllabusTracker {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id                   String @id
   classSubjectId       String
   termId               String
@@ -468,6 +538,9 @@ model SyllabusTracker {
 }
 
 model AcademicIntervention {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id              String @id
   studentId       String
   subjectId       String?
@@ -484,6 +557,9 @@ model AcademicIntervention {
 }
 
 model Invoice {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id                 String   @id
   studentId          String
   classId            String
@@ -500,6 +576,9 @@ model Invoice {
 }
 
 model Payment {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id        String   @id
   invoiceId String
   studentId String
@@ -513,15 +592,25 @@ model Payment {
 }
 
 model FeeCategory {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id         String @id
   name       String
   code       String
   isOptional Boolean
 
   @@schema("finance")
+
+  @@unique([schoolId, name])
+
+  @@unique([schoolId, code])
 }
 
 model Receipt {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id        String   @id
   studentId String
   paymentId String
@@ -533,6 +622,9 @@ model Receipt {
 }
 
 model Notification {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id         String   @id
   recipientId String
   channel    NotificationChannel
@@ -544,6 +636,9 @@ model Notification {
 }
 
 model Announcement {
+  schoolId String @default("00000000-0000-4000-8000-000000000001")
+  @@index([schoolId])
+
   id          String   @id
   title       String
   status      AnnouncementStatus

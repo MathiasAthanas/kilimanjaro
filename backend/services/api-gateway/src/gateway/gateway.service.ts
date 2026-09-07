@@ -55,7 +55,7 @@ export class GatewayService {
       );
 
       const user = userResponse?.data?.data;
-      if (!user?.isActive) {
+      if (!user?.isActive || payload.tokenVersion === undefined || payload.tokenVersion !== user.tokenVersion) {
         throw new UnauthorizedException('Account is inactive');
       }
 

@@ -1,3 +1,4 @@
+import { runWithIdentity, requireSchool } from '@kilimanjaro/security';
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { RabbitMqService } from './rabbitmq.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -67,9 +68,12 @@ export class RabbitMqConsumer implements OnModuleInit {
 
       try {
         const payload = JSON.parse(msg.content.toString());
+        await runWithIdentity({ id: 'event-consumer', role: 'SYSTEM_ADMIN', schoolId: payload.schoolId }, async () => {
+          requireSchool();
         this.logger.log(`Consumed ${msg.fields.routingKey}: ${JSON.stringify(payload)}`);
         await this.handleEvent(msg.fields.routingKey, payload);
         channel.ack(msg);
+        });
       } catch (error) {
         this.logger.warn(`Failed to process student event: ${(error as Error).message}`);
         channel.nack(msg, false, false);

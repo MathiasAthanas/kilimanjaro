@@ -4,6 +4,16 @@ import { Transform } from 'class-transformer';
 import { IsBoolean, IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 
 export class ListUsersDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  schoolId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  search?: string;
+
   @ApiPropertyOptional({ default: 1 })
   @IsOptional()
   @Transform(({ value }) => Number(value))

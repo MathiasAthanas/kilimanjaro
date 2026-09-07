@@ -1,3 +1,4 @@
+import { SchoolJob } from '@kilimanjaro/security';
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { ReportType } from '../../generated/prisma';
@@ -11,24 +12,28 @@ export class SchedulerService {
   constructor(private readonly snapshotsService: SnapshotsService, private readonly reportsService: ReportsService) {}
 
   @Cron('0 3 * * *')
+  @SchoolJob()
   async nightlySnapshot() {
     const result = await this.snapshotsService.computeDailySnapshots();
     this.logger.log(`nightly_snapshot count=${result.count} errors=${result.errors.length}`);
   }
 
   @Cron('0 4 * * 0')
+  @SchoolJob()
   async weeklyKpis() {
     const result = await this.snapshotsService.recordWeeklyKpis();
     this.logger.log(`weekly_kpis period=${result.period} recorded=${result.recorded}`);
   }
 
   @Cron('0 5 * * *')
+  @SchoolJob()
   async cleanupSnapshots() {
     const result = await this.snapshotsService.cleanupExpiredSnapshots();
     this.logger.log(`snapshot_cleanup deleted=${result.deleted}`);
   }
 
   @Cron('0 6 1 * *')
+  @SchoolJob()
   async monthlyExecutiveReport() {
     await this.reportsService.generateReport(
       {

@@ -39,6 +39,11 @@ enum AuditAction {
   USER_DEACTIVATED
   USER_ACTIVATED
   USER_ROLE_CHANGED
+  USER_PROFILE_UPDATED
+  USER_EMAIL_CHANGED
+  USER_SCHOOL_CHANGED
+  USER_ROLES_CHANGED
+  USERS_IMPORTED
 
   @@schema("auth")
 }
@@ -48,6 +53,10 @@ model User {
   email                String?              @unique
   registrationNumber   String?              @unique
   passwordHash         String
+  schoolId             String?
+  school               School? @relation(fields: [schoolId], references: [id])
+  roles                UserRoleAssignment[]
+  tokenVersion         Int @default(1)
   role                 Role
   firstName            String
   lastName             String
@@ -67,6 +76,7 @@ model User {
   passwordResetTokens  PasswordResetToken[]
   auditLogs            AuditLog[]
 
+  @@index([schoolId, isActive])
   @@index([role, isActive])
   @@index([createdAt])
   @@map("users")
@@ -120,4 +130,41 @@ model AuditLog {
   @@index([action, createdAt])
   @@map("audit_logs")
   @@schema("auth")
+}
+
+model School {
+  id String @id @default(uuid())
+  code String @unique
+  name String
+  isActive Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  users User[]
+  @@map("schools")
+  @@schema("auth")
+}
+
+model UserRoleAssignment {
+  id String @id @default(uuid())
+  userId String
+  role Role
+  assignedBy String?
+  assignedAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([userId, role])
+  @@index([role, userId])
+  @@map("user_role_assignments")
+  @@schema("auth")
+}
+
+model ImportBatch {
+ id String @id
+ schoolId String
+ actorId String
+ fingerprint String
+ result Json
+ createdAt DateTime @default(now())
+ @@index([schoolId])
+ @@map("import_batches")
+ @@schema("auth")
 }

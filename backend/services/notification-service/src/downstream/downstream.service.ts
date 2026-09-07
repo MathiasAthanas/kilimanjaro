@@ -1,3 +1,4 @@
+import { identityHeaders } from '@kilimanjaro/security';
 import { HttpService } from '@nestjs/axios';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -16,6 +17,7 @@ export class DownstreamService {
     return {
       'X-Internal-Api-Key': this.config.get<string>('INTERNAL_API_KEY', ''),
       'X-Internal-Request': 'true',
+      ...identityHeaders(),
       ...(extra || {}),
     };
   }
@@ -49,7 +51,7 @@ export class DownstreamService {
     const data =
       (await this.get<any>(base, '/api/v1/auth/internal/users-by-role', { roles: roles.join(',') })) ||
       (await this.get<any>(base, '/auth/internal/users-by-role', { roles: roles.join(',') }));
-    return data?.data || data?.users || data || [];
+    return data?.data?.users || data?.users || (Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : []);
   }
 
   async guardianForStudent(studentId: string): Promise<any | null> {

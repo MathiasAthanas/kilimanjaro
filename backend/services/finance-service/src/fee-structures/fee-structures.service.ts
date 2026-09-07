@@ -1,3 +1,4 @@
+import { requireSchool } from '@kilimanjaro/security';
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { FinancialAuditAction, Prisma } from '../../generated/prisma';
 import { PrismaService } from '../prisma/prisma.service';
@@ -186,7 +187,7 @@ export class FeeStructuresService {
 
   async createStudentGroup(dto: CreateStudentGroupDto, user: RequestUser) {
     return this.prisma.studentGroup.upsert({
-      where: { code: dto.code },
+      where: { schoolId_code: { schoolId: requireSchool(), code: dto.code } },
       create: {
         code: dto.code,
         name: dto.name,

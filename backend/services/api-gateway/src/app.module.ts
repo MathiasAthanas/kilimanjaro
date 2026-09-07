@@ -1,3 +1,4 @@
+import { SchoolContextInterceptor } from './common/interceptors/school-context.interceptor';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
@@ -36,6 +37,7 @@ import { validateEnv } from './config/env.validation';
     ProxyModule,
   ],
   providers: [
+    { provide: APP_INTERCEPTOR, useClass: SchoolContextInterceptor },
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },

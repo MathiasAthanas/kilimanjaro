@@ -1,3 +1,4 @@
+import { hasRole, hasAnyRole, isTeacherOnly, isSelfService } from '@kilimanjaro/security';
 import {
   Body,
   Controller,
@@ -33,10 +34,10 @@ export class StudentsController {
   ) {}
 
   private async assertScopedAccess(user: RequestUser, studentId: string): Promise<void> {
-    if (user.role === 'PARENT') {
+    if ((user && isSelfService(user) && hasRole(user, 'PARENT'))) {
       await this.accessControl.assertParentOwnsStudent(user.id, studentId);
     }
-    if (user.role === 'STUDENT') {
+    if ((user && isSelfService(user) && hasRole(user, 'STUDENT'))) {
       await this.accessControl.assertStudentOwnsRecord(user.id, studentId);
     }
   }

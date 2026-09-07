@@ -1,3 +1,4 @@
+import { hasRole, hasAnyRole, isTeacherOnly, isSelfService } from '@kilimanjaro/security';
 import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { GuardiansService } from './guardians.service';
@@ -38,7 +39,7 @@ export class GuardiansController {
   )
   @ApiOperation({ summary: 'List guardians linked to student' })
   async list(@Param('id') id: string, @CurrentUser() user?: RequestUser) {
-    if (user?.role === 'PARENT') {
+    if ((user && isSelfService(user) && hasRole(user, 'PARENT'))) {
       await this.accessControl.assertParentOwnsStudent(user.id, id);
     }
     return this.guardiansService.listByStudent(id);

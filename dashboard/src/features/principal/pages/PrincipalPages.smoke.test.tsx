@@ -45,6 +45,7 @@ vi.mock('../api/principal.hooks', () => ({
 
 // ─── Mock operations hooks ────────────────────────────────────────────────────
 vi.mock('../../operations/api/operations.hooks', () => ({
+  useGenerateReportCardsMutation: () => ({ mutate: vi.fn(), isPending: false }),
   useGenerateReportMutation: () => ({ mutate: vi.fn(), isPending: false, data: undefined }),
   downloadReportWhenReady:   vi.fn(),
 }));

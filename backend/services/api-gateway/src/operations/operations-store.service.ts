@@ -1,3 +1,4 @@
+import { requireSchool } from '@kilimanjaro/security';
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import * as crypto from 'crypto';
 import { PrismaClient } from '../../generated/prisma';
@@ -98,10 +99,11 @@ export class OperationsStoreService implements OnModuleInit, OnModuleDestroy {
   }
 
   private read<T>(collection: string): T[] {
-    return ([...(this.cache.get(collection) || [])] as unknown) as T[];
+    return ([...(this.cache.get(`${requireSchool()}:${collection}`) || [])] as unknown) as T[];
   }
 
   private write<T>(collection: string, items: T[]): void {
+    collection = `${requireSchool()}:${collection}`;
     this.cache.set(collection, ([...(items as OperationRecord[])]));
     this.enqueuePersist(collection, items as OperationRecord[]);
   }
@@ -131,6 +133,7 @@ export class OperationsStoreService implements OnModuleInit, OnModuleDestroy {
         },
         create: {
           collection,
+          schoolId: collection.split(':')[0],
           id: item.id,
           data: item as unknown as object,
           createdAt: new Date(item.createdAt),
@@ -148,14 +151,15 @@ export class OperationsStoreService implements OnModuleInit, OnModuleDestroy {
     const next = new Map<string, OperationRecord[]>();
     for (const row of rows) {
       const record = row.data as unknown as OperationRecord;
-      const items = next.get(row.collection) || [];
+      const collection = row.collection.startsWith(`${row.schoolId}:`) ? row.collection : `${row.schoolId}:${row.collection}`;
+      const items = next.get(collection) || [];
       items.push({
         ...record,
         id: record.id || row.id,
         createdAt: record.createdAt || row.createdAt.toISOString(),
         updatedAt: record.updatedAt || row.updatedAt.toISOString(),
       });
-      next.set(row.collection, items);
+      next.set(collection, items);
     }
 
     this.cache.clear();

@@ -29,7 +29,6 @@ import {
   type CourseDisplay,
   type ElearningAnnouncement,
   type ElearningAssignment,
-  type ElearningAttemptDetail,
   type ElearningDiscussion,
   type ElearningLesson,
   type ElearningMaterial,
@@ -44,6 +43,7 @@ import {
   useCloseAssignment,
   useCloseQuiz,
   useCreateAnnouncement,
+  useCreateAssignment,
   useCreateCourseMutation,
   useCreateLesson,
   useCreateMaterial,
@@ -75,7 +75,6 @@ import {
   useSubmission,
   useSubmissionSummary,
   useTeacherAnalytics,
-  useUpdateAssignment,
   useUpdateLesson,
   useUpdateMaterial,
   useUploadFile,
@@ -581,7 +580,7 @@ export function MaterialStudioPage() {
       setTitle(existingMaterial.title ?? '');
       setEstimatedMinutes(existingMaterial.estimatedMinutes ? String(existingMaterial.estimatedMinutes) : '');
       setIsDownloadable(existingMaterial.isDownloadable ?? false);
-      setNoteBody((existingMaterial as Record<string, unknown>).body as string ?? '');
+      setNoteBody(existingMaterial.body ?? '');
       setExternalUrl(existingMaterial.externalUrl ?? '');
       setFileKey(existingMaterial.fileKey ?? '');
       setFileName(existingMaterial.fileKey ? 'Existing file' : '');
@@ -1997,27 +1996,7 @@ function ActionRow({ title, detail, to }: { title: string; detail: string; to: s
   );
 }
 
-function FormGrid({ fields }: { fields: string[] }) {
-  return (
-    <div className="grid gap-4 md:grid-cols-2">
-      {fields.map((field) => (
-        <label key={field} className="space-y-2">
-          <span className="text-xs font-black uppercase tracking-widest text-ks-muted">{field}</span>
-          <input className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold outline-none focus:border-[#6C63FF]" placeholder={field} />
-        </label>
-      ))}
-    </div>
-  );
-}
 
-function TextArea({ label, value }: { label: string; value: string }) {
-  return (
-    <label className="mt-4 block space-y-2">
-      <span className="text-xs font-black uppercase tracking-widest text-ks-muted">{label}</span>
-      <textarea className="min-h-32 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold outline-none focus:border-[#6C63FF]" defaultValue={value} />
-    </label>
-  );
-}
 
 function TextPreview({ title, body }: { title: string; body: string }) {
   return (
@@ -2028,15 +2007,6 @@ function TextPreview({ title, body }: { title: string; body: string }) {
   );
 }
 
-function TypeGrid({ items }: { items: string[] }) {
-  return (
-    <div className="mb-5 grid gap-3 md:grid-cols-3">
-      {items.map((item, index) => (
-        <button key={item} className={`rounded-2xl border px-4 py-3 text-sm font-black ${index === 0 ? 'border-[#6C63FF] bg-[#EEEDFF] text-[#3D35CC]' : 'border-slate-200 bg-white text-ks-muted'}`}>{item}</button>
-      ))}
-    </div>
-  );
-}
 
 function QuickGrid({ items }: { items: [string, string][] }) {
   return (

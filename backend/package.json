@@ -10,6 +10,10 @@
   "scripts": {
     "dev": "turbo run dev",
     "build": "turbo run build",
+    "local:env": "node scripts/setup-local-env.js",
+    "local:infra": "docker compose -f docker-compose.local.yml up -d",
+    "local:migrate": "node scripts/migrate-local.js",
+    "local:start": "npm run build && pm2 start ecosystem.local.config.js --update-env",
     "lint": "turbo run lint",
     "test": "turbo run test",
     "test:cov": "turbo run test:cov",

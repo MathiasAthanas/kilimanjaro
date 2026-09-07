@@ -9,22 +9,29 @@ export const AUTH_EVENTS = {
 } as const;
 
 export interface UserRegisteredEvent {
+  schoolId: string | null;
   userId: string;
   email?: string;
   regNumber?: string;
-  role: string;
+  role: string; // compatibility alias
+  primaryRole?: string;
+  roles?: string[];
   createdAt: Date;
 }
 
 export interface UserLoginEvent {
+  schoolId: string | null;
   userId: string;
-  role: string;
+  role: string; // compatibility alias
+  primaryRole?: string;
+  roles?: string[];
   ip?: string;
   userAgent?: string;
   loginAt: Date;
 }
 
 export interface PasswordResetRequestedEvent {
+  schoolId: string | null;
   userId: string;
   email: string;
   resetToken: string;
@@ -41,6 +48,7 @@ export const STUDENT_EVENTS = {
 } as const;
 
 export interface StudentEnrolledEvent {
+  schoolId: string | null;
   studentId: string;
   userId: string; // auth user ID
   classId: string;
@@ -56,6 +64,7 @@ export const FINANCE_EVENTS = {
 } as const;
 
 export interface PaymentReceivedEvent {
+  schoolId: string | null;
   paymentId: string;
   studentId: string;
   amount: number;
@@ -73,6 +82,7 @@ export const NOTIFICATION_EVENTS = {
 } as const;
 
 export interface SendEmailEvent {
+  schoolId: string | null;
   to: string;
   subject: string;
   template: string;
@@ -80,11 +90,13 @@ export interface SendEmailEvent {
 }
 
 export interface SendSmsEvent {
+  schoolId: string | null;
   to: string;       // phone number with country code
   message: string;
 }
 
 export interface SendPushEvent {
+  schoolId: string | null;
   userId: string;
   title: string;
   body: string;
@@ -100,6 +112,7 @@ export const ACADEMIC_EVENTS = {
 } as const;
 
 export interface ResultsPublishedEvent {
+  schoolId: string | null;
   termId: string;
   classId: string;
   publishedBy: string;

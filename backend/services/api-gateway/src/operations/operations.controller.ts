@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, NotFoundException, Param, Patch, Post, Query } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, NotFoundException, Param, Patch, Post, Query } from '@nestjs/common';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { GatewayUser, UiApiService, UiEnvelope } from '../ui/ui-api.service';
@@ -148,6 +148,7 @@ export class OperationsController {
   @Post('files')
   @Roles(...LEADERSHIP, 'TEACHER', 'PARENT', 'STUDENT')
   createFile(@CurrentUser() user: GatewayUser, @Body() body: Record<string, unknown>): UiEnvelope {
+    if (String(body.storageKey || '').startsWith('disk://')) throw new BadRequestException('Stored files must be created through the upload endpoint');
     const file = this.store.create('files', {
       ownerService: body.ownerService || 'api-gateway',
       entityType: body.entityType || 'general',

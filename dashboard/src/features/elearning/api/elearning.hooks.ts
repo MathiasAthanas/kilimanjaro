@@ -950,7 +950,7 @@ export function useCloseQuiz() {
 export function useDeleteQuestion() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ quizId, questionId, courseId }: { quizId: string; questionId: string; courseId: string }) =>
+    mutationFn: ({ quizId, questionId }: { quizId: string; questionId: string; courseId: string }) =>
       api.delete(`/elearning/quizzes/${quizId}/questions/${questionId}`).then((r) => r.data),
     onSuccess: (_d, { courseId, quizId }) => qc.invalidateQueries({ queryKey: elKeys.quiz(courseId, quizId) }),
   });
@@ -983,7 +983,7 @@ export function useAttemptDetail(attemptId: string | undefined) {
         const raw = payloadOf(r) as Record<string, unknown>;
         const answers = (raw.answers as Record<string, unknown>[] | undefined) ?? [];
         return {
-          ...(raw as ElearningQuizAttempt),
+          ...(raw as unknown as ElearningQuizAttempt),
           answers: answers.map((a) => ({
             id: String(a.id ?? ''),
             questionId: String(a.questionId ?? a.question_id ?? ''),

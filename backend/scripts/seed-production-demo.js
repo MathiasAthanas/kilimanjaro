@@ -1,5 +1,6 @@
 /* eslint-disable no-console */
 const crypto = require('crypto');
+const SCHOOL_ID = '00000000-0000-4000-8000-000000000001';
 const fs = require('fs');
 const path = require('path');
 
@@ -209,6 +210,8 @@ async function upsertUser(account, passwordHash) {
     update: {
       passwordHash,
       role: account.role,
+      schoolId: SCHOOL_ID,
+      roles: { deleteMany: {}, create: { role: account.role } },
       firstName: account.firstName,
       lastName: account.lastName,
       phoneNumber: account.phone || `+2557${String(Math.abs(id.length * 937) % 100000000).padStart(8, '0')}`,
@@ -221,6 +224,8 @@ async function upsertUser(account, passwordHash) {
       registrationNumber: account.registrationNumber,
       passwordHash,
       role: account.role,
+      schoolId: SCHOOL_ID,
+      roles: { create: { role: account.role } },
       firstName: account.firstName,
       lastName: account.lastName,
       phoneNumber: account.phone || `+2557${String(Math.abs(id.length * 937) % 100000000).padStart(8, '0')}`,
@@ -265,7 +270,7 @@ async function seedAuthUsers() {
 async function seedStudentStructure() {
   console.log('Seeding academic years, terms, classes and pathways...');
   await students.academicYear.upsert({
-    where: { name: '2026 Academic Year' },
+    where: { schoolId_name: { schoolId: SCHOOL_ID, name: '2026 Academic Year' } },
     update: { isCurrent: true, startDate: date(-142), endDate: date(222) },
     create: { id: SCHOOL_YEAR_ID, name: '2026 Academic Year', isCurrent: true, startDate: date(-142), endDate: date(222) },
   });
@@ -322,8 +327,8 @@ async function seedStudentsAndGuardians(hashes) {
       const email = `student${String(count).padStart(3, '0')}@${DEMO_DOMAIN}`;
       await auth.user.upsert({
         where: { registrationNumber: reg },
-        update: { email, passwordHash: hashes.student, firstName, lastName, role: 'STUDENT', isActive: true, isEmailVerified: true },
-        create: { id: studentUserId, email, registrationNumber: reg, passwordHash: hashes.student, role: 'STUDENT', firstName, lastName, isActive: true, isEmailVerified: true, createdBy: SYSTEM_ID },
+        update: { email, passwordHash: hashes.student, firstName, lastName, role: 'STUDENT', schoolId: SCHOOL_ID, roles: { deleteMany: {}, create: { role: 'STUDENT' } }, isActive: true, isEmailVerified: true },
+        create: { id: studentUserId, email, registrationNumber: reg, passwordHash: hashes.student, role: 'STUDENT', schoolId: SCHOOL_ID, roles: { create: { role: 'STUDENT' } }, firstName, lastName, isActive: true, isEmailVerified: true, createdBy: SYSTEM_ID },
       });
       if (count <= 8) credentials.push({ label: `${firstName} ${lastName}`, role: 'STUDENT', email, registrationNumber: reg, password: PASSWORDS.student });
       await students.student.upsert({
@@ -376,8 +381,8 @@ async function seedStudentsAndGuardians(hashes) {
         const guardianId = uuid(`guardian-${guardianCounter}`);
         await auth.user.upsert({
           where: { email: parentEmail },
-          update: { passwordHash: hashes.parent, firstName: parentFirst, lastName: parentLast, role: 'PARENT', isActive: true, isEmailVerified: true },
-          create: { id: parentUserId, email: parentEmail, passwordHash: hashes.parent, role: 'PARENT', firstName: parentFirst, lastName: parentLast, phoneNumber: `+2557${String(10000000 + guardianCounter * 7919).slice(0, 8)}`, isActive: true, isEmailVerified: true, createdBy: SYSTEM_ID },
+          update: { passwordHash: hashes.parent, firstName: parentFirst, lastName: parentLast, role: 'PARENT', schoolId: SCHOOL_ID, roles: { deleteMany: {}, create: { role: 'PARENT' } }, isActive: true, isEmailVerified: true },
+          create: { id: parentUserId, email: parentEmail, passwordHash: hashes.parent, role: 'PARENT', schoolId: SCHOOL_ID, roles: { create: { role: 'PARENT' } }, firstName: parentFirst, lastName: parentLast, phoneNumber: `+2557${String(10000000 + guardianCounter * 7919).slice(0, 8)}`, isActive: true, isEmailVerified: true, createdBy: SYSTEM_ID },
         });
         await students.guardian.upsert({
           where: { authUserId: parentUserId },
@@ -424,7 +429,7 @@ async function seedAcademics() {
     const id = uuid(`subject-${code}`);
     ids.subjects[code] = { id, code, name, stage };
     await academics.subject.upsert({
-      where: { code },
+      where: { schoolId_code: { schoolId: SCHOOL_ID, code } },
       update: { name, educationStage: stage, isActive: true },
       create: { id, code, name, educationStage: stage, isCompulsory: !code.includes('BKEEP') && !code.includes('COM'), isActive: true },
     });
@@ -626,14 +631,14 @@ async function seedFinance() {
     const id = uuid(`fee-category-${code}`);
     ids.feeCategories[code] = id;
     await finance.feeCategory.upsert({
-      where: { code },
+      where: { schoolId_code: { schoolId: SCHOOL_ID, code } },
       update: { name, isOptional: optional, isActive: true },
       create: { id, code, name, isOptional: optional, isBillablePerTerm: true, isActive: true, displayOrder: i, createdById: ids.users.finance },
     });
   }
   for (const group of [['BOARDING', 'Boarding Students'], ['TRANSPORT-NORTH', 'Transport Route North'], ['SCHOLARSHIP', 'Scholarship Students']]) {
     await finance.studentGroup.upsert({
-      where: { code: group[0] },
+      where: { schoolId_code: { schoolId: SCHOOL_ID, code: group[0] } },
       update: { name: group[1], isActive: true },
       create: { id: uuid(`student-group-${group[0]}`), code: group[0], name: group[1], description: `Demo ${group[1].toLowerCase()}`, createdById: ids.users.finance },
     });
@@ -1134,7 +1139,7 @@ async function seedFullModuleCoverage() {
   ];
   for (const [eventType, channel, subject, body] of templates) {
     await notifications.notificationTemplate.upsert({
-      where: { eventType_channel_language: { eventType, channel, language: 'en' } },
+      where: { schoolId_eventType_channel_language: { schoolId: SCHOOL_ID, eventType, channel, language: 'en' } },
       update: { body, isActive: true },
       create: {
         id: uuid(`notification-template-${eventType}-${channel}`),

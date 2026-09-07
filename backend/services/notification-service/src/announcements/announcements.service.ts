@@ -1,3 +1,4 @@
+import { hasRole, hasAnyRole, isTeacherOnly, isSelfService } from '@kilimanjaro/security';
 import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { AnnouncementStatus } from '../../generated/prisma';
 import { RequestUser } from '../common/interfaces/request-user.interface';
@@ -64,8 +65,9 @@ export class AnnouncementsService {
     });
   }
 
-  async activeForRole(role: string) {
-    const key = `notif:announcements:${role}`;
+  async activeForRole(input: string | string[]) {
+    const roles = Array.isArray(input) ? input : [input];
+    const key = `notif:announcements:${[...roles].sort().join(',')}`;
     const cached = await this.redis.get<any[]>(key);
     if (cached) return cached;
 
@@ -74,7 +76,7 @@ export class AnnouncementsService {
       where: {
         status: 'PUBLISHED',
         OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
-        AND: [{ OR: [{ targetRoles: { isEmpty: true } }, { targetRoles: { has: role } }] }],
+        AND: [{ OR: [{ targetRoles: { isEmpty: true } }, { targetRoles: { hasSome: roles } }] }],
       },
       orderBy: { publishedAt: 'desc' },
     });
@@ -87,7 +89,7 @@ export class AnnouncementsService {
     const row = await this.prisma.announcement.findUnique({ where: { id } });
     if (!row) throw new NotFoundException('Announcement not found');
 
-    if (!['DRAFT', 'SCHEDULED'].includes(row.status) || (row.authorId !== user.id && user.role !== 'SYSTEM_ADMIN')) {
+    if (!['DRAFT', 'SCHEDULED'].includes(row.status) || (row.authorId !== user.id && !hasRole(user, 'SYSTEM_ADMIN'))) {
       throw new ForbiddenException('Cannot update this announcement');
     }
 

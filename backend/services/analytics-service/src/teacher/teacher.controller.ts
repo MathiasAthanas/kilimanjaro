@@ -1,3 +1,4 @@
+import { hasRole, hasAnyRole, isTeacherOnly, isSelfService } from '@kilimanjaro/security';
 import { Controller, Get, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ROLES } from '../common/constants/roles';
@@ -21,7 +22,7 @@ export class TeacherAnalyticsController {
     @Query('termId') termId?: string,
     @Query('teacherId') teacherId?: string,
   ) {
-    const resolvedId = (user.role === 'TEACHER' ? user.id : teacherId) || user.id;
+    const resolvedId = (isTeacherOnly(user) ? user.id : teacherId) || user.id;
     return this.service.myDashboard(resolvedId, academicYearId, termId);
   }
 }

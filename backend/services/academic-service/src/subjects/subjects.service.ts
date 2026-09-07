@@ -1,3 +1,4 @@
+import { hasRole, hasAnyRole, isTeacherOnly, isSelfService } from '@kilimanjaro/security';
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateClassSubjectDto } from './dto/create-class-subject.dto';
@@ -95,7 +96,7 @@ export class SubjectsService {
   }
 
   private async assertHodSubjectScope(user: RequestUser | undefined, subjectId: string, academicYearId?: string): Promise<void> {
-    if (user?.role !== ROLES.HEAD_OF_DEPARTMENT) return;
+    if (!user || !hasRole(user, 'HEAD_OF_DEPARTMENT')) return;
     const department = await this.getHodDepartment(user, academicYearId);
     if (!department?.id) {
       throw new ForbiddenException('HOD is not assigned to an active department');
@@ -131,7 +132,7 @@ export class SubjectsService {
     combinationId?: string;
   }, user?: RequestUser) {
     let scopedSubjectIds: string[] | undefined;
-    if (user?.role === ROLES.HEAD_OF_DEPARTMENT) {
+    if (user && hasRole(user, 'HEAD_OF_DEPARTMENT')) {
       const department = await this.getHodDepartment(user, filters.academicYearId);
       if (!department?.id) return [];
       const subjects = await this.prisma.subject.findMany({

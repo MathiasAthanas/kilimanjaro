@@ -1,3 +1,4 @@
+import { identityHeaders } from '@kilimanjaro/security';
 import { HttpService } from '@nestjs/axios';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -13,6 +14,7 @@ export class DownstreamService {
     return {
       'X-Internal-Api-Key': this.config.get<string>('INTERNAL_API_KEY', ''),
       'X-Internal-Request': 'true',
+      ...identityHeaders(),
     };
   }
 

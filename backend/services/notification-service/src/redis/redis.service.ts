@@ -1,3 +1,4 @@
+import { cacheKey } from '@kilimanjaro/security';
 import { Global, Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
@@ -32,7 +33,7 @@ export class RedisService implements OnModuleDestroy {
   async get<T>(key: string): Promise<T | null> {
     await this.ensureConnection();
     try {
-      const v = await this.client.get(key);
+      const v = await this.client.get(cacheKey(key));
       return v ? (JSON.parse(v) as T) : null;
     } catch {
       return null;
@@ -42,7 +43,7 @@ export class RedisService implements OnModuleDestroy {
   async set(key: string, value: unknown, ttlSeconds: number) {
     await this.ensureConnection();
     try {
-      await this.client.set(key, JSON.stringify(value), 'EX', ttlSeconds);
+      await this.client.set(cacheKey(key), JSON.stringify(value), 'EX', ttlSeconds);
     } catch {
       // noop
     }
@@ -52,7 +53,7 @@ export class RedisService implements OnModuleDestroy {
     if (!keys.length) return;
     await this.ensureConnection();
     try {
-      await this.client.del(...keys);
+      await this.client.del(...keys.map(cacheKey));
     } catch {
       // noop
     }

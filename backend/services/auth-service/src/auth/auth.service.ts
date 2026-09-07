@@ -54,7 +54,7 @@ export class AuthService {
       return null;
     }
 
-    return { id: result.user.id, role: result.user.role };
+    return { ...result.user, id: result.user.id, role: result.user.role };
   }
 
   async login(dto: LoginDto, meta: { ip: string; userAgent: string }) {
@@ -93,11 +93,11 @@ export class AuthService {
       throw new ForbiddenException('Account is deactivated');
     }
 
-    if (dto.email && user.role === 'STUDENT') {
+    if (dto.email && this.usersService.toSafeUser(user).roles.every(r => r === Role.STUDENT)) {
       throw new UnauthorizedException('Students must login with registration number');
     }
 
-    if (dto.registrationNumber && user.role !== 'STUDENT') {
+    if (dto.registrationNumber && !this.usersService.toSafeUser(user).roles.includes(Role.STUDENT)) {
       throw new UnauthorizedException('Only students can login with registration number');
     }
 
@@ -118,6 +118,7 @@ export class AuthService {
       if (update.locked) {
         await this.rabbitmqService.publish('account.locked', {
           userId: user.id,
+          schoolId: user.schoolId,
           email: user.email,
           lockedUntil: update.lockedUntil?.toISOString(),
         });
@@ -127,6 +128,9 @@ export class AuthService {
     }
 
     await this.usersService.registerSuccessfulLogin(user.id, meta.ip);
+    // A valid login proves the client is legitimate; do not let earlier failed
+    // attempts keep the address throttled for the remainder of the window.
+    await this.redisService.del(`auth:login:ip:${meta.ip || 'unknown'}`);
 
     await this.auditService.createLog({
       userId: user.id,
@@ -136,7 +140,7 @@ export class AuthService {
     });
 
     if (localOnly) {
-      return { user: { id: user.id, role: user.role } };
+      return { user: this.usersService.toSafeUser(user) };
     }
 
     return this.issueTokens(user, meta);
@@ -163,10 +167,9 @@ export class AuthService {
       throw new UnauthorizedException('Invalid refresh token');
     }
 
-    await this.prisma.refreshToken.update({
-      where: { id: record.id },
-      data: { isRevoked: true },
-    });
+    if (!record.user.isActive) throw new UnauthorizedException('Invalid refresh token');
+    const claimed = await this.prisma.refreshToken.updateMany({ where: { id: record.id, isRevoked: false }, data: { isRevoked: true } });
+    if (claimed.count !== 1) throw new UnauthorizedException('Refresh token already used');
 
     await this.auditService.createLog({
       userId: record.userId,
@@ -228,6 +231,7 @@ export class AuthService {
 
     await this.rabbitmqService.publish('password.reset.requested', {
       userId: user.id,
+      schoolId: user.schoolId,
       email: user.email,
       otp,
       expiresAt: expiresAt.toISOString(),
@@ -271,7 +275,7 @@ export class AuthService {
     await this.prisma.$transaction([
       this.prisma.user.update({
         where: { id: user.id },
-        data: { passwordHash, mustChangePassword: false },
+        data: { passwordHash, mustChangePassword: false, tokenVersion: { increment: 1 } },
       }),
       this.prisma.passwordResetToken.update({
         where: { id: validTokenId },
@@ -302,7 +306,7 @@ export class AuthService {
     const passwordHash = await argon2.hash(dto.newPassword);
 
     await this.prisma.$transaction([
-      this.prisma.user.update({ where: { id: userId }, data: { passwordHash, mustChangePassword: false } }),
+      this.prisma.user.update({ where: { id: userId }, data: { passwordHash, mustChangePassword: false, tokenVersion: { increment: 1 } } }),
       this.prisma.refreshToken.updateMany({
         where: { userId, isRevoked: false },
         data: { isRevoked: true },
@@ -322,24 +326,28 @@ export class AuthService {
     return this.usersService.toSafeUser(user);
   }
 
-  async getUserForGateway(userId: string) {
+  async getUserForGateway(userId: string, schoolId?: string) {
     const user = await this.usersService.findById(userId);
-    return { id: user.id, role: user.role, isActive: user.isActive };
+    if (schoolId && schoolId !== user.schoolId) throw new ForbiddenException('User not found');
+    return { ...this.usersService.toSafeUser(user), tokenVersion: user.tokenVersion };
   }
 
-  async getUsersByRoleInternal(rolesCsv: string) {
+  async getUsersByRoleInternal(rolesCsv: string, schoolId?: string) {
     const roles = String(rolesCsv || '')
       .split(',')
       .map((item) => item.trim())
       .filter((item): item is Role => Object.values(Role).includes(item as Role));
 
     if (!roles.length) return { users: [] };
+    if (!schoolId) throw new ForbiddenException('School is required for recipient lookup');
 
     const users = await this.prisma.user.findMany({
-      where: { role: { in: roles }, isActive: true },
+      where: { schoolId, roles: { some: { role: { in: roles } } }, isActive: true },
       select: {
         id: true,
         role: true,
+        roles: true,
+        schoolId: true,
         email: true,
         phoneNumber: true,
         department: true,
@@ -353,6 +361,9 @@ export class AuthService {
       users: users.map((user) => ({
         id: user.id,
         authUserId: user.id,
+        schoolId: user.schoolId,
+        roles: user.roles.map(r => r.role),
+        primaryRole: user.role,
         role: user.role,
         email: user.email,
         phone: user.phoneNumber,
@@ -369,9 +380,18 @@ export class AuthService {
   }
 
   private async issueTokens(user: User, meta: { ip: string; userAgent: string }) {
+    const expectedVersion = user.tokenVersion;
+    user = await this.usersService.findById(user.id);
+    if (user.tokenVersion !== expectedVersion) throw new UnauthorizedException('Session changed; log in again');
+    if (!user.isActive) throw new UnauthorizedException('Invalid credentials');
+    const identity = this.usersService.toSafeUser(user);
     const jti = crypto.randomUUID();
     const accessToken = this.jwtService.sign({
       sub: user.id,
+      schoolId: user.schoolId,
+      roles: identity.roles,
+      primaryRole: user.role,
+      tokenVersion: user.tokenVersion,
       role: user.role,
       email: user.email,
         registrationNumber: user.registrationNumber,
@@ -385,7 +405,13 @@ export class AuthService {
     const tokenHash = await argon2.hash(refreshToken);
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
-    await this.prisma.refreshToken.create({
+    await this.prisma.$transaction(async tx => {
+      // Serialize refresh creation with identity/password changes and their
+      // revocation transaction; an in-flight refresh cannot resurrect a session.
+      await tx.$queryRaw`SELECT id FROM auth.users WHERE id = ${user.id} FOR UPDATE`;
+      const current = await tx.user.findUnique({ where: { id: user.id } });
+      if (!current?.isActive || current.tokenVersion !== expectedVersion) throw new UnauthorizedException('Session changed; log in again');
+      await tx.refreshToken.create({
       data: {
         id: refreshTokenId,
         tokenHash,
@@ -395,11 +421,13 @@ export class AuthService {
         userAgent: meta.userAgent,
       },
     });
+    });
 
     return {
       accessToken,
       refreshToken,
       user: {
+        ...identity,
         id: user.id,
         role: user.role,
         firstName: user.firstName,
@@ -436,6 +464,6 @@ export class AuthService {
   }
 
   private generateOtp(): string {
-    return `${Math.floor(100000 + Math.random() * 900000)}`;
+    return `${crypto.randomInt(100000, 1000000)}`;
   }
 }

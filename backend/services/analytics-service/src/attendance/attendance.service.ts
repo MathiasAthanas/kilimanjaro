@@ -1,3 +1,4 @@
+import { hasRole, hasAnyRole, isTeacherOnly, isSelfService } from '@kilimanjaro/security';
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
@@ -147,11 +148,11 @@ export class AttendanceService {
   }
 
   async getStudentAttendance(studentId: string, user?: RequestUser) {
-    if (user?.role === 'STUDENT' && user.id !== studentId) {
+    if ((user && isSelfService(user) && hasRole(user, 'STUDENT')) && user.id !== studentId) {
       throw new ForbiddenException('Students can only access own attendance analytics');
     }
 
-    if (user?.role === 'PARENT') {
+    if ((user && isSelfService(user) && hasRole(user, 'PARENT'))) {
       const hasLink = await this.prisma.studentGuardianLink.findFirst({ where: { guardianId: user.id, studentId } });
       if (!hasLink) throw new ForbiddenException('Parents can only access linked students');
     }

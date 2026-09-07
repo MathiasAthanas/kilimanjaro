@@ -1,3 +1,4 @@
+import { hasRole, hasAnyRole, isTeacherOnly, isSelfService } from '@kilimanjaro/security';
 import {
   BadRequestException,
   ForbiddenException,
@@ -42,19 +43,19 @@ export class AssessmentsService {
   }
 
   private ensureTeacherScope(user: RequestUser, teacherId: string): void {
-    if (user.role === ROLES.TEACHER && user.id !== teacherId) {
+    if (isTeacherOnly(user) && user.id !== teacherId) {
       throw new ForbiddenException('Teacher can only access own assessments');
     }
   }
 
   private ensureAssignedTeacherScope(user: RequestUser, teacherId: string): void {
-    if ([ROLES.TEACHER, ROLES.HEAD_OF_DEPARTMENT].includes(user.role as any) && user.id !== teacherId) {
+    if (hasAnyRole(user, [ROLES.TEACHER, ROLES.HEAD_OF_DEPARTMENT]) && user.id !== teacherId) {
       throw new ForbiddenException('Teacher actions are limited to assigned class-subjects');
     }
   }
 
   private async assertHodSubjectScope(user: RequestUser, subjectId: string): Promise<void> {
-    if (user.role !== ROLES.HEAD_OF_DEPARTMENT) {
+    if (!hasRole(user, 'HEAD_OF_DEPARTMENT')) {
       return;
     }
 
@@ -177,7 +178,7 @@ export class AssessmentsService {
     status?: AssessmentStatus;
     teacherId?: string;
   }, user?: RequestUser) {
-    const teacherId = user?.role === ROLES.TEACHER ? user.id : filters.teacherId;
+    const teacherId = user && isTeacherOnly(user) ? user.id : filters.teacherId;
 
     return this.prisma.assessment.findMany({
       where: {
@@ -329,7 +330,7 @@ export class AssessmentsService {
       throw new NotFoundException('Mark not found');
     }
 
-    if (mark.isLocked && ![ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL].includes(user.role as any)) {
+    if (mark.isLocked && !hasAnyRole(user, [ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL])) {
       throw new ForbiddenException('Locked marks can only be edited by HOD or Principal');
     }
 
@@ -349,7 +350,7 @@ export class AssessmentsService {
       },
     });
 
-    if (mark.isLocked && [ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL].includes(user.role as any)) {
+    if (mark.isLocked && hasAnyRole(user, [ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL])) {
       await this.prisma.approvalLog.create({
         data: {
           assessmentId,
@@ -429,11 +430,11 @@ export class AssessmentsService {
   }
 
   async pendingApproval(filters: { classId?: string; subjectId?: string }, user: RequestUser) {
-    const status = user.role === ROLES.PRINCIPAL ? AssessmentStatus.HOD_APPROVED : AssessmentStatus.SUBMITTED;
+    const status = hasRole(user, 'PRINCIPAL') ? AssessmentStatus.HOD_APPROVED : AssessmentStatus.SUBMITTED;
 
     let hodSubjectFilter: { in: string[] } | string | undefined;
 
-    if (user.role === ROLES.HEAD_OF_DEPARTMENT) {
+    if (hasRole(user, 'HEAD_OF_DEPARTMENT') && !hasAnyRole(user, ['PRINCIPAL', 'ACADEMIC_QA'])) {
       // Try department-based scoping first
       let departmentSubjectIds: string[] = [];
       try {
@@ -537,7 +538,7 @@ export class AssessmentsService {
   async approveAssessment(id: string, dto: ApproveAssessmentDto, user: RequestUser) {
     const assessment = await this.getAssessmentOrThrow(id);
 
-    if (user.role === ROLES.HEAD_OF_DEPARTMENT) {
+    if (hasRole(user, 'HEAD_OF_DEPARTMENT') && !hasAnyRole(user, ['PRINCIPAL', 'ACADEMIC_QA'])) {
       await this.assertHodSubjectScope(user, assessment.subjectId);
       if (assessment.status !== AssessmentStatus.SUBMITTED) {
         throw new BadRequestException('Assessment is not awaiting HOD approval');
@@ -566,7 +567,7 @@ export class AssessmentsService {
       return updated;
     }
 
-    if (user.role !== ROLES.PRINCIPAL && user.role !== ROLES.ACADEMIC_QA) {
+    if (!hasRole(user, 'PRINCIPAL') && !hasRole(user, 'ACADEMIC_QA')) {
       throw new ForbiddenException('Only HOD or Principal can approve');
     }
 
@@ -661,7 +662,7 @@ export class AssessmentsService {
   }
 
   async rejectAssessment(id: string, dto: RejectAssessmentDto, user: RequestUser) {
-    if (![ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA].includes(user.role as any)) {
+    if (!hasAnyRole(user, [ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA])) {
       throw new ForbiddenException('Only HOD/Principal/Academic QA can reject');
     }
 
@@ -709,7 +710,7 @@ export class AssessmentsService {
       },
     };
 
-    if (user.role === ROLES.HEAD_OF_DEPARTMENT) {
+    if (hasRole(user, 'HEAD_OF_DEPARTMENT') && !hasAnyRole(user, ['PRINCIPAL', 'ACADEMIC_QA'])) {
       where['OR'] = [{ approvedById: user.id }, { rejectedById: user.id }];
     }
 

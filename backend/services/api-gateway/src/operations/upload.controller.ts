@@ -12,6 +12,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Response } from 'express';
+import { randomUUID } from 'crypto';
 import { createReadStream, existsSync } from 'fs';
 import { unlink } from 'fs/promises';
 import { diskStorage } from 'multer';
@@ -35,7 +36,7 @@ const storageOptions = diskStorage({
   destination: UPLOAD_DIR,
   filename: (_req: unknown, file: Express.Multer.File, cb: (e: Error | null, fn: string) => void) => {
     const ext = path.extname(file.originalname).toLowerCase().replace(/[^.a-z0-9]/g, '');
-    cb(null, `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
+    cb(null, `${randomUUID()}${ext}`);
   },
 });
 
@@ -85,6 +86,7 @@ export class UploadController {
     const storageKey = String(record.storageKey ?? '');
     if (!storageKey.startsWith('disk://')) return res.status(404).json({ success: false, message: 'File not available for streaming' });
     const filename = storageKey.slice(7);
+    if (path.basename(filename) !== filename) throw new NotFoundException('File not found');
     const filePath = path.join(UPLOAD_DIR, filename);
     if (!existsSync(filePath)) throw new NotFoundException('File missing from storage');
     this.store.appendAudit({ action: 'FILE_SERVED', entityType: 'FileObject', entityId: id }, user);
@@ -101,7 +103,9 @@ export class UploadController {
     if (!record) throw new NotFoundException('File not found');
     const storageKey = String(record.storageKey ?? '');
     if (storageKey.startsWith('disk://')) {
-      const fp = path.join(UPLOAD_DIR, storageKey.slice(7));
+      const filename = storageKey.slice(7);
+      if (path.basename(filename) !== filename) throw new NotFoundException('File not found');
+      const fp = path.join(UPLOAD_DIR, filename);
       if (existsSync(fp)) await unlink(fp);
     }
     this.store.remove('files', id);

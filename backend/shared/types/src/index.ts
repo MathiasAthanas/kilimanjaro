@@ -26,7 +26,11 @@ export interface JwtPayload {
   sub: string;        // user ID
   email?: string;
   regNumber?: string; // for students
-  role: Role;
+  role: Role; // compatibility alias for primaryRole
+  primaryRole?: Role;
+  roles?: Role[];
+  schoolId?: string | null;
+  tokenVersion?: number;
   iat?: number;
   exp?: number;
 }
@@ -62,7 +66,11 @@ export interface TokenPair {
 
 export interface AuthenticatedUser {
   id: string;
-  role: Role;
+  role: Role; // compatibility alias for primaryRole
+  primaryRole?: Role;
+  roles?: Role[];
+  schoolId?: string | null;
+  tokenVersion?: number;
   email?: string;
   regNumber?: string;
 }

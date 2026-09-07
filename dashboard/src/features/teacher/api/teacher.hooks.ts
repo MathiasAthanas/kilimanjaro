@@ -511,7 +511,7 @@ export function useUpdateReportCardCommentsMutation() {
   return useMutation({
     mutationFn: ({ id, teacherComment }: { id: string; teacherComment: string }) =>
       api.patch(`/academics/report-cards/${id}/comments`, { teacherComment }).then((r) => r.data?.data ?? r.data),
-    onSuccess: (_data, variables) => {
+    onSuccess: (_data) => {
       const studentId = String(_data?.studentId ?? '');
       if (studentId) qc.invalidateQueries({ queryKey: reportCardKeys.forStudent(studentId) });
     },

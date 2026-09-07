@@ -33,12 +33,12 @@ import {
   User,
   UserPlus,
   Users,
-  Video,
   WalletCards,
   X,
 } from 'lucide-react';
 import { useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { getDefaultRouteForRole } from '../../lib/auth/permissions';
 import { useAuthStore } from '../../lib/auth/authStore';
 import { KilimanjaroMark } from '../icons/KilimanjaroMark';
 import { NavItem } from '../navigation/NavItem';
@@ -446,7 +446,9 @@ export function RoleSidebar({ mobileOpen, onClose }: RoleSidebarProps) {
   const logout   = useAuthStore((state) => state.logout);
   const navigate = useNavigate();
   const location = useLocation();
-  const sections = getSectionsForRole(session?.user.role);
+  const assignedRoles = session?.user.roles ?? (session ? [session.user.role] : []);
+  const workspaceRole = assignedRoles.find(r => location.pathname.startsWith(getDefaultRouteForRole(r))) ?? session?.user.primaryRole ?? session?.user.role;
+  const sections = getSectionsForRole(workspaceRole);
 
   useEffect(() => {
     onClose();
@@ -488,6 +490,7 @@ export function RoleSidebar({ mobileOpen, onClose }: RoleSidebarProps) {
           </div>
         </div>
 
+        {assignedRoles.length > 1 && <div className="flex flex-wrap gap-2 px-4 py-2">{assignedRoles.map(role => <button key={role} className="rounded border px-2 py-1 text-xs text-white" onClick={() => navigate(getDefaultRouteForRole(role))}>{role}</button>)}</div>}
         {/* ── Nav sections ── */}
         <nav className="custom-scrollbar flex flex-1 flex-col gap-4 overflow-y-auto px-2 pb-2">
           {sections.map((section) => (

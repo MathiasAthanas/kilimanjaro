@@ -35,6 +35,10 @@ describe('gateway proxy service', () => {
     });
   });
 
+  it('blocks internal authentication endpoints from public proxy access', () => {
+    expect(() => createService().service.resolveRoute('/api/v1/auth/internal/user/123')).toThrow(HttpException);
+  });
+
   it('rejects unknown route prefixes', () => {
     const { service } = createService();
 
@@ -53,6 +57,9 @@ describe('gateway proxy service', () => {
         accept: 'application/json',
         'content-type': 'application/json',
         'x-user-id': 'attacker',
+        'x-school-id': 'other-school',
+        'x-user-roles': 'SYSTEM_ADMIN',
+        'x-user-primary-role': 'SYSTEM_ADMIN',
       },
       query: { page: '1' },
       body: { message: 'hello' },
@@ -66,10 +73,10 @@ describe('gateway proxy service', () => {
         incomingPath: '/students/messages',
         outboundPath: '/students/messages',
       },
-      { id: 'user-1', role: 'STUDENT', email: 'student@example.com' },
+      { id: 'user-1', role: 'STUDENT', email: 'student@example.com', schoolId: 'school-a', roles: ['STUDENT','TEACHER'], primaryRole: 'STUDENT' },
     );
 
-    expect(result).toEqual({ statusCode: 202, data: { ok: true } });
+    expect(result).toMatchObject({ statusCode: 202, data: { ok: true }, isBinary: false });
     expect(httpService.request).toHaveBeenCalledWith(
       expect.objectContaining({
         method: 'POST',
@@ -83,6 +90,9 @@ describe('gateway proxy service', () => {
           'X-User-Id': 'user-1',
           'X-User-Role': 'STUDENT',
           'X-User-Email': 'student@example.com',
+          'X-School-Id': 'school-a',
+          'X-User-Roles': 'STUDENT,TEACHER',
+          'X-User-Primary-Role': 'STUDENT',
         }),
       }),
     );

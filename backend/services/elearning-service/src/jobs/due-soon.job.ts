@@ -1,3 +1,4 @@
+import { SchoolJob } from '@kilimanjaro/security';
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
@@ -14,6 +15,7 @@ export class DueSoonJob {
 
   /** Runs every hour — emits assignment.due_soon for assignments due within 24 hours */
   @Cron(CronExpression.EVERY_HOUR)
+  @SchoolJob()
   async run(): Promise<void> {
     const now = new Date();
     const in24h = new Date(now.getTime() + 24 * 60 * 60 * 1000);

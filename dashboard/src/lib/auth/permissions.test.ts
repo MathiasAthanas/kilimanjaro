@@ -12,3 +12,12 @@ describe('permissions', () => {
     expect(isWebPrimaryRole('PRINCIPAL')).toBe(true);
   });
 });
+
+import { canAccessRoute } from './permissions';
+it('permits both workspaces for a teacher and HOD but not finance', () => {
+ expect(canAccessRoute(['TEACHER','HOD'], '/teacher/classes')).toBe(true);
+ expect(canAccessRoute(['TEACHER','HOD'], '/hod/approvals')).toBe(true);
+ expect(canAccessRoute(['TEACHER','HOD'], '/finance')).toBe(false);
+ expect(canAccessRoute([], '/admin')).toBe(false);
+ expect(getDefaultRouteForRole('HOD')).toBe('/hod');
+});

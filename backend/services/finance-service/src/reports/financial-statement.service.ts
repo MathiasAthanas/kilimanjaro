@@ -1,3 +1,4 @@
+import { requireSchool } from '@kilimanjaro/security';
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma';
 import { PrismaService } from '../prisma/prisma.service';
@@ -185,14 +186,16 @@ export class FinancialStatementService {
     let classes: Array<{ id: string; name: string; stream: string | null }> = [];
     if (studentIds.length) {
       students = await this.prisma.$queryRawUnsafe<Array<{ id: string; firstName: string; lastName: string }>>(
-        `SELECT id, "firstName", "lastName" FROM students."Student" WHERE id = ANY($1)`,
+        `SELECT id, "firstName", "lastName" FROM students."Student" WHERE id = ANY($1) AND "schoolId" = $2`,
         studentIds,
+        requireSchool(),
       ).catch(() => []);
     }
     if (classIds.length) {
       classes = await this.prisma.$queryRawUnsafe<Array<{ id: string; name: string; stream: string | null }>>(
-        `SELECT id, name, stream FROM students."Class" WHERE id = ANY($1)`,
+        `SELECT id, name, stream FROM students."Class" WHERE id = ANY($1) AND "schoolId" = $2`,
         classIds,
+        requireSchool(),
       ).catch(() => []);
     }
     const studentName = (id: string) => {

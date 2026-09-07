@@ -41,7 +41,18 @@ npm install
 npm run build
 ```
 
-Create `.env` for each service from its `.env.example`. In production, missing required variables fail startup. Ensure `INTERNAL_API_KEY` matches across gateway and downstream services, and configure RSA JWT keys for auth/gateway.
+For local development, use the shared local environment and infrastructure stack. This creates ignored local-only credentials, starts PostgreSQL, Redis, and RabbitMQ, then applies every service migration:
+
+```bash
+npm run local:env
+npm run local:infra
+npm run local:migrate
+npm run local:start
+```
+
+Use `pm2 logs ks-api-gateway --lines 100` and `curl http://127.0.0.1:3000/health` to confirm the gateway is actually listening before starting the dashboard. PM2's `online` state alone only means it has started a process; it does not mean Nest completed startup.
+
+For production, create secrets-managed `.env` files or inject the same values through the process manager. Ensure `INTERNAL_API_KEY` matches across gateway and downstream services, and configure matching RSA JWT keys for auth/gateway.
 
 ## Migrations
 

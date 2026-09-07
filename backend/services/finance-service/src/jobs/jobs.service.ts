@@ -1,3 +1,4 @@
+import { SchoolJob } from '@kilimanjaro/security';
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { InvoiceStatus } from '../../generated/prisma';
@@ -16,6 +17,7 @@ export class JobsService {
   ) {}
 
   @Cron('0 6 * * *')
+  @SchoolJob()
   async overdueCheck() {
     const invoices = await this.prisma.invoice.findMany({
       where: {
@@ -39,6 +41,7 @@ export class JobsService {
   }
 
   @Cron('0 7 * * *')
+  @SchoolJob()
   async feeReminder() {
     const thresholds = (process.env.REMINDER_DAYS_BEFORE || '7,3,1').split(',').map((v) => Number(v.trim()));
     const invoices = await this.prisma.invoice.findMany({
@@ -65,6 +68,7 @@ export class JobsService {
   }
 
   @Cron('0 20 * * *')
+  @SchoolJob()
   async dailyFinancialSummary() {
     const start = new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00.000Z');
     const end = new Date(new Date().toISOString().slice(0, 10) + 'T23:59:59.999Z');
@@ -83,6 +87,7 @@ export class JobsService {
   }
 
   @Cron('0 8 1 * *')
+  @SchoolJob()
   async monthlyOutstandingReport() {
     const rows = await this.prisma.invoice.findMany({
       where: { status: 'OVERDUE' },

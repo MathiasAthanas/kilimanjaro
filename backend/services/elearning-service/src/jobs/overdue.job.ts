@@ -1,3 +1,4 @@
+import { SchoolJob } from '@kilimanjaro/security';
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
@@ -14,6 +15,7 @@ export class OverdueJob {
 
   /** Runs every 2 hours — closes past-due assignments and emits assignment.overdue */
   @Cron('0 */2 * * *')
+  @SchoolJob()
   async run(): Promise<void> {
     const now = new Date();
 

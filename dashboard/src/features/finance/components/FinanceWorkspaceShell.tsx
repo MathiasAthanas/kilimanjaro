@@ -10,11 +10,8 @@ import {
   FileText,
   Filter,
   Lock,
-  PackagePlus,
   Plus,
-  Printer,
   QrCode,
-  School,
   Search,
   ShieldCheck,
   TrendingDown,
@@ -22,7 +19,6 @@ import {
   WalletCards,
   ChevronDown,
   ChevronUp,
-  ArrowLeftRight,
   UserCircle,
   Hash,
   Calendar,
@@ -820,7 +816,7 @@ export async function downloadInvoicePdf(invoice: {
   className?: string; term?: string; dueDate?: string; status: string;
   total: number; paid: number; outstanding: number;
   lineItems?: Array<{ category?: string; amount: number; mandatory?: boolean }>;
-}, toastFn?: (msg: string, tone?: string) => void): Promise<void> {
+}, toastFn?: (msg: string, tone?: 'success' | 'error' | 'warning' | 'info') => void): Promise<void> {
   try {
     await generateInvoicePdf({
       number:      invoice.number,
@@ -1180,7 +1176,7 @@ async function generateReceiptPdf(data: ReceiptPdfData): Promise<void> {
   doc.save(`${data.number}.pdf`);
 }
 
-export async function downloadReceiptPdf(receiptId: string, toast?: (msg: string, tone?: string) => void): Promise<void> {
+export async function downloadReceiptPdf(receiptId: string, toast?: (msg: string, tone?: 'success' | 'error' | 'warning' | 'info') => void): Promise<void> {
   try {
     const raw = await api.get(`/finance/receipts/${receiptId}`).then((r) => {
       const d = r.data?.data ?? r.data;
@@ -2091,9 +2087,9 @@ function AuditJsonBlock({ title, value }: { title: string; value: Record<string,
 
 // ─── Table cell ───────────────────────────────────────────────────────────────
 
-export function Td({ children, amount = false }: { children: ReactNode; amount?: boolean }) {
+export function Td({ children, amount = false, className = '' }: { children: ReactNode; amount?: boolean; className?: string }) {
   return (
-    <td className={`px-4 py-3 text-sm font-semibold text-[#334155] ${amount ? 'text-right' : ''}`}>
+    <td className={`px-4 py-3 text-sm font-semibold text-[#334155] ${amount ? 'text-right' : ''} ${className}`}>
       {children}
     </td>
   );

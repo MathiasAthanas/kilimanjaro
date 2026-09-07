@@ -1,3 +1,4 @@
+import { identityHeaders, context } from '@kilimanjaro/security';
 import { HttpException, Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
@@ -7,6 +8,9 @@ import { getServiceUrls } from '../common/config/service-urls.config';
 export type UiServiceName = 'auth' | 'student' | 'academic' | 'finance' | 'notification' | 'analytics';
 
 export interface GatewayUser {
+  schoolId?: string | null;
+  roles?: string[];
+  primaryRole?: string;
   id: string;
   role: string;
   email?: string | null;
@@ -153,7 +157,7 @@ export class UiApiService {
       headers['X-User-Email'] = user.email || '';
     }
 
-    return headers;
+    return { ...headers, ...identityHeaders(context() || user) };
   }
 
   private unwrap<T>(payload: unknown): T {

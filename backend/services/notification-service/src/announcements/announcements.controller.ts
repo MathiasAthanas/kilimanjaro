@@ -38,7 +38,7 @@ export class AnnouncementsController {
     ROLES.STUDENT,
   )
   active(@CurrentUser() user?: RequestUser) {
-    return this.service.activeForRole(user!.role);
+    return this.service.activeForRole(user!.roles ?? [user!.role]);
   }
 
   @Patch(':id')

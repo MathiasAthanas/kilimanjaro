@@ -3,7 +3,11 @@ import { api } from '../../../lib/api/client';
 import { arrayFromApi, dedupeById, payloadOf } from '../../../lib/api/response';
 import type { AdminStatus } from './adminApi';
 
-type AdminUserRow = {
+export type AdminUserRow = {
+  roles: string[];
+  primaryRole: string;
+  schoolId: string | null;
+  school?: { id: string; name: string; code: string } | null;
   id: string;
   name: string;
   email: string;
@@ -47,11 +51,15 @@ function toAdminUsers(value: unknown) {
       ...user,
       id: String(user.id ?? user.authUserId ?? user.email ?? crypto.randomUUID()),
       email: String(user.email ?? ''),
-      role: String(user.role ?? 'USER'),
+      role: String(user.primaryRole ?? user.role ?? 'USER'),
+      primaryRole: String(user.primaryRole ?? user.role ?? 'USER'),
+      roles: Array.isArray(user.roles) ? user.roles.map(String) : [String(user.role)],
+      schoolId: user.schoolId ? String(user.schoolId) : null,
+      school: user.school as AdminUserRow['school'],
       createdAt: String(user.createdAt ?? ''),
       name: String(user.name ?? fullName ?? user.email ?? 'Unknown User'),
       status: String(user.status ?? status) as AdminStatus,
-      linked: String(user.linked ?? user.registrationNumber ?? user.phoneNumber ?? 'Portal account'),
+      linked: [user.department, (user.school as { name?: string })?.name].filter(Boolean).join(' / '),
       lastLogin: String(user.lastLogin ?? user.lastLoginAt ?? user.updatedAt ?? user.createdAt ?? ''),
     } satisfies AdminUserRow;
   });
@@ -249,10 +257,10 @@ export function useAdminDashboard() {
   });
 }
 
-export function useAdminUsers() {
+export function useAdminUsers(schoolId?: string) {
   return useQuery({
-    queryKey: adminKeys.users(),
-    queryFn: () => api.get('/auth/users', { params: { limit: 100 } }).then((r) => toAdminUsers(payloadOf(r))),
+    queryKey: [...adminKeys.users(), schoolId ?? 'all'],
+    queryFn: () => api.get('/auth/users', { params: { limit: 100, schoolId } }).then((r) => toAdminUsers(payloadOf(r))),
     staleTime: 30_000,
   });
 }
@@ -289,11 +297,11 @@ export function useAdminStudents(params?: Record<string, unknown>) {
   });
 }
 
-export function useAdminClasses() {
+export function useAdminClasses(schoolId?: string) {
   return useQuery({
-    queryKey: adminKeys.classes(),
+    queryKey: [...adminKeys.classes(), schoolId],
     queryFn: () =>
-      api.get('/students/classes').then((r) =>
+      api.get('/students/classes', { params: { schoolId } }).then((r) =>
         arrayFromApi(payloadOf(r), ['classes']).map((raw) => {
           const c = raw as Record<string, unknown>;
           const teacherRaw = c.teacher ?? c.classTeacher ?? c.teacherName;
@@ -611,10 +619,10 @@ export function useFeatureFlags() {
   });
 }
 
-export function useAcademicYears() {
+export function useAcademicYears(schoolId?: string) {
   return useQuery({
-    queryKey: adminKeys.academicYears(),
-    queryFn: () => api.get('/students/academic-years').then((r) => arrayFromApi(payloadOf(r), ['academicYears', 'years'])),
+    queryKey: [...adminKeys.academicYears(), schoolId],
+    queryFn: () => api.get('/students/academic-years', { params: { schoolId } }).then((r) => arrayFromApi(payloadOf(r), ['academicYears', 'years'])),
     staleTime: 60_000,
   });
 }
@@ -897,7 +905,11 @@ export function useCreateStudentMutation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (payload: unknown) =>
-      api.post('/students', payload).then((r) => r.data?.data ?? r.data),
+      api.post('/auth/users/bulk-students', payload, { timeout: 600000 }).then((r) => {
+        const result = r.data?.data ?? r.data;
+        if (!result.valid) throw new Error(result.errors.map((e: { message: string }) => e.message).join('; '));
+        return result.students?.[0];
+      }),
     onSuccess: () => qc.invalidateQueries({ queryKey: adminKeys.students() }),
   });
 }

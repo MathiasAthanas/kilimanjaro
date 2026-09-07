@@ -1,3 +1,4 @@
+import { hasRole, hasAnyRole, isTeacherOnly, isSelfService } from '@kilimanjaro/security';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RequestUser } from '../common/interfaces/request-user.interface';
@@ -15,7 +16,7 @@ export class SyllabusService {
       throw new NotFoundException('Class subject not found');
     }
 
-    if ([ROLES.TEACHER, ROLES.HEAD_OF_DEPARTMENT].includes(user.role as any) && classSubject.teacherId !== user.id) {
+    if (hasAnyRole(user, [ROLES.TEACHER, ROLES.HEAD_OF_DEPARTMENT]) && classSubject.teacherId !== user.id) {
       throw new NotFoundException('Class subject not found in your scope');
     }
 
@@ -56,7 +57,7 @@ export class SyllabusService {
       throw new NotFoundException('Syllabus tracker not found');
     }
 
-    if ([ROLES.TEACHER, ROLES.HEAD_OF_DEPARTMENT].includes(user.role as any) && existing.classSubject.teacherId !== user.id) {
+    if (hasAnyRole(user, [ROLES.TEACHER, ROLES.HEAD_OF_DEPARTMENT]) && existing.classSubject.teacherId !== user.id) {
       throw new NotFoundException('Syllabus tracker not found in your scope');
     }
 

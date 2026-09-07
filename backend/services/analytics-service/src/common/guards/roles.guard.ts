@@ -1,3 +1,4 @@
+import { hasAnyRole } from '@kilimanjaro/security';
 import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
@@ -15,7 +16,7 @@ export class RolesGuard implements CanActivate {
 
     const req = context.switchToHttp().getRequest();
     const role = req.user?.role || req.headers['x-user-role'];
-    if (!role || !required.includes(role)) throw new ForbiddenException('Insufficient role');
+    if (!role || !hasAnyRole(req.user, required)) throw new ForbiddenException('Insufficient role');
     return true;
   }
 }

@@ -1,3 +1,4 @@
+import { hasRole, hasAnyRole, isTeacherOnly, isSelfService } from '@kilimanjaro/security';
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
@@ -31,7 +32,7 @@ export class PerformanceProxyService {
 
   async alerts(query: Record<string, unknown>, user: RequestUser) {
     const finalQuery = { ...query };
-    if (user.role === ROLES.TEACHER) {
+    if (isTeacherOnly(user)) {
       finalQuery.teacherId = user.id;
     }
 
@@ -199,10 +200,10 @@ export class PerformanceProxyService {
   }
 
   async studentProfile(studentId: string, user: RequestUser) {
-    if (user.role === ROLES.PARENT) {
+    if ((isSelfService(user) && hasRole(user, 'PARENT'))) {
       await this.accessControl.assertParentOwnsStudent(user.id, studentId);
     }
-    if (user.role === ROLES.STUDENT) {
+    if ((isSelfService(user) && hasRole(user, 'STUDENT'))) {
       await this.accessControl.assertStudentOwnsRecord(user.id, studentId);
     }
 
@@ -228,7 +229,7 @@ export class PerformanceProxyService {
       overallSummary: perf?.overallSummary || {},
     };
 
-    if ([ROLES.PARENT, ROLES.STUDENT].includes(user.role as any)) {
+    if (hasAnyRole(user, [ROLES.PARENT, ROLES.STUDENT])) {
       return {
         ...payload,
         activeAlerts: (payload.activeAlerts || []).map((item: any) => ({

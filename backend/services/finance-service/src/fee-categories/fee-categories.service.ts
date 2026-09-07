@@ -119,7 +119,7 @@ export class FeeCategoriesService {
     const existing = await this.byId(id);
     const code = dto.code ? this.codeFromInput(dto.code) : undefined;
     if (code && code !== existing.code) {
-      const duplicate = await this.prisma.feeCategory.findUnique({ where: { code } });
+      const duplicate = await this.prisma.feeCategory.findFirst({ where: { code } });
       if (duplicate) throw new ConflictException('Fee category code already exists');
     }
 

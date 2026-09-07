@@ -1,3 +1,4 @@
+import { hasRole, hasAnyRole, isTeacherOnly, isSelfService } from '@kilimanjaro/security';
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { GeneratedReport, ReportStatus, ReportType } from '../../generated/prisma';
@@ -154,7 +155,7 @@ export class ReportsService {
     if (reportType) where.reportType = reportType;
     if (status) where.status = status;
     if (generatedById) where.generatedById = generatedById;
-    if (user && user.role !== 'SYSTEM_ADMIN') where.generatedById = user.id;
+    if (user && !hasRole(user, 'SYSTEM_ADMIN')) where.generatedById = user.id;
 
     const [data, total] = await Promise.all([
       this.prisma.generatedReport.findMany({
@@ -171,7 +172,7 @@ export class ReportsService {
 
   private canAccess(report: GeneratedReport, user?: RequestUser) {
     if (!user) return false;
-    if (['SYSTEM_ADMIN', 'PRINCIPAL'].includes(user.role)) return true;
+    if (hasAnyRole(user, ['SYSTEM_ADMIN', 'PRINCIPAL'])) return true;
     return report.generatedById === user.id;
   }
 

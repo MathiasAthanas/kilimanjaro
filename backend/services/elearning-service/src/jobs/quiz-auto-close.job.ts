@@ -1,3 +1,4 @@
+import { SchoolJob } from '@kilimanjaro/security';
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
@@ -10,6 +11,7 @@ export class QuizAutoCloseJob {
 
   /** Runs every 30 minutes — auto-submits in-progress attempts that exceeded their time limit */
   @Cron('*/30 * * * *')
+  @SchoolJob()
   async run(): Promise<void> {
     const now = new Date();
 

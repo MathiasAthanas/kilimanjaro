@@ -1,3 +1,4 @@
+import { hasRole, hasAnyRole, isTeacherOnly, isSelfService } from '@kilimanjaro/security';
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createReadStream } from 'node:fs';
@@ -34,8 +35,8 @@ export class ElearningService {
     if (query.combinationId) where.combinationId = query.combinationId;
     if (query.termId) where.termId = query.termId;
     if (query.academicYearId) where.academicYearId = query.academicYearId;
-    if (user.role === 'TEACHER') where.teacherId = user.id;
-    if (user.role === 'STUDENT') where.enrollments = { some: { studentId: this.studentId(user), status: 'ACTIVE' } };
+    if (isTeacherOnly(user)) where.teacherId = user.id;
+    if ((isSelfService(user) && hasRole(user, 'STUDENT'))) where.enrollments = { some: { studentId: this.studentId(user), status: 'ACTIVE' } };
     return this.prisma.courseSpace.findMany({
       where,
       include: this.courseIncludes(),
@@ -254,7 +255,7 @@ export class ElearningService {
 
   async courseStudents(user: RequestUser, courseId: string) {
     const course = await this.getCourse(user, courseId);
-    if (!['TEACHER', 'HEAD_OF_DEPARTMENT', 'SYSTEM_ADMIN'].includes(user.role)) throw new ForbiddenException('Forbidden');
+    if (!hasAnyRole(user, ['TEACHER', 'HEAD_OF_DEPARTMENT', 'SYSTEM_ADMIN'])) throw new ForbiddenException('Forbidden');
     const enrollments = await this.prisma.courseEnrollment.findMany({ where: { courseSpaceId: courseId }, orderBy: { enrolledAt: 'desc' } });
     return Promise.all(enrollments.map(async (enrollment) => ({
       ...enrollment,
@@ -390,7 +391,7 @@ export class ElearningService {
   async downloadMaterial(user: RequestUser, id: string) {
     const material = await this.prisma.material.findUnique({ where: { id } });
     if (!material) throw new NotFoundException('Material not found');
-    if (user.role === 'STUDENT') {
+    if ((isSelfService(user) && hasRole(user, 'STUDENT'))) {
       const studentId = this.studentId(user);
       await this.assertStudentEnrollment(material.courseSpaceId, studentId);
       await this.prisma.materialProgress.upsert({
@@ -576,14 +577,14 @@ export class ElearningService {
   async getSubmission(user: RequestUser, id: string) {
     const submission = await this.prisma.submission.findUnique({ where: { id }, include: { assignment: { include: { courseSpace: true } } } });
     if (!submission) throw new NotFoundException('Submission not found');
-    if (user.role === 'STUDENT' && submission.studentId !== this.studentId(user)) throw new ForbiddenException('Forbidden');
-    if (user.role === 'TEACHER') this.assertTeacherOwner(user, submission.assignment.courseSpace.teacherId);
+    if ((isSelfService(user) && hasRole(user, 'STUDENT')) && submission.studentId !== this.studentId(user)) throw new ForbiddenException('Forbidden');
+    if (hasRole(user, 'TEACHER')) this.assertTeacherOwner(user, submission.assignment.courseSpace.teacherId);
     return submission;
   }
 
   async gradeSubmission(user: RequestUser, id: string, body: Record<string, unknown>) {
     const submission = await this.getSubmission(user, id);
-    if (user.role === 'TEACHER') this.assertTeacherOwner(user, submission.assignment.courseSpace.teacherId);
+    if (hasRole(user, 'TEACHER')) this.assertTeacherOwner(user, submission.assignment.courseSpace.teacherId);
     const graded = await this.prisma.submission.update({
       where: { id },
       data: {
@@ -621,7 +622,7 @@ export class ElearningService {
 
   async listQuizzes(user: RequestUser, courseId: string) {
     await this.getCourse(user, courseId);
-    return this.prisma.quiz.findMany({ where: { courseSpaceId: courseId }, include: { questions: { include: { options: true } }, attempts: user.role === 'STUDENT' ? { where: { studentId: this.studentId(user) } } : true } });
+    return this.prisma.quiz.findMany({ where: { courseSpaceId: courseId }, include: { questions: { include: { options: true } }, attempts: (isSelfService(user) && hasRole(user, 'STUDENT')) ? { where: { studentId: this.studentId(user) } } : true } });
   }
 
   async createQuiz(user: RequestUser, courseId: string, body: Record<string, unknown>) {
@@ -645,7 +646,7 @@ export class ElearningService {
     await this.getCourse(user, courseId);
     const quiz = await this.prisma.quiz.findUnique({ where: { id }, include: { questions: { include: { options: true } } } });
     if (!quiz) throw new NotFoundException('Quiz not found');
-    if (user.role === 'STUDENT') {
+    if ((isSelfService(user) && hasRole(user, 'STUDENT'))) {
       return { ...quiz, questions: quiz.questions.map((q) => ({ ...q, correctAnswer: undefined, options: q.options.map((o) => ({ ...o, isCorrect: undefined })) })) };
     }
     return quiz;
@@ -810,7 +811,7 @@ export class ElearningService {
   async getAttempt(user: RequestUser, attemptId: string) {
     const attempt = await this.prisma.quizAttempt.findUnique({ where: { id: attemptId }, include: { quiz: true, answers: true } });
     if (!attempt) throw new NotFoundException('Attempt not found');
-    if (user.role === 'STUDENT' && attempt.studentId !== this.studentId(user)) throw new ForbiddenException('Forbidden');
+    if ((isSelfService(user) && hasRole(user, 'STUDENT')) && attempt.studentId !== this.studentId(user)) throw new ForbiddenException('Forbidden');
     return attempt;
   }
 
@@ -858,7 +859,7 @@ export class ElearningService {
   async lessonProgress(user: RequestUser, lessonId: string) {
     const lesson = await this.prisma.lesson.findUnique({ where: { id: lessonId } });
     if (!lesson) throw new NotFoundException('Lesson not found');
-    if (user.role === 'STUDENT') return this.prisma.lessonProgress.findUnique({ where: { lessonId_studentId: { lessonId, studentId: this.studentId(user) } } });
+    if ((isSelfService(user) && hasRole(user, 'STUDENT'))) return this.prisma.lessonProgress.findUnique({ where: { lessonId_studentId: { lessonId, studentId: this.studentId(user) } } });
     return this.prisma.lessonProgress.findMany({ where: { lessonId } });
   }
 
@@ -938,7 +939,7 @@ export class ElearningService {
 
   async teacherAnalytics(user: RequestUser, query: Record<string, string> = {}) {
     this.assertRole(user, ['TEACHER', 'SYSTEM_ADMIN']);
-    const filter: Prisma.CourseSpaceWhereInput = { teacherId: user.role === 'TEACHER' ? user.id : undefined };
+    const filter: Prisma.CourseSpaceWhereInput = { teacherId: isTeacherOnly(user) ? user.id : undefined };
     if (query.academicYearId) filter.academicYearId = query.academicYearId;
     if (query.termId) filter.termId = query.termId;
     const courses = await this.prisma.courseSpace.findMany({ where: filter, include: this.courseIncludes() });
@@ -1117,13 +1118,13 @@ export class ElearningService {
   }
 
   private async assertCourseAccess(user: RequestUser, courseId: string, teacherId?: string): Promise<void> {
-    if (LEADERSHIP.includes(user.role) || user.role === 'SYSTEM_ADMIN') return;
-    if (user.role === 'TEACHER' && teacherId === user.id) return;
-    if (user.role === 'STUDENT') {
+    if (hasAnyRole(user, LEADERSHIP) || hasRole(user, 'SYSTEM_ADMIN')) return;
+    if (isTeacherOnly(user) && teacherId === user.id) return;
+    if ((isSelfService(user) && hasRole(user, 'STUDENT'))) {
       await this.assertStudentEnrollment(courseId, this.studentId(user));
       return;
     }
-    if (user.role === 'PARENT') return;
+    if ((isSelfService(user) && hasRole(user, 'PARENT'))) return;
     throw new ForbiddenException('Forbidden');
   }
 
@@ -1134,8 +1135,8 @@ export class ElearningService {
   }
 
   private assertTeacherOwner(user: RequestUser, teacherId: string): void {
-    if (user.role === 'SYSTEM_ADMIN') return;
-    if (user.role !== 'TEACHER' || user.id !== teacherId) throw new ForbiddenException('Teacher does not own this course');
+    if (hasRole(user, 'SYSTEM_ADMIN')) return;
+    if (!hasRole(user, 'TEACHER') || user.id !== teacherId) throw new ForbiddenException('Teacher does not own this course');
   }
 
   private async assertStudentEnrollment(courseId: string, studentId: string): Promise<void> {
@@ -1144,7 +1145,7 @@ export class ElearningService {
   }
 
   private assertRole(user: RequestUser, roles: string[]): void {
-    if (!roles.includes(user.role)) throw new ForbiddenException('Insufficient permissions');
+    if (!hasAnyRole(user, roles)) throw new ForbiddenException('Insufficient permissions');
   }
 
   private studentId(user: RequestUser): string {

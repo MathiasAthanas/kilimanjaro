@@ -1,3 +1,4 @@
+import { hasAnyRole } from '@kilimanjaro/security';
 import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
@@ -45,7 +46,7 @@ export class RolesGuard implements CanActivate {
       context.getClass(),
     ]);
 
-    if (explicitRoles?.length && (!role || !explicitRoles.includes(role))) {
+    if (explicitRoles?.length && (!role || !hasAnyRole(user, explicitRoles))) {
       throw new ForbiddenException('Insufficient role permissions');
     }
 
@@ -53,13 +54,13 @@ export class RolesGuard implements CanActivate {
     const method = String(request.method || 'GET').toUpperCase();
 
     if (normalized.startsWith('/analytics/') || normalized === '/analytics') {
-      if (!role || !ANALYTICS_ALLOWED.has(role)) {
+      if (!role || !hasAnyRole(user, [...ANALYTICS_ALLOWED])) {
         throw new ForbiddenException('Analytics routes require leadership role access');
       }
     }
 
     if (normalized === '/notifications/announcements' && method === 'POST') {
-      if (!role || !ANNOUNCEMENTS_ALLOWED.has(role)) {
+      if (!role || !hasAnyRole(user, [...ANNOUNCEMENTS_ALLOWED])) {
         throw new ForbiddenException('Insufficient role for announcements publishing');
       }
     }

@@ -1,5 +1,10 @@
-export function applyRoleFilter(profile: any, role: string) {
+export function applyRoleFilter(profile: any, input: string | string[]) {
+  const roles = Array.isArray(input) ? input : [input];
+  // Leadership access is not reduced by an additional teacher/parent assignment.
+  const role = roles.find(r => ['SYSTEM_ADMIN','BOARD_DIRECTOR','MANAGING_DIRECTOR','PRINCIPAL','ACADEMIC_QA','HEAD_OF_DEPARTMENT'].includes(r)) ?? roles.find(r => r === 'FINANCE') ?? roles.find(r => r === 'TEACHER') ?? roles.find(r => r === 'PARENT') ?? roles[0];
   const result = JSON.parse(JSON.stringify(profile || {}));
+  // Together these roles authorize the academic and financial sections.
+  if (roles.includes('TEACHER') && roles.includes('FINANCE')) return result;
 
   if (role === 'STUDENT') {
     delete result.discipline;

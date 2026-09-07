@@ -1,3 +1,4 @@
+import { runWithIdentity, requireSchool } from '@kilimanjaro/security';
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Worker } from 'bullmq';
@@ -40,7 +41,8 @@ export class DispatchWorkersService implements OnModuleInit, OnModuleDestroy {
 
     const smsWorker = new Worker(
       QUEUE_NAMES.SMS,
-      async (job) => {
+      async (job) => runWithIdentity({ id: 'notification-worker', role: 'SYSTEM_ADMIN', schoolId: job.data.schoolId }, async () => {
+        requireSchool();
         const id = job.data.notificationId as string;
         const row = await this.prisma.notification.findUnique({ where: { id } });
         if (!row) return;
@@ -71,13 +73,14 @@ export class DispatchWorkersService implements OnModuleInit, OnModuleDestroy {
             ? { status: 'DELIVERED', deliveredAt: new Date(), externalMessageId: primary.messageId }
             : { status: 'FAILED', failureReason: primary?.failureReason || 'SMS send failed' },
         });
-      },
+      }),
       { connection },
     );
 
     const emailWorker = new Worker(
       QUEUE_NAMES.EMAIL,
-      async (job) => {
+      async (job) => runWithIdentity({ id: 'notification-worker', role: 'SYSTEM_ADMIN', schoolId: job.data.schoolId }, async () => {
+        requireSchool();
         const id = job.data.notificationId as string;
         const row = await this.prisma.notification.findUnique({ where: { id } });
         if (!row || !row.recipientEmail) return;
@@ -90,13 +93,14 @@ export class DispatchWorkersService implements OnModuleInit, OnModuleDestroy {
         } catch (error) {
           await this.prisma.notification.update({ where: { id }, data: { status: 'FAILED', failureReason: (error as Error).message } });
         }
-      },
+      }),
       { connection },
     );
 
     const pushWorker = new Worker(
       QUEUE_NAMES.PUSH,
-      async (job) => {
+      async (job) => runWithIdentity({ id: 'notification-worker', role: 'SYSTEM_ADMIN', schoolId: job.data.schoolId }, async () => {
+        requireSchool();
         const id = job.data.notificationId as string;
         const row = await this.prisma.notification.findUnique({ where: { id } });
         if (!row) return;
@@ -115,20 +119,21 @@ export class DispatchWorkersService implements OnModuleInit, OnModuleDestroy {
         } catch (error) {
           await this.prisma.notification.update({ where: { id }, data: { status: 'FAILED', failureReason: (error as Error).message } });
         }
-      },
+      }),
       { connection },
     );
 
     const inAppWorker = new Worker(
       QUEUE_NAMES.IN_APP,
-      async (job) => {
+      async (job) => runWithIdentity({ id: 'notification-worker', role: 'SYSTEM_ADMIN', schoolId: job.data.schoolId }, async () => {
+        requireSchool();
         const id = job.data.notificationId as string;
         const row = await this.prisma.notification.findUnique({ where: { id } });
         if (!row) return;
 
         await this.prisma.notification.update({ where: { id }, data: { status: 'DELIVERED', deliveredAt: new Date() } });
         await this.redis.del(`notif:unread:${row.recipientId}`);
-      },
+      }),
       { connection },
     );
 

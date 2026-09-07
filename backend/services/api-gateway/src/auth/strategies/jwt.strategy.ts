@@ -8,6 +8,7 @@ import { RedisService } from '../../redis/redis.service';
 
 interface AccessPayload {
   sub: string;
+  tokenVersion?: number;
   role: string;
   email?: string | null;
   registrationNumber?: string | null;
@@ -33,7 +34,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(payload: AccessPayload): Promise<{ id: string; role: string; email?: string | null; jti: string }> {
+  async validate(payload: AccessPayload): Promise<any> {
     const authUrl = this.configService.get<string>('AUTH_SERVICE_URL') || 'http://localhost:3001';
     const internalApiKey = this.configService.get<string>('INTERNAL_API_KEY');
 
@@ -62,15 +63,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('Unable to validate token revocation state');
     }
 
-    const cacheKey = `gateway:user_active:${payload.sub}`;
-    const cached = await this.redisService.get(cacheKey);
-    if (cached === '1') {
-      return { id: payload.sub, role: payload.role, email: payload.email ?? null, jti: payload.jti };
-    }
-    if (cached === '0') {
-      throw new UnauthorizedException('User account is inactive');
-    }
-
     try {
       const userResponse = await firstValueFrom(
         this.httpService.get(`${authUrl}/api/v1/auth/internal/user/${payload.sub}`, {
@@ -81,16 +73,19 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
       const user = userResponse?.data?.data;
       const active = Boolean(user?.isActive);
-      await this.redisService.set(cacheKey, active ? '1' : '0', 60);
+      if (payload.tokenVersion === undefined || payload.tokenVersion !== user?.tokenVersion) throw new UnauthorizedException('Session expired; log in again');
 
       if (!active) {
         throw new UnauthorizedException('User account is inactive');
       }
 
       return {
+        schoolId: user.schoolId,
+        roles: user.roles,
+        primaryRole: user.primaryRole,
         id: payload.sub,
         role: user?.role || payload.role,
-        email: payload.email ?? null,
+        email: user.email ?? null,
         jti: payload.jti,
       };
     } catch (error) {

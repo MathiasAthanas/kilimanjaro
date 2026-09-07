@@ -1,3 +1,4 @@
+import { hasRole, hasAnyRole, isTeacherOnly, isSelfService } from '@kilimanjaro/security';
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import {
   AlertSeverity,
@@ -24,7 +25,7 @@ export class PerformanceService {
   ) {}
 
   private async assertScope(user: { id: string; role: string }, studentId: string): Promise<void> {
-    if (user.role === 'PARENT') {
+    if ((isSelfService(user) && hasRole(user, 'PARENT'))) {
       const link = await this.prisma.studentGuardianLink.findFirst({
         where: {
           studentId,
@@ -37,7 +38,7 @@ export class PerformanceService {
       }
     }
 
-    if (user.role === 'STUDENT') {
+    if ((isSelfService(user) && hasRole(user, 'STUDENT'))) {
       const student = await this.prisma.student.findUnique({ where: { id: studentId } });
       if (!student || student.authUserId !== user.id) {
         throw new ForbiddenException('Student access denied');
@@ -134,7 +135,7 @@ export class PerformanceService {
         : {}),
     };
 
-    if (user.role === 'TEACHER') {
+    if (isTeacherOnly(user)) {
       where.OR = [
         { triggeredBySnapshot: { teacherId: user.id } },
         { triggeredBySnapshot: { class: { classTeacherId: user.id } } },
@@ -162,7 +163,7 @@ export class PerformanceService {
   }
 
   async alertsByClass(classId: string, user: { id: string; role: string }): Promise<unknown> {
-    if (user.role === 'TEACHER') {
+    if (isTeacherOnly(user)) {
       const classEntity = await this.prisma.class.findUnique({ where: { id: classId } });
       if (!classEntity) {
         throw new NotFoundException('Class not found');

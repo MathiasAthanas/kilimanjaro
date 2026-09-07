@@ -1,3 +1,4 @@
+import { hasRole, hasAnyRole, isTeacherOnly, isSelfService } from '@kilimanjaro/security';
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { FinancialAuditAction } from '../../generated/prisma';
@@ -114,13 +115,13 @@ export class ReceiptsService {
     const page = Math.max(1, Number(filters.page || 1));
     const limit = Math.min(100, Math.max(1, Number(filters.limit || 20)));
 
-    if (['MANAGING_DIRECTOR', 'BOARD_DIRECTOR'].includes(user.role)) {
+    if (hasAnyRole(user, ['MANAGING_DIRECTOR', 'BOARD_DIRECTOR'])) {
       throw new ForbiddenException('Director roles can only access aggregate finance data');
     }
 
     let studentFilter: string | undefined = filters.studentId;
 
-    if (user.role === 'STUDENT') {
+    if ((isSelfService(user) && hasRole(user, 'STUDENT'))) {
       const ownStudentId = await this.accessControl.resolveStudentIdForAuthUser(user.id);
       if (!ownStudentId) {
         throw new ForbiddenException('Student profile not found');
@@ -131,7 +132,7 @@ export class ReceiptsService {
       studentFilter = ownStudentId;
     }
 
-    if (user.role === 'PARENT') {
+    if ((isSelfService(user) && hasRole(user, 'PARENT'))) {
       const studentIds = await this.accessControl.resolveGuardianStudentIds(user.id);
       if (!studentIds.length) {
         return [];
@@ -180,17 +181,17 @@ export class ReceiptsService {
   }
 
   async byId(id: string, user: RequestUser) {
-    if (['MANAGING_DIRECTOR', 'BOARD_DIRECTOR'].includes(user.role)) {
+    if (hasAnyRole(user, ['MANAGING_DIRECTOR', 'BOARD_DIRECTOR'])) {
       throw new ForbiddenException('Director roles can only access aggregate finance data');
     }
 
     const row = await this.prisma.receipt.findUnique({ where: { id } });
     if (!row) throw new NotFoundException('Receipt not found');
 
-    if (user.role === 'PARENT') {
+    if ((isSelfService(user) && hasRole(user, 'PARENT'))) {
       await this.accessControl.assertParentOwnsStudent(user.id, row.studentId);
     }
-    if (user.role === 'STUDENT') {
+    if ((isSelfService(user) && hasRole(user, 'STUDENT'))) {
       await this.accessControl.assertStudentOwnsRecord(user.id, row.studentId);
     }
 

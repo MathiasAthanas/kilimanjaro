@@ -1,3 +1,4 @@
+import { hasRole, hasAnyRole, isTeacherOnly, isSelfService } from '@kilimanjaro/security';
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RequestUser } from '../common/interfaces/request-user.interface';
@@ -54,10 +55,10 @@ export class InterventionsService {
   }
 
   async byStudent(studentId: string, user?: RequestUser) {
-    if (user?.role === ROLES.PARENT) {
+    if ((user && isSelfService(user) && hasRole(user, 'PARENT'))) {
       await this.accessControl.assertParentOwnsStudent(user.id, studentId);
     }
-    if (user?.role === ROLES.STUDENT) {
+    if ((user && isSelfService(user) && hasRole(user, 'STUDENT'))) {
       await this.accessControl.assertStudentOwnsRecord(user.id, studentId);
     }
 
@@ -66,7 +67,7 @@ export class InterventionsService {
       orderBy: { createdAt: 'desc' },
     });
 
-    if ([ROLES.PARENT, ROLES.STUDENT].includes(user?.role as any)) {
+    if (hasAnyRole(user, [ROLES.PARENT, ROLES.STUDENT])) {
       return items.map((item) => ({
         id: item.id,
         studentId: item.studentId,

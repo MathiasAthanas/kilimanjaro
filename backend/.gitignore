@@ -6,4 +6,5 @@ services/*/generated/prisma/
 .turbo/
 *.tsbuildinfo
 .env
+.local/
 services/*/.env

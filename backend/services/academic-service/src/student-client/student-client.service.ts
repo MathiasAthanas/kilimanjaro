@@ -1,3 +1,4 @@
+import { identityHeaders } from '@kilimanjaro/security';
 import { HttpService } from '@nestjs/axios';
 import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -11,10 +12,17 @@ export class StudentClientService {
   ) {}
 
   private buildHeaders(extra?: Record<string, string>): Record<string, string> {
+    const identity = identityHeaders();
+    const serviceRole = extra?.['X-User-Role'];
     return {
       'X-Internal-Api-Key': this.configService.get<string>('INTERNAL_API_KEY', ''),
       'X-Internal-Request': 'true',
+      ...identity,
       ...(extra || {}),
+      // Explicit server-side service operations retain their existing delegated
+      // role, while the owning school always comes from verified context.
+      ...(serviceRole && serviceRole !== identity['X-User-Role'] ? { 'X-User-Primary-Role': serviceRole, 'X-User-Roles': serviceRole } : {}),
+      'X-School-Id': identity['X-School-Id'] || '',
     };
   }
 

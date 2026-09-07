@@ -1,4 +1,5 @@
-import { ForbiddenException, Injectable } from '@nestjs/common';
+import { authorizeStudent } from '../common/helpers/student-access.helper';
+import { Injectable } from '@nestjs/common';
 import { AttendanceStatus, Prisma } from '../../generated/prisma';
 import { PrismaService } from '../prisma/prisma.service';
 import { RabbitMqService } from '../rabbitmq/rabbitmq.service';
@@ -60,21 +61,7 @@ export class AttendanceService {
   }
 
   async list(filters: AttendanceFilterDto, currentUser?: { id: string; role: string }): Promise<unknown> {
-    if (currentUser?.role === 'PARENT') {
-      if (!filters.studentId) {
-        throw new ForbiddenException('Parent must provide studentId');
-      }
-      const link = await this.prisma.studentGuardianLink.findFirst({
-        where: {
-          studentId: filters.studentId,
-          isActive: true,
-          guardian: { authUserId: currentUser.id },
-        },
-      });
-      if (!link) {
-        throw new ForbiddenException('Parent access denied');
-      }
-    }
+    await authorizeStudent(this.prisma, filters.studentId, currentUser);
 
     const pagination = paginate(filters.page, filters.limit);
 
@@ -115,25 +102,7 @@ export class AttendanceService {
   }
 
   async summary(studentId: string, currentUser?: { id: string; role: string }): Promise<unknown> {
-    if (currentUser?.role === 'PARENT') {
-      const link = await this.prisma.studentGuardianLink.findFirst({
-        where: {
-          studentId,
-          isActive: true,
-          guardian: { authUserId: currentUser.id },
-        },
-      });
-      if (!link) {
-        throw new ForbiddenException('Parent access denied');
-      }
-    }
-
-    if (currentUser?.role === 'STUDENT') {
-      const student = await this.prisma.student.findUnique({ where: { id: studentId } });
-      if (!student || student.authUserId !== currentUser.id) {
-        throw new ForbiddenException('Student access denied');
-      }
-    }
+    await authorizeStudent(this.prisma, studentId, currentUser);
 
     const records = await this.prisma.attendanceRecord.findMany({
       where: { studentId },

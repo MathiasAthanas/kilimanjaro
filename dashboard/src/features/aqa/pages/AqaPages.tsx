@@ -1849,12 +1849,3 @@ function useAlert() {
     alert: isLoading ? null : (apiAlerts.find((a) => a.id === id) ?? null),
   }), [id, apiAlerts, isLoading]);
 }
-
-function useStudentAlert() {
-  const { studentId } = useParams();
-  const { data: apiAlerts = [] as typeof aqaAlerts, isLoading } = useAqaAlerts() as unknown as { data: typeof aqaAlerts; isLoading: boolean };
-  return useMemo(() => ({
-    loading: isLoading,
-    alert: isLoading ? null : (apiAlerts.find((a) => a.studentId === studentId) ?? null),
-  }), [studentId, apiAlerts, isLoading]);
-}

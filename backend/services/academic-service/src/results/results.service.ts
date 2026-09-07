@@ -1,3 +1,4 @@
+import { hasRole, hasAnyRole, isTeacherOnly, isSelfService } from '@kilimanjaro/security';
 import {
   BadRequestException,
   ForbiddenException,
@@ -275,9 +276,9 @@ export class ResultsService {
       isPublished: filters.isPublished === undefined ? undefined : filters.isPublished === 'true',
     };
 
-    if (user?.role === ROLES.STUDENT || user?.role === ROLES.PARENT) {
+    if ((user && isSelfService(user) && hasRole(user, 'STUDENT')) || (user && isSelfService(user) && hasRole(user, 'PARENT'))) {
       where.isPublished = true;
-      if (user.role === ROLES.STUDENT) {
+      if ((user && isSelfService(user) && hasRole(user, 'STUDENT'))) {
         const studentId = await this.accessControl.resolveStudentIdForAuthUser(user.id);
         if (!studentId) {
           return [];
@@ -285,7 +286,7 @@ export class ResultsService {
         where.studentId = studentId;
       }
 
-      if (user.role === ROLES.PARENT) {
+      if ((user && isSelfService(user) && hasRole(user, 'PARENT'))) {
         const studentIds = await this.accessControl.resolveGuardianStudentIds(user.id);
         if (filters.studentId) {
           await this.accessControl.assertParentOwnsStudent(user.id, filters.studentId);
@@ -347,7 +348,7 @@ export class ResultsService {
   }
 
   async publishResults(dto: PublishResultsDto, user: RequestUser) {
-    if (user.role !== ROLES.PRINCIPAL) {
+    if (!hasRole(user, 'PRINCIPAL')) {
       throw new ForbiddenException('Only principal can publish results');
     }
 

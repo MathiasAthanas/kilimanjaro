@@ -1,3 +1,4 @@
+import { SchoolJob } from '@kilimanjaro/security';
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
@@ -10,6 +11,7 @@ export class ProgressAggregatorJob {
 
   /** Runs at midnight — refreshes enrolledCount on all active courses */
   @Cron('0 0 * * *')
+  @SchoolJob()
   async run(): Promise<void> {
     try {
       const courses = await this.prisma.courseSpace.findMany({

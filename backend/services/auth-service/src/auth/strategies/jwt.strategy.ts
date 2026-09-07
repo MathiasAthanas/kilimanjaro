@@ -1,3 +1,4 @@
+import { PrismaService } from '../../prisma/prisma.service';
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
@@ -6,6 +7,10 @@ import { RedisService } from '../../redis/redis.service';
 
 interface JwtPayload {
   sub: string;
+  tokenVersion?: number;
+  schoolId?: string | null;
+  roles?: string[];
+  primaryRole?: string;
   role: string;
   email: string | null;
   registrationNumber: string | null;
@@ -19,6 +24,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
     configService: ConfigService,
     private readonly redisService: RedisService,
+    private readonly prisma: PrismaService,
   ) {
     const publicKey = (configService.get<string>('JWT_PUBLIC_KEY') || '').replace(/\\n/g, '\n');
 
@@ -36,6 +42,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('Token has been revoked');
     }
 
-    return payload;
+    const user = await this.prisma.user.findUnique({ where: { id: payload.sub }, include: { roles: true } });
+    if (!user?.isActive || payload.tokenVersion !== user.tokenVersion) throw new UnauthorizedException('Session expired; log in again');
+    return { ...payload, schoolId: user.schoolId, role: user.role, primaryRole: user.role, roles: user.roles.map(r => r.role) };
   }
 }
