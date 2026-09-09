@@ -221,14 +221,43 @@ Rules followed:
     - Confirmed `/superadmin` renders the `System Administrators` panel.
     - Created a temporary administrator through the live UI.
     - The UI request returned HTTP `201`, the first-login password was displayed, and no API failures or browser console errors were captured.
-  - Removed all temporary verification data:
-    - Temporary auth refresh tokens.
-    - Temporary auth memberships.
-    - Temporary auth users.
-    - Temporary local and remote verification scripts.
+- Removed all temporary verification data:
+  - Temporary auth refresh tokens.
+  - Temporary auth memberships.
+  - Temporary auth users.
+  - Temporary local and remote verification scripts.
+- Integrated and deployed the completed multi-school/school-scope implementation on `2026-09-09`.
+  - Committed the integrated work as `61c633b` (`Integrate multischool production fixes`) and pushed it to `origin/main`.
+  - Updated the dashboard lockfile, committed it as `f521253` (`Sync dashboard lockfile`), and pushed it to `origin/main`.
+  - Local verification before deployment:
+    - `npm run build` in `backend` passed after stopping local PM2 services that were holding Windows Prisma DLL locks.
+    - `npx tsc --noEmit --pretty false` in `dashboard` passed.
+    - `npx vite build` in `dashboard` passed, with the existing large-bundle warning.
+    - `npm run test --workspace=services/api-gateway -- proxy.service.spec.ts` passed (`6/6`).
+    - `npx vitest run src/features/principal src/features/teacher` passed (`54/54`), with known jsdom network noise in the principal smoke file.
+  - First production deployment attempt from `61c633b` stopped before switching the live app because `dashboard/package-lock.json` was out of sync with `dashboard/package.json`.
+  - Second production deployment from `f521253` built successfully on the VPS:
+    - Backend `npm ci` and `npm run build` passed.
+    - Dashboard `npm ci` and `npm run build` passed, with the existing large-bundle warning.
+  - Database update:
+    - `prisma migrate deploy` reported no pending migrations for `auth-service`, `finance-service`, `notification-service`, `analytics-service`, `elearning-service`, and `api-gateway`.
+    - `student-service` was already in sync via `prisma db push --skip-generate`.
+    - `academic-service` required `prisma db push --skip-generate --accept-data-loss` because the new schema adds `Assessment.examWindowId` and a unique constraint on `Assessment(classSubjectId, examWindowId)`. The previous production table did not have `examWindowId`, so there were no existing duplicate pairs to collapse.
+  - Switched `/opt/kilimanjaro/app` to `/opt/kilimanjaro/releases/f521253-20260909062904`.
+  - Republished the dashboard static build to `/var/www/kilimanjaro-manage`.
+  - Restarted all eight PM2 services and saved the PM2 process list.
+  - `nginx -t` passed and Nginx was reloaded.
+  - Verified production after deployment:
+    - `https://srms.kilimanjaroschools.site/health` returned HTTP `200` with `auth`, `students`, `academics`, `finance`, `notifications`, and `analytics` reachable.
+    - `https://manage.kilimanjaroschools.site` returned HTTP `200`.
+    - PM2 showed all eight Kilimanjaro backend services online.
+    - Temporary `SUPER_ADMIN` verification login succeeded through the public gateway.
+    - Authenticated route checks returned HTTP `200` for `/auth/users?role=SYSTEM_ADMIN`, `/schools`, `/students/classes`, `/students/academic-years`, `/students/terms`, `/academics/subjects`, and `/analytics/group/overview`.
+    - Temporary verification user, membership, refresh tokens, and audit rows were removed; remaining `deploy-check-%@kilimanjaroschools.site` users count is `0`.
+    - Removed third-party `.claude` directories created under production `node_modules`; final scan for matching `codex`, `openai`, `.claude`, and `.qoder` paths under `/opt/kilimanjaro/app` returned no matches.
 
 Current limitation:
 
 - Real outbound email, SMS, and Firebase push credentials were not provided. Notification service is configured to run, but external delivery remains disabled/mock until provider credentials are supplied.
-- `student-service` and `academic-service` migration folders need follow-up cleanup so future production deployments can use pure `prisma migrate deploy` from an empty database.
+- `student-service` and `academic-service` still need migration-history cleanup for pure `prisma migrate deploy` on the existing production database; the live schema is in sync after `db push`.
 - Dependency vulnerability reports should be reviewed and remediated separately; automatic `npm audit fix --force` was not run because it may introduce breaking dependency upgrades.
