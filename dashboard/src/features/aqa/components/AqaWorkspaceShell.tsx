@@ -32,6 +32,9 @@ export function AqaWorkspaceShell({
 }) {
   const session = useAuthStore((state) => state.session);
   const userName = session?.user?.name ?? 'AQA Officer';
+  const { data: summary } = useAqaSchoolSummary();
+  const summaryObj = (summary ?? {}) as Record<string, unknown>;
+  const criticalCount = Number(summaryObj.criticalCount ?? summaryObj.critical ?? summaryObj.criticalAlerts ?? 0);
   return (
     <div className="space-y-gutter">
       {/* Header banner */}
@@ -44,9 +47,8 @@ export function AqaWorkspaceShell({
             <p className="mt-1.5 text-sm font-semibold text-white/70">{userName} · Academic Quality Assurance</p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <Badge tone="gold">Term II</Badge>
             <Badge tone="emerald">Engine Active</Badge>
-            <Badge tone="rose">3 Critical</Badge>
+            {criticalCount > 0 && <Badge tone="rose">{criticalCount} Critical</Badge>}
             {action}
           </div>
         </div>
@@ -383,65 +385,82 @@ export function AlertCard({ alert }: { alert: AqaAlert }) {
 // ─── Pairing funnel ──────────────────────────────────────────────────────────
 
 export function PairingFunnel() {
-  const rows = [
-    { label: 'Suggested',        value: 42, pct: 100, tone: 'bg-ks-navy'    },
-    { label: 'Activated',        value: 30, pct: 71,  tone: 'bg-ks-sky'     },
-    { label: 'Positive outcome', value: 26, pct: 62,  tone: 'bg-ks-emerald' },
-  ];
+  const { data: summary } = useAqaSchoolSummary();
+  const s = (summary ?? {}) as Record<string, unknown>;
+  const suggested   = Number(s.pairingSuggested   ?? s.totalPairings       ?? s.suggested      ?? 0);
+  const activated   = Number(s.pairingActivated   ?? s.activePairings      ?? s.activated      ?? 0);
+  const positive    = Number(s.pairingPositive    ?? s.positiveOutcomes    ?? s.positive       ?? 0);
+  const effectiveness = Number(s.pairingEffectivenessRate ?? s.effectivenessRate ?? s.effectiveness ?? 0);
+
+  const hasData = suggested > 0;
+  const rows = hasData
+    ? [
+        { label: 'Suggested',        value: suggested, pct: 100,                                           tone: 'bg-ks-navy'    },
+        { label: 'Activated',        value: activated, pct: suggested > 0 ? Math.round(activated / suggested * 100) : 0, tone: 'bg-ks-sky'     },
+        { label: 'Positive outcome', value: positive,  pct: suggested > 0 ? Math.round(positive  / suggested * 100) : 0, tone: 'bg-ks-emerald' },
+      ]
+    : [];
+
   const [hov, setHov] = useState<number | null>(null);
   return (
     <Card className="rounded-xl p-6">
       <h2 className="font-display text-xl font-black text-ks-navy">Pairing Effectiveness</h2>
       <p className="mt-1 text-sm font-semibold text-ks-muted">Measurable score lift after activation</p>
-      <div className="mt-6 space-y-5">
-        {rows.map(({ label, value, pct, tone }, i) => (
-          <div
-            key={label}
-            className="cursor-pointer"
-            onMouseEnter={() => setHov(i)}
-            onMouseLeave={() => setHov(null)}
-          >
-            <div className="mb-2 flex items-center justify-between text-sm">
-              <span className={`font-bold transition-colors ${hov === i ? 'text-ks-navy' : 'text-ks-navy/70'}`}>{label}</span>
-              <div className="flex items-center gap-3">
-                <span className="font-black text-ks-navy">{value}</span>
-                <motion.span
-                  animate={{ color: hov === i ? '#061f33' : '#94a3b8' }}
-                  transition={{ duration: 0.2 }}
-                  className="w-10 text-right text-[11px] font-bold"
-                >
-                  {pct}%
-                </motion.span>
+      {!hasData ? (
+        <p className="mt-6 text-sm font-semibold text-ks-muted">No pairing data available yet.</p>
+      ) : (
+        <>
+          <div className="mt-6 space-y-5">
+            {rows.map(({ label, value, pct, tone }, i) => (
+              <div
+                key={label}
+                className="cursor-pointer"
+                onMouseEnter={() => setHov(i)}
+                onMouseLeave={() => setHov(null)}
+              >
+                <div className="mb-2 flex items-center justify-between text-sm">
+                  <span className={`font-bold transition-colors ${hov === i ? 'text-ks-navy' : 'text-ks-navy/70'}`}>{label}</span>
+                  <div className="flex items-center gap-3">
+                    <span className="font-black text-ks-navy">{value}</span>
+                    <motion.span
+                      animate={{ color: hov === i ? '#061f33' : '#94a3b8' }}
+                      transition={{ duration: 0.2 }}
+                      className="w-10 text-right text-[11px] font-bold"
+                    >
+                      {pct}%
+                    </motion.span>
+                  </div>
+                </div>
+                <div className="relative h-9 overflow-hidden rounded-lg bg-ks-mist">
+                  <motion.div
+                    className={`h-full rounded-lg ${tone}`}
+                    initial={{ width: '0%' }}
+                    animate={{ width: `${pct}%`, opacity: hov === i ? 1 : 0.82 }}
+                    transition={{ duration: 0.9, ease: 'easeOut', delay: i * 0.12 }}
+                  />
+                  <AnimatePresence>
+                    {hov === i && (
+                      <motion.span
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.15 }}
+                        className="pointer-events-none absolute inset-0 flex items-center px-3 text-[11px] font-black text-white drop-shadow"
+                      >
+                        {value} students · {pct}% conversion rate
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
+                </div>
               </div>
-            </div>
-            <div className="relative h-9 overflow-hidden rounded-lg bg-ks-mist">
-              <motion.div
-                className={`h-full rounded-lg ${tone}`}
-                initial={{ width: '0%' }}
-                animate={{ width: `${pct}%`, opacity: hov === i ? 1 : 0.82 }}
-                transition={{ duration: 0.9, ease: 'easeOut', delay: i * 0.12 }}
-              />
-              <AnimatePresence>
-                {hov === i && (
-                  <motion.span
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.15 }}
-                    className="pointer-events-none absolute inset-0 flex items-center px-3 text-[11px] font-black text-white drop-shadow"
-                  >
-                    {value} students · {pct}% conversion rate
-                  </motion.span>
-                )}
-              </AnimatePresence>
-            </div>
+            ))}
           </div>
-        ))}
-      </div>
-      <div className="mt-5 flex items-center justify-between rounded-lg bg-ks-emerald/10 px-4 py-3">
-        <span className="text-sm font-bold text-ks-emerald">Overall effectiveness</span>
-        <span className="font-display text-xl font-black text-ks-emerald">62%</span>
-      </div>
+          <div className="mt-5 flex items-center justify-between rounded-lg bg-ks-emerald/10 px-4 py-3">
+            <span className="text-sm font-bold text-ks-emerald">Overall effectiveness</span>
+            <span className="font-display text-xl font-black text-ks-emerald">{effectiveness > 0 ? `${Math.round(effectiveness)}%` : '—'}</span>
+          </div>
+        </>
+      )}
     </Card>
   );
 }
@@ -499,7 +518,9 @@ export function PairingTable({ pairings }: { pairings: AqaPairing[] }) {
           <Td>{p.teacher}</Td>
           <Td>{p.outcome}</Td>
           <Td>
-            <Button variant="secondary" className="rounded-lg py-1.5 text-xs">Open</Button>
+            <NavLink to="/aqa/pairings" className="rounded-lg border border-ks-line bg-white px-3 py-1.5 text-xs font-bold text-ks-navy transition hover:bg-ks-paper">
+              View
+            </NavLink>
           </Td>
         </tr>
       ))}

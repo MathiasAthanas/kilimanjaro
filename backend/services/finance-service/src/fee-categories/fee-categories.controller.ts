@@ -15,15 +15,15 @@ export class FeeCategoriesController {
   constructor(private readonly feeCategoriesService: FeeCategoriesService) {}
 
   @Post()
-  @Roles(ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN)
+  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
   create(@Body() dto: CreateFeeCategoryDto, @CurrentUser() user?: RequestUser) {
     return this.feeCategoriesService.create(dto, user!);
   }
 
   @Get()
   @Roles(
-    ROLES.FINANCE,
-    ROLES.PRINCIPAL,
+    ROLES.FINANCE, ROLES.HEAD_OF_FINANCE,
+    ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN,
     ROLES.SYSTEM_ADMIN,
     ROLES.MANAGING_DIRECTOR,
     ROLES.BOARD_DIRECTOR,
@@ -39,15 +39,15 @@ export class FeeCategoriesController {
   }
 
   @Patch('reorder')
-  @Roles(ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN)
+  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
   reorder(@Body() dto: ReorderCategoriesDto) {
     return this.feeCategoriesService.reorder(dto);
   }
 
   @Get(':id')
   @Roles(
-    ROLES.FINANCE,
-    ROLES.PRINCIPAL,
+    ROLES.FINANCE, ROLES.HEAD_OF_FINANCE,
+    ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN,
     ROLES.SYSTEM_ADMIN,
     ROLES.MANAGING_DIRECTOR,
     ROLES.BOARD_DIRECTOR,
@@ -59,7 +59,7 @@ export class FeeCategoriesController {
   }
 
   @Patch(':id')
-  @Roles(ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN)
+  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
   update(@Param('id') id: string, @Body() dto: UpdateFeeCategoryDto, @CurrentUser() user?: RequestUser) {
     return this.feeCategoriesService.update(id, dto, user!);
   }

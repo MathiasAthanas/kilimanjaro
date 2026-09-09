@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { IsEnum, IsOptional, IsString, Min } from 'class-validator';
 import { AlertSeverity, AlertType, PairingStatus } from '../../../generated/prisma';
 
@@ -7,13 +7,24 @@ export class PerformanceFilterDto {
   @IsEnum(AlertType)
   alertType?: AlertType;
 
+  // Accepts a single severity ("HIGH") or a comma-separated list ("HIGH,CRITICAL").
   @IsOptional()
-  @IsEnum(AlertSeverity)
-  severity?: AlertSeverity;
+  @Transform(({ value }) =>
+    typeof value === 'string'
+      ? value.split(',').map((s) => s.trim()).filter(Boolean)
+      : value,
+  )
+  @IsEnum(AlertSeverity, { each: true })
+  severity?: AlertSeverity | AlertSeverity[];
 
   @IsOptional()
   @IsString()
   classId?: string;
+
+  // Comma-separated list of classIds — accepted alongside singular classId for UI convenience.
+  @IsOptional()
+  @IsString()
+  classIds?: string;
 
   @IsOptional()
   @IsString()

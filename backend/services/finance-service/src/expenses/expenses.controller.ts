@@ -14,31 +14,31 @@ export class ExpensesController {
   constructor(private readonly expensesService: ExpensesService) {}
 
   @Post()
-  @Roles(ROLES.FINANCE, ROLES.SYSTEM_ADMIN)
+  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.SYSTEM_ADMIN)
   create(@Body() dto: CreateExpenseDto, @CurrentUser() user?: RequestUser) {
     return this.expensesService.create(dto, user!);
   }
 
   @Get()
-  @Roles(ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN, ROLES.MANAGING_DIRECTOR, ROLES.BOARD_DIRECTOR)
-  list(@Query() query: any) {
-    return this.expensesService.list(query);
+  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN, ROLES.MANAGING_DIRECTOR, ROLES.BOARD_DIRECTOR)
+  list(@Query() query: any, @CurrentUser() user?: RequestUser) {
+    return this.expensesService.list(query, user);
   }
 
   @Get('summary')
-  @Roles(ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN, ROLES.MANAGING_DIRECTOR, ROLES.BOARD_DIRECTOR)
-  summary(@Query() query: any) {
-    return this.expensesService.summary(query);
+  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN, ROLES.MANAGING_DIRECTOR, ROLES.BOARD_DIRECTOR)
+  summary(@Query() query: any, @CurrentUser() user?: RequestUser) {
+    return this.expensesService.summary(query, user);
   }
 
   @Get(':id')
-  @Roles(ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN, ROLES.MANAGING_DIRECTOR)
+  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN, ROLES.MANAGING_DIRECTOR)
   byId(@Param('id') id: string) {
     return this.expensesService.byId(id);
   }
 
   @Patch(':id/void')
-  @Roles(ROLES.FINANCE, ROLES.SYSTEM_ADMIN)
+  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.SYSTEM_ADMIN)
   void(@Param('id') id: string, @Body() dto: VoidExpenseDto, @CurrentUser() user?: RequestUser) {
     return this.expensesService.void(id, dto, user!);
   }

@@ -6,5 +6,6 @@ import { FinancialStatementService } from './financial-statement.service';
 @Module({
   controllers: [ReportsController],
   providers: [ReportsService, FinancialStatementService],
+  exports: [ReportsService],
 })
 export class ReportsModule {}

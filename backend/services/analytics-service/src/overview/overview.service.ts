@@ -12,26 +12,31 @@ export class OverviewService {
     return (await this.prisma.academicYear.findFirst({ where: { isCurrent: true } }))?.id;
   }
 
-  async getOverview(academicYearId?: string) {
+  async getOverview(academicYearId?: string, schoolId?: string | null) {
     const yearId = academicYearId || (await this.currentYearId()) || undefined;
-    const cacheKey = `analytics:overview:v2:${yearId || 'current'}`;
+    const scopeKey = schoolId || 'group';
+    const cacheKey = `analytics:overview:v2:${scopeKey}:${yearId || 'current'}`;
     const cached = await this.redis.get<any>(cacheKey);
     if (cached) return cached;
 
+    // When a school-scoped user calls this, restrict all queries to their school.
+    const schoolFilter = schoolId ? { schoolId } : {};
+    const studentSchoolFilter = schoolId ? { schoolId } : {};
+
     const [students, activeStudents, byGender, byStatus, classes, terms, termResults, alerts, pairings, invoices, payments, attendance, notifications] = await Promise.all([
-      this.prisma.student.count(),
-      this.prisma.student.count({ where: { status: 'ACTIVE' } }),
-      this.prisma.student.groupBy({ by: ['gender'], _count: { _all: true } }),
-      this.prisma.student.groupBy({ by: ['status'], _count: { _all: true } }),
-      this.prisma.class.findMany({ where: { academicYearId: yearId }, select: { id: true, name: true, stream: true } }),
+      this.prisma.student.count({ where: studentSchoolFilter }),
+      this.prisma.student.count({ where: { ...studentSchoolFilter, status: 'ACTIVE' } }),
+      this.prisma.student.groupBy({ by: ['gender'], where: studentSchoolFilter, _count: { _all: true } }),
+      this.prisma.student.groupBy({ by: ['status'], where: studentSchoolFilter, _count: { _all: true } }),
+      this.prisma.class.findMany({ where: { academicYearId: yearId, ...schoolFilter }, select: { id: true, name: true, stream: true } }),
       this.prisma.term.findMany({ where: { academicYearId: yearId }, orderBy: { name: 'asc' } }),
-      this.prisma.termResult.findMany({ where: { academicYearId: yearId, isPublished: true }, select: { weightedTotal: true, isPassing: true, subjectName: true } }),
-      this.prisma.performanceAlert.findMany({ where: { isResolved: false }, select: { severity: true, alertType: true } }),
-      this.prisma.peerPairing.findMany({ where: { status: 'COMPLETED' }, select: { outcomeDelta: true } }),
-      this.prisma.invoice.findMany({ where: { academicYearId: yearId }, select: { totalAmount: true, paidAmount: true, outstandingBalance: true, status: true } }),
-      this.prisma.payment.findMany({ where: { status: 'CONFIRMED' }, select: { method: true, amount: true } }),
-      this.prisma.attendanceRecord.findMany({ select: { status: true } }),
-      this.prisma.notification.findMany({ where: { createdAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } }, select: { channel: true, status: true } }),
+      this.prisma.termResult.findMany({ where: { academicYearId: yearId, isPublished: true, ...schoolFilter }, select: { weightedTotal: true, isPassing: true, subjectName: true } }),
+      this.prisma.performanceAlert.findMany({ where: { isResolved: false, ...(schoolId ? { student: { schoolId } } : {}) }, select: { severity: true, alertType: true } }),
+      this.prisma.peerPairing.findMany({ where: { status: 'COMPLETED', ...(schoolId ? { class: { schoolId } } : {}) }, select: { outcomeDelta: true } }),
+      this.prisma.invoice.findMany({ where: { academicYearId: yearId, ...schoolFilter }, select: { totalAmount: true, paidAmount: true, outstandingBalance: true, status: true } }),
+      this.prisma.payment.findMany({ where: { status: 'CONFIRMED', ...schoolFilter }, select: { method: true, amount: true } }),
+      this.prisma.attendanceRecord.findMany({ where: schoolId ? { schoolId } : {}, select: { status: true } }),
+      this.prisma.notification.findMany({ where: { createdAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) }, ...schoolFilter }, select: { channel: true, status: true } }),
     ]);
 
     const enrolByClass = await Promise.all(

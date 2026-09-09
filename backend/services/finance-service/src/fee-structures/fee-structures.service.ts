@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { AuditService } from '../audit/audit.service';
 import { RequestUser } from '../common/interfaces/request-user.interface';
+import { schoolScopeFilter } from '../common/helpers/school-scope.helper';
 import { CreateFeeStructureDto } from './dto/create-fee-structure.dto';
 import { UpdateFeeStructureDto } from './dto/update-fee-structure.dto';
 import { AssignStudentGroupDto, CreateStudentGroupDto } from './dto/student-group.dto';
@@ -28,8 +29,10 @@ export class FeeStructuresService {
       throw new BadRequestException('Provide educationStage when targeting by classLevel');
     }
 
+    const schoolId = user.activeSchoolId ?? user.schoolIds?.find((id) => id !== '*') ?? null;
     const row = await this.prisma.feeStructure.create({
       data: {
+        schoolId,
         feeCategoryId: dto.feeCategoryId,
         classId: dto.classId,
         educationStage: dto.educationStage,
@@ -58,18 +61,22 @@ export class FeeStructuresService {
     return row;
   }
 
-  list(filters: {
-    feeCategoryId?: string;
-    classId?: string;
-    educationStage?: string;
-    classLevel?: string;
-    studentGroup?: string;
-    academicYearId?: string;
-    termId?: string;
-    isActive?: string;
-  }) {
+  list(
+    filters: {
+      feeCategoryId?: string;
+      classId?: string;
+      educationStage?: string;
+      classLevel?: string;
+      studentGroup?: string;
+      academicYearId?: string;
+      termId?: string;
+      isActive?: string;
+    },
+    user?: RequestUser,
+  ) {
     return this.prisma.feeStructure.findMany({
       where: {
+        ...(user ? schoolScopeFilter(user) : {}),
         feeCategoryId: filters.feeCategoryId,
         classId: filters.classId,
         educationStage: filters.educationStage as any,
@@ -84,8 +91,9 @@ export class FeeStructuresService {
     });
   }
 
-  async matrix(filters: { academicYearId: string; termId?: string; educationStage?: string }) {
-    const cacheKey = `fee-matrix:${filters.academicYearId}:${filters.termId || 'ANNUAL'}:${filters.educationStage || 'ALL'}`;
+  async matrix(filters: { academicYearId: string; termId?: string; educationStage?: string; schoolId?: string | null }) {
+    const scopeKey = filters.schoolId || 'group';
+    const cacheKey = `fee-matrix:${scopeKey}:${filters.academicYearId}:${filters.termId || 'ANNUAL'}:${filters.educationStage || 'ALL'}`;
     const cached = await this.redis.get(cacheKey);
     if (cached) return cached;
 
@@ -95,6 +103,7 @@ export class FeeStructuresService {
         termId: filters.termId,
         educationStage: filters.educationStage as any,
         isActive: true,
+        ...(filters.schoolId ? { schoolId: filters.schoolId } : {}),
       },
       include: { feeCategory: true },
       orderBy: [{ classId: 'asc' }, { feeCategory: { displayOrder: 'asc' } }],

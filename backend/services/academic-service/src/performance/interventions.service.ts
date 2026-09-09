@@ -14,9 +14,11 @@ export class InterventionsService {
   ) {}
 
   create(dto: CreateInterventionDto, user: RequestUser) {
+    const schoolId = user.scope === 'SCHOOL' ? (user.activeSchoolId ?? user.schoolIds?.[0] ?? null) : null;
     return this.prisma.academicIntervention.create({
       data: {
         ...dto,
+        schoolId,
         performedById: user.id,
         performedByRole: user.role,
         followUpDate: dto.followUpDate ? new Date(dto.followUpDate) : undefined,
@@ -30,6 +32,7 @@ export class InterventionsService {
     performedById?: string;
     isFollowedUp?: string;
     subjectId?: string;
+    schoolId?: string | null;
   }) {
     return this.prisma.academicIntervention.findMany({
       where: {
@@ -38,6 +41,7 @@ export class InterventionsService {
         performedById: filters.performedById,
         subjectId: filters.subjectId,
         isFollowedUp: filters.isFollowedUp === undefined ? undefined : filters.isFollowedUp === 'true',
+        ...(filters.schoolId ? { schoolId: filters.schoolId } : {}),
       },
       orderBy: { createdAt: 'desc' },
     });

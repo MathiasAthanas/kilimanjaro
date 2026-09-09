@@ -12,7 +12,7 @@ import {
   FinanceBreadcrumb,
   FinanceMetricStrip,
 } from '../components/FinanceWorkspaceShell';
-import { FundRequestBoard } from '../components/FundRequestBoard';
+import { FundRequestBoard, FundRequestDetailView } from '../components/FundRequestBoard';
 import { FinancialStatementReport } from '../components/FinancialStatementReport';
 import { EXPENSE_CATEGORY_OPTIONS, STORE_CATEGORY_OPTIONS, PAYMENT_METHOD_OPTIONS, STORE_UNIT_OPTIONS } from '../components/financeOpsConstants';
 import { getLogoBase64 } from '../components/FinanceWorkspaceShell';
@@ -44,7 +44,17 @@ export function BursarFundRequestsPage() {
   return (
     <FinanceWorkspaceShell title="Fund Requests" eyebrow="Departmental funding workflow">
       <FinanceBreadcrumb crumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Fund Requests' }]} />
-      <FundRequestBoard role="bursar" userName={userName} />
+      <FundRequestBoard role="finance" userName={userName} basePath="/finance/fund-requests" />
+    </FinanceWorkspaceShell>
+  );
+}
+
+export function BursarFundRequestDetailPage() {
+  const userName = useUserName();
+  return (
+    <FinanceWorkspaceShell title="Fund Request" eyebrow="Departmental funding workflow">
+      <FinanceBreadcrumb crumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Fund Requests', to: '/finance/fund-requests' }, { label: 'Detail' }]} />
+      <FundRequestDetailView role="finance" userName={userName} basePath="/finance/fund-requests" />
     </FinanceWorkspaceShell>
   );
 }

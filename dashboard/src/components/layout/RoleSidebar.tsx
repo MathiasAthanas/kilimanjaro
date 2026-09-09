@@ -30,10 +30,10 @@ import {
   Table2,
   Target,
   TrendingUp,
+  Upload,
   User,
   UserPlus,
   Users,
-  Video,
   WalletCards,
   X,
 } from 'lucide-react';
@@ -64,6 +64,7 @@ const teacherSections: SidebarSection[] = [
     title: 'Academic Work',
     items: [
       { to: '/teacher/assessments',    icon: FileSpreadsheet,   label: 'Marks Entry',         end: true },
+      { to: '/teacher/exams',          icon: ClipboardCheck,    label: 'Exam Windows',        end: true },
       { to: '/teacher/syllabus',       icon: Target,            label: 'Syllabus Tracker',    end: true },
       { to: '/teacher/timetable',      icon: CalendarCheck,     label: 'Timetable',           end: true },
       { to: '/teacher/report-remarks', icon: MessageSquarePlus, label: 'Report Card Remarks', end: true },
@@ -106,9 +107,8 @@ const hodSections: SidebarSection[] = [
     title: 'HOD Command',
     items: [
       { to: '/hod',                                             icon: Landmark,       label: 'Command Center',  end: true },
-      { to: '/hod/approvals',                                   icon: ClipboardCheck, label: 'Pending Approvals', end: true },
-      { to: '/hod/approvals/hod-appr-chem-3b-midterm',         icon: FileSpreadsheet,label: 'Review Oldest'              },
-      { to: '/hod/approvals/history',                           icon: FileText,       label: 'Approval History'           },
+      { to: '/hod/approvals',         icon: ClipboardCheck, label: 'Pending Approvals', end: true },
+      { to: '/hod/approvals/history', icon: FileText,       label: 'Approval History'           },
     ],
   },
   {
@@ -124,9 +124,8 @@ const hodSections: SidebarSection[] = [
     items: [
       { to: '/hod/department',                      icon: Target, label: 'Department Overview', end: true },
       { to: '/hod/assignments',                     icon: BookOpen, label: 'Subject Assignments', end: true },
-      { to: '/hod/department/subjects/chemistry',   icon: Shield, label: 'Chemistry Risk'                 },
-      { to: '/hod/teachers',                        icon: Users,  label: 'Teacher Matrix',      end: true },
-      { to: '/hod/teachers/teacher-amina',          icon: User,   label: 'Teacher Detail'                 },
+      { to: '/hod/department/subjects',              icon: Shield, label: 'Subject Risk',      end: true  },
+      { to: '/hod/teachers', icon: Users, label: 'Teacher Matrix', end: true },
     ],
   },
   {
@@ -139,10 +138,9 @@ const hodSections: SidebarSection[] = [
   {
     title: 'Performance',
     items: [
-      { to: '/hod/performance',           icon: AlertTriangle,    label: 'Risk Alerts',   end: true },
-      { to: '/hod/performance/pairings',  icon: Users,            label: 'Peer Pairings'            },
-      { to: '/hod/students/stu-jabir',    icon: User,             label: 'Student Profile'          },
-      { to: '/hod/interventions',         icon: MessageSquarePlus,label: 'Interventions'            },
+      { to: '/hod/performance',          icon: AlertTriangle,    label: 'Risk Alerts',  end: true },
+      { to: '/hod/performance/pairings', icon: Users,            label: 'Peer Pairings'           },
+      { to: '/hod/interventions',        icon: MessageSquarePlus,label: 'Interventions'           },
     ],
   },
   {
@@ -174,10 +172,17 @@ const aqaSections: SidebarSection[] = [
   {
     title: 'AQA Command',
     items: [
-      { to: '/aqa',                                              icon: LayoutDashboard, label: 'Command Center',      end: true },
-      { to: '/aqa/performance',                                  icon: AlertTriangle,   label: 'Performance Center',  end: true },
-      { to: '/aqa/performance/alerts/alert-jabir-chem',         icon: Shield,          label: 'Alert Investigation'            },
-      { to: '/aqa/performance/pairings',                        icon: Users,           label: 'Peer Pairings'                  },
+      { to: '/aqa',                       icon: LayoutDashboard, label: 'Command Center',     end: true },
+      { to: '/aqa/performance',           icon: AlertTriangle,   label: 'Performance Center', end: true },
+      { to: '/aqa/performance/pairings',  icon: Users,           label: 'Peer Pairings'                 },
+    ],
+  },
+  {
+    title: 'Examinations',
+    items: [
+      { to: '/exams',         icon: FileSpreadsheet, label: 'Exam Windows',        end: true },
+      { to: '/exams/types',   icon: ClipboardCheck,  label: 'Exam Types',          end: true },
+      { to: '/exams/compose', icon: FileText,        label: 'Compose Report Cards', end: true },
     ],
   },
   {
@@ -185,9 +190,8 @@ const aqaSections: SidebarSection[] = [
     items: [
       { to: '/aqa/performance/engine',        icon: FileSpreadsheet, label: 'Engine Control', end: true },
       { to: '/aqa/performance/engine/config', icon: Settings,        label: 'Engine Config'             },
-      { to: '/aqa/analytics',                 icon: BarChart3,       label: 'Academic Radar',       end: true },
-      { to: '/aqa/analytics/overview',        icon: TrendingUp,      label: 'Analytics Intelligence', end: true },
-      { to: '/aqa/analytics/classes/form-3b', icon: Target,          label: 'Class Analytics'               },
+      { to: '/aqa/analytics',         icon: BarChart3,  label: 'Academic Radar',        end: true },
+      { to: '/aqa/analytics/overview',icon: TrendingUp, label: 'Analytics Intelligence', end: true },
     ],
   },
   {
@@ -201,10 +205,9 @@ const aqaSections: SidebarSection[] = [
   {
     title: 'Students',
     items: [
-      { to: '/aqa/students/at-risk',  icon: Users,            label: 'At-Risk Students' },
-      { to: '/aqa/students/stu-jabir',icon: User,             label: 'Student Profile'  },
-      { to: '/aqa/interventions',     icon: MessageSquarePlus,label: 'Interventions'    },
-      { to: '/aqa/reports',           icon: FileText,         label: 'Reports Hub'      },
+      { to: '/aqa/students/at-risk', icon: Users,            label: 'At-Risk Students' },
+      { to: '/aqa/interventions',    icon: MessageSquarePlus,label: 'Interventions'    },
+      { to: '/aqa/reports',          icon: FileText,         label: 'Reports Hub'      },
     ],
   },
   {
@@ -293,6 +296,8 @@ const principalSections: SidebarSection[] = [
     title: 'Academic Decisions',
     items: [
       { to: '/principal/approvals',       icon: ClipboardCheck,label: 'Marks Approval',  end: true },
+      { to: '/exams',                     icon: FileSpreadsheet,label: 'Exam Windows',   end: true },
+      { to: '/exams/compose',             icon: FileText,      label: 'Compose Report Cards'       },
       { to: '/principal/results/publish', icon: Lock,          label: 'Publish Results'            },
       { to: '/principal/report-cards',    icon: BookOpen,      label: 'Report Cards',    end: true },
     ],
@@ -336,6 +341,7 @@ const adminSections: SidebarSection[] = [
       { to: '/admin/users',         icon: Users,        label: 'Users',          end: true },
       { to: '/admin/users/create',  icon: UserPlus,     label: 'Register User'             },
       { to: '/admin/students',      icon: GraduationCap,label: 'Students',       end: true },
+      { to: '/admin/import',        icon: Upload,       label: 'Bulk Import',    end: true },
       { to: '/admin/academic/setup',icon: BookOpen,     label: 'Academic Setup'            },
       { to: '/admin/classes',       icon: Landmark,     label: 'Classes',        end: true },
       { to: '/admin/subjects',      icon: Target,       label: 'Subjects',       end: true },
@@ -356,6 +362,8 @@ const adminSections: SidebarSection[] = [
     items: [
       { to: '/admin/grading',                              icon: FileSpreadsheet, label: 'Grading',             end: true },
       { to: '/admin/assessment-types',                     icon: ClipboardCheck,  label: 'Assessment Types'              },
+      { to: '/exams',                                      icon: FileSpreadsheet, label: 'Exam Windows',        end: true },
+      { to: '/exams/types',                                icon: ClipboardCheck,  label: 'Exam Types'                    },
       { to: '/admin/academic/stage-config',                icon: BookOpen,        label: 'Stage Config'                  },
       { to: '/admin/academic/promotion/cross-stage',       icon: GraduationCap,   label: 'Cross-Stage Promotion'         },
       { to: '/admin/finance/fee-categories',               icon: WalletCards,     label: 'Fee Categories'                },
@@ -383,11 +391,10 @@ const adminSections: SidebarSection[] = [
     ],
   },
   {
+    // System administration only. Finance/group analytics, the general report
+    // generator and the finance audit belong to the Manager (see managerSections).
     title: 'Reports & Audit',
     items: [
-      { to: '/admin/analytics',    icon: BarChart3,   label: 'Full Analytics'  },
-      { to: '/admin/reports',      icon: PieChart,    label: 'Any Report'      },
-      { to: '/admin/audit/finance',icon: WalletCards, label: 'Finance Audit'   },
       { to: '/admin/audit/system', icon: Shield,      label: 'System Audit'    },
       { to: '/reports',            icon: Download,    label: 'Shared Reports'  },
     ],
@@ -395,6 +402,40 @@ const adminSections: SidebarSection[] = [
 ];
 
 // ─── Generic / fallback ───────────────────────────────────────────────────────
+
+const studentSections: SidebarSection[] = [
+  {
+    title: 'Learning',
+    items: [
+      { to: '/student/elearning', icon: GraduationCap, label: 'My Learning', end: true },
+      { to: '/student/analytics', icon: BarChart3, label: 'Progress', end: true },
+    ],
+  },
+  {
+    title: 'School',
+    items: [
+      { to: '/app/announcements', icon: Megaphone, label: 'Announcements' },
+      { to: '/app/notifications', icon: Bell, label: 'Notifications' },
+    ],
+  },
+];
+
+const parentSections: SidebarSection[] = [
+  {
+    title: 'Children',
+    items: [
+      { to: '/parent/elearning', icon: GraduationCap, label: 'Learning Summary', end: true },
+      { to: '/parent/analytics', icon: BarChart3, label: 'Progress', end: true },
+    ],
+  },
+  {
+    title: 'School',
+    items: [
+      { to: '/app/announcements', icon: Megaphone, label: 'Announcements' },
+      { to: '/app/notifications', icon: Bell, label: 'Notifications' },
+    ],
+  },
+];
 
 const genericSections: SidebarSection[] = [
   {
@@ -407,6 +448,124 @@ const genericSections: SidebarSection[] = [
       { to: '/principal',   icon: Shield,          label: 'Headmaster Command'  },
       { to: '/admin',       icon: Settings,        label: 'Admin Settings'      },
       { to: '/reports',     icon: BarChart3,       label: 'Reports'             },
+    ],
+  },
+];
+
+// ─── Admissions Officer ──────────────────────────────────────────────────────
+
+const admissionsSections: SidebarSection[] = [
+  {
+    title: 'Admissions Desk',
+    items: [
+      { to: '/admissions',            icon: LayoutDashboard, label: 'Pipeline Board',     end: true },
+      { to: '/admissions/intake',     icon: UserPlus,        label: 'New Inquiry',        end: true },
+      { to: '/admissions/applicants', icon: Users,           label: 'Applicant Directory', end: true },
+      { to: '/admissions/students',   icon: GraduationCap,   label: 'Students',           end: true },
+      { to: '/admissions/students/enrol', icon: ClipboardCheck, label: 'Enrol Student',    end: true },
+    ],
+  },
+  {
+    title: 'Insight',
+    items: [
+      { to: '/admissions/analytics', icon: PieChart, label: 'Admissions Analytics', end: true },
+    ],
+  },
+];
+
+// ─── Manager (group owner) ───────────────────────────────────────────────────
+
+// The Manager (group owner) commands everything: group oversight PLUS the full
+// administrator, academic, finance and reporting surfaces — reusing the same
+// proven pages every other role uses. Data is group-wide until they drill into
+// a school via the switcher, which scopes every page to that school.
+const managerSections: SidebarSection[] = [
+  {
+    title: 'Group Command',
+    items: [
+      { to: '/manager',          icon: LayoutDashboard, label: 'School Gallery',   end: true },
+      { to: '/manager/overview', icon: BarChart3,       label: 'Group Dashboard',  end: true },
+      { to: '/manager/schools',  icon: Building2,       label: 'Scorecards',       end: true },
+      { to: '/manager/reports',  icon: PieChart,        label: 'Report Studio',    end: true },
+      { to: '/admin/reports',    icon: FileText,        label: 'Any Report',       end: true },
+    ],
+  },
+  {
+    title: 'Finance',
+    items: [
+      { to: '/manager/finance',           icon: WalletCards,    label: 'Group Finance',      end: true },
+      { to: '/manager/fund-approvals',    icon: HandCoins,      label: 'Fund Approvals',     end: true },
+      { to: '/finance/invoices',          icon: FileText,       label: 'Invoice Ledger',     end: true },
+      { to: '/finance/payments',          icon: Banknote,       label: 'Payments',           end: true },
+      { to: '/finance/payments/pending',  icon: ClipboardCheck, label: 'Pending Approvals'             },
+      { to: '/finance/reports/statement', icon: FileText,       label: 'Financial Statement', end: true },
+      { to: '/finance/fee-structures/matrix', icon: BarChart3,  label: 'Fee Matrix'                    },
+    ],
+  },
+  {
+    title: 'Academics',
+    items: [
+      { to: '/principal/approvals',    icon: ClipboardCheck, label: 'Marks Approval',   end: true },
+      { to: '/exams',                  icon: FileSpreadsheet, label: 'Exam Windows',    end: true },
+      { to: '/exams/compose',          icon: FileText,       label: 'Compose Report Cards'        },
+      { to: '/principal/results/publish', icon: Lock,        label: 'Publish Results'             },
+      { to: '/principal/report-cards', icon: BookOpen,       label: 'Report Cards',     end: true },
+      { to: '/principal/performance',  icon: TrendingUp,     label: 'Performance',      end: true },
+      { to: '/admin/analytics',        icon: BarChart3,      label: 'Academic Analytics', end: true },
+    ],
+  },
+  {
+    title: 'People & School',
+    items: [
+      { to: '/admin/users',        icon: Users,         label: 'Users',        end: true },
+      { to: '/admin/students',     icon: GraduationCap, label: 'Students',     end: true },
+      { to: '/principal/staff',    icon: GraduationCap, label: 'Staff',        end: true },
+      { to: '/principal/discipline', icon: AlertTriangle, label: 'Discipline', end: true },
+      { to: '/admissions',         icon: UserPlus,      label: 'Admissions',   end: true },
+    ],
+  },
+  {
+    title: 'Setup',
+    items: [
+      { to: '/admin/academic/setup', icon: BookOpen,        label: 'Academic Setup'          },
+      { to: '/admin/classes',        icon: Landmark,        label: 'Classes',      end: true },
+      { to: '/admin/subjects',       icon: Target,          label: 'Subjects',     end: true },
+      { to: '/admin/departments',    icon: Building2,       label: 'Departments',  end: true },
+      { to: '/admin/grading',        icon: FileSpreadsheet, label: 'Grading',      end: true },
+      { to: '/admin/timetable',      icon: Table2,          label: 'Timetable',    end: true },
+    ],
+  },
+  {
+    title: 'Communication',
+    items: [
+      { to: '/principal/announcements', icon: Megaphone, label: 'Announcements',     end: true },
+      { to: '/admin/notifications/send', icon: MessageSquarePlus, label: 'Manual Notification'    },
+      { to: '/admin/audit/finance',     icon: Shield,    label: 'Audit Log',         end: true },
+    ],
+  },
+];
+
+// ─── Super Admin ─────────────────────────────────────────────────────────────
+
+const superAdminSections: SidebarSection[] = [
+  {
+    title: 'Group Structure',
+    items: [
+      { to: '/superadmin',             icon: Building2, label: 'Schools',      end: true },
+      { to: '/superadmin/schools/new', icon: UserPlus,  label: 'New School',   end: true },
+      { to: '/manager/overview',       icon: BarChart3, label: 'Group Dashboard', end: true },
+      { to: '/manager/finance',        icon: WalletCards, label: 'Group Finance', end: true },
+    ],
+  },
+];
+
+// ─── Head of Finances ────────────────────────────────────────────────────────
+
+const headOfFinanceSections: SidebarSection[] = [
+  {
+    title: 'Group Finance',
+    items: [
+      { to: '/finance-group', icon: WalletCards, label: 'Consolidated Finance', end: true },
     ],
   },
 ];
@@ -431,6 +590,13 @@ function getSectionsForRole(role: string | undefined): SidebarSection[] {
   if (role === 'FINANCE')   return [...financeSections,    ...sharedSections];
   if (role === 'PRINCIPAL') return [...principalSections,  ...sharedSections];
   if (role === 'ADMIN')     return [...adminSections,      ...sharedSections];
+  if (role === 'ADMISSIONS') return [...admissionsSections, ...sharedSections];
+  if (role === 'MANAGER')          return [...managerSections,       ...sharedSections];
+  if (role === 'SUPER_ADMIN')      return [...superAdminSections,    ...sharedSections];
+  if (role === 'HEAD_OF_FINANCE')  return [...headOfFinanceSections, ...sharedSections];
+  if (role === 'HEAD_OF_SCHOOL')   return [...principalSections,     ...sharedSections];
+  if (role === 'STUDENT') return studentSections;
+  if (role === 'PARENT' || role === 'GUARDIAN') return parentSections;
   return [...genericSections, ...sharedSections];
 }
 

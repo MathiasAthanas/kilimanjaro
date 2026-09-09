@@ -20,6 +20,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { RabbitMqModule } from './rabbitmq/rabbitmq.module';
 import { RedisModule } from './redis/redis.module';
 import { ReportsModule } from './reports/reports.module';
+import { GroupModule } from './group/group.module';
 import { SchedulerAnalyticsModule } from './scheduler/scheduler.module';
 import { SnapshotsModule } from './snapshots/snapshots.module';
 import { StudentsModule } from './students/students.module';
@@ -45,6 +46,7 @@ import { validateEnv } from './config/env.validation';
     DepartmentModule,
     ExecutiveModule,
     ReportsModule,
+    GroupModule,
     SnapshotsModule,
     SchedulerAnalyticsModule,
     RabbitMqModule,

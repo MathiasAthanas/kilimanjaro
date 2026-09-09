@@ -81,6 +81,14 @@ enum RevealPolicy {
   @@schema("elearning")
 }
 
+enum EnrollmentStatus {
+  ACTIVE
+  INACTIVE
+  DROPPED
+
+  @@schema("elearning")
+}
+
 enum EducationStage {
   PRIMARY
   O_LEVEL
@@ -91,10 +99,12 @@ enum EducationStage {
 
 model CourseSpace {
   id             String       @id @default(uuid())
-  classSubjectId String
-  teacherId      String
-  termId         String
-  academicYearId String
+  classSubjectId  String
+  teacherId       String
+  termId          String
+  termName        String?
+  academicYearId  String
+  academicYearName String?
   subjectName    String
   className      String
   educationStage EducationStage @default(O_LEVEL)
@@ -115,6 +125,7 @@ model CourseSpace {
   assignments   Assignment[]
   submissions   Submission[]
   quizzes       Quiz[]
+  quizAttempts  QuizAttempt[]
   enrollments   CourseEnrollment[]
   announcements CourseAnnouncement[]
   discussions   DiscussionThread[]
@@ -315,6 +326,7 @@ model QuizAttempt {
   quiz             Quiz          @relation(fields: [quizId], references: [id], onDelete: Cascade)
   studentId        String
   courseSpaceId    String
+  courseSpace      CourseSpace   @relation(fields: [courseSpaceId], references: [id], onDelete: Cascade)
   attemptNumber    Int
   startedAt        DateTime      @default(now())
   submittedAt      DateTime?
@@ -355,9 +367,9 @@ model QuizAnswer {
 model CourseEnrollment {
   id             String      @id @default(uuid())
   courseSpaceId  String
-  courseSpace    CourseSpace @relation(fields: [courseSpaceId], references: [id], onDelete: Cascade)
+  courseSpace    CourseSpace    @relation(fields: [courseSpaceId], references: [id], onDelete: Cascade)
   studentId      String
-  status         String      @default("ACTIVE")
+  status         EnrollmentStatus @default(ACTIVE)
   enrolledAt     DateTime    @default(now())
   lastActivityAt DateTime?
 
@@ -407,6 +419,7 @@ model CourseAnnouncement {
   courseSpace   CourseSpace   @relation(fields: [courseSpaceId], references: [id], onDelete: Cascade)
   title         String
   body          String
+  audience      String        @default("ALL")
   status        PublishStatus @default(DRAFT)
   isPinned      Boolean       @default(false)
   publishedAt   DateTime?

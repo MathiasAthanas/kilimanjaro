@@ -23,9 +23,8 @@ export function HodWorkspaceShell({ title, eyebrow, children, action }: { title:
             <p className="mt-1 text-sm font-semibold text-ks-mist/75">{userName} · Head of Department</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Badge tone="gold">Term II · 2026</Badge>
             <Badge tone="rose">3 Pending</Badge>
-            <Badge tone="blue">Synced 2m ago</Badge>
+            <Badge tone="blue">Synced</Badge>
             {action}
           </div>
         </div>

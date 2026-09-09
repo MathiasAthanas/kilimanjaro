@@ -1,15 +1,18 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { ISmsProvider, SmsSendResult } from './sms-provider.interface';
 
 @Injectable()
 export class BeemProvider implements ISmsProvider {
+  constructor(private readonly config: ConfigService) {}
+
   async send(to: string[], message: string, senderId?: string): Promise<SmsSendResult[]> {
     try {
       const response = await axios.post(
         'https://apisms.beem.africa/v1/send',
         {
-          source_addr: senderId || process.env.BEEM_SOURCE_ADDR || process.env.SMS_SENDER_ID,
+          source_addr: senderId || this.config.get<string>('BEEM_SOURCE_ADDR') || this.config.get<string>('SMS_SENDER_ID'),
           schedule_time: '',
           encoding: 0,
           message,
@@ -17,8 +20,8 @@ export class BeemProvider implements ISmsProvider {
         },
         {
           auth: {
-            username: process.env.BEEM_API_KEY || '',
-            password: process.env.BEEM_SECRET_KEY || '',
+            username: this.config.get<string>('BEEM_API_KEY', ''),
+            password: this.config.get<string>('BEEM_SECRET_KEY', ''),
           },
         },
       );

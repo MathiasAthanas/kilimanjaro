@@ -1,6 +1,10 @@
+import type { ReactNode } from 'react';
+
 type BadgeProps = {
-  children: string;
+  children: ReactNode;
   tone?: 'blue' | 'emerald' | 'amber' | 'rose' | 'slate' | 'gold';
+  variant?: 'blue' | 'emerald' | 'amber' | 'rose' | 'slate' | 'gold' | string;
+  className?: string;
 };
 
 const tones = {
@@ -12,6 +16,11 @@ const tones = {
   gold: 'bg-ks-gold/20 text-[#7a5200]',
 };
 
-export function Badge({ children, tone = 'blue' }: BadgeProps) {
-  return <span className={`rounded px-2 py-1 text-[10px] font-extrabold uppercase tracking-wider ${tones[tone]}`}>{children}</span>;
+export function Badge({ children, tone, variant, className = '' }: BadgeProps) {
+  const resolvedTone = (tone ?? variant ?? 'blue') as keyof typeof tones;
+  return (
+    <span className={`rounded px-2 py-1 text-[10px] font-extrabold uppercase tracking-wider ${tones[resolvedTone] ?? tones.blue} ${className}`}>
+      {children}
+    </span>
+  );
 }

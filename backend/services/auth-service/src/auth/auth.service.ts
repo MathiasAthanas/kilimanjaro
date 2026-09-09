@@ -363,13 +363,57 @@ export class AuthService {
     };
   }
 
+  async getUsersByIds(idsCsv: string) {
+    const ids = String(idsCsv || '').split(',').map((s) => s.trim()).filter(Boolean);
+    if (!ids.length) return { users: [] };
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, role: true, firstName: true, lastName: true, email: true },
+    });
+    return {
+      users: users.map((u) => ({
+        id: u.id,
+        role: u.role,
+        firstName: u.firstName,
+        lastName: u.lastName,
+        fullName: `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email,
+      })),
+    };
+  }
+
   async isJtiBlacklisted(jti: string): Promise<boolean> {
     const found = await this.redisService.get(`auth:blacklist:jti:${jti}`);
     return Boolean(found);
   }
 
+  /** Group roles see every school; school roles see the union of their memberships. */
+  private static readonly GROUP_ROLES: Role[] = [
+    Role.SUPER_ADMIN,
+    Role.SYSTEM_ADMIN,
+    Role.MANAGER,
+    Role.HEAD_OF_FINANCE,
+  ];
+
+  private async resolveSchoolScope(user: User): Promise<{ scope: 'GROUP' | 'SCHOOL'; schoolIds: string[] }> {
+    const memberships = await this.prisma.schoolMembership.findMany({
+      where: { authUserId: user.id, isActive: true },
+      select: { schoolId: true, role: true },
+    });
+
+    const hasGroup =
+      AuthService.GROUP_ROLES.includes(user.role) ||
+      memberships.some((m) => m.schoolId === null && AuthService.GROUP_ROLES.includes(m.role));
+    if (hasGroup) {
+      return { scope: 'GROUP', schoolIds: ['*'] };
+    }
+
+    const schoolIds = [...new Set(memberships.map((m) => m.schoolId).filter((id): id is string => Boolean(id)))];
+    return { scope: 'SCHOOL', schoolIds };
+  }
+
   private async issueTokens(user: User, meta: { ip: string; userAgent: string }) {
     const jti = crypto.randomUUID();
+    const { scope, schoolIds } = await this.resolveSchoolScope(user);
     const accessToken = this.jwtService.sign({
       sub: user.id,
       role: user.role,
@@ -377,6 +421,8 @@ export class AuthService {
         registrationNumber: user.registrationNumber,
         jti,
         mustChangePassword: user.mustChangePassword,
+        scope,
+        schoolIds,
     });
 
     const refreshTokenId = crypto.randomUUID();
@@ -408,6 +454,8 @@ export class AuthService {
         department: user.department,
         mustChangePassword: user.mustChangePassword,
         requiresPasswordChange: user.mustChangePassword,
+        scope,
+        schoolIds,
       },
     };
   }
@@ -436,6 +484,6 @@ export class AuthService {
   }
 
   private generateOtp(): string {
-    return `${Math.floor(100000 + Math.random() * 900000)}`;
+    return String(crypto.randomInt(100000, 1000000));
   }
 }

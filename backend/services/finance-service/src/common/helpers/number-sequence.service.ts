@@ -5,62 +5,67 @@ import { PrismaService } from '../../prisma/prisma.service';
 export class NumberSequenceService {
   constructor(private readonly prisma: PrismaService) {}
 
-  private async next(key: string, year: number): Promise<number> {
-    const sequence = await this.prisma.numberSequence.upsert({
-      where: { id: `${key}:${year}` },
-      create: { id: `${key}:${year}`, year, value: 1 },
-      update: { value: { increment: 1 } },
-      select: { value: true },
-    });
-
-    return sequence.value;
+  // Single atomic INSERT ... ON CONFLICT DO UPDATE guarantees no duplicate values
+  // under concurrent load — no SELECT + UPDATE race condition is possible.
+  // schoolId scopes sequences per school so each school gets its own 1-based counter.
+  private async next(prefix: string, year: number, schoolId?: string | null): Promise<number> {
+    const scopePart = schoolId ? `:${schoolId}` : ':group';
+    const id = `${prefix}${scopePart}:${year}`;
+    const rows = await this.prisma.$queryRaw<{ value: number }[]>`
+      INSERT INTO finance."NumberSequence" (id, year, value)
+      VALUES (${id}, ${year}, 1)
+      ON CONFLICT (id)
+      DO UPDATE SET value = finance."NumberSequence".value + 1
+      RETURNING value
+    `;
+    return Number(rows[0].value);
   }
 
-  async invoiceNumber(termCode: string): Promise<string> {
+  async invoiceNumber(termCode: string, schoolId?: string | null): Promise<string> {
     const year = new Date().getUTCFullYear();
-    const value = await this.next('INV', year);
+    const value = await this.next('INV', year, schoolId);
     return `INV-${year}-${termCode}-${String(value).padStart(5, '0')}`;
   }
 
-  async paymentNumber(): Promise<string> {
+  async paymentNumber(schoolId?: string | null): Promise<string> {
     const year = new Date().getUTCFullYear();
-    const value = await this.next('PAY', year);
+    const value = await this.next('PAY', year, schoolId);
     return `PAY-${year}-${String(value).padStart(8, '0')}`;
   }
 
-  async receiptNumber(): Promise<string> {
+  async receiptNumber(schoolId?: string | null): Promise<string> {
     const year = new Date().getUTCFullYear();
-    const value = await this.next('RCP', year);
+    const value = await this.next('RCP', year, schoolId);
     return `RCP-${year}-${String(value).padStart(8, '0')}`;
   }
 
-  async assetNumber(): Promise<string> {
+  async assetNumber(schoolId?: string | null): Promise<string> {
     const year = new Date().getUTCFullYear();
-    const value = await this.next('AST', year);
+    const value = await this.next('AST', year, schoolId);
     return `AST-${year}-${String(value).padStart(5, '0')}`;
   }
 
-  async expenseNumber(): Promise<string> {
+  async expenseNumber(schoolId?: string | null): Promise<string> {
     const year = new Date().getUTCFullYear();
-    const value = await this.next('EXP', year);
+    const value = await this.next('EXP', year, schoolId);
     return `EXP-${year}-${String(value).padStart(5, '0')}`;
   }
 
-  async fundRequestNumber(): Promise<string> {
+  async fundRequestNumber(schoolId?: string | null): Promise<string> {
     const year = new Date().getUTCFullYear();
-    const value = await this.next('FRQ', year);
+    const value = await this.next('FRQ', year, schoolId);
     return `FRQ-${year}-${String(value).padStart(5, '0')}`;
   }
 
-  async storeItemCode(): Promise<string> {
+  async storeItemCode(schoolId?: string | null): Promise<string> {
     const year = new Date().getUTCFullYear();
-    const value = await this.next('STK', year);
+    const value = await this.next('STK', year, schoolId);
     return `STK-${year}-${String(value).padStart(5, '0')}`;
   }
 
-  async storeMovementNumber(): Promise<string> {
+  async storeMovementNumber(schoolId?: string | null): Promise<string> {
     const year = new Date().getUTCFullYear();
-    const value = await this.next('SMV', year);
+    const value = await this.next('SMV', year, schoolId);
     return `SMV-${year}-${String(value).padStart(6, '0')}`;
   }
 }

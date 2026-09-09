@@ -15,13 +15,13 @@ export class FeeStructuresController {
   constructor(private readonly feeStructuresService: FeeStructuresService) {}
 
   @Post()
-  @Roles(ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN)
+  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
   create(@Body() dto: CreateFeeStructureDto, @CurrentUser() user?: RequestUser) {
     return this.feeStructuresService.create(dto, user!);
   }
 
   @Get()
-  @Roles(ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN, ROLES.ACADEMIC_QA, ROLES.MANAGING_DIRECTOR)
+  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN, ROLES.ACADEMIC_QA, ROLES.MANAGING_DIRECTOR)
   list(
     @Query('feeCategoryId') feeCategoryId?: string,
     @Query('classId') classId?: string,
@@ -31,61 +31,58 @@ export class FeeStructuresController {
     @Query('academicYearId') academicYearId?: string,
     @Query('termId') termId?: string,
     @Query('isActive') isActive?: string,
+    @CurrentUser() user?: RequestUser,
   ) {
-    return this.feeStructuresService.list({
-      feeCategoryId,
-      classId,
-      educationStage,
-      classLevel,
-      studentGroup,
-      academicYearId,
-      termId,
-      isActive,
-    });
+    return this.feeStructuresService.list(
+      { feeCategoryId, classId, educationStage, classLevel, studentGroup, academicYearId, termId, isActive },
+      user,
+    );
   }
 
   @Get('matrix')
-  @Roles(ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN)
+  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
   matrix(
     @Query('academicYearId') academicYearId: string,
     @Query('termId') termId?: string,
     @Query('educationStage') educationStage?: string,
+    @CurrentUser() user?: RequestUser,
   ) {
-    return this.feeStructuresService.matrix({ academicYearId, termId, educationStage });
+    const schoolId = user?.scope === 'SCHOOL' ? (user.activeSchoolId ?? user.schoolIds?.[0] ?? null) : null;
+    return this.feeStructuresService.matrix({ academicYearId, termId, educationStage, schoolId });
   }
 
   @Patch(':id')
-  @Roles(ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN)
+  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
   update(@Param('id') id: string, @Body() dto: UpdateFeeStructureDto, @CurrentUser() user?: RequestUser) {
     return this.feeStructuresService.update(id, dto, user!);
   }
 
   @Patch(':id/deactivate')
-  @Roles(ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN)
+  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
   deactivate(@Param('id') id: string, @CurrentUser() user?: RequestUser) {
     return this.feeStructuresService.deactivate(id, user!);
   }
 
   @Post('student-groups')
-  @Roles(ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN)
+  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
   createStudentGroup(@Body() dto: CreateStudentGroupDto, @CurrentUser() user?: RequestUser) {
     return this.feeStructuresService.createStudentGroup(dto, user!);
   }
 
   @Get('student-groups')
-  @Roles(ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN, ROLES.ACADEMIC_QA, ROLES.MANAGING_DIRECTOR)
+  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN, ROLES.ACADEMIC_QA, ROLES.MANAGING_DIRECTOR)
   listStudentGroups(@Query('isActive') isActive?: string) {
     return this.feeStructuresService.listStudentGroups({ isActive });
   }
 
   @Post('student-groups/memberships')
-  @Roles(ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN)
+  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
   assignStudentGroup(@Body() dto: AssignStudentGroupDto, @CurrentUser() user?: RequestUser) {
     return this.feeStructuresService.assignStudentGroup(dto, user!);
   }
 
   @Patch('student-groups/memberships/:id/remove')
-  @Roles(ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN)
+  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
   removeStudentGroupMembership(@Param('id') id: string) {
     return this.feeStructuresService.removeStudentGroupMembership(id);
   }

@@ -134,23 +134,28 @@ export class GradingService {
   }
 
   async createAssessmentType(dto: CreateAssessmentTypeDto) {
-    const currentTotal = await this.prisma.assessmentType.aggregate({
-      _sum: { weightPercentage: true },
-      where: {
-        academicYearId: dto.academicYearId,
-        educationStage: dto.educationStage,
-        classLevel: dto.classLevel,
-        subjectId: dto.subjectId,
-        isActive: true,
+    // Serializable transaction prevents two concurrent creates from both passing
+    // the weight-sum check and ending up with a total > 100%.
+    const type = await this.prisma.$transaction(
+      async (tx) => {
+        const currentTotal = await tx.assessmentType.aggregate({
+          _sum: { weightPercentage: true },
+          where: {
+            academicYearId: dto.academicYearId,
+            educationStage: dto.educationStage,
+            classLevel: dto.classLevel,
+            subjectId: dto.subjectId,
+            isActive: true,
+          },
+        });
+        const total = (currentTotal._sum.weightPercentage ?? 0) + dto.weightPercentage;
+        if (total > 100.001) {
+          throw new BadRequestException('Assessment type weights exceed 100%');
+        }
+        return tx.assessmentType.create({ data: dto });
       },
-    });
-
-    const total = (currentTotal._sum.weightPercentage ?? 0) + dto.weightPercentage;
-    if (total > 100.001) {
-      throw new BadRequestException('Assessment type weights exceed 100%');
-    }
-
-    const type = await this.prisma.assessmentType.create({ data: dto });
+      { isolationLevel: 'Serializable' },
+    );
     await this.redis.delByPattern(`assessment-types:${dto.academicYearId}:*`);
     return type;
   }
@@ -161,38 +166,41 @@ export class GradingService {
       throw new NotFoundException('Assessment type not found');
     }
 
-    if (dto.weightPercentage !== undefined && dto.isActive !== false) {
-      const currentTotal = await this.prisma.assessmentType.aggregate({
-        _sum: { weightPercentage: true },
-        where: {
-          academicYearId: dto.academicYearId ?? existing.academicYearId,
-          educationStage: (dto.educationStage ?? existing.educationStage) as any,
-          classLevel: dto.classLevel ?? existing.classLevel,
-          subjectId: dto.subjectId ?? existing.subjectId,
-          isActive: true,
-          id: { not: id },
-        },
-      });
-
-      const total = (currentTotal._sum.weightPercentage ?? 0) + dto.weightPercentage;
-      if (total > 100.001) {
-        throw new BadRequestException('Assessment type weights exceed 100%');
-      }
-    }
-
-    const updated = await this.prisma.assessmentType.update({
-      where: { id },
-      data: {
-        name: dto.name,
-        code: dto.code,
-        weightPercentage: dto.weightPercentage,
-        academicYearId: dto.academicYearId,
-        educationStage: dto.educationStage as any,
-        classLevel: dto.classLevel,
-        subjectId: dto.subjectId,
-        isActive: dto.isActive,
+    const updated = await this.prisma.$transaction(
+      async (tx) => {
+        if (dto.weightPercentage !== undefined && dto.isActive !== false) {
+          const currentTotal = await tx.assessmentType.aggregate({
+            _sum: { weightPercentage: true },
+            where: {
+              academicYearId: dto.academicYearId ?? existing.academicYearId,
+              educationStage: (dto.educationStage ?? existing.educationStage) as any,
+              classLevel: dto.classLevel ?? existing.classLevel,
+              subjectId: dto.subjectId ?? existing.subjectId,
+              isActive: true,
+              id: { not: id },
+            },
+          });
+          const total = (currentTotal._sum.weightPercentage ?? 0) + dto.weightPercentage;
+          if (total > 100.001) {
+            throw new BadRequestException('Assessment type weights exceed 100%');
+          }
+        }
+        return tx.assessmentType.update({
+          where: { id },
+          data: {
+            name: dto.name,
+            code: dto.code,
+            weightPercentage: dto.weightPercentage,
+            academicYearId: dto.academicYearId,
+            educationStage: dto.educationStage as any,
+            classLevel: dto.classLevel,
+            subjectId: dto.subjectId,
+            isActive: dto.isActive,
+          },
+        });
       },
-    });
+      { isolationLevel: 'Serializable' },
+    );
     await this.redis.delByPattern(`assessment-types:${updated.academicYearId}:*`);
     return updated;
   }

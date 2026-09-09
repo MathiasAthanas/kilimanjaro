@@ -1,4 +1,5 @@
-import { Bell, MonitorCog, Settings, SlidersHorizontal, UserRound } from 'lucide-react';
+import { Bell, Check, MonitorCog, Settings, SlidersHorizontal, UserRound } from 'lucide-react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Badge } from '../../components/common/Badge';
 import { Button } from '../../components/common/Button';
@@ -7,23 +8,101 @@ import { SelectField } from '../../components/forms/SelectField';
 import { AdvancedIcon } from '../../components/icons/AdvancedIcon';
 import { PageScaffold } from './PageScaffold';
 
+const SETTINGS_KEY = 'ks-user-settings';
+
+const DEFAULTS = {
+  theme: 'system',
+  density: 'comfortable',
+  landing: 'role',
+  rowDensity: 'comfortable',
+};
+
+function loadSettings() {
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    return raw ? { ...DEFAULTS, ...JSON.parse(raw) } : DEFAULTS;
+  } catch {
+    return DEFAULTS;
+  }
+}
+
 export function SettingsPage() {
+  const [settings, setSettings] = useState(loadSettings);
+  const [saved, setSaved] = useState(false);
+
+  function set(key: keyof typeof DEFAULTS) {
+    return (e: React.ChangeEvent<HTMLSelectElement>) => {
+      setSettings((s: typeof DEFAULTS) => ({ ...s, [key]: e.target.value }));
+      setSaved(false);
+    };
+  }
+
+  function handleSave() {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2500);
+  }
+
   return (
     <PageScaffold title="User Settings" description="Manage your school portal preferences and common workspace behavior.">
       <div className="mb-6 flex gap-8 border-b border-ks-line">
-        <button className="flex items-center gap-2 -mb-px border-b-2 border-ks-blue pb-3 text-sm font-bold text-ks-blue"><Settings className="h-4 w-4" /> General</button>
-        <Link className="flex items-center gap-2 -mb-px pb-3 text-sm font-bold text-ks-muted hover:text-ks-navy" to="/app/notifications"><Bell className="h-4 w-4" /> Notifications</Link>
+        <button className="flex items-center gap-2 -mb-px border-b-2 border-ks-blue pb-3 text-sm font-bold text-ks-blue">
+          <Settings className="h-4 w-4" /> General
+        </button>
+        <Link className="flex items-center gap-2 -mb-px pb-3 text-sm font-bold text-ks-muted hover:text-ks-navy" to="/app/notifications">
+          <Bell className="h-4 w-4" /> Notifications
+        </Link>
       </div>
       <div className="grid gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2 p-6">
           <h3 className="font-display text-2xl font-bold text-ks-navy">Workspace Preferences</h3>
           <div className="mt-6 grid gap-5 md:grid-cols-2">
-            <SelectField label="Theme mode" options={[{ label: 'System', value: 'system' }, { label: 'Light', value: 'light' }, { label: 'Dark', value: 'dark' }]} />
-            <SelectField label="Density" options={[{ label: 'Comfortable', value: 'comfortable' }, { label: 'Compact', value: 'compact' }]} />
-            <SelectField label="Default landing workspace" options={[{ label: 'Role default', value: 'role' }, { label: 'Notifications', value: 'notifications' }, { label: 'Reports', value: 'reports' }]} />
-            <SelectField label="Table row density" options={[{ label: 'Comfortable', value: 'comfortable' }, { label: 'Ledger', value: 'ledger' }]} />
+            <SelectField
+              label="Theme mode"
+              value={settings.theme}
+              onChange={set('theme')}
+              options={[
+                { label: 'System', value: 'system' },
+                { label: 'Light', value: 'light' },
+                { label: 'Dark', value: 'dark' },
+              ]}
+            />
+            <SelectField
+              label="Density"
+              value={settings.density}
+              onChange={set('density')}
+              options={[
+                { label: 'Comfortable', value: 'comfortable' },
+                { label: 'Compact', value: 'compact' },
+              ]}
+            />
+            <SelectField
+              label="Default landing workspace"
+              value={settings.landing}
+              onChange={set('landing')}
+              options={[
+                { label: 'Role default', value: 'role' },
+                { label: 'Notifications', value: 'notifications' },
+                { label: 'Reports', value: 'reports' },
+              ]}
+            />
+            <SelectField
+              label="Table row density"
+              value={settings.rowDensity}
+              onChange={set('rowDensity')}
+              options={[
+                { label: 'Comfortable', value: 'comfortable' },
+                { label: 'Ledger', value: 'ledger' },
+              ]}
+            />
           </div>
-          <Button className="mt-6">Save settings</Button>
+          <Button className="mt-6" onClick={handleSave}>
+            {saved ? (
+              <><Check className="h-4 w-4" /> Saved</>
+            ) : (
+              'Save settings'
+            )}
+          </Button>
         </Card>
         <Card className="p-6">
           <AdvancedIcon icon={UserRound} tone="gold" />
@@ -34,8 +113,16 @@ export function SettingsPage() {
         </Card>
       </div>
       <div className="mt-6 grid gap-6 md:grid-cols-2">
-        <Card className="p-6"><AdvancedIcon icon={MonitorCog} /><h3 className="mt-4 font-display text-xl font-bold text-ks-navy">Accessibility</h3><p className="mt-2 text-sm text-ks-muted">Focus rings, reduced motion support and readable density are enabled.</p></Card>
-        <Card className="p-6"><AdvancedIcon icon={SlidersHorizontal} tone="emerald" /><h3 className="mt-4 font-display text-xl font-bold text-ks-navy">Settings Updated</h3><Badge tone="emerald">Local persistence ready</Badge></Card>
+        <Card className="p-6">
+          <AdvancedIcon icon={MonitorCog} />
+          <h3 className="mt-4 font-display text-xl font-bold text-ks-navy">Accessibility</h3>
+          <p className="mt-2 text-sm text-ks-muted">Focus rings, reduced motion support and readable density are enabled.</p>
+        </Card>
+        <Card className="p-6">
+          <AdvancedIcon icon={SlidersHorizontal} tone="emerald" />
+          <h3 className="mt-4 font-display text-xl font-bold text-ks-navy">Settings Updated</h3>
+          <Badge tone="emerald">Local persistence ready</Badge>
+        </Card>
       </div>
     </PageScaffold>
   );

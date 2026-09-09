@@ -10,6 +10,8 @@ interface JwtPayload {
   email: string | null;
   registrationNumber: string | null;
   jti: string;
+  scope?: 'GROUP' | 'SCHOOL';
+  schoolIds?: string[];
   exp?: number;
   iat?: number;
 }

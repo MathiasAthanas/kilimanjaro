@@ -11,7 +11,7 @@ export class FinanceController {
   constructor(private readonly service: FinanceAnalyticsService) {}
 
   @Get('overview')
-  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGING_DIRECTOR, ROLES.BOARD_DIRECTOR, ROLES.FINANCE)
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.MANAGING_DIRECTOR, ROLES.BOARD_DIRECTOR, ROLES.FINANCE, ROLES.HEAD_OF_FINANCE)
   @ApiOperation({ summary: 'Finance overview analytics' })
   @ApiResponse({ status: 200 })
   overview(@Query('academicYearId') academicYearId?: string, @Query('termId') termId?: string) {
@@ -26,7 +26,7 @@ export class FinanceController {
   }
 
   @Get('assets-summary')
-  @Roles(ROLES.SYSTEM_ADMIN, ROLES.MANAGING_DIRECTOR, ROLES.BOARD_DIRECTOR, ROLES.FINANCE, ROLES.PRINCIPAL)
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.MANAGING_DIRECTOR, ROLES.BOARD_DIRECTOR, ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN)
   @ApiOperation({ summary: 'Assets summary analytics' })
   assets() {
     return this.service.getAssetsSummary();

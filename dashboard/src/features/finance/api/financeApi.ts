@@ -138,16 +138,3 @@ export const auditEntries: AuditEntry[] = [
   { id: 'audit-1002', date: 'May 21, 2026 08:43', actor: 'Grace Temba', action: 'RECEIPT_ISSUED', entity: 'RCT-2026-5001', correlationId: 'FIN-2026-8799', before: { receipt: false }, after: { receipt: true, amount: 600_000 } },
   { id: 'audit-1003', date: 'May 20, 2026 15:21', actor: 'Principal Office', action: 'PAYMENT_REJECTED', entity: 'PAY-9003', correlationId: 'FIN-2026-8740', before: { status: 'PENDING' }, after: { status: 'REJECTED', reason: 'Reference mismatch' } },
 ];
-
-export const financeApi = {
-  getOverview: async () => financeOverview,
-  getInvoices: async () => invoices,
-  getPayments: async () => payments,
-  getReceipts: async () => receipts,
-  getFeeCategories: async () => feeCategories,
-  getFeeStructures: async () => feeStructures,
-  getStudentGroups: async () => studentGroups,
-  getFeeAssignments: async () => feeAssignments,
-  getAssets: async () => assets,
-  getAuditEntries: async () => auditEntries,
-};

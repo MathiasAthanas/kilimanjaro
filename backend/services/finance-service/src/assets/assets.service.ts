@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { NumberSequenceService } from '../common/helpers/number-sequence.service';
 import { RequestUser } from '../common/interfaces/request-user.interface';
+import { schoolScopeFilter } from '../common/helpers/school-scope.helper';
 
 @Injectable()
 export class AssetsService {
@@ -54,7 +55,7 @@ export class AssetsService {
     const currentValue = this.decimal(dto.currentValue) ?? purchaseCost;
     const row = await this.prisma.asset.create({
       data: {
-        assetNumber: await this.numberService.assetNumber(),
+        assetNumber: await this.numberService.assetNumber(user.activeSchoolId ?? user.schoolIds?.find((id) => id !== '*') ?? null),
         name: dto.name,
         isGroup: dto.isGroup === true || dto.isGroup === 'true',
         groupType: dto.groupType,
@@ -93,13 +94,14 @@ export class AssetsService {
     return this.withRollup(row);
   }
 
-  async list(filters: any) {
+  async list(filters: any, user?: RequestUser) {
     const page = Math.max(1, Number(filters.page || 1));
     const limit = Math.min(100, Math.max(1, Number(filters.limit || 20)));
     const includeChildren = filters.includeChildren === 'true' || filters.includeChildren === true;
 
     const rows = await this.prisma.asset.findMany({
       where: {
+        ...schoolScopeFilter(user),
         category: filters.category,
         type: filters.type,
         condition: filters.condition,
@@ -192,17 +194,18 @@ export class AssetsService {
     return row;
   }
 
-  async summary() {
+  async summary(user?: RequestUser) {
+    const scope = schoolScopeFilter(user);
     const [totalAssets, groupedAssets, componentAssets, byCategory, byCondition, byType, sums, rootRows] = await Promise.all([
-      this.prisma.asset.count({ where: { status: { not: 'DISPOSED' } } }),
-      this.prisma.asset.count({ where: { isGroup: true, status: { not: 'DISPOSED' } } }),
-      this.prisma.asset.count({ where: { parentAssetId: { not: null }, status: { not: 'DISPOSED' } } }),
-      this.prisma.asset.groupBy({ by: ['category'], _count: { _all: true }, _sum: { currentValue: true }, where: { status: { not: 'DISPOSED' } } }),
-      this.prisma.asset.groupBy({ by: ['condition'], _count: { _all: true }, _sum: { currentValue: true }, where: { status: { not: 'DISPOSED' } } }),
-      this.prisma.asset.groupBy({ by: ['type'], _count: { _all: true }, _sum: { currentValue: true }, where: { status: { not: 'DISPOSED' } } }),
-      this.prisma.asset.aggregate({ _sum: { purchaseCost: true, currentValue: true }, where: { status: { not: 'DISPOSED' }, isGroup: false } }),
+      this.prisma.asset.count({ where: { ...scope, status: { not: 'DISPOSED' } } }),
+      this.prisma.asset.count({ where: { ...scope, isGroup: true, status: { not: 'DISPOSED' } } }),
+      this.prisma.asset.count({ where: { ...scope, parentAssetId: { not: null }, status: { not: 'DISPOSED' } } }),
+      this.prisma.asset.groupBy({ by: ['category'], _count: { _all: true }, _sum: { currentValue: true }, where: { ...scope, status: { not: 'DISPOSED' } } }),
+      this.prisma.asset.groupBy({ by: ['condition'], _count: { _all: true }, _sum: { currentValue: true }, where: { ...scope, status: { not: 'DISPOSED' } } }),
+      this.prisma.asset.groupBy({ by: ['type'], _count: { _all: true }, _sum: { currentValue: true }, where: { ...scope, status: { not: 'DISPOSED' } } }),
+      this.prisma.asset.aggregate({ _sum: { purchaseCost: true, currentValue: true }, where: { ...scope, status: { not: 'DISPOSED' }, isGroup: false } }),
       this.prisma.asset.findMany({
-        where: { parentAssetId: null, status: { not: 'DISPOSED' } },
+        where: { ...scope, parentAssetId: null, status: { not: 'DISPOSED' } },
         include: { childAssets: true },
       }),
     ]);
@@ -231,9 +234,9 @@ export class AssetsService {
     };
   }
 
-  async fixedAssetRegister() {
+  async fixedAssetRegister(user?: RequestUser) {
     const rows = await this.prisma.asset.findMany({
-      where: { parentAssetId: null, status: { not: 'DISPOSED' } },
+      where: { ...schoolScopeFilter(user), parentAssetId: null, status: { not: 'DISPOSED' } },
       orderBy: { name: 'asc' },
       include: { childAssets: { orderBy: { name: 'asc' } } },
     });

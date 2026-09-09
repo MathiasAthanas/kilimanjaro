@@ -22,6 +22,13 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
       const channel = this.channel;
       if (!channel) return;
       await channel.assertExchange('elearning.events', 'topic', { durable: true });
+      this.connection.on('error', (err: Error) => this.logger.warn(`RabbitMQ connection error: ${err.message}`));
+      this.connection.on('close', () => {
+        this.logger.warn('RabbitMQ connection closed — reconnecting in 5s');
+        this.channel = undefined;
+        this.connection = undefined;
+        setTimeout(() => this.connect(), 5000);
+      });
     } catch (error) {
       this.logger.warn(`RabbitMQ unavailable: ${(error as Error).message}`);
     }
@@ -31,7 +38,10 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
     if (!this.channel) {
       await this.connect();
     }
-    if (!this.channel) return;
+    if (!this.channel) {
+      this.logger.warn(`RabbitMQ unavailable — event dropped: ${routingKey}`);
+      return;
+    }
     this.channel.publish(
       'elearning.events',
       routingKey,

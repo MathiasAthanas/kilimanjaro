@@ -15,6 +15,8 @@ import { PerformanceModule } from './performance/performance.module';
 import { InternalModule } from './internal/internal.module';
 import { HealthModule } from './health/health.module';
 import { DepartmentsModule } from './departments/departments.module';
+import { AdmissionsModule } from './admissions/admissions.module';
+import { SchoolsModule } from './schools/schools.module';
 import { RolesGuard } from './common/guards/roles.guard';
 import { IdentityMiddleware } from './common/middleware/identity.middleware';
 import { validateEnv } from './config/env.validation';
@@ -43,6 +45,8 @@ import { validateEnv } from './config/env.validation';
     InternalModule,
     HealthModule,
     DepartmentsModule,
+    AdmissionsModule,
+    SchoolsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

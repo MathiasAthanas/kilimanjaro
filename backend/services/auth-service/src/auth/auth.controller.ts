@@ -127,4 +127,10 @@ export class AuthController {
   async getUsersByRole(@Query('roles') roles: string) {
     return this.authService.getUsersByRoleInternal(roles || '');
   }
+
+  @UseGuards(InternalApiGuard)
+  @Get('internal/users-by-ids')
+  async getUsersByIds(@Query('ids') ids: string) {
+    return this.authService.getUsersByIds(ids || '');
+  }
 }

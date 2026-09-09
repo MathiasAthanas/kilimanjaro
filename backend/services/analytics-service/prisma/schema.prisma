@@ -22,6 +22,7 @@ enum ReportType {
   TERM_SUMMARY
   ANNUAL_SUMMARY
   BOARD_EXECUTIVE
+  REPORT_CARD
   CUSTOM
 
   @@schema("analytics")
@@ -243,8 +244,37 @@ model MetricEvent {
   @@schema("analytics")
 }
 
+enum SchoolType {
+  NURSERY
+  PRIMARY
+  SECONDARY
+
+  @@schema("students")
+}
+
+enum SchoolGender {
+  MALE
+  FEMALE
+  BOTH
+
+  @@schema("students")
+}
+
+model School {
+  id       String       @id
+  name     String
+  code     String
+  type     SchoolType
+  gender   SchoolGender
+  logoUrl  String?
+  isActive Boolean
+
+  @@schema("students")
+}
+
 model Student {
   id                 String   @id
+  schoolId             String?
   registrationNumber String
   firstName          String
   lastName           String
@@ -260,6 +290,7 @@ model Student {
 
 model Enrolment {
   id             String   @id
+  schoolId             String?
   studentId      String
   classId        String
   academicYearId String
@@ -271,6 +302,7 @@ model Enrolment {
 
 model Class {
   id             String @id
+  schoolId             String?
   name           String
   level          Int
   stream         String?
@@ -300,6 +332,7 @@ model Term {
 
 model AttendanceRecord {
   id        String   @id
+  schoolId             String?
   studentId String
   classId   String
   termId    String
@@ -337,6 +370,16 @@ model PerformanceSnapshot {
   @@schema("students")
 }
 
+enum TrendDirection {
+  IMPROVING
+  DECLINING
+  STABLE
+  VOLATILE
+  INSUFFICIENT_DATA
+
+  @@schema("students")
+}
+
 model PerformanceTrend {
   id                      String @id
   studentId               String
@@ -344,7 +387,7 @@ model PerformanceTrend {
   subjectName             String
   currentScore            Float
   averageScore            Float
-  trendDirection          String
+  trendDirection          TrendDirection
   trendSlope              Float?
   consecutiveDeclines     Int
   consecutiveImprovements Int
@@ -414,6 +457,7 @@ model ClassSubject {
 
 model TermResult {
   id                   String @id
+  schoolId             String?
   studentId            String
   classSubjectId       String
   subjectId            String
@@ -433,17 +477,33 @@ model TermResult {
 
 model ReportCard {
   id                   String @id
+  schoolId             String?
   studentId            String
   classId              String
   termId               String
   academicYearId       String
   overallAverage       Float
   overallGrade         String
+  overallPoints        Float
+  overallRemark        String
   rank                 Int?
   totalStudentsInClass Int?
   subjectCount         Int
   failingSubjectCount  Int
+  teacherComment       String?
+  principalComment     String?
+  divisionSummary      Json?
+  reportTemplateCode   String?
+  classLevel           Int?
+  behaviourGrade       String?
+  socialSkillsGrade    String?
+  extraCurricularNote  String?
+  readingAbility       String?
+  writingAbility       String?
+  numeracyAbility      String?
   isPublished          Boolean
+  publishedAt          DateTime?
+  createdAt            DateTime
 
   @@schema("academics")
 }
@@ -485,6 +545,7 @@ model AcademicIntervention {
 
 model Invoice {
   id                 String   @id
+  schoolId             String?
   studentId          String
   classId            String
   termId             String

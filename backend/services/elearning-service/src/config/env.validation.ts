@@ -1,6 +1,6 @@
 type EnvConfig = Record<string, unknown>;
 
-const requiredInProduction = ['DATABASE_URL', 'INTERNAL_API_KEY'];
+const requiredInProduction = ['DATABASE_URL', 'INTERNAL_API_KEY', 'ACADEMIC_SERVICE_URL', 'STUDENT_SERVICE_URL'];
 
 function asString(config: EnvConfig, key: string): string {
   return String(config[key] ?? '').trim();

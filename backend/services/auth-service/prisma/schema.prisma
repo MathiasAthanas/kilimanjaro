@@ -21,7 +21,32 @@ enum Role {
   TEACHER
   PARENT
   STUDENT
+  ADMISSIONS
+  SUPER_ADMIN
+  MANAGER
+  HEAD_OF_SCHOOL
+  HEAD_OF_FINANCE
 
+  @@schema("auth")
+}
+
+/// Multi-school expansion: a user's access is the union of their memberships.
+/// Group roles (SUPER_ADMIN, MANAGER, HEAD_OF_FINANCE, SYSTEM_ADMIN) use
+/// schoolId = null (= all schools); school roles carry one row per school.
+model SchoolMembership {
+  id           String    @id @default(uuid())
+  authUserId   String
+  schoolId     String?
+  role         Role
+  isActive     Boolean   @default(true)
+  assignedById String
+  assignedAt   DateTime  @default(now())
+  removedAt    DateTime?
+  user         User      @relation(fields: [authUserId], references: [id])
+
+  @@unique([authUserId, schoolId, role])
+  @@index([schoolId, role, isActive])
+  @@index([authUserId, isActive])
   @@schema("auth")
 }
 
@@ -66,6 +91,7 @@ model User {
   refreshTokens        RefreshToken[]
   passwordResetTokens  PasswordResetToken[]
   auditLogs            AuditLog[]
+  schoolMemberships    SchoolMembership[]
 
   @@index([role, isActive])
   @@index([createdAt])

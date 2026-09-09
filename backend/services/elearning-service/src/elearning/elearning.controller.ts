@@ -1,7 +1,7 @@
-import { Body, Controller, Delete, Get, Header, Param, Patch, Post, Query, Res, StreamableFile } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Header, Param, Patch, Post, Query, Res, StreamableFile, UseGuards } from '@nestjs/common';
 import { Response } from 'express';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { Public } from '../common/decorators/public.decorator';
+import { InternalApiGuard } from '../common/guards/internal-api.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RequestUser } from '../common/interfaces/request-user.interface';
 import { ElearningService } from './elearning.service';
@@ -23,6 +23,34 @@ export class ElearningController {
   @Roles('TEACHER', 'SYSTEM_ADMIN')
   createCourse(@CurrentUser() user: RequestUser, @Body() body: Record<string, unknown>) {
     return this.service.createCourse(user, body);
+  }
+
+  @Post('courses/from-class-subject/:classSubjectId')
+  @Roles('TEACHER', 'HEAD_OF_DEPARTMENT', 'SYSTEM_ADMIN')
+  createCourseFromClassSubject(
+    @CurrentUser() user: RequestUser,
+    @Param('classSubjectId') classSubjectId: string,
+    @Body() body: Record<string, unknown>,
+  ) {
+    return this.service.createCourseFromClassSubject(user, classSubjectId, body);
+  }
+
+  @Get('teacher/today')
+  @Roles('TEACHER', 'HEAD_OF_DEPARTMENT', 'SYSTEM_ADMIN')
+  teacherToday(@CurrentUser() user: RequestUser, @Query() query: Record<string, string>) {
+    return this.service.teacherToday(user, query);
+  }
+
+  @Get('teacher/teaching-load')
+  @Roles('TEACHER', 'HEAD_OF_DEPARTMENT', 'SYSTEM_ADMIN')
+  teacherTeachingLoad(@CurrentUser() user: RequestUser, @Query() query: Record<string, string>) {
+    return this.service.teacherTeachingLoad(user, query);
+  }
+
+  @Get('teacher/review-desk')
+  @Roles('TEACHER', 'HEAD_OF_DEPARTMENT', 'SYSTEM_ADMIN')
+  teacherReviewDesk(@CurrentUser() user: RequestUser, @Query() query: Record<string, string>) {
+    return this.service.teacherReviewDesk(user, query);
   }
 
   @Get('courses/:id')
@@ -519,27 +547,75 @@ export class ElearningController {
     return this.service.storagePolicy(user);
   }
 
+  @Post('admin/sync-courses')
+  @Roles('SYSTEM_ADMIN')
+  adminSyncCourses(@CurrentUser() user: RequestUser, @Body() body: Record<string, unknown>) {
+    return this.service.adminSyncCourses(user, body);
+  }
+
+  @Post('admin/sync-enrollments')
+  @Roles('SYSTEM_ADMIN')
+  adminSyncEnrollments(@CurrentUser() user: RequestUser, @Body() body: Record<string, unknown>) {
+    return this.service.adminSyncEnrollments(user, body);
+  }
+
+  @Post('admin/repair-orphans')
+  @Roles('SYSTEM_ADMIN')
+  adminRepairOrphans(@CurrentUser() user: RequestUser, @Body() body: Record<string, unknown>) {
+    return this.service.adminRepairOrphans(user, body);
+  }
+
   @Get('analytics/hod/overview')
   @Roles('HEAD_OF_DEPARTMENT', 'SYSTEM_ADMIN')
-  hodOverview(@Query() query: Record<string, string>) {
-    return this.service.roleOverview('hod', query);
+  hodOverview(@CurrentUser() user: RequestUser, @Query() query: Record<string, string>) {
+    return this.service.roleOverview('hod', query, user);
   }
 
   @Get('analytics/principal/overview')
   @Roles('PRINCIPAL', 'SYSTEM_ADMIN')
-  principalOverview(@Query() query: Record<string, string>) {
-    return this.service.roleOverview('principal', query);
+  principalOverview(@CurrentUser() user: RequestUser, @Query() query: Record<string, string>) {
+    return this.service.roleOverview('principal', query, user);
   }
 
   @Get('analytics/aqa/courses')
   @Roles('ACADEMIC_QA', 'SYSTEM_ADMIN')
-  aqaOverview(@Query() query: Record<string, string>) {
-    return this.service.roleOverview('aqa', query);
+  aqaOverview(@CurrentUser() user: RequestUser, @Query() query: Record<string, string>) {
+    return this.service.roleOverview('aqa', query, user);
+  }
+
+  @Get('hod/department-board')
+  @Roles('HEAD_OF_DEPARTMENT', 'SYSTEM_ADMIN')
+  hodDepartmentBoard(@CurrentUser() user: RequestUser, @Query() query: Record<string, string>) {
+    return this.service.roleOverview('hod', query, user);
+  }
+
+  @Get('aqa/audit-board')
+  @Roles('ACADEMIC_QA', 'SYSTEM_ADMIN')
+  aqaAuditBoard(@CurrentUser() user: RequestUser, @Query() query: Record<string, string>) {
+    return this.service.roleOverview('aqa', query, user);
+  }
+
+  @Get('principal/school-health')
+  @Roles('PRINCIPAL', 'SYSTEM_ADMIN')
+  principalSchoolHealth(@CurrentUser() user: RequestUser, @Query() query: Record<string, string>) {
+    return this.service.roleOverview('principal', query, user);
   }
 
   @Get('analytics/student/summary')
   @Roles('STUDENT', 'SYSTEM_ADMIN')
   studentSummary(@CurrentUser() user: RequestUser) {
+    return this.service.studentSummary(user);
+  }
+
+  @Get('student/today')
+  @Roles('STUDENT', 'SYSTEM_ADMIN')
+  studentToday(@CurrentUser() user: RequestUser) {
+    return this.service.studentSummary(user);
+  }
+
+  @Get('student/tasks')
+  @Roles('STUDENT', 'SYSTEM_ADMIN')
+  studentTasks(@CurrentUser() user: RequestUser) {
     return this.service.studentSummary(user);
   }
 
@@ -549,19 +625,31 @@ export class ElearningController {
     return this.service.parentSummary(childId);
   }
 
-  @Public()
+  @Get('parent/:childId/learning-summary')
+  @Roles('PARENT', 'SYSTEM_ADMIN')
+  parentLearningSummary(@Param('childId') childId: string) {
+    return this.service.parentSummary(childId);
+  }
+
+  @Get('parent/:childId/missing-work')
+  @Roles('PARENT', 'SYSTEM_ADMIN')
+  parentMissingWork(@Param('childId') childId: string) {
+    return this.service.parentSummary(childId);
+  }
+
+  @UseGuards(InternalApiGuard)
   @Get('internal/students/:studentId/courses')
   internalStudentCourses(@Param('studentId') studentId: string) {
     return this.service.internalStudentCourses(studentId);
   }
 
-  @Public()
+  @UseGuards(InternalApiGuard)
   @Post('internal/enrollment-sync')
   internalEnrollmentSync(@Body() body: Record<string, unknown>) {
     return this.service.internalEnrollmentSync(body);
   }
 
-  @Public()
+  @UseGuards(InternalApiGuard)
   @Get('internal/courses/:courseId/has-student/:studentId')
   internalHasStudent(@Param('courseId') courseId: string, @Param('studentId') studentId: string) {
     return this.service.internalHasStudent(courseId, studentId);

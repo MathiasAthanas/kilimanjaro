@@ -14,31 +14,32 @@ export class FeeAssignmentsController {
   constructor(private readonly feeAssignmentsService: FeeAssignmentsService) {}
 
   @Post('bulk')
-  @Roles(ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN)
+  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
   bulk(@Body() dto: BulkAssignFeeDto, @CurrentUser() user?: RequestUser) {
     return this.feeAssignmentsService.bulk(dto, user!);
   }
 
   @Post(':studentId')
-  @Roles(ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN)
+  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
   assign(@Param('studentId') studentId: string, @Body() dto: AssignFeeDto, @CurrentUser() user?: RequestUser) {
     return this.feeAssignmentsService.assign(studentId, dto, user!);
   }
 
   @Get()
-  @Roles(ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN)
+  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
   list(
     @Query('studentId') studentId?: string,
     @Query('feeCategoryId') feeCategoryId?: string,
     @Query('academicYearId') academicYearId?: string,
     @Query('termId') termId?: string,
     @Query('isActive') isActive?: string,
+    @CurrentUser() user?: RequestUser,
   ) {
-    return this.feeAssignmentsService.list({ studentId, feeCategoryId, academicYearId, termId, isActive });
+    return this.feeAssignmentsService.list({ studentId, feeCategoryId, academicYearId, termId, isActive }, user!);
   }
 
   @Delete(':id')
-  @Roles(ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN)
+  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
   remove(@Param('id') id: string, @CurrentUser() user?: RequestUser) {
     return this.feeAssignmentsService.remove(id, user!);
   }

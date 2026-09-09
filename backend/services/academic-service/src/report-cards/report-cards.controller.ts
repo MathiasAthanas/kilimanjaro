@@ -21,7 +21,7 @@ export class ReportCardsController {
   ) {}
 
   @Post('report-cards/generate')
-  @Roles(ROLES.PRINCIPAL, ROLES.ACADEMIC_QA)
+  @Roles(ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA)
   generate(@Body() dto: GenerateReportCardsDto, @CurrentUser() user?: RequestUser) {
     return this.reportCardsService.generate(dto, user!);
   }
@@ -29,7 +29,7 @@ export class ReportCardsController {
   @Get('report-cards/student/:studentId')
   @Roles(
     ROLES.SYSTEM_ADMIN,
-    ROLES.PRINCIPAL,
+    ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN,
     ROLES.ACADEMIC_QA,
     ROLES.HEAD_OF_DEPARTMENT,
     ROLES.TEACHER,
@@ -40,10 +40,22 @@ export class ReportCardsController {
     return this.reportCardsService.listForStudent(studentId, user!);
   }
 
+  @Get('report-cards/class/:classId/term/:termId')
+  @Roles(
+    ROLES.SYSTEM_ADMIN,
+    ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN,
+    ROLES.ACADEMIC_QA,
+    ROLES.HEAD_OF_DEPARTMENT,
+    ROLES.TEACHER,
+  )
+  listForClass(@Param('classId') classId: string, @Param('termId') termId: string, @CurrentUser() user?: RequestUser) {
+    return this.reportCardsService.listForClass(classId, termId, user?.id || 'system');
+  }
+
   @Get('report-cards/:studentId/term/:termId')
   @Roles(
     ROLES.SYSTEM_ADMIN,
-    ROLES.PRINCIPAL,
+    ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN,
     ROLES.ACADEMIC_QA,
     ROLES.HEAD_OF_DEPARTMENT,
     ROLES.TEACHER,
@@ -57,7 +69,7 @@ export class ReportCardsController {
   @Get('report-cards/:studentId/term/:termId/pdf')
   @Roles(
     ROLES.SYSTEM_ADMIN,
-    ROLES.PRINCIPAL,
+    ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN,
     ROLES.ACADEMIC_QA,
     ROLES.HEAD_OF_DEPARTMENT,
     ROLES.TEACHER,
@@ -79,8 +91,14 @@ export class ReportCardsController {
     return createReadStream(absolutePath).pipe(res);
   }
 
+  @Patch('report-cards/:id/sign')
+  @Roles(ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
+  signReportCard(@Param('id') id: string, @Body() body: { signatureText?: string }, @CurrentUser() user?: RequestUser) {
+    return this.reportCardsService.signReportCard(id, body.signatureText || 'Approved', user!);
+  }
+
   @Patch('report-cards/:id/comments')
-  @Roles(ROLES.TEACHER, ROLES.PRINCIPAL)
+  @Roles(ROLES.TEACHER, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN)
   updateComments(@Param('id') id: string, @Body() dto: UpdateCommentsDto, @CurrentUser() user?: RequestUser) {
     return this.reportCardsService.updateComments(id, dto, user!);
   }

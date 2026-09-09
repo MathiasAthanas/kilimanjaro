@@ -16,7 +16,7 @@ export class AttendanceController {
   constructor(private readonly attendanceService: AttendanceService) {}
 
   @Post('attendance')
-  @Roles('TEACHER', 'HEAD_OF_DEPARTMENT', 'PRINCIPAL')
+  @Roles('TEACHER', 'HEAD_OF_DEPARTMENT', 'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN')
   @ApiOperation({ summary: 'Mark attendance in bulk for a class/date' })
   async mark(@Body() dto: MarkAttendanceDto, @CurrentUser() user?: RequestUser) {
     return this.attendanceService.mark(dto, user?.id || 'system');
@@ -25,7 +25,7 @@ export class AttendanceController {
   @Get('attendance')
   @Roles(
     'SYSTEM_ADMIN',
-    'PRINCIPAL',
+    'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN',
     'ACADEMIC_QA',
     'FINANCE',
     'HEAD_OF_DEPARTMENT',
@@ -40,7 +40,7 @@ export class AttendanceController {
   @Get('attendance/summary/:studentId')
   @Roles(
     'SYSTEM_ADMIN',
-    'PRINCIPAL',
+    'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN',
     'ACADEMIC_QA',
     'FINANCE',
     'HEAD_OF_DEPARTMENT',

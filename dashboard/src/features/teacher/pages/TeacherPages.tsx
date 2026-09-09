@@ -28,6 +28,7 @@ import {
   useResolveAlertMutation,
   useUpdateSyllabusMutation,
   useCreatePairingMutation,
+  useUpdatePairingStatusMutation,
   useTeacherSyllabus,
   useCurrentTerm,
   useStudentReportCards,
@@ -402,10 +403,12 @@ export function AssessmentSubmitPage() {
       onError: () => toast('Failed to submit. Please try again.', 'error'),
     });
   };
+  const allAccounted = apiMarks.length > 0 && apiMarks.every((m) => m.absent || (m.score !== null && m.score !== ''));
+  const allAbsentConfirmed = apiMarks.length === 0 || apiMarks.every((m) => m.score !== null || m.absent);
   const checklist = [
-    { label: 'All students accounted for', done: true },
-    { label: 'Outliers reviewed', done: true },
-    { label: 'Absent students confirmed', done: true },
+    { label: 'All students accounted for', done: allAccounted },
+    { label: 'Outliers reviewed', done: ready },
+    { label: 'Absent students confirmed', done: allAbsentConfirmed },
     { label: 'Teacher declaration required', done: confirmed },
   ];
   return (
@@ -618,7 +621,7 @@ export function PerformanceAlertsPage() {
       <div className="grid grid-cols-12 gap-gutter">
         <section className="col-span-12 space-y-stack-lg xl:col-span-8">
           <AlertsOperationalTable />
-          <PredictionPanel />
+          <PredictionPanel criticalCount={criticalCount} suggestedPairings={suggestedPairings} />
         </section>
         <section className="col-span-12 space-y-stack-lg xl:col-span-4">
           <div className="flex items-center justify-between">
@@ -714,7 +717,12 @@ export function PeerPairingsPage() {
 
 export function PairingDetailPage() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const { data: apiPairings = [] as typeof pairings, isLoading } = usePerfPairings() as { data: typeof pairings; isLoading: boolean };
+  const statusMutation = useUpdatePairingStatusMutation();
+  const [rejectionReason, setRejectionReason] = useState('');
+  const [showRejectForm, setShowRejectForm] = useState(false);
+
   if (isLoading) return <TeacherWorkspaceShell title="Loading…" eyebrow="Pairing detail"><SkeletonTable cols={4} /></TeacherWorkspaceShell>;
   const pairing = apiPairings.find((item) => item.id === id) ?? null;
   if (!pairing) return (
@@ -722,11 +730,84 @@ export function PairingDetailPage() {
       <EmptyState title="Pairing not found" description="This pairing may no longer be active or the link is invalid." />
     </TeacherWorkspaceShell>
   );
+
+  const status = String((pairing as any).status ?? 'SUGGESTED').toUpperCase();
+
+  const handleStatus = (newStatus: string, reason?: string) => {
+    statusMutation.mutate(
+      { id: pairing.id, status: newStatus, rejectionReason: reason },
+      {
+        onSuccess: () => {
+          toast(`Pairing ${newStatus.toLowerCase()}`, 'success');
+          setShowRejectForm(false);
+          if (newStatus === 'REJECTED') navigate(-1);
+        },
+        onError: (err: any) => toast(err?.response?.data?.message || `Failed to update pairing`, 'error'),
+      },
+    );
+  };
+
+  const busy = statusMutation.isPending;
+
   return (
     <TeacherWorkspaceShell title={`${pairing.mentor} + ${pairing.support}`} eyebrow="Pairing detail">
       <div className="grid gap-gutter xl:grid-cols-[1fr_360px]">
         <PairingCard pairing={pairing} />
-        <ActionPanel title="Record outcome" actions={['Create intervention']} />
+        <div className="space-y-4">
+          <Card className="rounded-xl p-5">
+            <SectionTitle title="Actions" />
+            <div className="mt-4 space-y-2">
+              {status === 'SUGGESTED' && (
+                <>
+                  <button
+                    disabled={busy}
+                    onClick={() => handleStatus('ACTIVE')}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-ks-blue px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50"
+                  >
+                    Activate Pairing
+                  </button>
+                  <button
+                    disabled={busy}
+                    onClick={() => setShowRejectForm((v) => !v)}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-ks-rose px-4 py-2.5 text-sm font-bold text-ks-rose disabled:opacity-50"
+                  >
+                    Reject
+                  </button>
+                  {showRejectForm && (
+                    <div className="mt-2 space-y-2">
+                      <textarea
+                        rows={3}
+                        placeholder="Reason for rejection…"
+                        value={rejectionReason}
+                        onChange={(e) => setRejectionReason(e.target.value)}
+                        className="w-full rounded-xl border border-ks-line px-3 py-2 text-sm outline-none focus:border-ks-blue"
+                      />
+                      <button
+                        disabled={busy || !rejectionReason.trim()}
+                        onClick={() => handleStatus('REJECTED', rejectionReason)}
+                        className="w-full rounded-xl bg-ks-rose px-4 py-2 text-sm font-bold text-white disabled:opacity-40"
+                      >
+                        Confirm Rejection
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+              {status === 'ACTIVE' && (
+                <button
+                  disabled={busy}
+                  onClick={() => handleStatus('COMPLETED')}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-ks-emerald px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50"
+                >
+                  Mark as Completed
+                </button>
+              )}
+              {(status === 'COMPLETED' || status === 'REJECTED') && (
+                <p className="text-center text-sm text-ks-muted">This pairing is {status.toLowerCase()}.</p>
+              )}
+            </div>
+          </Card>
+        </div>
       </div>
     </TeacherWorkspaceShell>
   );
@@ -1166,6 +1247,7 @@ export function TeacherExportsPage() {
 export function CreatePairingPage() {
   const navigate = useNavigate();
   const { data: apiClasses = [] as typeof teacherClasses } = useTeacherClasses() as { data: typeof teacherClasses };
+  const { data: currentTerm } = useCurrentTerm() as { data: { id: string } | null | undefined };
   const createMutation = useCreatePairingMutation();
   const [classId, setClassId] = useState('');
   const [mentorId, setMentorId] = useState('');
@@ -1173,6 +1255,7 @@ export function CreatePairingPage() {
   const [reason, setReason] = useState('');
   const { data: classStudents = [] as typeof students } = useClassStudents(classId) as { data: typeof students };
 
+  const selectedClass = apiClasses.find((c) => c.id === classId);
   const mentorOptions = classStudents.filter((s) => s.id !== supportId);
   const supportOptions = classStudents.filter((s) => s.id !== mentorId);
   const mentor = classStudents.find((s) => s.id === mentorId);
@@ -1182,15 +1265,21 @@ export function CreatePairingPage() {
     e.preventDefault();
     if (!mentorId || !supportId || !reason.trim()) { toast('Select both students and provide a reason', 'warning'); return; }
     if (mentorId === supportId) { toast('Mentor and student to support cannot be the same person', 'error'); return; }
+    const termId = String((currentTerm as any)?.id ?? (selectedClass as any)?.termId ?? '');
+    const subjectId = String((selectedClass as any)?.subjectId ?? '');
+    const subjectName = selectedClass?.subject ?? '';
+    if (!termId) { toast('No active term found — please reload', 'error'); return; }
+    if (!subjectId) { toast('Could not determine subject — please select a class', 'error'); return; }
     createMutation.mutate({
-      classId,
       peerId: mentorId,
       studentId: supportId,
-      subject: apiClasses.find((c) => c.id === classId)?.subject ?? '',
+      subjectId,
+      subjectName,
+      termId,
       reason,
     }, {
       onSuccess: () => { toast('Peer pairing created', 'success'); navigate('/teacher/performance/pairings'); },
-      onError: () => toast('Failed to create pairing', 'error'),
+      onError: (err: any) => toast(err?.response?.data?.message || 'Failed to create pairing', 'error'),
     });
   };
 
@@ -1361,7 +1450,7 @@ function AlertsOperationalTable() {
         ))}
       </TeacherTable>
       <div className="border-t border-ks-line bg-ks-paper/30 px-gutter py-3 text-center">
-        <NavLink to="/teacher/classes/cs-form3a-math/students" className="text-sm font-black text-ks-muted transition hover:text-ks-navy">
+        <NavLink to="/teacher/classes" className="text-sm font-black text-ks-muted transition hover:text-ks-navy">
           View all student records
         </NavLink>
       </div>
@@ -1369,28 +1458,38 @@ function AlertsOperationalTable() {
   );
 }
 
-function PredictionPanel() {
+function PredictionPanel({ criticalCount, suggestedPairings }: { criticalCount: number; suggestedPairings: number }) {
+  const headline =
+    suggestedPairings > 0
+      ? `${suggestedPairings} pairing${suggestedPairings === 1 ? '' : 's'} ready to activate`
+      : criticalCount > 0
+        ? `${criticalCount} critical alert${criticalCount === 1 ? '' : 's'} need attention`
+        : 'All performance signals clear';
+  const detail =
+    suggestedPairings > 0
+      ? 'The engine has matched struggling students with strong peers in your classes — activating pairings early in the week gives the best improvement odds.'
+      : criticalCount > 0
+        ? 'Review the critical alerts above and open an intervention or guardian conversation before the next assessment cycle.'
+        : 'No open critical alerts or pending pairings for your classes — keep marks entry current so the engine can keep watching.';
   return (
     <div className="relative overflow-hidden rounded-xl bg-ks-navy p-stack-lg text-white shadow-layer">
       <div className="absolute -right-16 -top-16 h-48 w-48 rounded-full bg-white/5" />
       <div className="absolute -bottom-8 left-1/3 h-32 w-32 rounded-full bg-ks-blue/10" />
       <div className="relative flex flex-col gap-stack-lg md:flex-row md:items-center md:justify-between">
         <div className="max-w-2xl">
-          <p className="text-[11px] font-black uppercase tracking-[0.22em] text-ks-gold">System Prediction</p>
-          <h3 className="mt-2 font-display text-2xl font-black">11% improvement projected</h3>
-          <p className="mt-2 text-sm font-semibold leading-6 text-ks-mist/75">
-            Based on the last 3 assessments — activate peer pairings before Friday and review the critical alert to unlock this outcome.
-          </p>
+          <p className="text-[11px] font-black uppercase tracking-[0.22em] text-ks-gold">Performance Engine</p>
+          <h3 className="mt-2 font-display text-2xl font-black">{headline}</h3>
+          <p className="mt-2 text-sm font-semibold leading-6 text-ks-mist/75">{detail}</p>
         </div>
         <div className="flex shrink-0 gap-6">
           <div className="text-center">
-            <p className="font-display text-3xl font-black text-ks-gold">A+</p>
-            <p className="text-[10px] font-black uppercase tracking-wider text-ks-mist/50">Efficiency</p>
+            <p className="font-display text-3xl font-black text-ks-gold">{String(criticalCount).padStart(2, '0')}</p>
+            <p className="text-[10px] font-black uppercase tracking-wider text-ks-mist/50">Critical</p>
           </div>
           <div className="h-12 w-px bg-white/20" />
           <div className="text-center">
-            <p className="font-display text-3xl font-black text-ks-sky">85%</p>
-            <p className="text-[10px] font-black uppercase tracking-wider text-ks-mist/50">Engagement</p>
+            <p className="font-display text-3xl font-black text-ks-sky">{String(suggestedPairings).padStart(2, '0')}</p>
+            <p className="text-[10px] font-black uppercase tracking-wider text-ks-mist/50">Pairings</p>
           </div>
         </div>
       </div>
@@ -1399,24 +1498,39 @@ function PredictionPanel() {
 }
 
 function AcademicSpotlight() {
-  const items = [
-    { icon: '★', label: 'Physics top mover', sub: 'Joel Komba +18% this month', subColor: 'text-ks-emerald', iconColor: 'text-ks-gold' },
-    { icon: '↓', label: 'Form 3B average', sub: '-4% drop detected', subColor: 'text-ks-rose', iconColor: 'text-ks-rose' },
-    { icon: '↑', label: 'Amina Baraka', sub: 'Improving streak · +9%', subColor: 'text-ks-blue', iconColor: 'text-ks-blue' },
-  ];
+  const { data: apiAlerts = [] } = usePerformanceAlerts() as { data: Array<{ id: string; student: string; subject: string; type: string; severity: string; reason: string }> };
+
+  const spotlightFor = (alert: { student: string; subject: string; type: string; reason: string }) => {
+    const positive = ['RAPID_IMPROVEMENT', 'CONSISTENT_EXCELLENCE', 'RECOVERED'].includes(alert.type);
+    const declining = ['SUDDEN_DECLINE', 'CONSECUTIVE_DECLINE', 'CHRONIC_UNDERPERFORMER', 'FAILURE_RISK', 'AT_RISK'].includes(alert.type);
+    return {
+      icon: positive ? '★' : declining ? '↓' : '↑',
+      iconColor: positive ? 'text-ks-gold' : declining ? 'text-ks-rose' : 'text-ks-blue',
+      subColor: positive ? 'text-ks-emerald' : declining ? 'text-ks-rose' : 'text-ks-blue',
+      label: `${alert.student}${alert.subject ? ` · ${alert.subject}` : ''}`,
+      sub: alert.reason || alert.type.replaceAll('_', ' ').toLowerCase(),
+    };
+  };
+
+  const items = apiAlerts.slice(0, 3).map(spotlightFor);
+
   return (
     <Card className="rounded-xl p-stack-lg">
       <h4 className="border-b border-ks-line pb-2 text-[11px] font-black uppercase tracking-[0.22em] text-ks-navy">Academic Spotlight</h4>
       <div className="mt-4 space-y-3">
-        {items.map((item) => (
-          <div key={item.label} className="flex items-center gap-3 rounded-lg bg-ks-paper p-3">
-            <div className={`w-6 shrink-0 text-center text-lg font-black ${item.iconColor}`}>{item.icon}</div>
-            <div>
-              <p className="text-sm font-black text-ks-navy">{item.label}</p>
-              <p className={`text-xs font-bold ${item.subColor}`}>{item.sub}</p>
+        {items.length === 0 ? (
+          <p className="text-sm font-semibold text-ks-muted">No performance signals for your classes yet — spotlights appear as the engine detects movers and risks.</p>
+        ) : (
+          items.map((item) => (
+            <div key={item.label + item.sub} className="flex items-center gap-3 rounded-lg bg-ks-paper p-3">
+              <div className={`w-6 shrink-0 text-center text-lg font-black ${item.iconColor}`}>{item.icon}</div>
+              <div>
+                <p className="text-sm font-black text-ks-navy">{item.label}</p>
+                <p className={`text-xs font-bold ${item.subColor}`}>{item.sub}</p>
+              </div>
             </div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
     </Card>
   );

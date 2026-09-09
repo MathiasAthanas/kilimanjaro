@@ -10,6 +10,8 @@ export type SessionUser = {
   status?: string;
   mustChangePassword?: boolean;
   requiresPasswordChange?: boolean;
+  scope?: 'GROUP' | 'SCHOOL';
+  schoolIds?: string[];
 };
 
 export type AuthSession = {

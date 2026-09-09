@@ -4,6 +4,10 @@ import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { ROLES_KEY } from '../decorators/roles.decorator';
 
 const ANALYTICS_ALLOWED = new Set([
+  'SUPER_ADMIN',
+  'MANAGER',
+  'HEAD_OF_SCHOOL',
+  'HEAD_OF_FINANCE',
   'SYSTEM_ADMIN',
   'BOARD_DIRECTOR',
   'MANAGING_DIRECTOR',
@@ -12,9 +16,14 @@ const ANALYTICS_ALLOWED = new Set([
   'FINANCE',
   'HEAD_OF_DEPARTMENT',
   'TEACHER',
+  'STUDENT',
+  'PARENT',
 ]);
 
 const ANNOUNCEMENTS_ALLOWED = new Set([
+  'SUPER_ADMIN',
+  'MANAGER',
+  'HEAD_OF_SCHOOL',
   'SYSTEM_ADMIN',
   'PRINCIPAL',
   'MANAGING_DIRECTOR',
@@ -45,7 +54,12 @@ export class RolesGuard implements CanActivate {
       context.getClass(),
     ]);
 
-    if (explicitRoles?.length && (!role || !explicitRoles.includes(role))) {
+    // Group super-roles: SUPER_ADMIN passes all; MANAGER passes all but SUPER_ADMIN-only.
+    const isSuperRole =
+      role === 'SUPER_ADMIN' ||
+      (role === 'MANAGER' && !(explicitRoles ?? []).every((r) => r === 'SUPER_ADMIN'));
+
+    if (!isSuperRole && explicitRoles?.length && (!role || !explicitRoles.includes(role))) {
       throw new ForbiddenException('Insufficient role permissions');
     }
 

@@ -16,14 +16,14 @@ export class DisciplineController {
   constructor(private readonly disciplineService: DisciplineService) {}
 
   @Post('discipline')
-  @Roles('TEACHER', 'HEAD_OF_DEPARTMENT', 'PRINCIPAL', 'SYSTEM_ADMIN')
+  @Roles('TEACHER', 'HEAD_OF_DEPARTMENT', 'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN', 'SYSTEM_ADMIN')
   @ApiOperation({ summary: 'Record discipline incident' })
   async create(@Body() dto: CreateDisciplineDto, @CurrentUser() user?: RequestUser) {
     return this.disciplineService.create(dto, user?.id || 'system');
   }
 
   @Get('discipline')
-  @Roles('PRINCIPAL', 'HEAD_OF_DEPARTMENT', 'ACADEMIC_QA', 'SYSTEM_ADMIN')
+  @Roles('TEACHER', 'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN', 'HEAD_OF_DEPARTMENT', 'ACADEMIC_QA', 'SYSTEM_ADMIN')
   @ApiOperation({ summary: 'List discipline records with filters' })
   async list(
     @Query('studentId') studentId?: string,
@@ -31,14 +31,15 @@ export class DisciplineController {
     @Query('severity') severity?: any,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
+    @CurrentUser() user?: RequestUser,
   ) {
-    return this.disciplineService.list({ studentId, category, severity, startDate, endDate });
+    return this.disciplineService.list({ studentId, category, severity, startDate, endDate }, user);
   }
 
   @Get('discipline/:studentId')
   @Roles(
     'SYSTEM_ADMIN',
-    'PRINCIPAL',
+    'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN',
     'ACADEMIC_QA',
     'FINANCE',
     'HEAD_OF_DEPARTMENT',
@@ -52,7 +53,7 @@ export class DisciplineController {
   }
 
   @Patch('discipline/:recordId/resolve')
-  @Roles('PRINCIPAL', 'HEAD_OF_DEPARTMENT', 'SYSTEM_ADMIN')
+  @Roles('PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN', 'HEAD_OF_DEPARTMENT', 'SYSTEM_ADMIN')
   @ApiOperation({ summary: 'Resolve discipline record' })
   async resolve(@Param('recordId') recordId: string, @Body() dto: ResolveDisciplineDto) {
     return this.disciplineService.resolve(recordId, dto);

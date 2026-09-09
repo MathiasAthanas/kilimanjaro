@@ -19,6 +19,7 @@ import { NumberSequenceService } from '../common/helpers/number-sequence.service
 import { AuditService } from '../audit/audit.service';
 import { RabbitMqService } from '../rabbitmq/rabbitmq.service';
 import { RequestUser } from '../common/interfaces/request-user.interface';
+import { schoolScopeFilter } from '../common/helpers/school-scope.helper';
 import { ReceiptsService } from '../receipts/receipts.service';
 import { CreateManualPaymentDto } from './dto/create-manual-payment.dto';
 
@@ -59,20 +60,20 @@ export class PaymentsService {
     const payment = await this.prisma.payment.findUnique({ where: { id: paymentId } });
     if (!payment) throw new NotFoundException('Payment not found');
 
-    const invoice = await this.prisma.invoice.findUnique({ where: { id: payment.invoiceId } });
-    if (!invoice) throw new NotFoundException('Invoice not found');
+    // Atomic increment — prevents concurrent payments from corrupting the balance
+    // via a read-modify-write race. The updated invoice is re-read for status computation.
+    const updatedInvoice = await this.prisma.$transaction(async (tx) => {
+      const invoice = await tx.invoice.findUnique({ where: { id: payment.invoiceId } });
+      if (!invoice) throw new NotFoundException('Invoice not found');
 
-    const paidAmount = invoice.paidAmount.plus(payment.amount);
-    const outstanding = invoice.totalAmount.minus(paidAmount);
-    const status = this.status(invoice.totalAmount, paidAmount, invoice.dueDate);
+      const paidAmount = invoice.paidAmount.plus(payment.amount);
+      const outstanding = invoice.totalAmount.minus(paidAmount);
+      const status = this.status(invoice.totalAmount, paidAmount, invoice.dueDate);
 
-    await this.prisma.invoice.update({
-      where: { id: invoice.id },
-      data: {
-        paidAmount,
-        outstandingBalance: outstanding,
-        status,
-      },
+      return tx.invoice.update({
+        where: { id: invoice.id },
+        data: { paidAmount, outstandingBalance: outstanding, status },
+      });
     });
 
     const receipt = await this.receiptsService.issueFromPayment(payment.id, actor);
@@ -90,7 +91,7 @@ export class PaymentsService {
       paymentId: payment.id,
       amount: payment.amount.toString(),
       method: payment.method,
-      termId: invoice.termId,
+      termId: updatedInvoice.termId,
     });
 
     return { payment, receipt };
@@ -113,6 +114,11 @@ export class PaymentsService {
       throw new ForbiddenException('Invalid webhook signature');
     }
 
+    const webhookAmount = Number(input.payload.amount);
+    if (!webhookAmount || webhookAmount <= 0) {
+      return { accepted: false, reason: 'Invalid amount' };
+    }
+
     const existing = await this.prisma.payment.findFirst({ where: { referenceNumber: input.payload.transactionId } });
     if (existing) return { accepted: true, idempotent: true };
 
@@ -127,7 +133,7 @@ export class PaymentsService {
 
     const payment = await this.prisma.payment.create({
       data: {
-        paymentNumber: await this.numberService.paymentNumber(),
+        paymentNumber: await this.numberService.paymentNumber((invoice as any).schoolId ?? null),
         invoiceId: invoice.id,
         studentId: invoice.studentId,
         amount: this.decimal(input.payload.amount),
@@ -165,7 +171,7 @@ export class PaymentsService {
 
     const payment = await this.prisma.payment.create({
       data: {
-        paymentNumber: await this.numberService.paymentNumber(),
+        paymentNumber: await this.numberService.paymentNumber((invoice as any).schoolId ?? null),
         invoiceId: invoice.id,
         studentId: invoice.studentId,
         amount: this.decimal(dto.amount),
@@ -174,7 +180,7 @@ export class PaymentsService {
         referenceNumber: dto.referenceNumber,
         payerName: dto.payerName,
         payerPhone: dto.payerPhone,
-        paidAt: new Date(dto.paidAt),
+        paidAt: dto.paidAt ? new Date(dto.paidAt) : new Date(),
         notes: dto.notes,
         requiresApproval: true,
         approvalStatus: ApprovalStatus.PENDING_APPROVAL,
@@ -209,11 +215,12 @@ export class PaymentsService {
     return this.createManualPayment(dto, PaymentMethod.CASH, user);
   }
 
-  list(filters: any, _user: RequestUser) {
+  list(filters: any, user: RequestUser) {
     const page = Math.max(1, Number(filters.page || 1));
     const limit = Math.min(100, Math.max(1, Number(filters.limit || 20)));
     return this.prisma.payment.findMany({
       where: {
+        ...schoolScopeFilter(user),
         invoiceId: filters.invoiceId,
         studentId: filters.studentId,
         method: filters.method,
@@ -232,9 +239,12 @@ export class PaymentsService {
     });
   }
 
-  pendingApprovals(_user: RequestUser) {
+  pendingApprovals(user: RequestUser) {
     return this.prisma.manualPaymentApproval.findMany({
-      where: { decision: null },
+      where: {
+        decision: null,
+        payment: { ...schoolScopeFilter(user) },
+      },
       include: { payment: true },
       orderBy: { requestedAt: 'asc' },
     });
@@ -243,6 +253,9 @@ export class PaymentsService {
   async approve(approvalId: string, user: RequestUser) {
     const approval = await this.prisma.manualPaymentApproval.findUnique({ where: { id: approvalId }, include: { payment: true } });
     if (!approval) throw new NotFoundException('Approval record not found');
+    if (approval.decision !== null) {
+      throw new BadRequestException(`Approval already ${approval.decision.toLowerCase()}`);
+    }
 
     await this.prisma.manualPaymentApproval.update({
       where: { id: approvalId },
@@ -270,12 +283,23 @@ export class PaymentsService {
       newValue: payment,
     });
 
+    await this.rabbitMq.publish('manual.payment.approved', {
+      approvalId,
+      paymentId: payment.id,
+      studentId: payment.studentId,
+      amount: payment.amount.toString(),
+      approvedById: user.id,
+    });
+
     return { approved: true, paymentId: payment.id };
   }
 
   async reject(approvalId: string, rejectionReason: string, user: RequestUser) {
     const approval = await this.prisma.manualPaymentApproval.findUnique({ where: { id: approvalId }, include: { payment: true } });
     if (!approval) throw new NotFoundException('Approval record not found');
+    if (approval.decision !== null) {
+      throw new BadRequestException(`Approval already ${approval.decision.toLowerCase()}`);
+    }
 
     await this.prisma.manualPaymentApproval.update({
       where: { id: approvalId },
@@ -331,24 +355,25 @@ export class PaymentsService {
     const outstanding = invoice.totalAmount.minus(paidAmount);
     const status = this.status(invoice.totalAmount, paidAmount, invoice.dueDate);
 
-    await this.prisma.payment.update({
-      where: { id: payment.id },
-      data: {
-        status: PaymentStatus.REFUNDED,
-        refundReason,
-        refundedAt: new Date(),
-        refundedById: user.id,
-      },
-    });
-
-    await this.prisma.invoice.update({
-      where: { id: invoice.id },
-      data: {
-        paidAmount,
-        outstandingBalance: outstanding,
-        status,
-      },
-    });
+    await this.prisma.$transaction([
+      this.prisma.payment.update({
+        where: { id: payment.id },
+        data: {
+          status: PaymentStatus.REFUNDED,
+          refundReason,
+          refundedAt: new Date(),
+          refundedById: user.id,
+        },
+      }),
+      this.prisma.invoice.update({
+        where: { id: invoice.id },
+        data: {
+          paidAmount,
+          outstandingBalance: outstanding,
+          status,
+        },
+      }),
+    ]);
 
     await this.audit.log({
       entityType: 'Payment',
@@ -361,5 +386,26 @@ export class PaymentsService {
     });
 
     return { refunded: true };
+  }
+
+  async addNote(paymentId: string, note: string, user: RequestUser) {
+    const payment = await this.prisma.payment.findUnique({ where: { id: paymentId } });
+    if (!payment) throw new NotFoundException('Payment not found');
+
+    const updated = await this.prisma.payment.update({
+      where: { id: paymentId },
+      data: { notes: note },
+    });
+
+    await this.audit.log({
+      entityType: 'Payment',
+      entityId: paymentId,
+      action: FinancialAuditAction.PAYMENT_NOTE_ADDED,
+      performedById: user.id,
+      performedByRole: user.role,
+      metadata: { note },
+    });
+
+    return updated;
   }
 }

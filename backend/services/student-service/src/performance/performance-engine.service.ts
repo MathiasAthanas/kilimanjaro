@@ -75,7 +75,8 @@ export class PerformanceEngineService {
           data: { ...input, updatedBy: userId },
         });
 
-    await this.redis.del('engine:config', 'performance:school:summary');
+    await this.redis.del('engine:config');
+    await this.redis.delByPattern('performance:school:*:summary');
     await this.redis.delByPattern('performance:class:*:summary');
     await this.redis.delByPattern('performance:*:trends');
     await this.redis.delByPattern('performance:*:alerts:active');
@@ -83,7 +84,8 @@ export class PerformanceEngineService {
   }
 
   private async invalidatePerformanceCache(studentId: string): Promise<void> {
-    await this.redis.del(`performance:${studentId}:trends`, `performance:${studentId}:alerts:active`, 'performance:school:summary');
+    await this.redis.del(`performance:${studentId}:trends`, `performance:${studentId}:alerts:active`);
+    await this.redis.delByPattern('performance:school:*:summary');
     await this.redis.delByPattern('performance:class:*:summary');
   }
 
@@ -291,7 +293,7 @@ export class PerformanceEngineService {
 
   private async evaluateAlerts(input: {
     config: any;
-    student: { id: string; firstName: string; lastName: string };
+    student: { id: string; firstName: string; lastName: string; schoolId?: string | null };
     snapshots: Array<{ score: number }>;
     currentScore: number;
     previousScore: number | undefined;
@@ -446,6 +448,7 @@ export class PerformanceEngineService {
         const alert = await this.prisma.performanceAlert.create({
           data: {
             studentId: student.id,
+            schoolId: student.schoolId ?? null,
             subjectId,
             subjectName,
             alertType: condition.type,
@@ -554,6 +557,7 @@ export class PerformanceEngineService {
     studentId: string;
     studentScore: number;
     classId: string;
+    schoolId?: string | null;
     classLevel?: number;
     excludeClassId?: string;
     peerSuggestionMinPeerScore: number;
@@ -566,17 +570,10 @@ export class PerformanceEngineService {
         studentId: { not: input.studentId },
         score: { gte: input.peerSuggestionMinPeerScore },
         ...(input.excludeClassId ? { classId: { not: input.excludeClassId } } : { classId: input.classId }),
-        ...(input.classLevel !== undefined
-          ? {
-              class: {
-                level: input.classLevel,
-              },
-            }
-          : {}),
+        // Always restrict candidates to the same school — never pair across schools
+        ...(input.schoolId ? { class: { schoolId: input.schoolId, ...(input.classLevel !== undefined ? { level: input.classLevel } : {}) } } : input.classLevel !== undefined ? { class: { level: input.classLevel } } : {}),
       },
-      include: {
-        student: true,
-      },
+      include: { student: true },
       orderBy: { score: 'desc' },
     });
 
@@ -587,37 +584,45 @@ export class PerformanceEngineService {
       }
     }
 
+    // Batch all per-candidate DB lookups to avoid N+1 queries
+    const candidateIds = [...latestByStudent.keys()];
+
+    const [activePairings, allPeerSnapshots] = await Promise.all([
+      // One query for all active pairings involving this student as any peer
+      this.prisma.peerPairing.findMany({
+        where: {
+          studentId: input.studentId,
+          subjectId: input.subjectId,
+          peerId: { in: candidateIds },
+          status: PairingStatus.ACTIVE,
+        },
+        select: { peerId: true },
+      }),
+      // One query for all historical snapshots for all candidates
+      this.prisma.performanceSnapshot.findMany({
+        where: { studentId: { in: candidateIds }, subjectId: input.subjectId },
+        orderBy: [{ term: { startDate: 'asc' } }, { createdAt: 'asc' }],
+        select: { studentId: true, score: true, subjectName: true },
+      }),
+    ]);
+
+    const activePairingSet = new Set(activePairings.map((p) => p.peerId));
+    const peerHistoryMap = new Map<string, number[]>();
+    for (const snap of allPeerSnapshots) {
+      if (!peerHistoryMap.has(snap.studentId)) peerHistoryMap.set(snap.studentId, []);
+      peerHistoryMap.get(snap.studentId)!.push(snap.score);
+    }
+
     const candidates: Array<{ peerId: string; score: number; candidateScore: number; reason: string }> = [];
 
     for (const snapshot of latestByStudent.values()) {
-      if (snapshot.student.status !== StudentStatus.ACTIVE) {
-        continue;
-      }
+      if (snapshot.student.status !== StudentStatus.ACTIVE) continue;
 
       const gap = snapshot.score - input.studentScore;
-      if (gap > input.peerSuggestionMaxScoreGap) {
-        continue;
-      }
+      if (gap > input.peerSuggestionMaxScoreGap) continue;
+      if (activePairingSet.has(snapshot.studentId)) continue;
 
-      const activePairing = await this.prisma.peerPairing.findFirst({
-        where: {
-          studentId: input.studentId,
-          peerId: snapshot.studentId,
-          subjectId: input.subjectId,
-          status: PairingStatus.ACTIVE,
-        },
-      });
-
-      if (activePairing) {
-        continue;
-      }
-
-      const peerSnapshots = await this.prisma.performanceSnapshot.findMany({
-        where: { studentId: snapshot.studentId, subjectId: input.subjectId },
-        orderBy: [{ term: { startDate: 'asc' } }, { createdAt: 'asc' }],
-      });
-
-      const peerScores = peerSnapshots.map((item) => item.score);
+      const peerScores = peerHistoryMap.get(snapshot.studentId) ?? [snapshot.score];
       const consistencyScore = (1 - standardDeviation(peerScores) / 100) * 100;
       const trendScore = this.normalizeTrendScore(linearRegressionSlope(peerScores)) * 100;
       const finalScore = (0.5 * snapshot.score) + (0.3 * consistencyScore) + (0.2 * trendScore);
@@ -658,7 +663,11 @@ export class PerformanceEngineService {
       return null;
     }
 
-    const studentClass = await this.prisma.class.findUnique({ where: { id: input.classId } });
+    const [studentClass, term] = await Promise.all([
+      this.prisma.class.findUnique({ where: { id: input.classId }, select: { level: true, schoolId: true } }),
+      this.prisma.term.findUnique({ where: { id: input.termId } }),
+    ]);
+    const schoolId = studentClass?.schoolId ?? null;
 
     let candidates = await this.buildPeerCandidates({
       subjectId: input.subjectId,
@@ -666,17 +675,20 @@ export class PerformanceEngineService {
       studentId: input.studentId,
       studentScore: input.studentScore,
       classId: input.classId,
+      schoolId,
       peerSuggestionMinPeerScore: config.peerSuggestionMinPeerScore,
       peerSuggestionMaxScoreGap: config.peerSuggestionMaxScoreGap,
     });
 
     if (candidates.length === 0 && config.peerSuggestionSameClass && studentClass) {
+      // Widen to same class level within the same school — never cross-school
       candidates = await this.buildPeerCandidates({
         subjectId: input.subjectId,
         termId: input.termId,
         studentId: input.studentId,
         studentScore: input.studentScore,
         classId: input.classId,
+        schoolId,
         classLevel: studentClass.level,
         excludeClassId: input.classId,
         peerSuggestionMinPeerScore: config.peerSuggestionMinPeerScore,
@@ -690,7 +702,6 @@ export class PerformanceEngineService {
     }
 
     const best = candidates[0];
-    const term = await this.prisma.term.findUnique({ where: { id: input.termId } });
 
     const pairing = await this.prisma.peerPairing.create({
       data: {
@@ -699,6 +710,7 @@ export class PerformanceEngineService {
         subjectId: input.subjectId,
         subjectName: input.subjectName,
         classId: input.classId,
+        schoolId,
         termId: input.termId,
         suggestedBy: PairingSuggestedBy.SYSTEM,
         status: PairingStatus.SUGGESTED,

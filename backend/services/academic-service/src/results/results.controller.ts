@@ -16,7 +16,7 @@ export class ResultsController {
   @Get('results')
   @Roles(
     ROLES.SYSTEM_ADMIN,
-    ROLES.PRINCIPAL,
+    ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN,
     ROLES.ACADEMIC_QA,
     ROLES.HEAD_OF_DEPARTMENT,
     ROLES.TEACHER,
@@ -28,13 +28,23 @@ export class ResultsController {
   }
 
   @Get('results/class/:classId/term/:termId')
-  @Roles(ROLES.TEACHER, ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA)
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.TEACHER, ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA)
   classResults(@Param('classId') classId: string, @Param('termId') termId: string) {
     return this.resultsService.classResults(classId, termId);
   }
 
+  @Get('results/readiness')
+  @Roles(
+    ROLES.SYSTEM_ADMIN,
+    ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN,
+    ROLES.ACADEMIC_QA,
+  )
+  readiness(@Query('termId') termId?: string) {
+    return this.resultsService.readiness(termId);
+  }
+
   @Post('results/publish')
-  @Roles(ROLES.PRINCIPAL)
+  @Roles(ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN)
   publish(@Body() dto: PublishResultsDto, @CurrentUser() user?: RequestUser) {
     return this.resultsService.publishResults(dto, user!);
   }

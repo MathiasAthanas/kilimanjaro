@@ -95,6 +95,7 @@ export type FundRequestRow = {
   department: string; status: string; requestedByName: string; requestedByRole: string; neededBy: string;
   bursarName: string; bursarNote: string; forwardedAt: string;
   principalName: string; principalNote: string; decidedAt: string; rejectionReason: string;
+  managerName: string; managerNote: string; managerDecidedAt: string;
   disbursedByName: string; disbursementMethod: string; disbursementRef: string; disbursedAt: string;
   expenseId: string; createdAt: string; events: FundEvent[];
 };
@@ -106,6 +107,7 @@ function normaliseFund(raw: unknown): FundRequestRow {
     requestedByName: str(f.requestedByName) || str(f.requestedByRole), requestedByRole: str(f.requestedByRole), neededBy: str(f.neededBy),
     bursarName: str(f.bursarName), bursarNote: str(f.bursarNote), forwardedAt: str(f.forwardedAt),
     principalName: str(f.principalName), principalNote: str(f.principalNote), decidedAt: str(f.decidedAt), rejectionReason: str(f.rejectionReason),
+    managerName: str(f.managerName), managerNote: str(f.managerNote), managerDecidedAt: str(f.managerDecidedAt),
     disbursedByName: str(f.disbursedByName), disbursementMethod: str(f.disbursementMethod), disbursementRef: str(f.disbursementRef), disbursedAt: str(f.disbursedAt),
     expenseId: str(f.expenseId), createdAt: str(f.createdAt),
     events: arrayFromApi(f, ['events']).map((e) => { const o = e as Record<string, unknown>; return { id: str(o.id), action: str(o.action), actorName: str(o.actorName) || str(o.actorRole), actorRole: str(o.actorRole), note: str(o.note), createdAt: str(o.createdAt) }; }),
@@ -115,6 +117,33 @@ export function useFundRequests(params?: Record<string, unknown>) {
   return useQuery({
     queryKey: opsKeys.fundRequests(params),
     queryFn: () => api.get('/finance/fund-requests', { params }).then((r) => arrayFromApi(payloadOf(r), ['items']).map(normaliseFund)),
+  });
+}
+
+export type FundPageMeta = { page: number; limit: number; total: number; totalPages: number };
+export type FundRequestPage = { items: FundRequestRow[]; meta: FundPageMeta };
+/** Server-paginated fund requests: returns the current page of rows plus paging meta. */
+export function useFundRequestsPage(params: Record<string, unknown>) {
+  return useQuery({
+    queryKey: opsKeys.fundRequests(params),
+    queryFn: async (): Promise<FundRequestPage> => {
+      const r = await api.get('/finance/fund-requests', { params });
+      const p = payloadOf(r) as Record<string, unknown>;
+      const items = arrayFromApi(p, ['items']).map(normaliseFund);
+      const meta = (p.meta ?? {}) as Partial<FundPageMeta>;
+      const limit = Number(meta.limit ?? (params.limit as number) ?? items.length ?? 20) || 20;
+      const total = Number(meta.total ?? items.length);
+      return {
+        items,
+        meta: {
+          page: Number(meta.page ?? (params.page as number) ?? 1) || 1,
+          limit,
+          total,
+          totalPages: Number(meta.totalPages ?? Math.max(1, Math.ceil(total / limit))),
+        },
+      };
+    },
+    placeholderData: (prev) => prev,
   });
 }
 export function useFundRequest(id: string) {
@@ -130,9 +159,13 @@ export function useFundRequestSummary() {
     queryFn: () => api.get('/finance/fund-requests/summary').then((r) => {
       const p = payloadOf(r) as Record<string, unknown>;
       return {
-        pendingForward: Number(p.pendingForward ?? 0),
-        pendingApproval: Number(p.pendingApproval ?? 0),
+        pendingSchoolApproval: Number(p.pendingSchoolApproval ?? 0),
+        pendingFinanceReview: Number(p.pendingFinanceReview ?? 0),
+        pendingManagerApproval: Number(p.pendingManagerApproval ?? 0),
         approvedAwaitingDisbursement: Number(p.approvedAwaitingDisbursement ?? 0),
+        // legacy aliases
+        pendingForward: Number(p.pendingForward ?? p.pendingSchoolApproval ?? 0),
+        pendingApproval: Number(p.pendingApproval ?? p.pendingManagerApproval ?? 0),
         byStatus: (p.byStatus ?? {}) as Record<string, { count: number; total: unknown }>,
       };
     }),
@@ -155,11 +188,16 @@ function fundAction(action: string) {
     });
   };
 }
-export const useForwardFundRequestMutation = fundAction('forward');
-export const useApproveFundRequestMutation = fundAction('approve');
+// New approval chain: initiate → school-approve → finance-review → manager-approve → disburse
+export const useSchoolApproveFundRequestMutation = fundAction('school-approve');
+export const useFinanceReviewFundRequestMutation = fundAction('finance-review');
+export const useManagerApproveFundRequestMutation = fundAction('manager-approve');
 export const useRejectFundRequestMutation = fundAction('reject');
 export const useDisburseFundRequestMutation = fundAction('disburse');
 export const useCancelFundRequestMutation = fundAction('cancel');
+// legacy aliases (kept so any older import still resolves)
+export const useForwardFundRequestMutation = fundAction('finance-review');
+export const useApproveFundRequestMutation = fundAction('manager-approve');
 
 // ─── Store / inventory ──────────────────────────────────────────────────────────
 export type StoreItemRow = {

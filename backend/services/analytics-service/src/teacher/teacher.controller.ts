@@ -13,7 +13,7 @@ export class TeacherAnalyticsController {
   constructor(private readonly service: TeacherAnalyticsService) {}
 
   @Get('my-dashboard')
-  @Roles(ROLES.TEACHER, ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.HEAD_OF_DEPARTMENT)
+  @Roles(ROLES.TEACHER, ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.HEAD_OF_DEPARTMENT)
   @ApiOperation({ summary: 'Teacher personal analytics dashboard' })
   myDashboard(
     @CurrentUser() user: RequestUser,

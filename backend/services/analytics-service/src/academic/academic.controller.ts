@@ -11,7 +11,7 @@ export class AcademicController {
   constructor(private readonly service: AcademicService) {}
 
   @Get('overview')
-  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA, ROLES.MANAGING_DIRECTOR, ROLES.BOARD_DIRECTOR)
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA, ROLES.MANAGING_DIRECTOR, ROLES.BOARD_DIRECTOR)
   @ApiOperation({ summary: 'School academic overview analytics' })
   @ApiResponse({ status: 200 })
   overview(@Query('academicYearId') academicYearId?: string, @Query('termId') termId?: string) {
@@ -19,7 +19,7 @@ export class AcademicController {
   }
 
   @Get('subject/:subjectId')
-  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA, ROLES.HEAD_OF_DEPARTMENT, ROLES.TEACHER)
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA, ROLES.HEAD_OF_DEPARTMENT, ROLES.TEACHER)
   @ApiOperation({ summary: 'Subject-level analytics' })
   subject(
     @Param('subjectId') subjectId: string,
@@ -31,7 +31,7 @@ export class AcademicController {
   }
 
   @Get('teacher/:teacherId')
-  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA, ROLES.HEAD_OF_DEPARTMENT)
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA, ROLES.HEAD_OF_DEPARTMENT)
   @ApiOperation({ summary: 'Teacher performance analytics' })
   teacher(
     @Param('teacherId') teacherId: string,
@@ -42,7 +42,7 @@ export class AcademicController {
   }
 
   @Get('class/:classId')
-  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA, ROLES.HEAD_OF_DEPARTMENT, ROLES.TEACHER)
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA, ROLES.HEAD_OF_DEPARTMENT, ROLES.TEACHER)
   @ApiOperation({ summary: 'Class academic analytics' })
   classAnalytics(
     @Param('classId') classId: string,
@@ -53,7 +53,7 @@ export class AcademicController {
   }
 
   @Get('performance-engine')
-  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA, ROLES.MANAGING_DIRECTOR)
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA, ROLES.MANAGING_DIRECTOR)
   @ApiOperation({ summary: 'Performance engine effectiveness' })
   performanceEngine(@Query('academicYearId') academicYearId?: string, @Query('termId') termId?: string) {
     return this.service.getPerformanceEngine(academicYearId, termId);

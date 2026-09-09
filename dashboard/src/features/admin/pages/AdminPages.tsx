@@ -134,7 +134,6 @@ export function AdminHomePage() {
             <AdminQuickCard title="Academic Setup"         detail="Years, terms, classes, subjects, grading."        to="/admin/academic/setup"                        />
             <AdminQuickCard title="Notification Templates" detail="Edit and preview SMS / email / push templates."   to="/admin/notifications/templates"               />
             <AdminQuickCard title="Run Engine"             detail="Performance engine thresholds and manual run."    to="/admin/performance/engine"                    />
-            <AdminQuickCard title="Generate Report"        detail="Any report across all domains."                   to="/admin/reports"                 icon="file"   />
             <AdminQuickCard title="System Audit"           detail="Security and settings events."                    to="/admin/audit/system"            icon="eye"    />
             <AdminQuickCard title="System Status"          detail="Live service health and incident surface."         to="/admin/system-status"           icon="eye"    />
             <AdminQuickCard title="System Settings"        detail="Providers, versions, feature flags."              to="/admin/settings/system"                       />
@@ -300,6 +299,7 @@ const ROLE_LABELS: Record<string, string> = {
   FINANCE:            'Finance Officer',
   PRINCIPAL:          'Head master / Head of School',
   SYSTEM_ADMIN:       'System Admin',
+  ADMISSIONS:         'Admissions Officer',
 };
 
 function roleLabel(role: string): string {
@@ -321,32 +321,30 @@ const STATUS_OPTIONS = [
   { value: 'PENDING',  label: 'Pending'  },
 ];
 
-const DEPARTMENT_OPTIONS = [
-  { value: 'Science Department', label: 'Science Department' },
-  { value: 'Mathematics Department', label: 'Mathematics Department' },
-  { value: 'Languages Department', label: 'Languages Department' },
-  { value: 'Humanities Department', label: 'Humanities Department' },
-  { value: 'Business Department', label: 'Business Department' },
-  { value: 'ICT Department', label: 'ICT Department' },
-  { value: 'Primary Department', label: 'Primary Department' },
-  { value: 'Academic Quality Assurance', label: 'Academic Quality Assurance' },
-  { value: 'Finance Office', label: 'Finance Office' },
-  { value: 'Principal Office', label: 'Headmaster\'s Office' },
-  { value: 'System Administration', label: 'System Administration' },
-];
+type DeptOption = { value: string; label: string };
 
-function departmentOptionsForRole(role: string) {
-  if (role === 'FINANCE') return DEPARTMENT_OPTIONS.filter((option) => option.value === 'Finance Office');
-  if (role === 'PRINCIPAL') return DEPARTMENT_OPTIONS.filter((option) => option.value === 'Principal Office');
-  if (role === 'ACADEMIC_QA') return DEPARTMENT_OPTIONS.filter((option) => option.value === 'Academic Quality Assurance');
-  if (role === 'SYSTEM_ADMIN') return DEPARTMENT_OPTIONS.filter((option) => option.value === 'System Administration');
-  return DEPARTMENT_OPTIONS.filter(
-    (option) => !['Finance Office', 'Principal Office', 'System Administration'].includes(option.value),
-  );
+const ROLE_DEPT_KEYWORDS: Record<string, string> = {
+  FINANCE: 'finance',
+  PRINCIPAL: 'principal',
+  ACADEMIC_QA: 'quality',
+  SYSTEM_ADMIN: 'system',
+};
+
+function departmentOptionsForRole(role: string, departments: { name: string }[]): DeptOption[] {
+  const all = departments.map((d) => ({ value: d.name, label: d.name }));
+  if (all.length === 0) return all;
+  const keyword = ROLE_DEPT_KEYWORDS[role];
+  if (keyword) {
+    const filtered = all.filter((o) => o.value.toLowerCase().includes(keyword));
+    return filtered.length > 0 ? filtered : all;
+  }
+  const restricted = Object.values(ROLE_DEPT_KEYWORDS);
+  const filtered = all.filter((o) => !restricted.some((k) => o.value.toLowerCase().includes(k)));
+  return filtered.length > 0 ? filtered : all;
 }
 
-function defaultDepartmentForRole(role: string) {
-  return departmentOptionsForRole(role)[0]?.value ?? '';
+function defaultDepartmentForRole(role: string, departments: { name: string }[]): string {
+  return departmentOptionsForRole(role, departments)[0]?.value ?? '';
 }
 
 function rolePermissions(role: string): string[] {
@@ -364,14 +362,22 @@ function rolePermissions(role: string): string[] {
 export function CreateUserPage() {
   const navigate = useNavigate();
   const createMutation = useCreateUserMutation();
+  const { data: rawDepts = [] } = useDepartments();
+  const depts = rawDepts as { name: string }[];
   const [role, setRole] = useState('TEACHER');
   const [form, setForm] = useState({
     name: '',
     email: '',
     phone: '',
-    linked: defaultDepartmentForRole('TEACHER'),
+    linked: '',
     status: 'ACTIVE',
   });
+
+  useEffect(() => {
+    if (depts.length > 0 && !form.linked) {
+      setForm((f) => ({ ...f, linked: defaultDepartmentForRole('TEACHER', depts) }));
+    }
+  }, [depts.length]);
   const [createdPassword, setCreatedPassword] = useState('');
   const isPrivileged = roleRisk(role) === 'high';
 
@@ -380,7 +386,7 @@ export function CreateUserPage() {
 
   const handleRoleChange = (nextRole: string) => {
     setRole(nextRole);
-    setForm((f) => ({ ...f, linked: defaultDepartmentForRole(nextRole) }));
+    setForm((f) => ({ ...f, linked: defaultDepartmentForRole(nextRole, depts) }));
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -428,7 +434,7 @@ export function CreateUserPage() {
                 <SelectField
                   key={`department-${role}`}
                   label="Linked Entity / Department"
-                  options={departmentOptionsForRole(role)}
+                  options={departmentOptionsForRole(role, depts)}
                   value={form.linked}
                   onChange={(value) => setForm((f) => ({ ...f, linked: value }))}
                 />
@@ -658,21 +664,24 @@ export function EditUserPage() {
   const { loading, user } = useUser();
   const navigate = useNavigate();
   const updateMutation = useUpdateUserMutation();
+  const { data: rawDepts = [] } = useDepartments();
+  const depts = rawDepts as { name: string }[];
   const [role, setRole] = useState('');
   const [linked, setLinked] = useState('');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
 
   useEffect(() => {
-    if (user) {
-      setRole(user.role);
-      setLinked(DEPARTMENT_OPTIONS.some((o) => o.value === user.linked) ? user.linked : defaultDepartmentForRole(user.role));
-      setName(user.name ?? '');
-    }
-  }, [user?.id]);
+    if (!user) return;
+    setRole(user.role);
+    setName(user.name ?? '');
+    const validOptions = depts.length > 0 ? departmentOptionsForRole(user.role, depts) : [];
+    const isValid = validOptions.some((o) => o.value === user.linked);
+    setLinked(isValid ? user.linked : (validOptions[0]?.value ?? user.linked ?? ''));
+  }, [user?.id, depts.length]);
 
   const isPrivileged = roleRisk(role) === 'high';
-  const handleRoleChange = (nextRole: string) => { setRole(nextRole); setLinked(defaultDepartmentForRole(nextRole)); };
+  const handleRoleChange = (nextRole: string) => { setRole(nextRole); setLinked(defaultDepartmentForRole(nextRole, depts)); };
 
   if (loading) return <AdminShell title="Loading…" eyebrow="Account update"><SkeletonTable cols={3} /></AdminShell>;
   if (!user) return <AdminShell title="Not Found" eyebrow="Account update"><EmptyState title="User not found" description="This user account does not exist." /></AdminShell>;
@@ -698,7 +707,7 @@ export function EditUserPage() {
           <AdminFormSection title="Role & Access" subtitle="Role and linked entity assignment">
             <div className="grid gap-4 md:grid-cols-2">
               <SelectField label="Role" options={ROLE_OPTIONS} value={role} onChange={handleRoleChange} />
-              <SelectField key={`edit-department-${role}`} label="Linked Entity / Department" options={departmentOptionsForRole(role)} value={linked} onChange={setLinked} />
+              <SelectField key={`edit-department-${role}`} label="Linked Entity / Department" options={departmentOptionsForRole(role, depts)} value={linked} onChange={setLinked} />
             </div>
             {isPrivileged && (
               <div className="mt-4 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
@@ -3008,16 +3017,33 @@ export function AssessmentTypesPage() {
 
 // â"€â"€â"€ Students â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
-export function StudentsPage() {
+function useConsoleSubtitle() {
+  const session = useAuthStore((s) => s.session);
+  if (!session) return undefined;
+  return `${roleLabel(session.user.role)} · ${session.user.email} · Production console`;
+}
+
+export function StudentsPage({ basePath = '/admin' }: { basePath?: string } = {}) {
+  const subtitle = useConsoleSubtitle();
+  const navigate = useNavigate();
   return (
-    <AdminShell title="Student Management" eyebrow="Registry and lifecycle">
+    <AdminShell
+      title="Student Management"
+      eyebrow="Registry and lifecycle"
+      subtitle={subtitle}
+      action={
+        <Button className="rounded-xl bg-[#4338CA]" onClick={() => navigate(`${basePath}/students/enrol`)}>
+          <UserPlus className="h-4 w-4" /> Enrol Student
+        </Button>
+      }
+    >
       <CsvImportZone entity="student" />
-      <StudentsTable />
+      <StudentsTable basePath={basePath} />
     </AdminShell>
   );
 }
 
-function StudentsTable() {
+function StudentsTable({ basePath = '/admin' }: { basePath?: string }) {
   const { data: apiStudents = [] as typeof adminStudents, isLoading, isError, refetch } = useAdminStudents() as unknown as { data: typeof adminStudents; isLoading: boolean; isError: boolean; refetch: () => void };
   if (isLoading) return <SkeletonTable cols={9} />;
   if (isError) return <DataError onRetry={refetch} />;
@@ -3039,7 +3065,7 @@ function StudentsTable() {
             </Badge>
           </Td>
           <Td>
-            <NavLink className="text-xs font-black text-[#4338CA] hover:underline" to={`/admin/students/${student.id}`}>Open</NavLink>
+            <NavLink className="text-xs font-black text-[#4338CA] hover:underline" to={`${basePath}/students/${student.id}`}>Open</NavLink>
           </Td>
         </tr>
       ))}
@@ -3082,6 +3108,7 @@ function safeDate(value: string, fallback: string) {
 }
 
 export function EnrolStudentPage() {
+  const subtitle = useConsoleSubtitle();
   const { data: enrolClasses = [] as typeof adminClasses } = useAdminClasses() as unknown as { data: typeof adminClasses };
   const { data: academicYears = [] } = useAcademicYears();
   const createStudentMutation = useCreateStudentMutation();
@@ -3168,7 +3195,7 @@ export function EnrolStudentPage() {
   };
 
   return (
-    <AdminShell title="Enrol Student" eyebrow="Admission workflow">
+    <AdminShell title="Enrol Student" eyebrow="Admission workflow" subtitle={subtitle}>
       {/* Step progress bar */}
       <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white px-6 py-4 shadow-sm">
         <div className="flex min-w-max items-center gap-0">
@@ -3321,8 +3348,9 @@ export function EnrolStudentPage() {
 
 // â"€â"€â"€ Student profile â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
-export function StudentAdminProfilePage() {
+export function StudentAdminProfilePage({ basePath = '/admin' }: { basePath?: string } = {}) {
   const { id } = useParams();
+  const subtitle = useConsoleSubtitle();
   const { data: apiStudents = [] as typeof adminStudents, isLoading } = useAdminStudents() as unknown as { data: typeof adminStudents; isLoading: boolean };
   const { data: guardians = [] } = useStudentGuardians(id) as unknown as { data: any[] };
   const { data: attendance = null } = useStudentAttendance(id) as unknown as { data: any };
@@ -3386,8 +3414,8 @@ export function StudentAdminProfilePage() {
   ];
 
   return (
-    <AdminShell title={student.name} eyebrow="Admin student profile">
-      <NavLink to="/admin/students" className="inline-flex items-center gap-1.5 text-sm font-black text-[#4338CA] hover:underline mb-4 block">
+    <AdminShell title={student.name} eyebrow="Student profile" subtitle={subtitle}>
+      <NavLink to={`${basePath}/students`} className="inline-flex items-center gap-1.5 text-sm font-black text-[#4338CA] hover:underline mb-4 block">
         <ArrowLeft className="h-4 w-4" /> Back to Students
       </NavLink>
 
@@ -5191,3 +5219,5 @@ function useUser() {
     user: isLoading ? null : (apiUsers.find((u) => u.id === id) ?? null),
   }), [id, apiUsers, isLoading]);
 }
+
+export { BulkImportPage } from './BulkImportPage';

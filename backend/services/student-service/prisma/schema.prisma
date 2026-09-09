@@ -140,8 +140,51 @@ enum ClassTransitionType {
   @@schema("students")
 }
 
+// ─── Multi-school expansion ──────────────────────────────────────────────────
+
+enum SchoolType {
+  NURSERY
+  PRIMARY
+  SECONDARY
+
+  @@schema("students")
+}
+
+enum SchoolGender {
+  MALE
+  FEMALE
+  BOTH
+
+  @@schema("students")
+}
+
+/// Canonical school record for the whole group. Other services keep
+/// lightweight mirrors synced via `school.*` events.
+model School {
+  id        String       @id @default(uuid())
+  name      String
+  code      String       @unique
+  type      SchoolType
+  gender    SchoolGender @default(BOTH)
+  motto     String?
+  logoUrl   String?
+  address   String?
+  phone     String?
+  email     String?
+  isActive  Boolean      @default(true)
+  createdBy String
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  classes   Class[]
+  students  Student[]
+
+  @@schema("students")
+}
+
 model Student {
   id                 String                @id @default(uuid())
+  schoolId           String?
+  school             School?               @relation(fields: [schoolId], references: [id])
   registrationNumber String                @unique
   authUserId         String                @unique
   firstName          String
@@ -228,6 +271,8 @@ model AcademicYear {
 
 model Term {
   id             String   @id @default(uuid())
+  /// null = group-wide term; set = school-specific term dates
+  schoolId       String?
   academicYearId String
   name           String
   startDate      DateTime
@@ -245,6 +290,8 @@ model Term {
 
 model Class {
   id             String   @id @default(uuid())
+  schoolId       String?
+  school         School?  @relation(fields: [schoolId], references: [id])
   name           String
   level          Int
   stream         String?
@@ -263,6 +310,7 @@ model Class {
   pairings       PeerPairing[]
   pathwayFrom    ClassPathway[] @relation("PathwayFromClass")
   pathwayTo      ClassPathway[] @relation("PathwayToClass")
+  applicants     Applicant[]
 
   @@unique([name, stream, academicYearId])
   @@index([educationStage, level, academicYearId])
@@ -288,6 +336,7 @@ model ClassPathway {
 
 model Enrolment {
   id             String   @id @default(uuid())
+  schoolId       String?
   studentId      String
   classId        String
   academicYearId String
@@ -309,6 +358,7 @@ model Enrolment {
 
 model AttendanceRecord {
   id         String   @id @default(uuid())
+  schoolId   String?
   studentId  String
   classId    String
   date       DateTime @db.Date
@@ -397,6 +447,7 @@ model PerformanceTrend {
 
 model PerformanceAlert {
   id                  String   @id @default(uuid())
+  schoolId            String?
   studentId           String
   subjectId           String
   subjectName         String
@@ -419,11 +470,13 @@ model PerformanceAlert {
   @@index([studentId, isResolved])
   @@index([alertType, isResolved])
   @@index([subjectId, isResolved])
+  @@index([schoolId])
   @@schema("students")
 }
 
 model PeerPairing {
   id                   String   @id @default(uuid())
+  schoolId             String?
   studentId            String
   peerId               String
   subjectId            String
@@ -439,6 +492,8 @@ model PeerPairing {
   outcomeDelta         Float?
   activatedAt          DateTime?
   completedAt          DateTime?
+  rejectedAt           DateTime?
+  rejectionReason      String?
   expiresAt            DateTime
   createdAt            DateTime @default(now())
   student              Student  @relation("PairingsStudent", fields: [studentId], references: [id])
@@ -449,6 +504,7 @@ model PeerPairing {
   @@index([studentId, status])
   @@index([subjectId, status])
   @@index([peerId, status])
+  @@index([schoolId])
   @@schema("students")
 }
 
@@ -483,6 +539,7 @@ model PerformanceEngineConfig {
 
 model Department {
   id              String          @id @default(uuid())
+  schoolId    String?
   name            String          @unique
   code            String          @unique
   description     String?
@@ -531,5 +588,138 @@ model RegistrationSequenceByStage {
   updatedAt DateTime @updatedAt
 
   @@id([year, stage])
+  @@schema("students")
+}
+
+// ─── Admissions pipeline (Admissions Officer role) ──────────────────────────
+
+enum AdmissionStage {
+  INQUIRY
+  APPLICATION
+  ASSESSMENT
+  OFFER
+  ACCEPTED
+  ENROLLED
+  REJECTED
+  WITHDRAWN
+
+  @@schema("students")
+}
+
+enum AdmissionSourceChannel {
+  WALK_IN
+  REFERRAL
+  WEBSITE
+  SOCIAL_MEDIA
+  PHONE_CALL
+  SCHOOL_EVENT
+  OTHER
+
+  @@schema("students")
+}
+
+enum AdmissionAssessmentOutcome {
+  PENDING
+  PASSED
+  FAILED
+  WAIVED
+
+  @@schema("students")
+}
+
+enum AdmissionOfferDecision {
+  PENDING
+  ACCEPTED
+  DECLINED
+  EXPIRED
+
+  @@schema("students")
+}
+
+model Applicant {
+  id                   String                 @id @default(uuid())
+  schoolId             String?
+  firstName            String
+  middleName           String?
+  lastName             String
+  dateOfBirth          DateTime?
+  gender               Gender?
+  nationality          String                 @default("Tanzanian")
+  previousSchool       String?
+  prospectiveClassId   String?
+  educationStage       EducationStage?
+  guardianFirstName    String
+  guardianLastName     String
+  /// Normalised on write (+255XXXXXXXXX) — same scheme as parent auth accounts
+  guardianPhone        String
+  guardianEmail        String?
+  guardianRelationship GuardianRelationship   @default(GUARDIAN)
+  sourceChannel        AdmissionSourceChannel @default(WALK_IN)
+  stage                AdmissionStage         @default(INQUIRY)
+  notes                String?
+  /// Set when the applicant is converted into an enrolled student
+  studentId            String?                @unique
+  createdBy            String
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+  prospectiveClass     Class?                 @relation(fields: [prospectiveClassId], references: [id])
+  stageEvents          ApplicantStageEvent[]
+  assessments          AdmissionAssessment[]
+  offer                AdmissionOffer?
+
+  @@index([stage, createdAt])
+  @@index([guardianPhone])
+  @@index([prospectiveClassId, stage])
+  @@schema("students")
+}
+
+/// Every stage transition is recorded with actor + timestamp, mirroring the
+/// discipline / fund-request event-trail convention.
+model ApplicantStageEvent {
+  id          String          @id @default(uuid())
+  applicantId String
+  fromStage   AdmissionStage?
+  toStage     AdmissionStage
+  actorId     String
+  note        String?
+  createdAt   DateTime        @default(now())
+  applicant   Applicant       @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+
+  @@index([applicantId, createdAt])
+  @@schema("students")
+}
+
+model AdmissionAssessment {
+  id           String                     @id @default(uuid())
+  applicantId  String
+  scheduledAt  DateTime
+  subjectFocus String?
+  score        Float?
+  maxScore     Float?                     @default(100)
+  outcome      AdmissionAssessmentOutcome @default(PENDING)
+  notes        String?
+  recordedBy   String?
+  createdAt    DateTime                   @default(now())
+  updatedAt    DateTime                   @updatedAt
+  applicant    Applicant                  @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+
+  @@index([applicantId])
+  @@schema("students")
+}
+
+model AdmissionOffer {
+  id              String                 @id @default(uuid())
+  applicantId     String                 @unique
+  classId         String
+  admissionNumber String?
+  feeExpectation  Float?
+  decision        AdmissionOfferDecision @default(PENDING)
+  issuedBy        String
+  issuedAt        DateTime               @default(now())
+  respondedAt     DateTime?
+  expiresAt       DateTime?
+  note            String?
+  applicant       Applicant              @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+
   @@schema("students")
 }

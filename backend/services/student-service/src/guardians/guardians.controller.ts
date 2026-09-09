@@ -20,7 +20,7 @@ export class GuardiansController {
   ) {}
 
   @Post(':id/guardians')
-  @Roles('SYSTEM_ADMIN', 'PRINCIPAL')
+  @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN', 'ADMISSIONS')
   @ApiOperation({ summary: 'Add guardian to student' })
   async create(@Param('id') id: string, @Body() dto: CreateGuardianDto) {
     return this.guardiansService.addGuardian(id, dto);
@@ -29,11 +29,12 @@ export class GuardiansController {
   @Get(':id/guardians')
   @Roles(
     'SYSTEM_ADMIN',
-    'PRINCIPAL',
+    'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN',
     'ACADEMIC_QA',
     'FINANCE',
     'HEAD_OF_DEPARTMENT',
     'TEACHER',
+    'ADMISSIONS',
     'PARENT',
   )
   @ApiOperation({ summary: 'List guardians linked to student' })
@@ -45,7 +46,7 @@ export class GuardiansController {
   }
 
   @Patch(':id/guardians/:guardianId')
-  @Roles('SYSTEM_ADMIN', 'PRINCIPAL')
+  @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN', 'ADMISSIONS')
   @ApiOperation({ summary: 'Update guardian details / primary flag' })
   async update(
     @Param('id') id: string,
@@ -56,7 +57,7 @@ export class GuardiansController {
   }
 
   @Delete(':id/guardians/:guardianId')
-  @Roles('SYSTEM_ADMIN', 'PRINCIPAL')
+  @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN', 'ADMISSIONS')
   @ApiOperation({ summary: 'Unlink guardian from student' })
   async remove(@Param('id') id: string, @Param('guardianId') guardianId: string) {
     return this.guardiansService.unlink(id, guardianId);

@@ -1,5 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { RequestUser } from '../common/interfaces/request-user.interface';
+import { assertSchoolInScope, schoolScopeFilter } from '../common/helpers/school-scope.helper';
 import { CreateClassDto } from './dto/create-class.dto';
 import { CreateClassPathwayDto } from './dto/create-class-pathway.dto';
 import { CreateAcademicYearDto } from './dto/create-academic-year.dto';
@@ -78,13 +80,18 @@ export class ClassesService {
     });
   }
 
-  async listClasses(filters: { academicYearId?: string; level?: number; stream?: string; educationStage?: string }): Promise<unknown> {
+  async listClasses(
+    filters: { academicYearId?: string; level?: number; stream?: string; educationStage?: string; schoolId?: string },
+    user?: RequestUser,
+  ): Promise<unknown> {
+    if (filters.schoolId) assertSchoolInScope(user, filters.schoolId);
     return this.prisma.class.findMany({
       where: {
         academicYearId: filters.academicYearId,
         level: filters.level,
         stream: filters.stream,
         educationStage: filters.educationStage as any,
+        ...(filters.schoolId ? { schoolId: filters.schoolId } : schoolScopeFilter(user)),
       },
       include: {
         academicYear: true,

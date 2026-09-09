@@ -10,6 +10,9 @@ export interface GatewayUser {
   id: string;
   role: string;
   email?: string | null;
+  scope?: 'GROUP' | 'SCHOOL';
+  schoolIds?: string[];
+  activeSchoolId?: string;
 }
 
 export interface UiEnvelope<T = unknown> {
@@ -89,6 +92,36 @@ export class UiApiService {
     }
   }
 
+  async patch<T = unknown>(
+    service: UiServiceName,
+    path: string,
+    body: unknown,
+    user?: GatewayUser,
+  ): Promise<T> {
+    const urls = getServiceUrls(this.configService);
+    const internalApiKey = this.configService.get<string>('INTERNAL_API_KEY') || '';
+    const timeoutMs = Number(this.configService.get<string>('PROXY_TIMEOUT_MS', '30000'));
+    const outboundPath = service === 'student' ? path : `/api/v1${path}`;
+
+    const response = await firstValueFrom(
+      this.httpService.request({
+        method: 'PATCH',
+        url: `${urls[service]}${outboundPath}`,
+        data: body,
+        timeout: timeoutMs,
+        headers: { ...this.internalHeaders(internalApiKey, user), 'Content-Type': 'application/json' },
+        validateStatus: () => true,
+      }),
+    );
+
+    if (response.status >= 400) {
+      const message = response.data?.message || `${service} request failed`;
+      throw new HttpException(message, response.status);
+    }
+
+    return this.unwrap<T>(response.data);
+  }
+
   async tryGet<T>(
     call: DownstreamCall,
     fallback: T,
@@ -151,6 +184,9 @@ export class UiApiService {
       headers['X-User-Id'] = user.id;
       headers['X-User-Role'] = user.role;
       headers['X-User-Email'] = user.email || '';
+      headers['X-User-Scope'] = user.scope || 'SCHOOL';
+      headers['X-User-School-Ids'] = user.scope === 'GROUP' ? '*' : (user.schoolIds || []).join(',');
+      if (user.activeSchoolId) headers['X-Active-School'] = user.activeSchoolId;
     }
 
     return headers;

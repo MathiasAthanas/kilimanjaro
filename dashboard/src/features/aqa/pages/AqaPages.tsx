@@ -37,6 +37,8 @@ import {
   useAqaPairings,
   useAqaReports,
   useEngineConfig,
+  useEngineRuns,
+  useAqaStudentProfile,
   useAqaSchoolSummary,
   useAqaAudit,
   useAqaAnnouncements,
@@ -113,7 +115,7 @@ export function AqaHomePage() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h2 className="font-display text-2xl font-bold text-ks-navy">Institutional Overview</h2>
-          <p className="mt-1 text-sm font-semibold text-ks-muted">Academic Term: Phase 2 · Week 12</p>
+          <p className="mt-1 text-sm font-semibold text-ks-muted">Institutional academic intelligence overview</p>
         </div>
         <div className="flex gap-2">
           <Button variant="secondary" className="rounded-xl" disabled={exporting} onClick={handleExportPdf}>
@@ -292,7 +294,7 @@ export function AqaAlertDetailPage() {
       <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_360px]">
         <section className="space-y-gutter">
           <AlertCard alert={alert} />
-          <TrendBoard student={alert.student} subject={alert.subject} />
+          <TrendBoard student={alert.student} subject={alert.subject} studentId={alert.studentId} />
           <EvidenceTable />
         </section>
         <InvestigationPanel alert={alert} />
@@ -320,12 +322,31 @@ export function PairingsOverviewPage() {
 export function EngineControlPage() {
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [scope, setScope] = useState<string>('Whole school');
   const runMutation = useRunEngineMutation();
+  const { data: rawRuns = [] } = useEngineRuns();
+  const lastRun = (rawRuns as Record<string, unknown>[])[0] ?? {};
+  const lastDuration = lastRun.durationMs != null
+    ? `${Math.round(Number(lastRun.durationMs) / 1000 / 60)}m ${Math.round((Number(lastRun.durationMs) / 1000) % 60)}s`
+    : (lastRun.duration != null ? String(lastRun.duration) : '—');
+  const lastStudents = lastRun.studentCount != null ? String(lastRun.studentCount) : '—';
+  const { data: rawConfig } = useEngineConfig() as { data: unknown };
+  const configThresholds = ((): typeof thresholds => {
+    if (Array.isArray(rawConfig)) return rawConfig as typeof thresholds;
+    if (rawConfig && typeof rawConfig === 'object') {
+      const o = rawConfig as Record<string, unknown>;
+      const nested = o.thresholds ?? o.data ?? o.items;
+      if (Array.isArray(nested)) return nested as typeof thresholds;
+    }
+    return [];
+  })();
+  const thresholdCount = configThresholds.length > 0 ? String(configThresholds.length) : '—';
+  const nextScheduled = String(lastRun.nextScheduled ?? lastRun.next_scheduled ?? '—');
 
   const handleRun = () => {
     setRunning(true);
     setProgress(0);
-    runMutation.mutate({});
+    runMutation.mutate({ scope });
     const interval = setInterval(() => {
       setProgress((p) => {
         if (p >= 100) { clearInterval(interval); setRunning(false); return 100; }
@@ -346,12 +367,17 @@ export function EngineControlPage() {
             Select scope and trigger a fresh academic analysis pass.
           </p>
           <div className="mt-5 grid gap-3 sm:grid-cols-3">
-            {['Whole school', 'Selected classes', 'Selected subjects'].map((scope) => (
+            {['Whole school', 'Selected classes', 'Selected subjects'].map((s) => (
               <button
-                key={scope}
-                className="rounded-xl border border-ks-line bg-ks-paper px-4 py-3 text-sm font-bold text-ks-navy transition hover:border-ks-blue hover:bg-ks-mist"
+                key={s}
+                onClick={() => setScope(s)}
+                className={`rounded-xl border px-4 py-3 text-sm font-bold transition ${
+                  scope === s
+                    ? 'border-ks-blue bg-ks-blue/10 text-ks-blue'
+                    : 'border-ks-line bg-ks-paper text-ks-navy hover:border-ks-blue hover:bg-ks-mist'
+                }`}
               >
-                {scope}
+                {s}
               </button>
             ))}
           </div>
@@ -379,10 +405,10 @@ export function EngineControlPage() {
 
           <div className="mt-6 grid grid-cols-2 gap-3">
             {[
-              { label: 'Last run duration', value: '4m 18s' },
-              { label: 'Students in scope', value: '312'    },
-              { label: 'Thresholds active', value: '3'      },
-              { label: 'Next scheduled',    value: '02:00 AM'},
+              { label: 'Last run duration', value: lastDuration   },
+              { label: 'Students in scope', value: lastStudents   },
+              { label: 'Thresholds active', value: thresholdCount },
+              { label: 'Next scheduled',    value: nextScheduled  },
             ].map(({ label, value }) => (
               <div key={label} className="rounded-xl border border-ks-line bg-ks-paper p-3">
                 <p className="text-[10px] font-black uppercase tracking-wider text-ks-muted">{label}</p>
@@ -401,8 +427,16 @@ export function EngineControlPage() {
 // ─── Engine config ────────────────────────────────────────────────────────────
 
 export function EngineConfigPage() {
-  const { data: apiThresholds = [] as typeof thresholds } = useEngineConfig() as { data: typeof thresholds };
-  const configThresholds = (Array.isArray(apiThresholds) ? apiThresholds : thresholds);
+  const { data: rawConfig } = useEngineConfig() as { data: unknown };
+  const configThresholds = ((): typeof thresholds => {
+    if (Array.isArray(rawConfig)) return rawConfig as typeof thresholds;
+    if (rawConfig && typeof rawConfig === 'object') {
+      const o = rawConfig as Record<string, unknown>;
+      const nested = o.thresholds ?? o.data ?? o.items;
+      if (Array.isArray(nested)) return nested as typeof thresholds;
+    }
+    return [];
+  })();
   const updateConfigMutation = useUpdateEngineConfigMutation();
   const [values, setValues] = useState(
     Object.fromEntries(configThresholds.map((t) => [t.id, t.value])) as Record<string, number>
@@ -796,7 +830,7 @@ export function AqaStudentProfilePage() {
           </Card>
 
           {/* Trend board for worst subject */}
-          <TrendBoard student={primaryAlert.student} subject={primaryAlert.subject} />
+          <TrendBoard student={primaryAlert.student} subject={primaryAlert.subject} studentId={primaryAlert.studentId} />
 
           {/* Intervention history */}
           {studentInterventions.length > 0 && (
@@ -1534,8 +1568,36 @@ function RiskRow({ alert, compact }: { alert: (typeof aqaAlerts)[number]; compac
   );
 }
 
-function TrendBoard({ student, subject }: { student: string; subject: string }) {
-  const scores = [82, 76, 71, 58, 39, 44, 51];
+function TrendBoard({ student, subject, studentId }: { student: string; subject: string; studentId?: string }) {
+  const { data: profile } = useAqaStudentProfile(studentId ?? '');
+  const profileObj = (profile ?? {}) as Record<string, unknown>;
+  const rawScores = (Array.isArray(profileObj.scoreHistory)
+    ? profileObj.scoreHistory
+    : Array.isArray(profileObj.scores)
+    ? profileObj.scores
+    : Array.isArray(profileObj.weeklyScores)
+    ? profileObj.weeklyScores
+    : []) as unknown[];
+  const scores: number[] = rawScores.map((s) =>
+    typeof s === 'number' ? s : Number((s as Record<string, unknown>).score ?? (s as Record<string, unknown>).value ?? 0)
+  ).filter((n) => !isNaN(n));
+
+  if (scores.length < 2) {
+    return (
+      <Card className="overflow-hidden rounded-xl">
+        <div className="flex items-center justify-between border-b border-ks-line px-6 py-4">
+          <div>
+            <p className="text-[11px] font-black uppercase tracking-wider text-ks-muted">{subject}</p>
+            <h2 className="font-display text-xl font-black text-ks-navy">{student} — Score history</h2>
+          </div>
+        </div>
+        <div className="flex h-44 items-center justify-center p-6">
+          <p className="text-sm font-semibold text-ks-muted">No score history available yet.</p>
+        </div>
+      </Card>
+    );
+  }
+
   const W = 500; const H = 160;
   const pad = 8;
   const points = scores.map((v, i) => {
@@ -1594,13 +1656,12 @@ function TrendBoard({ student, subject }: { student: string; subject: string }) 
 
 function EvidenceTable() {
   return (
-    <AqaTable columns={['Evidence', 'Value', 'Source', 'Action']}>
+    <AqaTable columns={['Evidence', 'Value', 'Source']}>
       {['Score history', 'Attendance context', 'Engine raw data', 'Intervention history'].map((item) => (
         <tr key={item} className="transition hover:bg-ks-paper">
           <Td><span className="font-bold text-ks-navy">{item}</span></Td>
           <Td>Available</Td>
           <Td>Academic gateway</Td>
-          <Td><Button variant="secondary" className="rounded-xl py-1.5 text-xs">Inspect</Button></Td>
         </tr>
       ))}
     </AqaTable>
@@ -1608,30 +1669,37 @@ function EvidenceTable() {
 }
 
 function EngineTimeline() {
-  const runs = [
-    { label: 'Today 02:03 AM',               status: 'success', note: '312 students · 4m 18s'       },
-    { label: 'Yesterday 02:00 AM',            status: 'success', note: '310 students · 4m 01s'       },
-    { label: 'Config change — thresholds',    status: 'gold',    note: 'Ms. Fatuma Ally · AQA-2001'  },
-    { label: '2 days ago',                    status: 'success', note: '308 students · 3m 55s'       },
-  ];
+  const { data: rawRuns = [] } = useEngineRuns();
+  const runs = (rawRuns as Record<string, unknown>[]).slice(0, 4).map((r) => ({
+    label: String(r.label ?? r.ranAt ?? r.executedAt ?? r.createdAt ?? r.ran_at ?? ''),
+    status: String(r.status ?? r.result ?? 'success').toLowerCase().includes('fail') ? 'error' : 'success',
+    note: [
+      r.studentCount != null ? `${r.studentCount} students` : null,
+      r.durationMs != null ? `${Math.round(Number(r.durationMs) / 1000 / 60)}m ${Math.round((Number(r.durationMs) / 1000) % 60)}s` : (r.duration != null ? String(r.duration) : null),
+    ].filter(Boolean).join(' · ') || String(r.note ?? r.description ?? ''),
+  }));
   return (
     <div className="sticky top-24 h-fit overflow-hidden rounded-xl bg-ks-navy text-white shadow-sm">
       <div className="border-b border-white/10 px-6 py-4">
         <h2 className="font-display text-xl font-black text-white">Run History</h2>
-        <p className="text-sm font-semibold text-white/60">Last 4 engine executions</p>
+        <p className="text-sm font-semibold text-white/60">Last engine executions</p>
       </div>
       <div className="relative p-6">
-        <div className="relative border-l-2 border-white/20 pl-6 space-y-5">
-          {runs.map(({ label, status, note }) => (
-            <div key={label} className="relative">
-              <span className={`absolute -left-[31px] top-1 flex h-4 w-4 items-center justify-center rounded-full border-2 border-ks-navy ${
-                status === 'success' ? 'bg-ks-emerald' : status === 'gold' ? 'bg-ks-gold' : 'bg-ks-sky'
-              }`} />
-              <p className="text-sm font-bold text-white">{label}</p>
-              <p className="text-xs font-semibold text-white/65">{note}</p>
-            </div>
-          ))}
-        </div>
+        {runs.length === 0 ? (
+          <p className="text-sm font-semibold text-white/50">No runs recorded yet.</p>
+        ) : (
+          <div className="relative border-l-2 border-white/20 pl-6 space-y-5">
+            {runs.map(({ label, status, note }, i) => (
+              <div key={i} className="relative">
+                <span className={`absolute -left-[31px] top-1 flex h-4 w-4 items-center justify-center rounded-full border-2 border-ks-navy ${
+                  status === 'error' ? 'bg-ks-rose' : 'bg-ks-emerald'
+                }`} />
+                <p className="text-sm font-bold text-white">{label}</p>
+                {note && <p className="text-xs font-semibold text-white/65">{note}</p>}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1748,7 +1816,7 @@ function AnnouncementsTable() {
   if (isError) return <DataError onRetry={refetch} />;
   if (apiAnnouncements.length === 0) return <EmptyState title="No announcements" description="Create an announcement to communicate with academic staff." />;
   return (
-    <AqaTable columns={['Title', 'Status', 'Audience', 'Priority', 'Schedule', 'Published by', 'Actions']}>
+    <AqaTable columns={['Title', 'Status', 'Audience', 'Priority', 'Schedule', 'Published by']}>
       {apiAnnouncements.map((row: Record<string, unknown>) => {
         const title = String(row.title ?? row.subject ?? 'Announcement');
         const status = String(row.status ?? 'ACTIVE');
@@ -1766,7 +1834,6 @@ function AnnouncementsTable() {
             </Td>
             <Td>{scheduledAt}</Td>
             <Td>{createdBy}</Td>
-            <Td><Button variant="secondary" className="rounded-xl py-1.5 text-xs">Preview</Button></Td>
           </tr>
         );
       })}

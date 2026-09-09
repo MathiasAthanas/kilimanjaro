@@ -14,13 +14,13 @@ export class SyllabusController {
   constructor(private readonly syllabusService: SyllabusService) {}
 
   @Post()
-  @Roles(ROLES.TEACHER, ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA)
+  @Roles(ROLES.TEACHER, ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA)
   create(@Body() dto: CreateSyllabusDto, @CurrentUser() user?: RequestUser) {
     return this.syllabusService.create(dto, user!);
   }
 
   @Patch(':id')
-  @Roles(ROLES.TEACHER, ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA)
+  @Roles(ROLES.TEACHER, ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA)
   update(@Param('id') id: string, @Body() dto: UpdateSyllabusDto, @CurrentUser() user?: RequestUser) {
     return this.syllabusService.update(id, dto, user!);
   }
@@ -28,7 +28,7 @@ export class SyllabusController {
   @Get()
   @Roles(
     ROLES.SYSTEM_ADMIN,
-    ROLES.PRINCIPAL,
+    ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN,
     ROLES.ACADEMIC_QA,
     ROLES.HEAD_OF_DEPARTMENT,
     ROLES.TEACHER,

@@ -13,7 +13,7 @@ export class RabbitMqConsumer implements OnModuleInit {
 
   private async handleEvent(routingKey: string, payload: any): Promise<void> {
     if (routingKey === 'student.status.changed') {
-      const status = payload?.status as string | undefined;
+      const status = (payload?.newStatus ?? payload?.status) as string | undefined;
       const studentId = payload?.studentId as string | undefined;
       if (!studentId || !status) {
         return;
@@ -55,7 +55,14 @@ export class RabbitMqConsumer implements OnModuleInit {
     }
 
     await channel.assertExchange('student.events', 'topic', { durable: true });
-    await channel.assertQueue('academic-service.student', { durable: true });
+    await channel.assertExchange('dlq.direct', 'direct', { durable: true });
+    await channel.assertQueue('academic-service.student', {
+      durable: true,
+      arguments: { 'x-dead-letter-exchange': 'dlq.direct', 'x-dead-letter-routing-key': 'academic-service.student' },
+    });
+    await channel.assertQueue('academic-service.student.dlq', { durable: true });
+    await channel.bindQueue('academic-service.student.dlq', 'dlq.direct', 'academic-service.student');
+    await channel.prefetch(10);
     await channel.bindQueue('academic-service.student', 'student.events', 'student.enrolled');
     await channel.bindQueue('academic-service.student', 'student.events', 'student.promoted');
     await channel.bindQueue('academic-service.student', 'student.events', 'student.status.changed');

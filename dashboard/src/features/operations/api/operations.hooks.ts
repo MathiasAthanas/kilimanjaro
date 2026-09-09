@@ -265,6 +265,54 @@ export function useOperationsClasses() {
   });
 }
 
+export function useClassReportCards(classId: string | undefined, termId: string | undefined) {
+  return useQuery({
+    queryKey: [...operationsKeys.all, 'report-cards', classId ?? '', termId ?? ''] as const,
+    queryFn: () =>
+      api
+        .get(`/academics/report-cards/class/${classId}/term/${termId}`)
+        .then((r) => arrayFromApi(payloadOf(r), ['cards', 'reportCards'])),
+    enabled: !!classId && !!termId,
+    staleTime: 15_000,
+  });
+}
+
+export function useClassAnalytics(classId: string | undefined) {
+  return useQuery({
+    queryKey: [...operationsKeys.all, 'analytics', 'class', classId ?? ''] as const,
+    queryFn: () => api.get(`/analytics/academic/class/${classId}`).then(payloadOf),
+    enabled: !!classId,
+    staleTime: 30_000,
+  });
+}
+
+export function useSubjectAnalytics(subjectId: string | undefined) {
+  return useQuery({
+    queryKey: [...operationsKeys.all, 'analytics', 'subject', subjectId ?? ''] as const,
+    queryFn: () => api.get(`/analytics/academic/subject/${subjectId}`).then(payloadOf),
+    enabled: !!subjectId,
+    staleTime: 30_000,
+  });
+}
+
+export function useTeacherAnalyticsDetail(teacherId: string | undefined) {
+  return useQuery({
+    queryKey: [...operationsKeys.all, 'analytics', 'teacher', teacherId ?? ''] as const,
+    queryFn: () => api.get(`/analytics/academic/teacher/${teacherId}`).then(payloadOf),
+    enabled: !!teacherId,
+    staleTime: 30_000,
+  });
+}
+
+export function useStudentAnalyticsProfile(studentId: string | undefined) {
+  return useQuery({
+    queryKey: [...operationsKeys.all, 'analytics', 'student', studentId ?? ''] as const,
+    queryFn: () => api.get(`/analytics/students/${studentId}`).then(payloadOf),
+    enabled: !!studentId,
+    staleTime: 30_000,
+  });
+}
+
 export function usePublishReadiness() {
   return useQuery({
     queryKey: operationsKeys.publishReadiness(),

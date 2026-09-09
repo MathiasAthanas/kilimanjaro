@@ -19,7 +19,7 @@ export class SubjectsController {
   constructor(private readonly subjectsService: SubjectsService) {}
 
   @Post('subjects')
-  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA)
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA)
   createSubject(@Body() dto: CreateSubjectDto) {
     return this.subjectsService.createSubject(dto);
   }
@@ -27,7 +27,7 @@ export class SubjectsController {
   @Get('subjects')
   @Roles(
     ROLES.SYSTEM_ADMIN,
-    ROLES.PRINCIPAL,
+    ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN,
     ROLES.ACADEMIC_QA,
     ROLES.HEAD_OF_DEPARTMENT,
     ROLES.TEACHER,
@@ -41,20 +41,20 @@ export class SubjectsController {
   }
 
   @Patch('subjects/:id')
-  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA)
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA)
   updateSubject(@Param('id') id: string, @Body() dto: UpdateSubjectDto) {
     return this.subjectsService.updateSubject(id, dto);
   }
 
   @Delete('subjects/:id')
-  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL)
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN)
   @HttpCode(HttpStatus.NO_CONTENT)
   deleteSubject(@Param('id') id: string) {
     return this.subjectsService.deleteSubject(id);
   }
 
   @Post('class-subjects')
-  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA, ROLES.HEAD_OF_DEPARTMENT)
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA, ROLES.HEAD_OF_DEPARTMENT)
   createClassSubject(@Body() dto: CreateClassSubjectDto, @CurrentUser() user?: RequestUser) {
     return this.subjectsService.createClassSubject(dto, user);
   }
@@ -62,7 +62,7 @@ export class SubjectsController {
   @Get('class-subjects')
   @Roles(
     ROLES.SYSTEM_ADMIN,
-    ROLES.PRINCIPAL,
+    ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN,
     ROLES.ACADEMIC_QA,
     ROLES.HEAD_OF_DEPARTMENT,
     ROLES.TEACHER,
@@ -89,65 +89,66 @@ export class SubjectsController {
   }
 
   @Patch('class-subjects/:id')
-  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA, ROLES.HEAD_OF_DEPARTMENT)
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA, ROLES.HEAD_OF_DEPARTMENT)
   updateClassSubject(@Param('id') id: string, @Body() dto: UpdateClassSubjectDto, @CurrentUser() user?: RequestUser) {
     return this.subjectsService.updateClassSubject(id, dto, user);
   }
 
   @Post('subject-combinations')
-  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA)
-  createSubjectCombination(@Body() dto: CreateSubjectCombinationDto) {
-    return this.subjectsService.createSubjectCombination(dto);
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA)
+  createSubjectCombination(@Body() dto: CreateSubjectCombinationDto, @CurrentUser() user?: RequestUser) {
+    return this.subjectsService.createSubjectCombination(dto, user);
   }
 
   @Patch('subject-combinations/:id')
-  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA)
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA)
   updateSubjectCombination(@Param('id') id: string, @Body() dto: Partial<CreateSubjectCombinationDto>) {
     return this.subjectsService.updateSubjectCombination(id, dto);
   }
 
   @Delete('subject-combinations/:id')
-  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA)
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA)
   deactivateSubjectCombination(@Param('id') id: string) {
     return this.subjectsService.deactivateSubjectCombination(id);
   }
 
   @Get('subject-combinations')
-  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA, ROLES.HEAD_OF_DEPARTMENT, ROLES.TEACHER)
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA, ROLES.HEAD_OF_DEPARTMENT, ROLES.TEACHER)
   listSubjectCombinations(
     @Query('academicYearId') academicYearId?: string,
     @Query('educationStage') educationStage?: string,
     @Query('isActive') isActive?: string,
+    @CurrentUser() user?: RequestUser,
   ) {
-    return this.subjectsService.listSubjectCombinations({ academicYearId, educationStage, isActive });
+    return this.subjectsService.listSubjectCombinations({ academicYearId, educationStage, isActive }, user);
   }
 
   @Post('student-subject-enrollments')
-  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA)
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA)
   enrollStudentSubject(@Body() dto: CreateStudentSubjectEnrollmentDto) {
     return this.subjectsService.enrollStudentSubject(dto);
   }
 
   @Post('student-subject-enrollments/bulk-combination')
-  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA)
-  bulkEnrollStudentCombination(@Body() dto: BulkStudentSubjectEnrollmentDto) {
-    return this.subjectsService.bulkEnrollStudentCombination(dto);
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA)
+  bulkEnrollStudentCombination(@Body() dto: BulkStudentSubjectEnrollmentDto, @CurrentUser() user?: RequestUser) {
+    return this.subjectsService.bulkEnrollStudentCombination(dto, user!);
   }
 
   @Patch('student-subject-enrollments/:id')
-  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA)
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA)
   updateStudentSubjectEnrollment(@Param('id') id: string, @Body() dto: Partial<CreateStudentSubjectEnrollmentDto>) {
     return this.subjectsService.updateStudentSubjectEnrollment(id, dto);
   }
 
   @Delete('student-subject-enrollments/:id')
-  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA)
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA)
   deactivateStudentSubjectEnrollment(@Param('id') id: string) {
     return this.subjectsService.deactivateStudentSubjectEnrollment(id);
   }
 
   @Get('student-subject-enrollments')
-  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA, ROLES.HEAD_OF_DEPARTMENT, ROLES.TEACHER)
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA, ROLES.HEAD_OF_DEPARTMENT, ROLES.TEACHER)
   listStudentSubjectEnrollments(
     @Query('studentId') studentId?: string,
     @Query('classId') classId?: string,

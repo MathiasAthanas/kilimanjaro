@@ -67,6 +67,7 @@ const PASSWORDS = {
   parent: 'Parent@Kili2026',
   student: 'Student@Kili2026',
   staff: 'Staff@Kili2026',
+  admissions: 'Admissions@Kili2026',
 };
 
 const maleNames = ['Amani', 'Baraka', 'Daudi', 'Emmanuel', 'Faraji', 'Hassan', 'Ibrahim', 'Juma', 'Kelvin', 'Lucas', 'Musa', 'Noel', 'Omari', 'Peter', 'Rajabu', 'Samwel', 'Tito', 'Yusuph'];
@@ -76,12 +77,13 @@ const streets = ['Moshi Urban', 'Majengo', 'Soweto', 'Pasua', 'Rau', 'Shanty Tow
 
 const roleAccounts = [
   { key: 'admin', email: `admin@${DEMO_DOMAIN}`, role: 'SYSTEM_ADMIN', firstName: 'System', lastName: 'Administrator', passwordKey: 'admin' },
-  { key: 'principal', email: `principal@${DEMO_DOMAIN}`, role: 'PRINCIPAL', firstName: 'Dr. Miriam', lastName: 'Kileo', passwordKey: 'principal' },
+  { key: 'principal', label: 'manager', email: `principal@${DEMO_DOMAIN}`, role: 'MANAGER', firstName: 'Dr. Miriam', lastName: 'Kileo', passwordKey: 'principal' },
   { key: 'aqa', email: `aqa@${DEMO_DOMAIN}`, role: 'ACADEMIC_QA', firstName: 'Quality', lastName: 'Assurance', passwordKey: 'aqa' },
   { key: 'finance', email: `finance@${DEMO_DOMAIN}`, role: 'FINANCE', firstName: 'Bursar', lastName: 'Mtei', passwordKey: 'finance' },
   { key: 'registrar', email: `registrar@${DEMO_DOMAIN}`, role: 'SYSTEM_ADMIN', firstName: 'Registrar', lastName: 'Laiser', passwordKey: 'staff' },
   { key: 'librarian', email: `librarian@${DEMO_DOMAIN}`, role: 'TEACHER', firstName: 'Librarian', lastName: 'Ngalu', passwordKey: 'staff' },
   { key: 'hr', email: `hr@${DEMO_DOMAIN}`, role: 'SYSTEM_ADMIN', firstName: 'HR', lastName: 'Mwanga', passwordKey: 'staff' },
+  { key: 'admissions', email: `admissions@${DEMO_DOMAIN}`, role: 'ADMISSIONS', firstName: 'Admissions', lastName: 'Officer', passwordKey: 'admissions' },
 ];
 
 const teacherSpecs = [
@@ -320,51 +322,64 @@ async function seedStudentsAndGuardians(hashes) {
       const studentUserId = uuid(`user-student-${count}`);
       const studentId = uuid(`student-${count}`);
       const email = `student${String(count).padStart(3, '0')}@${DEMO_DOMAIN}`;
-      await auth.user.upsert({
-        where: { registrationNumber: reg },
-        update: { email, passwordHash: hashes.student, firstName, lastName, role: 'STUDENT', isActive: true, isEmailVerified: true },
-        create: { id: studentUserId, email, registrationNumber: reg, passwordHash: hashes.student, role: 'STUDENT', firstName, lastName, isActive: true, isEmailVerified: true, createdBy: SYSTEM_ID },
-      });
+      // Resolve-then-write instead of a plain upsert: an existing row may match
+      // by registration number, email OR deterministic id — a blind upsert can
+      // hit a unique collision on whichever key it did not search by.
+      let studentUser =
+        (await auth.user.findFirst({ where: { OR: [{ registrationNumber: reg }, { email }] } })) ||
+        (await auth.user.findUnique({ where: { id: studentUserId } }));
+      if (studentUser) {
+        studentUser = await auth.user.update({
+          where: { id: studentUser.id },
+          data: { email, registrationNumber: reg, passwordHash: hashes.student, firstName, lastName, role: 'STUDENT', isActive: true, isEmailVerified: true },
+        });
+      } else {
+        studentUser = await auth.user.create({
+          data: { id: studentUserId, email, registrationNumber: reg, passwordHash: hashes.student, role: 'STUDENT', firstName, lastName, isActive: true, isEmailVerified: true, createdBy: SYSTEM_ID },
+        });
+      }
+      const actualStudentUserId = studentUser.id;
       if (count <= 8) credentials.push({ label: `${firstName} ${lastName}`, role: 'STUDENT', email, registrationNumber: reg, password: PASSWORDS.student });
-      await students.student.upsert({
-        where: { registrationNumber: reg },
-        update: {
-          authUserId: studentUserId,
-          firstName,
-          lastName,
-          dateOfBirth: date(-(365 * (classInfo.level + 6 + (classInfo.stage === 'A_LEVEL' ? 6 : classInfo.stage === 'O_LEVEL' ? 7 : 0)) + j * 11)),
-          gender,
-          profilePhotoUrl: `/demo/students/${reg}.jpg`,
-          status: 'ACTIVE',
-          notes: `Demo learner in ${classInfo.name} ${classInfo.stream}. Medical: ${count % 13 === 0 ? 'mild asthma, inhaler kept at nurse office' : 'no critical condition'}.`,
-          nectaCandidateNumber: classInfo.key.includes('form4') || classInfo.key.includes('form6') ? `S${2026}${String(count).padStart(4, '0')}` : null,
-          psleIndexNumber: classInfo.key.includes('std7') ? `P${2026}${String(count).padStart(4, '0')}` : null,
-          nationalExamYear: classInfo.key.includes('std7') || classInfo.key.includes('form4') || classInfo.key.includes('form6') ? 2026 : null,
-        },
-        create: {
-          id: studentId,
-          registrationNumber: reg,
-          authUserId: studentUserId,
-          firstName,
-          lastName,
-          dateOfBirth: date(-(365 * (classInfo.level + 6 + (classInfo.stage === 'A_LEVEL' ? 6 : classInfo.stage === 'O_LEVEL' ? 7 : 0)) + j * 11)),
-          gender,
-          profilePhotoUrl: `/demo/students/${reg}.jpg`,
-          status: 'ACTIVE',
-          admissionDate: date(-500 + count),
-          createdBy: SYSTEM_ID,
-          notes: `Demo learner in ${classInfo.name} ${classInfo.stream}. Medical: ${count % 13 === 0 ? 'mild asthma, inhaler kept at nurse office' : 'no critical condition'}.`,
-          nectaCandidateNumber: classInfo.key.includes('form4') || classInfo.key.includes('form6') ? `S${2026}${String(count).padStart(4, '0')}` : null,
-          psleIndexNumber: classInfo.key.includes('std7') ? `P${2026}${String(count).padStart(4, '0')}` : null,
-          nationalExamYear: classInfo.key.includes('std7') || classInfo.key.includes('form4') || classInfo.key.includes('form6') ? 2026 : null,
-        },
-      });
-      ids.students.push({ id: studentId, index: count, classId: classInfo.id, classKey: classInfo.key, stage: classInfo.stage, level: classInfo.level, name: `${firstName} ${lastName}` });
-      ids.classStudents[classInfo.id].push(studentId);
+
+      const studentData = {
+        authUserId: actualStudentUserId,
+        firstName,
+        lastName,
+        dateOfBirth: date(-(365 * (classInfo.level + 6 + (classInfo.stage === 'A_LEVEL' ? 6 : classInfo.stage === 'O_LEVEL' ? 7 : 0)) + j * 11)),
+        gender,
+        profilePhotoUrl: `/demo/students/${reg}.jpg`,
+        status: 'ACTIVE',
+        notes: `Demo learner in ${classInfo.name} ${classInfo.stream}. Medical: ${count % 13 === 0 ? 'mild asthma, inhaler kept at nurse office' : 'no critical condition'}.`,
+        nectaCandidateNumber: classInfo.key.includes('form4') || classInfo.key.includes('form6') ? `S${2026}${String(count).padStart(4, '0')}` : null,
+        psleIndexNumber: classInfo.key.includes('std7') ? `P${2026}${String(count).padStart(4, '0')}` : null,
+        nationalExamYear: classInfo.key.includes('std7') || classInfo.key.includes('form4') || classInfo.key.includes('form6') ? 2026 : null,
+      };
+      let studentRow =
+        (await students.student.findFirst({ where: { OR: [{ registrationNumber: reg }, { authUserId: actualStudentUserId }] } })) ||
+        (await students.student.findUnique({ where: { id: studentId } }));
+      if (studentRow) {
+        studentRow = await students.student.update({
+          where: { id: studentRow.id },
+          data: { ...studentData, registrationNumber: reg },
+        });
+      } else {
+        studentRow = await students.student.create({
+          data: {
+            ...studentData,
+            id: studentId,
+            registrationNumber: reg,
+            admissionDate: date(-500 + count),
+            createdBy: SYSTEM_ID,
+          },
+        });
+      }
+      const actualStudentId = studentRow.id;
+      ids.students.push({ id: actualStudentId, index: count, classId: classInfo.id, classKey: classInfo.key, stage: classInfo.stage, level: classInfo.level, name: `${firstName} ${lastName}` });
+      ids.classStudents[classInfo.id].push(actualStudentId);
       await students.enrolment.upsert({
-        where: { studentId_classId_academicYearId: { studentId, classId: classInfo.id, academicYearId: SCHOOL_YEAR_ID } },
+        where: { studentId_classId_academicYearId: { studentId: actualStudentId, classId: classInfo.id, academicYearId: SCHOOL_YEAR_ID } },
         update: { termId: CURRENT_TERM_ID, isActive: true },
-        create: { id: uuid(`enrolment-${count}`), studentId, classId: classInfo.id, academicYearId: SCHOOL_YEAR_ID, termId: CURRENT_TERM_ID, isActive: true },
+        create: { id: uuid(`enrolment-${count}`), studentId: actualStudentId, classId: classInfo.id, academicYearId: SCHOOL_YEAR_ID, termId: CURRENT_TERM_ID, isActive: true },
       });
 
       if (count % 2 === 1 || guardianCounter < 80) {
@@ -389,9 +404,9 @@ async function seedStudentsAndGuardians(hashes) {
       }
       const guardian = pick(ids.guardians, count - 1);
       await students.studentGuardianLink.upsert({
-        where: { studentId_guardianId: { studentId, guardianId: guardian.id } },
+        where: { studentId_guardianId: { studentId: actualStudentId, guardianId: guardian.id } },
         update: { isPrimary: true, isActive: true },
-        create: { id: uuid(`guardian-link-${studentId}-${guardian.id}`), studentId, guardianId: guardian.id, isPrimary: true, isActive: true },
+        create: { id: uuid(`guardian-link-${actualStudentId}-${guardian.id}`), studentId: actualStudentId, guardianId: guardian.id, isPrimary: true, isActive: true },
       });
     }
   }
@@ -437,7 +452,7 @@ async function seedAcademics() {
   ]) {
     const comboId = uuid(`combo-${combo[0]}`);
     await academics.subjectCombination.upsert({
-      where: { code_academicYearId: { code: combo[0], academicYearId: SCHOOL_YEAR_ID } },
+      where: { id: comboId },
       update: { name: combo[1], isActive: true },
       create: { id: comboId, code: combo[0], name: combo[1], educationStage: 'A_LEVEL', academicYearId: SCHOOL_YEAR_ID, isActive: true },
     });
@@ -1131,6 +1146,12 @@ async function seedFullModuleCoverage() {
     ['ASSIGNMENT_PUBLISHED', 'IN_APP', 'New assignment published', 'A new assignment is available in {{courseName}}.'],
     ['PAYMENT_RECEIVED', 'SMS', 'Payment received', 'Payment of {{amount}} has been received.'],
     ['MARKS_APPROVED', 'EMAIL', 'Marks approved', 'Marks for {{assessmentName}} have been approved.'],
+    ['performance.weekly.digest', 'IN_APP', 'Weekly Performance Digest', '{{body}}'],
+    ['marks.approval.reminder', 'IN_APP', 'Marks Approval Reminder', 'Assessment "{{assessmentName}}" is awaiting your approval.'],
+    ['report_card.signed', 'IN_APP', 'Report Card Signed', 'Report card for {{studentName}} has been signed and is ready.'],
+    ['REPORT_GENERATION_COMPLETE', 'IN_APP', 'Report Ready', 'Your requested report "{{reportType}}" is ready to download.'],
+    ['STUDENT_ENROLLED', 'IN_APP', 'Student Enrolled', '{{studentName}} has been successfully enrolled.'],
+    ['INVOICE_GENERATED', 'IN_APP', 'Invoice Generated', 'Invoice {{invoiceNumber}} has been generated for {{studentName}}.'],
   ];
   for (const [eventType, channel, subject, body] of templates) {
     await notifications.notificationTemplate.upsert({
@@ -1277,6 +1298,7 @@ function writeCredentials() {
     '# Demo Login Credentials',
     '',
     'Generated by `backend/scripts/seed-production-demo.js`.',
+    'These are real DB-backed test users. The dashboard quick-fill only autofills the form; authentication still goes through the live backend.',
     '',
     '| Label | Role | Email | Registration Number | Password |',
     '|---|---|---|---|---|',
@@ -1286,6 +1308,21 @@ function writeCredentials() {
   }
   lines.push('', '## Main Role Passwords', '');
   for (const [key, password] of Object.entries(PASSWORDS)) lines.push(`- ${key}: \`${password}\``);
+  lines.push(
+    '',
+    '## Multi-School Expansion Roles (2026 expansion)',
+    '',
+    '| Label | Role | Email | Password | Scope |',
+    '|---|---|---|---|---|',
+    '| Super Admin | SUPER_ADMIN | superadmin@demo.kilimanjaro.test | Super@Kili2026 | Group - defines schools, assigns heads |',
+    '| Manager | MANAGER | principal@demo.kilimanjaro.test | Principal@Kili2026 | Group - oversight across schools |',
+    '| Head of Finances | HEAD_OF_FINANCE | headfinance@demo.kilimanjaro.test | Headfin@Kili2026 | Group - all-schools finance |',
+    '| Head of School (Nursery) | HEAD_OF_SCHOOL | hos-nursery@demo.kilimanjaro.test | Head@Kili2026 | KS-NUR |',
+    '| Head of School (Primary) | HEAD_OF_SCHOOL | hos-primary@demo.kilimanjaro.test | Head@Kili2026 | KS-PRI |',
+    '| Head of School (Secondary) | HEAD_OF_SCHOOL | hos-secondary@demo.kilimanjaro.test | Head@Kili2026 | KS-SEC |',
+    '',
+    'Schools after the auto-split migration: **KS-NUR**, **KS-PRI**, **KS-SEC**, plus any additional schools created in the Super Admin console.',
+  );
   fs.writeFileSync(path.join(repoRoot, 'docs', 'demo-login-credentials.md'), `${lines.join('\n')}\n`);
 }
 
@@ -1351,6 +1388,161 @@ async function validateCounts() {
   }
 }
 
+async function seedAdmissions() {
+  console.log('Seeding admissions pipeline (applicants across all stages)...');
+  const admissionsOfficerId = uuid('user-admissions');
+  const applicantSpecs = [
+    // [key, first, last, gender, classKey, stage, source, guardianFirst, guardianLast, phoneSuffix]
+    ['app-01', 'Zuhura', 'Mbwana', 'FEMALE', 'std1-a', 'INQUIRY', 'WALK_IN', 'Salim', 'Mbwana', '901'],
+    ['app-02', 'Denis', 'Macha', 'MALE', 'std1-a', 'INQUIRY', 'WEBSITE', 'Anna', 'Macha', '902'],
+    ['app-03', 'Naima', 'Kagya', 'FEMALE', 'std3-a', 'INQUIRY', 'REFERRAL', 'Rashid', 'Kagya', '903'],
+    ['app-04', 'Elia', 'Temu', 'MALE', 'form1-a', 'APPLICATION', 'SOCIAL_MEDIA', 'Joyce', 'Temu', '904'],
+    ['app-05', 'Winfrida', 'Urio', 'FEMALE', 'form1-a', 'APPLICATION', 'WALK_IN', 'Method', 'Urio', '905'],
+    ['app-06', 'Collins', 'Mariki', 'MALE', 'form2-a', 'ASSESSMENT', 'REFERRAL', 'Grace', 'Mariki', '906'],
+    ['app-07', 'Diana', 'Mmari', 'FEMALE', 'form1-a', 'ASSESSMENT', 'SCHOOL_EVENT', 'Elibariki', 'Mmari', '907'],
+    ['app-08', 'Gasper', 'Minja', 'MALE', 'std5-a', 'OFFER', 'PHONE_CALL', 'Restituta', 'Minja', '908'],
+    ['app-09', 'Lilian', 'Assey', 'FEMALE', 'form3-a', 'OFFER', 'WEBSITE', 'Deogratius', 'Assey', '909'],
+    ['app-10', 'Aron', 'Mtui', 'MALE', 'std2-a', 'ACCEPTED', 'WALK_IN', 'Veronica', 'Mtui', '910'],
+    ['app-11', 'Careen', 'Munisi', 'FEMALE', 'form1-a', 'ACCEPTED', 'REFERRAL', 'Godfrey', 'Munisi', '911'],
+    ['app-12', 'Frank', 'Towo', 'MALE', 'std4-a', 'REJECTED', 'OTHER', 'Editha', 'Towo', '912'],
+    ['app-13', 'Queen', 'Materu', 'FEMALE', 'form2-a', 'WITHDRAWN', 'WEBSITE', 'Alex', 'Materu', '913'],
+  ];
+
+  const stageOrder = ['INQUIRY', 'APPLICATION', 'ASSESSMENT', 'OFFER', 'ACCEPTED'];
+  for (let i = 0; i < applicantSpecs.length; i++) {
+    const [key, first, last, gender, classKey, stage, source, gFirst, gLast, suffix] = applicantSpecs[i];
+    const cls = ids.classes[classKey];
+    if (!cls) continue;
+    const applicantId = uuid(`applicant-${key}`);
+    const phone = `+2557440009${suffix.slice(-2)}`;
+    await students.applicant.upsert({
+      where: { id: applicantId },
+      update: { stage, prospectiveClassId: cls.id },
+      create: {
+        id: applicantId,
+        firstName: first,
+        lastName: last,
+        gender,
+        dateOfBirth: date(-365 * (cls.level + 6) - i * 17),
+        nationality: 'Tanzanian',
+        previousSchool: pick(streets, i) + ' Primary School',
+        prospectiveClassId: cls.id,
+        educationStage: cls.stage,
+        guardianFirstName: gFirst,
+        guardianLastName: gLast,
+        guardianPhone: phone,
+        guardianRelationship: i % 2 === 0 ? 'FATHER' : 'MOTHER',
+        sourceChannel: source,
+        stage,
+        notes: `Interested in joining ${cls.name} ${cls.stream}.`,
+        createdBy: admissionsOfficerId,
+        createdAt: date(-40 + i * 2),
+      },
+    });
+
+    // Stage event trail from INQUIRY up to the current stage
+    const terminalFrom = { REJECTED: 'APPLICATION', WITHDRAWN: 'OFFER' };
+    const trail = stageOrder.includes(stage)
+      ? stageOrder.slice(0, stageOrder.indexOf(stage) + 1)
+      : [...stageOrder.slice(0, stageOrder.indexOf(terminalFrom[stage]) + 1), stage];
+    for (let s = 0; s < trail.length; s++) {
+      const eventId = uuid(`applicant-${key}-event-${s}`);
+      await students.applicantStageEvent.upsert({
+        where: { id: eventId },
+        update: {},
+        create: {
+          id: eventId,
+          applicantId,
+          fromStage: s === 0 ? null : trail[s - 1],
+          toStage: trail[s],
+          actorId: admissionsOfficerId,
+          note: s === 0 ? 'Inquiry captured' : `Moved to ${trail[s]}`,
+          createdAt: date(-40 + i * 2 + s * 3),
+        },
+      });
+    }
+
+    // Assessment record for applicants that reached ASSESSMENT or beyond
+    if (['ASSESSMENT', 'OFFER', 'ACCEPTED'].includes(stage) || stage === 'WITHDRAWN') {
+      const assessmentId = uuid(`applicant-${key}-assessment`);
+      const done = stage !== 'ASSESSMENT';
+      await students.admissionAssessment.upsert({
+        where: { id: assessmentId },
+        update: {},
+        create: {
+          id: assessmentId,
+          applicantId,
+          scheduledAt: date(done ? -20 + i : 3 + i),
+          subjectFocus: cls.level >= 7 ? 'Mathematics & English' : 'Reading & Numeracy',
+          score: done ? 62 + ((i * 7) % 30) : null,
+          maxScore: 100,
+          outcome: done ? 'PASSED' : 'PENDING',
+          notes: done ? 'Interview completed with the guardian present.' : 'Awaiting entrance interview.',
+          recordedBy: admissionsOfficerId,
+        },
+      });
+    }
+
+    // Offer for applicants at OFFER stage and beyond
+    if (['OFFER', 'ACCEPTED', 'WITHDRAWN'].includes(stage)) {
+      const offerId = uuid(`applicant-${key}-offer`);
+      await students.admissionOffer.upsert({
+        where: { applicantId },
+        update: {},
+        create: {
+          id: offerId,
+          applicantId,
+          classId: cls.id,
+          feeExpectation: cls.level >= 7 ? 1850000 : 1250000,
+          decision: stage === 'ACCEPTED' ? 'ACCEPTED' : stage === 'WITHDRAWN' ? 'DECLINED' : 'PENDING',
+          issuedBy: admissionsOfficerId,
+          issuedAt: date(-12 + i),
+          respondedAt: stage === 'OFFER' ? null : date(-8 + i),
+          expiresAt: date(20 + i),
+          note: `Offer for ${cls.name} ${cls.stream}`,
+        },
+      });
+    }
+  }
+}
+
+
+async function seedMultiSchool(hashes) {
+  console.log('Seeding multi-school foundation (schools, memberships, group roles)...');
+  // Run the idempotent auto-split backfill (schools + schoolId stamping + memberships)
+  const fs = require('fs');
+  const sql = fs.readFileSync(path.join(__dirname, 'multischool-backfill.sql'), 'utf8');
+  // execute statement-by-statement (Prisma cannot run multi-statement strings)
+  const statements = sql.split(/;\s*[\r\n]+/).map((s) => s.trim()).filter((s) => s && !s.startsWith('--'));
+  for (const stmt of statements) {
+    try { await students.$executeRawUnsafe(stmt); } catch (e) { console.warn('  backfill stmt skipped:', e.message.split('\n')[0]); }
+  }
+
+  const NUR = '00000000-0000-4000-8000-000000000001';
+  const PRI = '00000000-0000-4000-8000-000000000002';
+  const SEC = '00000000-0000-4000-8000-000000000003';
+  const specials = [
+    { key: 'superadmin', email: `superadmin@${DEMO_DOMAIN}`, role: 'SUPER_ADMIN', first: 'Super', last: 'Admin', pw: 'Super@Kili2026', schools: [null] },
+    { key: 'headfinance', email: `headfinance@${DEMO_DOMAIN}`, role: 'HEAD_OF_FINANCE', first: 'Head of', last: 'Finances', pw: 'Headfin@Kili2026', schools: [null] },
+    { key: 'hos-nursery', email: `hos-nursery@${DEMO_DOMAIN}`, role: 'HEAD_OF_SCHOOL', first: 'Head', last: 'Nursery', pw: 'Head@Kili2026', schools: [NUR] },
+    { key: 'hos-primary', email: `hos-primary@${DEMO_DOMAIN}`, role: 'HEAD_OF_SCHOOL', first: 'Head', last: 'Primary', pw: 'Head@Kili2026', schools: [PRI] },
+    { key: 'hos-secondary', email: `hos-secondary@${DEMO_DOMAIN}`, role: 'HEAD_OF_SCHOOL', first: 'Head', last: 'Secondary', pw: 'Head@Kili2026', schools: [SEC] },
+  ];
+  for (const a of specials) {
+    const hash = await argon2.hash(a.pw, { timeCost: 2, memoryCost: 19456, parallelism: 1 });
+    const u = await auth.user.upsert({
+      where: { email: a.email },
+      update: { role: a.role, passwordHash: hash, isActive: true, firstName: a.first, lastName: a.last, mustChangePassword: false },
+      create: { email: a.email, role: a.role, passwordHash: hash, firstName: a.first, lastName: a.last, isActive: true, isEmailVerified: true, createdBy: SYSTEM_ID },
+    });
+    for (const sid of a.schools) {
+      const existing = await auth.schoolMembership.findFirst({ where: { authUserId: u.id, schoolId: sid, role: a.role } });
+      if (!existing) await auth.schoolMembership.create({ data: { authUserId: u.id, schoolId: sid, role: a.role, assignedById: SYSTEM_ID } });
+    }
+    credentials.push({ label: `${a.first} ${a.last}`, role: a.role, email: a.email, registrationNumber: '', password: a.pw });
+  }
+}
+
 async function main() {
   console.log(`Using database: ${process.env.DATABASE_URL.replace(/:\/\/[^:]+:[^@]+@/, '://***:***@')}`);
   const hashes = await seedAuthUsers();
@@ -1360,6 +1552,8 @@ async function main() {
   await seedFinance();
   await seedElearning();
   await seedNotificationsAnalyticsOperations();
+  await seedAdmissions();
+  await seedMultiSchool(hashes);
   await seedFullModuleCoverage();
   writeCredentials();
   await validateCounts();

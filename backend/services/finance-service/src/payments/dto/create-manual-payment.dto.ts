@@ -20,9 +20,10 @@ export class CreateManualPaymentDto {
   @IsString()
   payerPhone?: string;
 
+  // Optional: a cash payment recorded at the counter defaults to "now".
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  paidAt!: string;
+  paidAt?: string;
 
   @IsOptional()
   @IsString()

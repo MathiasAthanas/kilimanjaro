@@ -6,7 +6,6 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { Throttle } from '@nestjs/throttler';
 import { Request, Response } from 'express';
 import { ProxyService } from './proxy.service';
 import { Public } from '../auth/decorators/public.decorator';
@@ -20,7 +19,6 @@ export class ProxyController {
 
   @All(['auth/login', 'api/v1/auth/login'])
   @Public()
-  @Throttle({ default: { limit: 20, ttl: 900000 } })
   @ApiOperation({ summary: 'Public login route proxy' })
   async loginProxy(@Req() req: Request, @Res() res: Response) {
     return this.forwardPublic(req, res);

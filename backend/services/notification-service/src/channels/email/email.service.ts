@@ -1,13 +1,17 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import nodemailer from 'nodemailer';
+import * as nodemailer from 'nodemailer';
+import type { Transporter } from 'nodemailer';
 
 @Injectable()
-export class EmailService {
+export class EmailService implements OnModuleInit {
+  private readonly logger = new Logger(EmailService.name);
+  private transporter: Transporter;
+
   constructor(private readonly config: ConfigService) {}
 
-  private transport() {
-    return nodemailer.createTransport({
+  onModuleInit() {
+    this.transporter = nodemailer.createTransport({
       host: this.config.get<string>('SMTP_HOST', 'localhost'),
       port: Number(this.config.get<string>('SMTP_PORT', '1025')),
       secure: this.config.get<string>('SMTP_SECURE', 'false') === 'true',
@@ -18,6 +22,14 @@ export class EmailService {
           }
         : undefined,
     });
+
+    const host = this.config.get<string>('SMTP_HOST', 'localhost');
+    const port = this.config.get<string>('SMTP_PORT', '1025');
+    if (host === 'localhost' && port === '1025') {
+      this.logger.warn('SMTP is pointed at localhost:1025 (MailHog/dev capture). Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS for production.');
+    } else {
+      this.logger.log(`SMTP transporter ready → ${host}:${port}`);
+    }
   }
 
   private wrapHtml(content: string): string {
@@ -25,8 +37,7 @@ export class EmailService {
   }
 
   async send(to: string, subject: string, htmlBody: string, textBody: string): Promise<string | null> {
-    const transporter = this.transport();
-    const result = await transporter.sendMail({
+    const result = await this.transporter.sendMail({
       from: this.config.get<string>('EMAIL_FROM_ADDRESS', 'Kilimanjaro Schools <no-reply@kilimanjaro.ac.tz>'),
       to,
       subject,

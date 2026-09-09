@@ -16,6 +16,7 @@ import { ChangeStatusDto } from './dto/change-status.dto';
 import { PromoteStudentDto } from './dto/promote-student.dto';
 import { BulkPromoteStudentsDto } from './dto/bulk-promote-students.dto';
 import { ListStudentsDto } from './dto/list-students.dto';
+import { RequestUser } from '../common/interfaces/request-user.interface';
 import { paginate, buildPageMeta } from '../common/helpers/pagination.helper';
 import {
   formatRegistrationNumber,
@@ -23,6 +24,7 @@ import {
   type EducationStageCode,
 } from '../common/helpers/registration-number.helper';
 import { RabbitMqService } from '../rabbitmq/rabbitmq.service';
+import { assertSchoolInScope, resolveWriteSchoolId, schoolScopeFilter } from '../common/helpers/school-scope.helper';
 import { RedisService } from '../redis/redis.service';
 
 @Injectable()
@@ -58,24 +60,38 @@ export class StudentsService {
       stage = (cls?.educationStage as EducationStageCode) ?? null;
     }
 
+    // The sequence can lag behind reality (bulk imports / seeds insert fixed
+    // numbers without touching it), so skip ahead past any taken numbers.
+    const MAX_ATTEMPTS = 1000;
+
     if (stage) {
-      const seq = await (tx as any).registrationSequenceByStage.upsert({
-        where: { year_stage: { year, stage } },
-        create: { year, stage, nextValue: 2 },
-        update: { nextValue: { increment: 1 } },
-        select: { nextValue: true },
-      });
-      return formatRegistrationNumberWithStage(year, seq.nextValue - 1, stage);
+      for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+        const seq = await (tx as any).registrationSequenceByStage.upsert({
+          where: { year_stage: { year, stage } },
+          create: { year, stage, nextValue: 2 },
+          update: { nextValue: { increment: 1 } },
+          select: { nextValue: true },
+        });
+        const candidate = formatRegistrationNumberWithStage(year, seq.nextValue - 1, stage);
+        const taken = await tx.student.findUnique({ where: { registrationNumber: candidate }, select: { id: true } });
+        if (!taken) return candidate;
+      }
+      throw new BadRequestException('Unable to allocate a registration number — sequence exhausted');
     }
 
     // Legacy fallback (no stage info)
-    const sequence = await tx.registrationSequence.upsert({
-      where: { year },
-      create: { year, nextValue: 2 },
-      update: { nextValue: { increment: 1 } },
-      select: { nextValue: true },
-    });
-    return formatRegistrationNumber(year, sequence.nextValue - 1);
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      const sequence = await tx.registrationSequence.upsert({
+        where: { year },
+        create: { year, nextValue: 2 },
+        update: { nextValue: { increment: 1 } },
+        select: { nextValue: true },
+      });
+      const candidate = formatRegistrationNumber(year, sequence.nextValue - 1);
+      const taken = await tx.student.findUnique({ where: { registrationNumber: candidate }, select: { id: true } });
+      if (!taken) return candidate;
+    }
+    throw new BadRequestException('Unable to allocate a registration number — sequence exhausted');
   }
 
   private buildStudentProfileInclude(): Prisma.StudentInclude {
@@ -97,7 +113,7 @@ export class StudentsService {
     };
   }
 
-  async create(dto: CreateStudentDto, actorId: string): Promise<unknown> {
+  async create(dto: CreateStudentDto, actorId: string, user?: RequestUser): Promise<unknown> {
     const admissionDate = new Date(dto.admissionDate);
 
     const created = await this.prisma.$transaction(async (tx) => {
@@ -105,6 +121,9 @@ export class StudentsService {
       if (!classExists) {
         throw new BadRequestException('Class not found');
       }
+      // The class owns the student. Never trust a client-supplied class id
+      // unless it belongs to the actor's selected/in-scope school.
+      resolveWriteSchoolId(user, classExists.schoolId);
 
       const academicYear = await tx.academicYear.findUnique({ where: { id: dto.academicYearId } });
       if (!academicYear) {
@@ -113,9 +132,17 @@ export class StudentsService {
 
       const registrationNumber = await this.generateRegistrationNumber(tx, admissionDate, dto.classId);
 
+      // Bind the enrolment to the current term so term-based flows (fee invoicing,
+      // results) pick the new student up. Falls back to any current term for the year.
+      const enrolmentTerm = await tx.term.findFirst({
+        where: { academicYearId: dto.academicYearId, isCurrent: true },
+        select: { id: true },
+      });
+
       const student = await tx.student.create({
         data: {
           registrationNumber,
+          schoolId: classExists.schoolId,
           authUserId: dto.authUserId,
           firstName: dto.firstName,
           middleName: dto.middleName,
@@ -130,6 +157,8 @@ export class StudentsService {
             create: {
               classId: dto.classId,
               academicYearId: dto.academicYearId,
+              termId: enrolmentTerm?.id ?? null,
+              schoolId: classExists.schoolId,
               isActive: true,
             },
           },
@@ -212,10 +241,24 @@ export class StudentsService {
     return created;
   }
 
-  async list(query: ListStudentsDto): Promise<unknown> {
+  async stats(user?: RequestUser) {
+    const scope = schoolScopeFilter(user);
+    const [total, byStatusRaw] = await Promise.all([
+      this.prisma.student.count({ where: scope }),
+      this.prisma.student.groupBy({ by: ['status'], where: scope, _count: { _all: true } }),
+    ]);
+    const byStatus = byStatusRaw.reduce<Record<string, number>>((acc, row) => {
+      acc[row.status] = row._count._all;
+      return acc;
+    }, {});
+    return { total, byStatus };
+  }
+
+  async list(query: ListStudentsDto, user?: RequestUser): Promise<unknown> {
     const pagination = paginate(query.page, query.limit);
 
     const where: Prisma.StudentWhereInput = {
+      ...schoolScopeFilter(user),
       status: query.status,
       ...(query.search
         ? {
@@ -257,10 +300,11 @@ export class StudentsService {
     };
   }
 
-  async findById(id: string): Promise<unknown> {
+  async findById(id: string, user?: RequestUser): Promise<unknown> {
     const cacheKey = `student:${id}:profile`;
-    const cached = await this.redis.get<unknown>(cacheKey);
+    const cached = await this.redis.get<{ schoolId?: string | null } | null>(cacheKey);
     if (cached) {
+      assertSchoolInScope(user, cached.schoolId ?? null);
       return cached;
     }
 
@@ -273,14 +317,19 @@ export class StudentsService {
       throw new NotFoundException('Student not found');
     }
 
+    // School isolation: a school-bound staff member cannot read a student
+    // outside their school(s). Group roles and self/parent access pass through.
+    assertSchoolInScope(user, (student as { schoolId?: string | null }).schoolId ?? null);
+
     await this.redis.set(cacheKey, student, 300);
     return student;
   }
 
-  async findByRegistration(registrationNumber: string): Promise<unknown> {
+  async findByRegistration(registrationNumber: string, user?: RequestUser): Promise<unknown> {
     const cacheKey = `student:reg:${registrationNumber}`;
-    const cached = await this.redis.get<unknown>(cacheKey);
+    const cached = await this.redis.get<{ schoolId?: string | null } | null>(cacheKey);
     if (cached) {
+      assertSchoolInScope(user, cached.schoolId ?? null);
       return cached;
     }
 
@@ -293,15 +342,19 @@ export class StudentsService {
       throw new NotFoundException('Student not found');
     }
 
+    assertSchoolInScope(user, (student as { schoolId?: string | null }).schoolId ?? null);
+
     await this.redis.set(cacheKey, student, 300);
     return student;
   }
 
-  async update(id: string, dto: UpdateStudentDto): Promise<unknown> {
+  async update(id: string, dto: UpdateStudentDto, user?: RequestUser): Promise<unknown> {
     const existing = await this.prisma.student.findUnique({ where: { id } });
     if (!existing) {
       throw new NotFoundException('Student not found');
     }
+
+    assertSchoolInScope(user, existing.schoolId ?? null);
 
     const updated = await this.prisma.student.update({
       where: { id },
@@ -350,11 +403,12 @@ export class StudentsService {
     return updated;
   }
 
-  async promote(id: string, dto: PromoteStudentDto, actorId: string): Promise<unknown> {
+  async promote(id: string, dto: PromoteStudentDto, actorId: string, user?: RequestUser): Promise<unknown> {
     const student = await this.prisma.student.findUnique({ where: { id } });
     if (!student) {
       throw new NotFoundException('Student not found');
     }
+    assertSchoolInScope(user, student.schoolId);
 
     const activeEnrolment = await this.prisma.enrolment.findFirst({
       where: { studentId: id, isActive: true },
@@ -389,12 +443,18 @@ export class StudentsService {
     if (!targetClass) {
       throw new BadRequestException('Target class not found');
     }
+    assertSchoolInScope(user, targetClass.schoolId);
     if (
       activeEnrolment?.class.educationStage !== targetClass.educationStage &&
       pathwayTransition !== 'CROSS_STAGE'
     ) {
       throw new BadRequestException('Cross-stage promotion requires an explicit CROSS_STAGE pathway');
     }
+
+    const promotionTerm = await this.prisma.term.findFirst({
+      where: { academicYearId: dto.academicYearId, isCurrent: true },
+      select: { id: true },
+    });
 
     const result = await this.prisma.$transaction(async (tx) => {
       if (activeEnrolment) {
@@ -409,11 +469,19 @@ export class StudentsService {
           studentId: id,
           classId: targetClassId,
           academicYearId: dto.academicYearId,
+          termId: promotionTerm?.id ?? null,
+          schoolId: targetClass.schoolId,
           isActive: true,
           promotedFrom: activeEnrolment?.classId,
           promotedAt: new Date(),
         },
       });
+
+      // A cross-stage promotion physically moves the student to another school
+      // (e.g. nursery → primary). Keep the student's home school in sync.
+      if (targetClass.schoolId && targetClass.schoolId !== student.schoolId) {
+        await tx.student.update({ where: { id }, data: { schoolId: targetClass.schoolId } });
+      }
 
       return { enrolment, previousClassId: activeEnrolment?.classId ?? null };
     });
@@ -432,7 +500,7 @@ export class StudentsService {
     return result.enrolment;
   }
 
-  async bulkPromote(dto: BulkPromoteStudentsDto, actorId: string): Promise<unknown> {
+  async bulkPromote(dto: BulkPromoteStudentsDto, actorId: string, user?: RequestUser): Promise<unknown> {
     const pathway = await this.prisma.classPathway.findUnique({
       where: {
         fromClassId_academicYearId: {
@@ -445,6 +513,8 @@ export class StudentsService {
     if (!pathway) {
       throw new BadRequestException('No class pathway configured for source class');
     }
+    resolveWriteSchoolId(user, pathway.fromClass.schoolId);
+    if (pathway.toClass) assertSchoolInScope(user, pathway.toClass.schoolId);
     if (pathway.transitionType === 'GRADUATION' || pathway.transitionType === 'TRANSFER') {
       return {
         promoted: [],
@@ -483,6 +553,7 @@ export class StudentsService {
             academicYearId: dto.targetAcademicYearId,
           },
           actorId,
+          user,
         ) as { id: string; studentId: string };
         promoted.push({ studentId: created.studentId, enrolmentId: created.id });
       } catch (error) {

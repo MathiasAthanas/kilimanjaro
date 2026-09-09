@@ -482,7 +482,7 @@ export function useAssessmentTypes() {
 export function useServiceHealth() {
   return useQuery({
     queryKey: adminKeys.serviceHealth(),
-    queryFn: () => api.get('/admin/system/health').then((r) => toServiceHealth(payloadOf(r))),
+    queryFn: () => api.get('/admin/system/health/deep').then((r) => toServiceHealth(payloadOf(r))),
     staleTime: 10_000,
     refetchInterval: 30_000,
   });
@@ -556,7 +556,7 @@ export function useNotificationStats() {
 export function useAdminAuditEvents() {
   return useQuery({
     queryKey: adminKeys.audit(),
-    queryFn: () => api.get('/admin/audit/system').then((r) => toAuditEvents(payloadOf(r))),
+    queryFn: () => api.get('/admin/system/audit').then((r) => toAuditEvents(payloadOf(r))),
     staleTime: 15_000,
   });
 }
@@ -600,14 +600,6 @@ export function useUpdateSystemSettingsMutation() {
     mutationFn: (settings: Record<string, unknown>) =>
       api.patch('/admin/system/settings', { settings }).then((r) => r.data?.data ?? r.data),
     onSuccess: () => qc.invalidateQueries({ queryKey: adminKeys.systemSettings() }),
-  });
-}
-
-export function useFeatureFlags() {
-  return useQuery({
-    queryKey: adminKeys.featureFlags(),
-    queryFn: () => api.get('/admin/system/feature-flags').then(payloadOf),
-    staleTime: 60_000,
   });
 }
 
@@ -1151,7 +1143,7 @@ export function useStudentDiscipline(id: string | undefined) {
   return useQuery({
     queryKey: ['admin', 'student', id, 'discipline'],
     queryFn: () => id
-      ? api.get(`/students/${id}/discipline`).then((r) => {
+      ? api.get(`/students/discipline/${id}`).then((r) => {
           const d = r.data?.data ?? r.data;
           return Array.isArray(d) ? d : [];
         }).catch(() => [] as unknown[])
@@ -1228,7 +1220,7 @@ export function useCancelAnnouncementMutation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, reason }: { id: string; reason: string }) =>
-      api.patch(`/admin/announcements/${id}/cancel`, { reason }).then((r) => r.data?.data ?? r.data),
+      api.patch(`/notifications/announcements/${id}/cancel`, { reason }).then((r) => r.data?.data ?? r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['announcements'] });
       qc.invalidateQueries({ queryKey: ['admin', 'announcements'] });
@@ -1240,7 +1232,7 @@ export function useCreateAnnouncementAdminMutation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: Record<string, unknown>) =>
-      api.post('/admin/announcements', body).then((r) => r.data?.data ?? r.data),
+      api.post('/notifications/announcements', body).then((r) => r.data?.data ?? r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['announcements'] });
       qc.invalidateQueries({ queryKey: ['admin', 'announcements'] });

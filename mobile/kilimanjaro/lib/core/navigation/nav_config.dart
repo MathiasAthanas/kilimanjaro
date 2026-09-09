@@ -132,126 +132,30 @@ final navConfig = <UserRole, List<NavItem>>{
       isMore: true,
     ),
   ],
-  UserRole.academicQa: const [
+  UserRole.admissions: const [
     NavItem(
       label: 'Home',
       iconAsset: '$_icons/home.svg',
       iconActiveAsset: '$_icons/home_filled.svg',
-      route: '/shell/aqa/home',
+      route: '/shell/admissions/home',
     ),
     NavItem(
-      label: 'Performance',
-      iconAsset: '$_icons/shield-check.svg',
-      iconActiveAsset: '$_icons/shield-check_filled.svg',
-      route: '/shell/aqa/performance',
-    ),
-    NavItem(
-      label: 'Analytics',
-      iconAsset: '$_icons/chart-bar-square.svg',
-      iconActiveAsset: '$_icons/chart-bar-square_filled.svg',
-      route: '/shell/aqa/analytics',
-    ),
-    NavItem(
-      label: 'Interventions',
-      iconAsset: '$_icons/hand-raised.svg',
-      iconActiveAsset: '$_icons/hand-raised_filled.svg',
-      route: '/shell/aqa/interventions',
-    ),
-    NavItem(
-      label: 'More',
-      iconAsset: '$_icons/grid-dots.svg',
-      iconActiveAsset: '$_icons/grid-dots_filled.svg',
-      isMore: true,
-    ),
-  ],
-  UserRole.principal: const [
-    NavItem(
-      label: 'Home',
-      iconAsset: '$_icons/home.svg',
-      iconActiveAsset: '$_icons/home_filled.svg',
-      route: '/shell/principal/home',
-    ),
-    NavItem(
-      label: 'Approvals',
-      iconAsset: '$_icons/clipboard-check.svg',
-      iconActiveAsset: '$_icons/clipboard-check_filled.svg',
-      route: '/shell/principal/approvals',
-    ),
-    NavItem(
-      label: 'Analytics',
-      iconAsset: '$_icons/chart-bar-square.svg',
-      iconActiveAsset: '$_icons/chart-bar-square_filled.svg',
-      route: '/shell/principal/analytics',
-    ),
-    NavItem(
-      label: 'Students',
+      label: 'Applicants',
       iconAsset: '$_icons/user-group.svg',
       iconActiveAsset: '$_icons/user-group_filled.svg',
-      route: '/shell/principal/students',
+      route: '/shell/admissions/applicants',
     ),
     NavItem(
-      label: 'More',
-      iconAsset: '$_icons/grid-dots.svg',
-      iconActiveAsset: '$_icons/grid-dots_filled.svg',
-      isMore: true,
-    ),
-  ],
-  UserRole.finance: const [
-    NavItem(
-      label: 'Home',
-      iconAsset: '$_icons/home.svg',
-      iconActiveAsset: '$_icons/home_filled.svg',
-      route: '/shell/finance/home',
+      label: 'New Inquiry',
+      iconAsset: '$_icons/edit-pencil.svg',
+      iconActiveAsset: '$_icons/edit-pencil_filled.svg',
+      route: '/shell/admissions/inquiry',
     ),
     NavItem(
-      label: 'Invoices',
-      iconAsset: '$_icons/document-text.svg',
-      iconActiveAsset: '$_icons/document-text_filled.svg',
-      route: '/shell/finance/invoices',
-    ),
-    NavItem(
-      label: 'Payments',
-      iconAsset: '$_icons/banknotes.svg',
-      iconActiveAsset: '$_icons/banknotes_filled.svg',
-      route: '/shell/finance/payments',
-    ),
-    NavItem(
-      label: 'Reports',
-      iconAsset: '$_icons/chart-bar.svg',
-      iconActiveAsset: '$_icons/chart-bar_filled.svg',
-      route: '/shell/finance/reports',
-    ),
-    NavItem(
-      label: 'More',
-      iconAsset: '$_icons/grid-dots.svg',
-      iconActiveAsset: '$_icons/grid-dots_filled.svg',
-      isMore: true,
-    ),
-  ],
-  UserRole.admin: const [
-    NavItem(
-      label: 'Home',
-      iconAsset: '$_icons/home.svg',
-      iconActiveAsset: '$_icons/home_filled.svg',
-      route: '/shell/admin/home',
-    ),
-    NavItem(
-      label: 'Users',
-      iconAsset: '$_icons/user-group.svg',
-      iconActiveAsset: '$_icons/user-group_filled.svg',
-      route: '/shell/admin/users',
-    ),
-    NavItem(
-      label: 'System',
-      iconAsset: '$_icons/cog-6-tooth.svg',
-      iconActiveAsset: '$_icons/cog-6-tooth_filled.svg',
-      route: '/shell/admin/system',
-    ),
-    NavItem(
-      label: 'Notify',
+      label: 'Alerts',
       iconAsset: '$_icons/bell.svg',
       iconActiveAsset: '$_icons/bell_filled.svg',
-      route: '/shell/admin/notifications',
+      route: '/shell/admissions/notifications',
     ),
     NavItem(
       label: 'More',
@@ -260,4 +164,46 @@ final navConfig = <UserRole, List<NavItem>>{
       isMore: true,
     ),
   ],
+  // Web-primary desk roles: read-only pulse + notifications + profile only.
+  UserRole.academicQa: _deskRoleNav('aqa'),
+  UserRole.manager: _deskRoleNav('principal'),
+  UserRole.headOfSchool: _deskRoleNav('principal'),
+  UserRole.headOfFinance: _deskRoleNav('finance'),
+  UserRole.superAdmin: _deskRoleNav('admin'),
+  UserRole.principal: _deskRoleNav('principal'),
+  UserRole.finance: _deskRoleNav('finance'),
+  UserRole.admin: _deskRoleNav('admin'),
 };
+
+List<NavItem> _deskRoleNav(String prefix) => [
+      NavItem(
+        label: 'Home',
+        iconAsset: '$_icons/home.svg',
+        iconActiveAsset: '$_icons/home_filled.svg',
+        route: '/shell/$prefix/home',
+      ),
+      NavItem(
+        label: 'Alerts',
+        iconAsset: '$_icons/bell.svg',
+        iconActiveAsset: '$_icons/bell_filled.svg',
+        route: '/shell/$prefix/notifications',
+      ),
+      NavItem(
+        label: 'Profile',
+        iconAsset: '$_icons/user-group.svg',
+        iconActiveAsset: '$_icons/user-group_filled.svg',
+        route: '/shell/$prefix/profile',
+      ),
+      NavItem(
+        label: 'Settings',
+        iconAsset: '$_icons/cog-6-tooth.svg',
+        iconActiveAsset: '$_icons/cog-6-tooth_filled.svg',
+        route: '/shell/$prefix/settings',
+      ),
+      NavItem(
+        label: 'More',
+        iconAsset: '$_icons/grid-dots.svg',
+        iconActiveAsset: '$_icons/grid-dots_filled.svg',
+        isMore: true,
+      ),
+    ];

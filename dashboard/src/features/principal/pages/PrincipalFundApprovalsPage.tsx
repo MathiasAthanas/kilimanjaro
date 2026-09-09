@@ -51,7 +51,11 @@ export function PrincipalFundApprovalsPage() {
         </div>
       </div>
 
-      <FundRequestBoard role="principal" userName={userName} />
+      <FundRequestBoard
+        role="headOfSchool"
+        userName={userName}
+        basePath="/principal/finance/fund-approvals"
+      />
     </PrincipalWorkspaceShell>
   );
 }

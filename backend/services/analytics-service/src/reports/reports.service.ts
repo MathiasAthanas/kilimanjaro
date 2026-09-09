@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { GeneratedReport, ReportStatus, ReportType } from '../../generated/prisma';
 import * as fs from 'fs';
@@ -17,6 +17,7 @@ import { ClassAcademicGenerator } from './generators/class-academic.generator';
 import { FinanceCollectionGenerator } from './generators/finance-collection.generator';
 import { OutstandingBalancesGenerator } from './generators/outstanding-balances.generator';
 import { PerformanceEngineGenerator } from './generators/performance-engine.generator';
+import { ReportCardGenerator } from './generators/report-card.generator';
 import { SchoolOverviewGenerator } from './generators/school-overview.generator';
 import { StudentProfileGenerator } from './generators/student-profile.generator';
 import { TeacherPerformanceGenerator } from './generators/teacher-performance.generator';
@@ -44,6 +45,7 @@ export class ReportsService {
     private readonly attendanceSummaryGenerator: AttendanceSummaryGenerator,
     private readonly teacherPerformanceGenerator: TeacherPerformanceGenerator,
     private readonly boardExecutiveGenerator: BoardExecutiveGenerator,
+    private readonly reportCardGenerator: ReportCardGenerator,
   ) {
     this.storageRoot = path.resolve(this.config.get<string>('PDF_STORAGE_PATH', './storage/analytics'));
   }
@@ -87,7 +89,7 @@ export class ReportsService {
 
     switch (body.reportType) {
       case ReportType.SCHOOL_OVERVIEW: {
-        const data = await this.overviewService.getOverview(body.academicYearId);
+        const data = await this.overviewService.getOverview(body.academicYearId, body.schoolId ?? undefined);
         await this.schoolOverviewGenerator.generate(file, data);
         break;
       }
@@ -102,12 +104,12 @@ export class ReportsService {
         break;
       }
       case ReportType.FINANCE_COLLECTION: {
-        const data = await this.financeService.getOverview(body.academicYearId, body.termId);
+        const data = await this.financeService.getOverview(body.academicYearId, body.termId, body.schoolId);
         await this.financeCollectionGenerator.generate(file, data);
         break;
       }
       case ReportType.OUTSTANDING_BALANCES: {
-        const data = await this.financeService.getOverview(body.academicYearId, body.termId);
+        const data = await this.financeService.getOverview(body.academicYearId, body.termId, body.schoolId);
         await this.outstandingBalancesGenerator.generate(file, data);
         break;
       }
@@ -131,8 +133,16 @@ export class ReportsService {
         await this.boardExecutiveGenerator.generate(file, data);
         break;
       }
+      case ReportType.REPORT_CARD: {
+        if (!body.scopeId || !body.termId) {
+          throw new BadRequestException('REPORT_CARD requires scopeId (studentId) and termId');
+        }
+        const data = await this.studentsService.getReportCard(body.scopeId, body.termId);
+        await this.reportCardGenerator.generate(file, data as any);
+        break;
+      }
       default: {
-        const data = await this.overviewService.getOverview(body.academicYearId);
+        const data = await this.overviewService.getOverview(body.academicYearId, body.schoolId ?? undefined);
         await this.schoolOverviewGenerator.generate(file, data);
       }
     }
@@ -154,7 +164,24 @@ export class ReportsService {
     if (reportType) where.reportType = reportType;
     if (status) where.status = status;
     if (generatedById) where.generatedById = generatedById;
-    if (user && user.role !== 'SYSTEM_ADMIN') where.generatedById = user.id;
+
+    const groupSuperRoles = ['SYSTEM_ADMIN', 'SUPER_ADMIN', 'MANAGER', 'BOARD_DIRECTOR'];
+    const schoolPrivilegedRoles = ['PRINCIPAL', 'HEAD_OF_SCHOOL', 'ACADEMIC_QA'];
+
+    if (user) {
+      if (groupSuperRoles.includes(user.role) || user.scope === 'GROUP') {
+        // Group-scoped or super roles see all reports — no extra filter.
+      } else if (schoolPrivilegedRoles.includes(user.role) && user.scope === 'SCHOOL') {
+        // School-scoped privileged roles see all reports generated for their school(s).
+        where.OR = [
+          { generatedById: user.id },
+          { schoolId: { in: (user.schoolIds ?? []).filter((id) => id !== '*') } },
+        ];
+      } else {
+        // Everyone else (finance, HOD, etc.) sees only their own reports.
+        where.generatedById = user.id;
+      }
+    }
 
     const [data, total] = await Promise.all([
       this.prisma.generatedReport.findMany({
@@ -171,7 +198,16 @@ export class ReportsService {
 
   private canAccess(report: GeneratedReport, user?: RequestUser) {
     if (!user) return false;
-    if (['SYSTEM_ADMIN', 'PRINCIPAL'].includes(user.role)) return true;
+    // Super/group roles can always access any report.
+    const alwaysAllowed = ['SYSTEM_ADMIN', 'SUPER_ADMIN', 'MANAGER', 'BOARD_DIRECTOR'];
+    if (alwaysAllowed.includes(user.role) || user.scope === 'GROUP') return true;
+    // School-privileged roles can access reports scoped to their school(s).
+    const schoolPrivileged = ['PRINCIPAL', 'HEAD_OF_SCHOOL', 'ACADEMIC_QA'];
+    if (schoolPrivileged.includes(user.role) && user.scope === 'SCHOOL') {
+      const reportSchool = (report as any).schoolId as string | null;
+      if (!reportSchool) return true; // global report
+      return (user.schoolIds ?? []).some((id) => id === '*' || id === reportSchool);
+    }
     return report.generatedById === user.id;
   }
 

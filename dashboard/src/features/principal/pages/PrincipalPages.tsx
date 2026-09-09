@@ -39,6 +39,7 @@ import {
   usePrincipalPendingPayments,
   usePrincipalDiscipline,
   usePrincipalStudents,
+  usePrincipalStudentAnalytics,
   usePrincipalStaff,
   usePrincipalAudit,
   usePrincipalAnnouncements,
@@ -497,7 +498,7 @@ export function PrincipalReportCardDetailPage() {
         {/* Class overview */}
         <div className="space-y-gutter">
           <ExecutiveMetricGrid items={[
-            { label: 'Class',      value: classLabel,          detail: 'Term II 2026',                                        tone: 'medium' },
+            { label: 'Class',      value: classLabel,          detail: 'Current term',                                        tone: 'medium' },
             { label: 'Cards',      value: String(studentCount), detail: 'Total report cards',                                 tone: 'stable' },
             { label: 'Readiness',  value: `${readiness}%`,     detail: readiness >= 90 ? 'Ready to sign' : 'Items missing',  tone: readiness >= 90 ? 'stable' : 'high' },
             { label: 'Missing',    value: String(missing),     detail: 'Items not yet complete',                              tone: missing > 0 ? 'critical' : 'stable' },
@@ -509,7 +510,7 @@ export function PrincipalReportCardDetailPage() {
               <div>
                 <p className="text-[11px] font-black uppercase tracking-widest text-ks-muted">Class sign-off</p>
                 <h2 className="mt-1 font-display text-3xl font-black text-ks-navy">{classLabel}</h2>
-                <p className="text-sm font-bold text-ks-muted">{studentCount} students Â· Term II 2026</p>
+                <p className="text-sm font-bold text-ks-muted">{studentCount} students</p>
               </div>
               <Badge tone={signed ? 'emerald' : readiness >= 90 ? 'blue' : 'amber'}>
                 {signed ? 'Signed' : readiness >= 90 ? 'Ready' : 'Pending items'}
@@ -903,6 +904,7 @@ export function PrincipalStudentProfilePage() {
   const { studentId } = useParams();
   const navigate = useNavigate();
   const { loading, item: student } = useStudent();
+  const { data: studentAnalytics } = usePrincipalStudentAnalytics(studentId) as { data: Record<string, unknown> | undefined };
   const { data: apiIncidents = [] as DisciplineIncident[] } = usePrincipalDiscipline() as { data: DisciplineIncident[] };
   const interventionMutation = useCreateAqaInterventionMutation();
   const generateMutation = useGenerateReportMutation();
@@ -923,6 +925,14 @@ export function PrincipalStudentProfilePage() {
 
   const selectedStudent = student;
   const studentIncidents = apiIncidents.filter((d) => d.student === selectedStudent.name);
+
+  // Real score trajectory from published term history (falls back to the
+  // current average alone when no history exists yet).
+  const academicBlock = (studentAnalytics?.academic ?? {}) as Record<string, unknown>;
+  const termHistory = (academicBlock.termHistory ?? []) as Array<Record<string, unknown>>;
+  const trendValues = termHistory.length > 0
+    ? termHistory.map((t) => Number(t.overallAverage ?? t.average ?? 0)).filter((v) => Number.isFinite(v))
+    : [selectedStudent.academicAverage];
 
   function handleFlagIntervention() {
     if (!interventionReason.trim()) { toast('Enter a reason before flagging.'); return; }
@@ -981,8 +991,8 @@ export function PrincipalStudentProfilePage() {
         <div className="space-y-gutter">
           <ExecutiveLineChart
             title="Academic Performance"
-            subtitle="Score trajectory this term"
-            values={[51, 49, 46, selectedStudent.academicAverage, 55, 61]}
+            subtitle="Score trajectory across terms"
+            values={trendValues.length > 0 ? trendValues : [selectedStudent.academicAverage]}
           />
           <ExecutiveBarChart
             title="Student 360 Context"

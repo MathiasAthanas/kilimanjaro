@@ -2,7 +2,9 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { mkdirSync, createWriteStream } from 'fs';
 import { dirname, join } from 'path';
-import PDFDocument from 'pdfkit';
+// pdfkit publishes a CommonJS constructor; this service's tsconfig has
+// esModuleInterop off, so the `= require` form is needed for a usable constructor.
+import PDFDocument = require('pdfkit');
 
 const BRAND = '#4338CA';
 const BRAND_LIGHT = '#EEF2FF';

@@ -12,6 +12,11 @@ export class GenerateReportDto {
   @IsString()
   scopeId?: string;
 
+  /** Multi-school: scope a report to a single school. Omit for a group-wide report. */
+  @IsOptional()
+  @IsString()
+  schoolId?: string;
+
   @IsOptional()
   @IsString()
   academicYearId?: string;

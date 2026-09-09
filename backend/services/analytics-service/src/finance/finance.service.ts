@@ -96,15 +96,15 @@ export class FinanceAnalyticsService {
     }
   }
 
-  async getOverview(academicYearId?: string, termId?: string) {
+  async getOverview(academicYearId?: string, termId?: string, schoolId?: string) {
     const yearId = academicYearId || (await this.currentYearId());
     const scopedTermId = termId || (await this.currentTermId(yearId));
-    const key = `analytics:finance:overview:${yearId || 'current'}:${scopedTermId || 'current'}`;
+    const key = `analytics:finance:overview:${yearId || 'current'}:${scopedTermId || 'current'}:${schoolId || 'group'}`;
     const cached = await this.redis.get<any>(key);
     if (cached) return cached;
 
     const invoices = await this.prisma.invoice.findMany({
-      where: { academicYearId: yearId || undefined, termId: scopedTermId || undefined },
+      where: { academicYearId: yearId || undefined, termId: scopedTermId || undefined, ...(schoolId ? { schoolId } : {}) },
       select: {
         id: true,
         studentId: true,

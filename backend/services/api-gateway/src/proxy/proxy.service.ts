@@ -40,6 +40,12 @@ export class ProxyService {
       const canonical = normalized.replace(/^\/student(\/|$)/, '/students$1');
       return this.route('student', urls.student, path, canonical);
     }
+    if (normalized.startsWith('/admissions/') || normalized === '/admissions') {
+      return this.route('student', urls.student, path, normalized);
+    }
+    if (normalized.startsWith('/schools/') || normalized === '/schools') {
+      return this.route('student', urls.student, path, normalized);
+    }
     if (normalized.startsWith('/academics/') || normalized === '/academics' || normalized.startsWith('/academic/') || normalized === '/academic') {
       const canonical = normalized.replace(/^\/academic(\/|$)/, '/academics$1');
       return this.route('academic', urls.academic, path, canonical);
@@ -64,7 +70,7 @@ export class ProxyService {
   async forward(
     req: Request,
     route: ResolvedRoute,
-    auth?: { id: string; role: string; email?: string | null },
+    auth?: { id: string; role: string; email?: string | null; scope?: 'GROUP' | 'SCHOOL'; schoolIds?: string[] },
   ): Promise<ProxiedResponse> {
     const internalApiKey = this.configService.get<string>('INTERNAL_API_KEY') || '';
     const timeoutMs = Number(this.configService.get<string>('PROXY_TIMEOUT_MS', '30000'));
@@ -95,6 +101,23 @@ export class ProxyService {
       headers['X-User-Id'] = auth.id;
       headers['X-User-Role'] = auth.role;
       headers['X-User-Email'] = auth.email || '';
+      // Multi-school scope: trusted headers derived from the validated JWT
+      const scope = auth.scope ?? 'SCHOOL';
+      const schoolIds = auth.schoolIds ?? [];
+      headers['X-User-Scope'] = scope;
+      headers['X-User-School-Ids'] = scope === 'GROUP' ? '*' : schoolIds.join(',');
+      // Active school comes from the client. If it is inside the caller's scope
+      // we honour it; if it is stale/out-of-scope (e.g. a leftover selection from
+      // another role) we simply ignore it and fall back to the user's own scope
+      // rather than failing the whole request — downstream services still scope
+      // to X-User-School-Ids, so this never widens access.
+      const requestedActive = req.headers['x-active-school'];
+      if (typeof requestedActive === 'string' && requestedActive) {
+        const inScope = scope === 'GROUP' || schoolIds.includes(requestedActive);
+        if (inScope) {
+          headers['X-Active-School'] = requestedActive;
+        }
+      }
     }
 
     const targetUrl = `${route.serviceUrl}${route.outboundPath}`;
@@ -132,7 +155,11 @@ export class ProxyService {
   }
 
   private isBinaryRoute(path: string): boolean {
-    return /\/download(?:\/)?$/.test(path);
+    // File-returning routes must be proxied as binary (arraybuffer) so PDFs,
+    // spreadsheets and CSVs are streamed through byte-for-byte instead of being
+    // parsed as JSON (which corrupts the payload and rewrites the content-type).
+    if (/\/files\/[^/]+\//i.test(path)) return true;
+    return /\/(download|pdf|csv|xlsx|xls|excel|export)(?:\/)?$/i.test(path);
   }
 
   private route(
@@ -141,6 +168,8 @@ export class ProxyService {
     incomingPath: string,
     normalizedPath: string,
   ): ResolvedRoute {
+    // Student service is mounted at root (`/students`, `/schools`), while the
+    // other backend services use the `/api/v1` global prefix.
     const needsVersionPrefix = serviceName !== 'student';
     const outboundPath = needsVersionPrefix ? `/api/v1${normalizedPath}` : normalizedPath;
     return {

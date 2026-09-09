@@ -31,7 +31,7 @@ export class StoreService {
 
     const item = await this.prisma.storeItem.create({
       data: {
-        itemCode: await this.numberService.storeItemCode(),
+        itemCode: await this.numberService.storeItemCode(user.activeSchoolId ?? user.schoolIds?.find((id) => id !== '*') ?? null),
         name: dto.name,
         category: dto.category as any,
         unit: dto.unit || 'unit',
@@ -47,7 +47,7 @@ export class StoreService {
     if (opening.greaterThan(0)) {
       await this.prisma.storeMovement.create({
         data: {
-          movementNumber: await this.numberService.storeMovementNumber(),
+          movementNumber: await this.numberService.storeMovementNumber(user.activeSchoolId ?? user.schoolIds?.find((id) => id !== '*') ?? null),
           storeItemId: item.id,
           type: 'RECEIPT',
           quantity: opening,
@@ -123,7 +123,7 @@ export class StoreService {
     const result = await this.prisma.$transaction(async (tx) => {
       const movement = await tx.storeMovement.create({
         data: {
-          movementNumber: await this.numberService.storeMovementNumber(),
+          movementNumber: await this.numberService.storeMovementNumber(user.activeSchoolId ?? user.schoolIds?.find((id) => id !== '*') ?? null),
           storeItemId: id,
           type: 'RECEIPT',
           quantity: qty,
@@ -164,7 +164,7 @@ export class StoreService {
     const result = await this.prisma.$transaction(async (tx) => {
       const movement = await tx.storeMovement.create({
         data: {
-          movementNumber: await this.numberService.storeMovementNumber(),
+          movementNumber: await this.numberService.storeMovementNumber(user.activeSchoolId ?? user.schoolIds?.find((id) => id !== '*') ?? null),
           storeItemId: id,
           type: 'ISSUE',
           quantity: qty,
@@ -202,7 +202,7 @@ export class StoreService {
     const result = await this.prisma.$transaction(async (tx) => {
       const movement = await tx.storeMovement.create({
         data: {
-          movementNumber: await this.numberService.storeMovementNumber(),
+          movementNumber: await this.numberService.storeMovementNumber(user.activeSchoolId ?? user.schoolIds?.find((id) => id !== '*') ?? null),
           storeItemId: id,
           type: 'ADJUSTMENT',
           quantity: delta,

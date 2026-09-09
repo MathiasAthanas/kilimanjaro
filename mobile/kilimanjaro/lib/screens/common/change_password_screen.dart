@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/providers/auth_provider.dart';
 import '../../core/providers/notification_provider.dart';
 import '../../core/providers/snackbar_provider.dart';
 import '../../core/theme/app_colors.dart';
@@ -51,17 +52,28 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
 
   Future<void> _submit() async {
     setState(() => _saving = true);
-    await Future<void>.delayed(const Duration(milliseconds: 450));
-    if (!mounted) return;
-    setState(() {
-      _saving = false;
-      _current.clear();
-      _next.clear();
-      _confirm.clear();
-    });
-    ref
-        .read(snackbarProvider.notifier)
-        .show('Password update flow is ready for backend integration.');
+    try {
+      await ref.read(authServiceProvider).changePassword(
+            currentPassword: _current.text,
+            newPassword: _next.text,
+          );
+      if (!mounted) return;
+      setState(() {
+        _current.clear();
+        _next.clear();
+        _confirm.clear();
+      });
+      ref
+          .read(snackbarProvider.notifier)
+          .show('Password changed — use the new password next time you sign in.');
+    } catch (_) {
+      if (!mounted) return;
+      ref
+          .read(snackbarProvider.notifier)
+          .show('Could not change the password. Check the current password and try again.');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   @override

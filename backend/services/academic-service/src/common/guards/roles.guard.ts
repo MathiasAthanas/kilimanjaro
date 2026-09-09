@@ -33,6 +33,19 @@ export class RolesGuard implements CanActivate {
       throw new ForbiddenException('Missing role header');
     }
 
+        // ── Group super-roles (multi-school expansion) ──────────────────────────
+    // SUPER_ADMIN passes everything. MANAGER inherits every operational power
+    // (administrator + head-of-school + finance + academic) and so passes any
+    // guard EXCEPT structural actions reserved solely for SUPER_ADMIN
+    // (e.g. defining schools). School-level isolation is still enforced
+    // separately by school scope, so this only widens ROLE checks.
+    if (userRole === 'SUPER_ADMIN') {
+      return true;
+    }
+    if (userRole === 'MANAGER' && !requiredRoles.every((r) => r === 'SUPER_ADMIN')) {
+      return true;
+    }
+
     if (!requiredRoles.includes(userRole)) {
       throw new ForbiddenException('Insufficient permissions');
     }

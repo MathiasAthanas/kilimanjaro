@@ -18,6 +18,13 @@ export class RabbitMqConsumer implements OnModuleInit {
     try {
       const conn = await connect(url);
       const ch = await conn.createChannel();
+
+      conn.on('error', (err: Error) => this.logger.warn(`RabbitMQ connection error: ${err.message}`));
+      conn.on('close', () => this.logger.warn('RabbitMQ connection closed — notification consumer offline until restart'));
+
+      await ch.prefetch(10);
+      await ch.assertExchange('dlq.direct', 'direct', { durable: true });
+
       await this.setup(ch, 'auth.events', 'notification-service.auth', [
         'user.created',
         'password.reset.requested',
@@ -39,8 +46,10 @@ export class RabbitMqConsumer implements OnModuleInit {
         'marks.rejected',
         'results.published',
         'marks.submission.reminder',
+        'marks.approval.reminder',
         'alert.escalated',
         'report_card.generated',
+        'report_card.signed',
       ], 'academic-service');
       await this.setup(ch, 'finance.events', 'notification-service.finance', [
         'payment.confirmed',
@@ -70,7 +79,12 @@ export class RabbitMqConsumer implements OnModuleInit {
 
   private async setup(channel: Channel, exchange: string, queue: string, keys: string[], sourceService: string) {
     await channel.assertExchange(exchange, 'topic', { durable: true });
-    await channel.assertQueue(queue, { durable: true });
+    await channel.assertQueue(queue, {
+      durable: true,
+      arguments: { 'x-dead-letter-exchange': 'dlq.direct', 'x-dead-letter-routing-key': queue },
+    });
+    await channel.assertQueue(`${queue}.dlq`, { durable: true });
+    await channel.bindQueue(`${queue}.dlq`, 'dlq.direct', queue);
 
     for (const key of keys) {
       await channel.bindQueue(queue, exchange, key);
@@ -83,10 +97,10 @@ export class RabbitMqConsumer implements OnModuleInit {
       try {
         const payload = JSON.parse(msg.content.toString('utf8'));
         await this.dispatch.dispatchFromEvent(eventType, payload, sourceService);
+        channel.ack(msg);
       } catch (error) {
         this.logger.warn(`Failed to process ${exchange}/${eventType}: ${(error as Error).message}`);
-      } finally {
-        channel.ack(msg);
+        channel.nack(msg, false, false);
       }
     });
   }

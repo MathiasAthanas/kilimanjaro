@@ -1037,7 +1037,7 @@ export function ExpandableIncident({ incident }: { incident: DisciplineIncident 
   const [resolvedLocally, setResolvedLocally] = useState(false);
 
   const handleResolve = () => {
-    resolveMutation.mutate({ id: incident.id, resolution: 'Resolved by Principal' }, {
+    resolveMutation.mutate({ id: incident.id, resolutionNote: 'Resolved by Principal' }, {
       onSuccess: () => { setResolvedLocally(true); toast('Incident marked as resolved', 'success'); },
       onError: () => toast('Failed to resolve incident. Please try again.', 'error'),
     });

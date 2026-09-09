@@ -60,6 +60,8 @@ import '../../screens/student/elearning/student_elearning_screens.dart'
 import '../../screens/teacher/elearning/teacher_elearning_screens.dart'
     as teacher_elearning;
 import '../../screens/teacher/teacher_screens.dart' as teacher_screens;
+import '../../screens/admissions/admissions_screens.dart';
+import '../../screens/staff/staff_overview_screen.dart';
 import '../../screens/utility/force_update_screen.dart';
 import '../../screens/utility/shell_demo_screen.dart';
 import '../../widgets/shell/app_shell.dart';
@@ -285,6 +287,104 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       }
     }
 
+    if (role == UserRole.admissions) {
+      if (path == '/shell/admissions/home') {
+        return GoRoute(
+          path: path,
+          pageBuilder: (context, state) => NoTransitionPage(
+            key: state.pageKey,
+            child: const AdmissionsHomeScreen(),
+          ),
+        );
+      }
+      if (path == '/shell/admissions/applicants') {
+        return GoRoute(
+          path: path,
+          pageBuilder: (context, state) => NoTransitionPage(
+            key: state.pageKey,
+            child: const AdmissionsApplicantsScreen(),
+          ),
+          routes: [
+            GoRoute(
+              path: ':applicantId',
+              pageBuilder: (context, state) => AppTransitions.utility(
+                key: state.pageKey,
+                child: AdmissionsApplicantDetailScreen(
+                  applicantId: state.pathParameters['applicantId'] ?? '',
+                ),
+              ),
+            ),
+          ],
+        );
+      }
+      if (path == '/shell/admissions/inquiry') {
+        return GoRoute(
+          path: path,
+          pageBuilder: (context, state) => NoTransitionPage(
+            key: state.pageKey,
+            child: const AdmissionsNewInquiryScreen(),
+          ),
+        );
+      }
+    }
+
+    // Web-primary desk roles get a real read-only landing instead of a demo.
+    const deskRoles = [
+      UserRole.academicQa,
+      UserRole.principal,
+      UserRole.finance,
+      UserRole.admin,
+    ];
+    if (deskRoles.contains(role) && path.endsWith('/home')) {
+      return GoRoute(
+        path: path,
+        pageBuilder: (context, state) => NoTransitionPage(
+          key: state.pageKey,
+          child: StaffOverviewScreen(role: role),
+        ),
+      );
+    }
+
+    // Generic tab destinations shared by every role.
+    if (path.endsWith('/notifications')) {
+      return GoRoute(
+        path: path,
+        pageBuilder: (context, state) => NoTransitionPage(
+          key: state.pageKey,
+          child: const NotificationsScreen(),
+        ),
+        routes: [
+          GoRoute(
+            path: ':id',
+            pageBuilder: (context, state) => AppTransitions.utility(
+              key: state.pageKey,
+              child: NotificationDetailScreen(
+                id: state.pathParameters['id'] ?? '',
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+    if (path.endsWith('/profile')) {
+      return GoRoute(
+        path: path,
+        pageBuilder: (context, state) => NoTransitionPage(
+          key: state.pageKey,
+          child: const ProfileScreen(),
+        ),
+      );
+    }
+    if (path.endsWith('/settings')) {
+      return GoRoute(
+        path: path,
+        pageBuilder: (context, state) => NoTransitionPage(
+          key: state.pageKey,
+          child: const SettingsScreen(),
+        ),
+      );
+    }
+
     return GoRoute(
       path: path,
       pageBuilder: (context, state) => NoTransitionPage(
@@ -380,12 +480,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           case 'peer-pairings':
             return page(const teacher_screens.PeerPairingsScreen(), state);
           case 'students':
-            return page(
-              const teacher_screens.StudentPerformanceProfileScreen(
-                studentId: 'stu-amina',
-              ),
-              state,
-            );
+            // Students are reached through the teacher's own class lists so
+            // every profile link carries a real student id.
+            return page(const teacher_screens.MyClassesScreen(), state);
           case 'timetable':
             if (role == UserRole.hod) {
               return page(const hod_screens.HodTimetableScreen(), state);

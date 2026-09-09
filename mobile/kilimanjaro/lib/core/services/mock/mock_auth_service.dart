@@ -47,9 +47,16 @@ class MockAuthService implements IAuthService {
     {
       'identifier': 'james.kileo@ks.ac.tz',
       'password': 'demo1234',
-      'role': 'HOD',
+      'role': 'HEAD_OF_DEPARTMENT',
       'name': 'Dr. James Kileo',
       'bio': 'Sciences HOD • Academic quality and departmental oversight',
+    },
+    {
+      'identifier': 'neema.mrosso@ks.ac.tz',
+      'password': 'demo1234',
+      'role': 'ADMISSIONS',
+      'name': 'Ms. Neema Mrosso',
+      'bio': 'Admissions Officer • Inquiries, applications and enrolment',
     },
     {
       'identifier': 'fatuma.ally@ks.ac.tz',
@@ -136,6 +143,14 @@ class MockAuthService implements IAuthService {
     required String newPassword,
   }) async {
     await Future<void>.delayed(const Duration(milliseconds: 1000));
+  }
+
+  @override
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    await Future<void>.delayed(const Duration(milliseconds: 600));
   }
 
   @override

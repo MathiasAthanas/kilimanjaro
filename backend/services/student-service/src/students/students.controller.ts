@@ -42,35 +42,43 @@ export class StudentsController {
   }
 
   @Post()
-  @Roles('SYSTEM_ADMIN', 'PRINCIPAL')
+  @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN', 'ADMISSIONS')
   @ApiOperation({ summary: 'Enroll a new student' })
   @ApiResponse({ status: 201, description: 'Student enrolled successfully' })
   async create(@Body() dto: CreateStudentDto, @CurrentUser() user?: RequestUser) {
-    return this.studentsService.create(dto, user?.id || 'system');
+    return this.studentsService.create(dto, user?.id || 'system', user);
+  }
+
+  @Get('stats')
+  @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN', 'ACADEMIC_QA')
+  @ApiOperation({ summary: 'Aggregate student counts by status' })
+  async stats(@CurrentUser() user?: RequestUser) {
+    return this.studentsService.stats(user);
   }
 
   @Get()
-  @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'ACADEMIC_QA', 'FINANCE', 'HEAD_OF_DEPARTMENT', 'TEACHER')
+  @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN', 'ACADEMIC_QA', 'FINANCE', 'HEAD_OF_DEPARTMENT', 'TEACHER', 'ADMISSIONS')
   @ApiOperation({ summary: 'Paginated list of students with filters' })
-  async list(@Query() query: ListStudentsDto) {
-    return this.studentsService.list(query);
+  async list(@Query() query: ListStudentsDto, @CurrentUser() user?: RequestUser) {
+    return this.studentsService.list(query, user);
   }
 
   @Get('registration/:registrationNumber')
-  @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'ACADEMIC_QA', 'FINANCE', 'HEAD_OF_DEPARTMENT', 'TEACHER')
+  @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN', 'ACADEMIC_QA', 'FINANCE', 'HEAD_OF_DEPARTMENT', 'TEACHER', 'ADMISSIONS')
   @ApiOperation({ summary: 'Lookup student by registration number' })
-  async byRegistration(@Param('registrationNumber') registrationNumber: string) {
-    return this.studentsService.findByRegistration(registrationNumber);
+  async byRegistration(@Param('registrationNumber') registrationNumber: string, @CurrentUser() user?: RequestUser) {
+    return this.studentsService.findByRegistration(registrationNumber, user);
   }
 
   @Get(':id([0-9a-fA-F-]{36})')
   @Roles(
     'SYSTEM_ADMIN',
-    'PRINCIPAL',
+    'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN',
     'ACADEMIC_QA',
     'FINANCE',
     'HEAD_OF_DEPARTMENT',
     'TEACHER',
+    'ADMISSIONS',
     'PARENT',
     'STUDENT',
   )
@@ -79,34 +87,34 @@ export class StudentsController {
     if (user) {
       await this.assertScopedAccess(user, id);
     }
-    return this.studentsService.findById(id);
+    return this.studentsService.findById(id, user);
   }
 
   @Patch(':id([0-9a-fA-F-]{36})')
-  @Roles('SYSTEM_ADMIN', 'PRINCIPAL')
+  @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN', 'ADMISSIONS')
   @ApiOperation({ summary: 'Update student profile' })
-  async update(@Param('id') id: string, @Body() dto: UpdateStudentDto) {
-    return this.studentsService.update(id, dto);
+  async update(@Param('id') id: string, @Body() dto: UpdateStudentDto, @CurrentUser() user?: RequestUser) {
+    return this.studentsService.update(id, dto, user);
   }
 
   @Patch(':id([0-9a-fA-F-]{36})/status')
-  @Roles('SYSTEM_ADMIN', 'PRINCIPAL')
+  @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN', 'ADMISSIONS')
   @ApiOperation({ summary: 'Change student status and publish status event' })
   async status(@Param('id') id: string, @Body() dto: ChangeStatusDto, @CurrentUser() user?: RequestUser) {
     return this.studentsService.changeStatus(id, dto, user?.id || 'system');
   }
 
   @Post(':id([0-9a-fA-F-]{36})/promote')
-  @Roles('SYSTEM_ADMIN', 'PRINCIPAL')
+  @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN', 'ADMISSIONS')
   @ApiOperation({ summary: 'Promote student to new class and academic year' })
   async promote(@Param('id') id: string, @Body() dto: PromoteStudentDto, @CurrentUser() user?: RequestUser) {
-    return this.studentsService.promote(id, dto, user?.id || 'system');
+    return this.studentsService.promote(id, dto, user?.id || 'system', user);
   }
 
   @Post('promotions/bulk')
-  @Roles('SYSTEM_ADMIN', 'PRINCIPAL')
+  @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN', 'ADMISSIONS')
   @ApiOperation({ summary: 'Bulk promote students using configured class pathway' })
   async bulkPromote(@Body() dto: BulkPromoteStudentsDto, @CurrentUser() user?: RequestUser) {
-    return this.studentsService.bulkPromote(dto, user?.id || 'system');
+    return this.studentsService.bulkPromote(dto, user?.id || 'system', user);
   }
 }

@@ -85,6 +85,7 @@ enum InterventionType {
   ALERT_ESCALATED
   PAIRING_ACTIVATED
   PAIRING_REJECTED
+  PAIRING_COMPLETED
   MANUAL_PAIRING_CREATED
   TEACHER_SUPPORT_GIVEN
   PARENT_MEETING_SCHEDULED
@@ -104,6 +105,47 @@ enum EducationStage {
   @@schema("academics")
 }
 
+/// Lifecycle of an Exam Window (the new exam lifecycle orchestrator).
+/// DRAFT     → created, assessments not yet fanned out / not visible to teachers
+/// OPEN      → teachers can enter/upload & submit marks for their subjects
+/// CLOSED    → entry locked; merit list computed
+/// PUBLISHED → results visible to students/parents; analytics fired
+/// REOPENED  → temporarily unlocked for an approved edit request
+/// ARCHIVED  → retired from active lists
+enum ExamWindowStatus {
+  DRAFT
+  OPEN
+  CLOSED
+  PUBLISHED
+  REOPENED
+  ARCHIVED
+
+  @@schema("academics")
+}
+
+/// How an Exam Window selects the classes it applies to.
+/// ALL_CLASSES → every active class in the academic year (optionally stage-filtered)
+/// STANDARDS   → all streams of the listed levels (e.g. Class 6 = level 6 → 6A/6B/6C)
+/// STREAMS     → an explicit list of class ids (individual streams)
+enum ExamWindowScopeType {
+  ALL_CLASSES
+  STANDARDS
+  STREAMS
+
+  @@schema("academics")
+}
+
+/// Lifecycle of a teacher's request to edit already-submitted/locked results.
+enum ResultEditRequestStatus {
+  REQUESTED
+  GRANTED
+  REJECTED
+  COMPLETED
+  REPUBLISHED
+
+  @@schema("academics")
+}
+
 /// Role of a subject inside an A-Level combination.
 /// COMPULSORY_SUBSIDIARY marks General Studies / General Paper which every
 /// ACSEE candidate must sit regardless of their principal combination.
@@ -116,38 +158,40 @@ enum SubjectRole {
 }
 
 model Subject {
-  id             String         @id @default(uuid())
-  name           String
-  code           String         @unique
-  description    String?
-  educationStage EducationStage?
-  isCompulsory   Boolean        @default(true)
-  isActive       Boolean        @default(true)
-  departmentId   String?
-  department     String?
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
-  classSubjects  ClassSubject[]
+  id                  String                      @id @default(uuid())
+  name                String
+  code                String                      @unique
+  description         String?
+  educationStage      EducationStage?
+  isCompulsory        Boolean                     @default(true)
+  isActive            Boolean                     @default(true)
+  departmentId        String?
+  department          String?
+  createdAt           DateTime                    @default(now())
+  updatedAt           DateTime                    @updatedAt
+  classSubjects       ClassSubject[]
   combinationSubjects SubjectCombinationSubject[]
-  studentEnrollments StudentSubjectEnrollment[]
-  assessments    Assessment[]
-  timetable      Timetable[]
+  studentEnrollments  StudentSubjectEnrollment[]
+  assessments         Assessment[]
+  timetable           Timetable[]
 
   @@schema("academics")
 }
 
 model ClassSubject {
-  id             String           @id @default(uuid())
+  id             String              @id @default(uuid())
+  schoolId       String?
   classId        String
   subjectId      String
   academicYearId String
   teacherId      String
-  educationStage EducationStage @default(O_LEVEL)
+  educationStage EducationStage      @default(O_LEVEL)
   classLevel     Int?
   combinationId  String?
-  isActive       Boolean          @default(true)
-  createdAt      DateTime         @default(now())
-  subject        Subject          @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  periodsPerWeek Int                 @default(4)
+  isActive       Boolean             @default(true)
+  createdAt      DateTime            @default(now())
+  subject        Subject             @relation(fields: [subjectId], references: [id], onDelete: Cascade)
   combination    SubjectCombination? @relation(fields: [combinationId], references: [id], onDelete: SetNull)
   assessments    Assessment[]
   marks          Mark[]
@@ -163,14 +207,15 @@ model ClassSubject {
 }
 
 model GradingScale {
-  id             String         @id @default(uuid())
+  id             String          @id @default(uuid())
+  schoolId       String?
   name           String
   academicYearId String
   educationStage EducationStage?
   classLevel     Int?
   subjectId      String?
-  isActive       Boolean        @default(false)
-  createdAt      DateTime       @default(now())
+  isActive       Boolean         @default(false)
+  createdAt      DateTime        @default(now())
   grades         GradeBoundary[]
 
   @@index([academicYearId, educationStage, classLevel, subjectId, isActive])
@@ -194,7 +239,7 @@ model GradeBoundary {
 }
 
 model AssessmentType {
-  id               String       @id @default(uuid())
+  id               String          @id @default(uuid())
   name             String
   code             String
   weightPercentage Float
@@ -202,8 +247,8 @@ model AssessmentType {
   educationStage   EducationStage?
   classLevel       Int?
   subjectId        String?
-  isActive         Boolean      @default(true)
-  createdAt        DateTime     @default(now())
+  isActive         Boolean         @default(true)
+  createdAt        DateTime        @default(now())
   assessments      Assessment[]
 
   @@unique([code, academicYearId, educationStage, classLevel, subjectId])
@@ -212,40 +257,48 @@ model AssessmentType {
 }
 
 model Assessment {
-  id              String           @id @default(uuid())
-  classSubjectId  String
-  assessmentTypeId String
-  subjectId       String
-  classId         String
-  educationStage  EducationStage @default(O_LEVEL)
-  classLevel      Int?
-  combinationId   String?
-  termId          String
-  academicYearId  String
-  name            String
-  maxScore        Float            @default(100)
-  date            DateTime?
-  status          AssessmentStatus @default(DRAFT)
-  submittedAt     DateTime?
-  submittedById   String?
-  approvedAt      DateTime?
-  approvedById    String?
-  rejectedAt      DateTime?
-  rejectedById    String?
-  rejectionReason String?
-  lockedAt        DateTime?
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
-  classSubject    ClassSubject     @relation(fields: [classSubjectId], references: [id], onDelete: Cascade)
-  assessmentType  AssessmentType   @relation(fields: [assessmentTypeId], references: [id])
-  subject         Subject          @relation(fields: [subjectId], references: [id])
-  marks           Mark[]
-  approvalLogs    ApprovalLog[]
+  id               String           @id @default(uuid())
+  schoolId         String?
+  classSubjectId   String
+  /// Legacy weighting-based flow. NULL for exam-window assessments, which
+  /// derive their type from the parent ExamWindow's ExamType instead.
+  assessmentTypeId String?
+  /// Set when this assessment belongs to an Exam Window (new exam lifecycle).
+  examWindowId     String?
+  subjectId        String
+  classId          String
+  educationStage   EducationStage   @default(O_LEVEL)
+  classLevel       Int?
+  combinationId    String?
+  termId           String
+  academicYearId   String
+  name             String
+  maxScore         Float            @default(100)
+  date             DateTime?
+  status           AssessmentStatus @default(DRAFT)
+  submittedAt      DateTime?
+  submittedById    String?
+  approvedAt       DateTime?
+  approvedById     String?
+  rejectedAt       DateTime?
+  rejectedById     String?
+  rejectionReason  String?
+  lockedAt         DateTime?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  classSubject     ClassSubject     @relation(fields: [classSubjectId], references: [id], onDelete: Cascade)
+  assessmentType   AssessmentType?  @relation(fields: [assessmentTypeId], references: [id])
+  examWindow       ExamWindow?      @relation(fields: [examWindowId], references: [id], onDelete: Cascade)
+  subject          Subject          @relation(fields: [subjectId], references: [id])
+  marks            Mark[]
+  approvalLogs     ApprovalLog[]
 
   @@unique([classSubjectId, assessmentTypeId, termId])
+  @@unique([classSubjectId, examWindowId])
   @@index([classId, termId, status])
   @@index([educationStage, classLevel, academicYearId])
   @@index([combinationId])
+  @@index([examWindowId, status])
   @@schema("academics")
 }
 
@@ -272,7 +325,8 @@ model Mark {
 }
 
 model TermResult {
-  id                   String      @id @default(uuid())
+  id                   String         @id @default(uuid())
+  schoolId             String?
   studentId            String
   classId              String
   classSubjectId       String
@@ -292,12 +346,12 @@ model TermResult {
   rank                 Int?
   totalStudentsInClass Int?
   teacherId            String
-  isPublished          Boolean     @default(false)
+  isPublished          Boolean        @default(false)
   publishedAt          DateTime?
   publishedById        String?
-  createdAt            DateTime    @default(now())
-  updatedAt            DateTime    @updatedAt
-  classSubject         ClassSubject @relation(fields: [classSubjectId], references: [id], onDelete: Cascade)
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+  classSubject         ClassSubject   @relation(fields: [classSubjectId], references: [id], onDelete: Cascade)
 
   @@unique([studentId, classSubjectId, termId])
   @@index([studentId, termId])
@@ -308,7 +362,8 @@ model TermResult {
 }
 
 model ReportCard {
-  id                   String    @id @default(uuid())
+  id                   String         @id @default(uuid())
+  schoolId             String?
   studentId            String
   classId              String
   educationStage       EducationStage @default(O_LEVEL)
@@ -332,11 +387,11 @@ model ReportCard {
   principalSignedById  String?
   pdfUrl               String?
   pdfGeneratedAt       DateTime?
-  isPublished          Boolean   @default(false)
+  isPublished          Boolean        @default(false)
   publishedAt          DateTime?
   publishedById        String?
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
   /// Gap 12 ── Primary holistic assessment fields
   behaviourGrade       String?
   socialSkillsGrade    String?
@@ -353,18 +408,21 @@ model ReportCard {
 }
 
 model SubjectCombination {
-  id             String                      @id @default(uuid())
-  code           String
-  name           String
-  educationStage EducationStage              @default(A_LEVEL)
-  academicYearId String
-  isActive       Boolean                     @default(true)
-  createdAt      DateTime                    @default(now())
-  subjects       SubjectCombinationSubject[]
-  classSubjects  ClassSubject[]
+  id                 String                      @id @default(uuid())
+  schoolId           String?
+  code               String
+  name               String
+  educationStage     EducationStage              @default(A_LEVEL)
+  academicYearId     String
+  isActive           Boolean                     @default(true)
+  createdAt          DateTime                    @default(now())
+  subjects           SubjectCombinationSubject[]
+  classSubjects      ClassSubject[]
   studentEnrollments StudentSubjectEnrollment[]
 
-  @@unique([code, academicYearId])
+  // Uniqueness is enforced at DB level by a COALESCE-based index (see migration)
+  // that treats NULL schoolId as group-wide combinations.
+  @@index([code, academicYearId, schoolId])
   @@index([educationStage, academicYearId, isActive])
   @@schema("academics")
 }
@@ -423,6 +481,7 @@ model ApprovalLog {
 
 model Timetable {
   id             String    @id @default(uuid())
+  schoolId       String?
   classId        String
   subjectId      String
   teacherId      String
@@ -460,6 +519,7 @@ model SyllabusTracker {
 
 model AcademicIntervention {
   id              String           @id @default(uuid())
+  schoolId        String?
   alertId         String?
   pairingId       String?
   studentId       String
@@ -476,17 +536,20 @@ model AcademicIntervention {
   updatedAt       DateTime         @updatedAt
 
   @@index([studentId])
+  @@index([schoolId])
   @@index([performedById])
   @@schema("academics")
 }
 
 model AcademicAuditLog {
   id            String   @id @default(uuid())
+  schoolId      String?
   action        String
   performedById String
   payload       Json
   createdAt     DateTime @default(now())
 
+  @@index([schoolId])
   @@index([performedById])
   @@schema("academics")
 }
@@ -494,15 +557,16 @@ model AcademicAuditLog {
 // ─── Timetable System ─────────────────────────────────────────────────────────
 
 model Venue {
-  id          String      @id @default(uuid())
+  id          String          @id @default(uuid())
+  schoolId    String?
   name        String
-  type        VenueType   @default(CLASSROOM)
-  capacity    Int         @default(40)
+  type        VenueType       @default(CLASSROOM)
+  capacity    Int             @default(40)
   /// Stage filter: empty array = available to all stages. e.g. ["PRIMARY","O_LEVEL"]
   stageFilter String[]
   description String?
-  isActive    Boolean     @default(true)
-  createdAt   DateTime    @default(now())
+  isActive    Boolean         @default(true)
+  createdAt   DateTime        @default(now())
   slots       TimetableSlot[]
 
   @@schema("academics")
@@ -525,19 +589,20 @@ model TimetableActivity {
 }
 
 model TimetableSheet {
-  id             String        @id @default(uuid())
+  id             String          @id @default(uuid())
+  schoolId       String?
   name           String
-  timetableType  TimetableType @default(CLASS)
+  timetableType  TimetableType   @default(CLASS)
   /// Stage scope: NURSERY | PRE_UNIT | PRIMARY | O_LEVEL | A_LEVEL | null = ALL
   stage          String?
   classId        String?
   className      String?
   academicYearId String
   termId         String?
-  isPublished    Boolean       @default(false)
+  isPublished    Boolean         @default(false)
   note           String?
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
   slots          TimetableSlot[]
 
   @@index([academicYearId, timetableType])
@@ -545,14 +610,14 @@ model TimetableSheet {
 }
 
 model TimetableSlot {
-  id            String            @id @default(uuid())
+  id            String             @id @default(uuid())
   sheetId       String
-  sheet         TimetableSheet    @relation(fields: [sheetId], references: [id], onDelete: Cascade)
+  sheet         TimetableSheet     @relation(fields: [sheetId], references: [id], onDelete: Cascade)
   dayOfWeek     DayOfWeek
-  startTime     String            // "08:00"
-  endTime       String            // "08:40"
-  activityType  SlotActivityType  @default(LESSON)
-  label         String?           // display label — subject name, "Assembly", "Break", etc.
+  startTime     String // "08:00"
+  endTime       String // "08:40"
+  activityType  SlotActivityType   @default(LESSON)
+  label         String? // display label — subject name, "Assembly", "Break", etc.
   activityId    String?
   activity      TimetableActivity? @relation(fields: [activityId], references: [id])
   subjectId     String?
@@ -562,7 +627,7 @@ model TimetableSlot {
   classId       String?
   className     String?
   venueId       String?
-  venue         Venue?            @relation(fields: [venueId], references: [id])
+  venue         Venue?             @relation(fields: [venueId], references: [id])
   combinationId String?
   /// Extra-curricular: participant class IDs, student group IDs, etc.
   attendeeIds   String[]
@@ -572,8 +637,200 @@ model TimetableSlot {
   notes         String?
   colorCode     String?
 
-  createdAt     DateTime          @default(now())
+  createdAt DateTime @default(now())
 
   @@index([sheetId, dayOfWeek])
+  @@schema("academics")
+}
+
+// ─── Exam Lifecycle ─────────────────────────────────────────────────────────
+
+/// Admin-managed catalogue of exam types (a.k.a. exam-window types):
+/// Weekly, Monthly, Midterm, Terminal, Remedial, Mock, etc.
+/// `defaultWeight` is the contribution this type carries when its windows are
+/// selected to compose a term report card (weighting happens only at report-card
+/// composition time — never during marks entry).
+model ExamType {
+  id             String          @id @default(uuid())
+  schoolId       String?
+  name           String
+  code           String
+  description    String?
+  /// Report-card composition weight (0–100). 100 = a single window fills the card.
+  defaultWeight  Float           @default(100)
+  /// Optional narrowing of where this type applies. NULL = all.
+  educationStage EducationStage?
+  color          String?         @default("#4338CA")
+  sortOrder      Int             @default(0)
+  isActive       Boolean         @default(true)
+  createdById    String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  windows        ExamWindow[]
+
+  @@index([schoolId, isActive])
+  @@index([code])
+  @@schema("academics")
+}
+
+/// The orchestrating aggregate. An admin/principal/AQA opens a window for a term,
+/// picks the exam type + scope (all classes / standards / individual streams),
+/// and the system fans out one Assessment per class-subject in scope. Teachers
+/// then see their open windows and fill marks. On close the cross-subject merit
+/// list is computed; on publish results reach students/parents and analytics.
+model ExamWindow {
+  id                 String              @id @default(uuid())
+  schoolId           String?
+  examTypeId         String
+  name               String
+  academicYearId     String
+  termId             String
+  educationStage     EducationStage?
+  scopeType          ExamWindowScopeType @default(ALL_CLASSES)
+  /// For STANDARDS scope: the class levels covered (e.g. [6] → all Class 6 streams).
+  scopeLevels        Int[]
+  /// For STREAMS scope: explicit class ids.
+  scopeClassIds      String[]
+  status             ExamWindowStatus    @default(DRAFT)
+  /// Default per-subject maximum score for the whole window (individual
+  /// assessments may still override their own maxScore).
+  maxScore           Float               @default(100)
+  /// Report-card composition weight (seeded from ExamType.defaultWeight, overridable).
+  weight             Float               @default(100)
+  /// Whether this window is eligible to be selected into a term report card.
+  countsToReportCard Boolean             @default(true)
+  instructions       String?
+  opensAt            DateTime?
+  closesAt           DateTime?
+  openedAt           DateTime?
+  closedAt           DateTime?
+  computedAt         DateTime?
+  publishedAt        DateTime?
+  publishedById      String?
+  createdById        String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  examType           ExamType            @relation(fields: [examTypeId], references: [id])
+  assessments        Assessment[]
+  results            ExamWindowResult[]
+  editRequests       ResultEditRequest[]
+
+  @@index([schoolId, academicYearId, termId])
+  @@index([status])
+  @@index([examTypeId])
+  @@schema("academics")
+}
+
+/// Per-student, per-window cross-subject rollup — the merit-list row.
+/// This is the new ranking dimension (distinct from per-subject TermResult and
+/// per-term ReportCard): one exam event ranked across all subjects, at two
+/// granularities — stream (one class) and standard (all streams of a level).
+model ExamWindowResult {
+  id                 String         @id @default(uuid())
+  schoolId           String?
+  examWindowId       String
+  studentId          String
+  classId            String
+  className          String?
+  stream             String?
+  classLevel         Int?
+  educationStage     EducationStage @default(PRIMARY)
+  registrationNumber String?
+  studentName        String?
+  gender             String?
+  /// { [subjectId]: { subjectName, code, score, maxScore, grade, points, isAbsent } }
+  subjectScores      Json
+  subjectCount       Int            @default(0)
+  total              Float          @default(0)
+  mean               Float          @default(0)
+  meanPoints         Float          @default(0)
+  overallGrade       String         @default("")
+  overallPoints      Float          @default(0)
+  overallRemark      String         @default("")
+  isPassing          Boolean        @default(false)
+  /// DEV column: deviation of this student's mean from their STREAM mean (signed).
+  classMeanDev       Float          @default(0)
+  /// Deviation of this student's mean from their STANDARD (level) mean (signed).
+  standardMeanDev    Float          @default(0)
+  /// Enrichment: this student's mean in the previous window of the term, and the change.
+  prevWindowMean     Float?
+  prevWindowDelta    Float?
+  /// STR POS — position within the stream (one class).
+  streamRank         Int?
+  streamTotal        Int?
+  /// OVR POS — position within the standard (all streams of the level).
+  standardRank       Int?
+  standardTotal      Int?
+  isPublished        Boolean        @default(false)
+  publishedAt        DateTime?
+  computedAt         DateTime       @default(now())
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  examWindow         ExamWindow     @relation(fields: [examWindowId], references: [id], onDelete: Cascade)
+
+  @@unique([examWindowId, studentId])
+  @@index([examWindowId, classId])
+  @@index([examWindowId, classLevel])
+  @@index([studentId])
+  @@schema("academics")
+}
+
+/// A teacher's request to edit results after submission/lock. Admin grants →
+/// the affected assessment(s) unlock and the window/results unpublish; after the
+/// edit the admin republishes.
+model ResultEditRequest {
+  id              String                  @id @default(uuid())
+  schoolId        String?
+  examWindowId    String
+  assessmentId    String?
+  classSubjectId  String?
+  subjectId       String?
+  classId         String?
+  requestedById   String
+  requestedByRole String
+  reason          String
+  status          ResultEditRequestStatus @default(REQUESTED)
+  decidedById     String?
+  decidedByRole   String?
+  decidedAt       DateTime?
+  decisionNote    String?
+  completedAt     DateTime?
+  republishedAt   DateTime?
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+  examWindow      ExamWindow              @relation(fields: [examWindowId], references: [id], onDelete: Cascade)
+
+  @@index([examWindowId, status])
+  @@index([requestedById])
+  @@index([schoolId, status])
+  @@schema("academics")
+}
+
+/// Records an admin's choice of WHICH exam windows (and their weights) compose
+/// the term report cards for a scope, so a report card is auditable and the
+/// composition is repeatable. Generation blends the selected windows into
+/// TermResult, then the existing report-card generator builds the cards/PDFs.
+model ReportCardComposition {
+  id                   String    @id @default(uuid())
+  schoolId             String?
+  name                 String?
+  academicYearId       String
+  termId               String
+  /// Scope narrowing (both optional): a single standard level and/or explicit classes.
+  scopeLevel           Int?
+  scopeClassIds        String[]
+  /// [{ examWindowId, weight, name }] — the windows blended into the report card.
+  windowSelections     Json
+  status               String    @default("GENERATED")
+  classesGenerated     Int       @default(0)
+  studentsGenerated    Int       @default(0)
+  reportCardsGenerated Int       @default(0)
+  generatedById        String?
+  generatedAt          DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@index([schoolId, termId])
+  @@index([academicYearId, termId])
   @@schema("academics")
 }

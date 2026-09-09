@@ -124,6 +124,16 @@ export function usePrincipalStudents() {
   });
 }
 
+/** Full analytics profile for one student — feeds the real score trajectory. */
+export function usePrincipalStudentAnalytics(studentId: string | undefined) {
+  return useQuery({
+    queryKey: [...principalKeys.students(), 'analytics', studentId ?? ''] as const,
+    queryFn: () => api.get(`/analytics/students/${studentId}`).then(payloadOf),
+    enabled: !!studentId,
+    staleTime: 30_000,
+  });
+}
+
 export function usePrincipalSchoolSettings() {
   return useQuery({
     queryKey: principalKeys.settings(),
@@ -433,8 +443,8 @@ export function useRejectPaymentMutation() {
 export function useResolveDisciplineMutation() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, resolution }: { id: string; resolution: string }) =>
-      api.patch(`/students/discipline/${id}/resolve`, { resolution }).then((r) => r.data?.data ?? r.data),
+    mutationFn: ({ id, resolutionNote }: { id: string; resolutionNote: string }) =>
+      api.patch(`/students/discipline/${id}/resolve`, { resolutionNote }).then((r) => r.data?.data ?? r.data),
     onSuccess: () => qc.invalidateQueries({ queryKey: principalKeys.discipline() }),
   });
 }

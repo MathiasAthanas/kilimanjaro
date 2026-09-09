@@ -7,6 +7,7 @@ import { AuditService } from '../audit/audit.service';
 import { AccessControlService } from '../common/helpers/access-control.service';
 import { NumberSequenceService } from '../common/helpers/number-sequence.service';
 import { RequestUser } from '../common/interfaces/request-user.interface';
+import { schoolScopeFilter } from '../common/helpers/school-scope.helper';
 import { PrismaService } from '../prisma/prisma.service';
 import { RabbitMqService } from '../rabbitmq/rabbitmq.service';
 import { StudentClientService } from '../student-client/student-client.service';
@@ -41,10 +42,10 @@ export class ReceiptsService {
     if (!payment) throw new NotFoundException('Payment not found');
     if (payment.receipt) return payment.receipt;
 
-    const receiptNumber = await this.numberService.receiptNumber();
+    const receiptNumber = await this.numberService.receiptNumber(actor.activeSchoolId ?? actor.schoolIds?.find((id) => id !== '*') ?? null);
 
     const student = this.unwrap<any>(
-      await this.studentClient.get(`/api/v1/students/${payment.studentId}`, {}, {
+      await this.studentClient.get(`/students/${payment.studentId}`, {}, {
         'X-User-Id': actor.id,
         'X-User-Role': actor.role,
       }),
@@ -68,9 +69,11 @@ export class ReceiptsService {
       issuedAt: new Date(),
     });
 
+    const receiptSchoolId = actor.activeSchoolId ?? actor.schoolIds?.find((id) => id !== '*') ?? null;
     const receipt = await this.prisma.receipt.create({
       data: {
         receiptNumber,
+        schoolId: receiptSchoolId,
         paymentId: payment.id,
         invoiceId: payment.invoiceId,
         studentId: payment.studentId,
@@ -162,6 +165,7 @@ export class ReceiptsService {
 
     return this.prisma.receipt.findMany({
       where: {
+        ...schoolScopeFilter(user),
         studentId: studentFilter,
         termId: filters.termId,
         method: filters.method,

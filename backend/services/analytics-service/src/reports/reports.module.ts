@@ -12,6 +12,7 @@ import { ClassAcademicGenerator } from './generators/class-academic.generator';
 import { FinanceCollectionGenerator } from './generators/finance-collection.generator';
 import { OutstandingBalancesGenerator } from './generators/outstanding-balances.generator';
 import { PerformanceEngineGenerator } from './generators/performance-engine.generator';
+import { ReportCardGenerator } from './generators/report-card.generator';
 import { SchoolOverviewGenerator } from './generators/school-overview.generator';
 import { StudentProfileGenerator } from './generators/student-profile.generator';
 import { TeacherPerformanceGenerator } from './generators/teacher-performance.generator';
@@ -32,6 +33,7 @@ import { ReportsService } from './reports.service';
     AttendanceSummaryGenerator,
     TeacherPerformanceGenerator,
     BoardExecutiveGenerator,
+    ReportCardGenerator,
   ],
   exports: [ReportsService],
 })

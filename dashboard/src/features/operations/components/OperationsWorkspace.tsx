@@ -113,39 +113,6 @@ export function BulkMarksGrid({ rows }: { rows: Array<{ id: string; student: str
   );
 }
 
-export function MarksReviewPanel() {
-  return (
-    <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_340px]">
-      <div className="space-y-gutter">
-        <ChartCard title="Mark Distribution" values={[12, 22, 38, 72, 94]} />
-        <OperationsTable columns={['Student', 'Score', 'Diff', 'Flag', 'Decision']} minWidth={720}>
-          {['Hassan Mwamba', 'Zainab Kilio', 'Joel Komba'].map((student, index) => <tr key={student}><Td>{student}</Td><Td>{[28, 34, 94][index]}%</Td><Td>{[-33, -20, 6][index]}</Td><Td>{index < 2 ? 'Outlier' : 'Top performer'}</Td><Td>Review</Td></tr>)}
-        </OperationsTable>
-      </div>
-      <div className="sticky top-24 h-fit rounded-2xl border border-ks-line bg-white p-5 shadow-sm">
-        <h2 className="font-display text-xl font-black text-ks-navy">Decision Panel</h2>
-        <textarea className="mt-4 h-28 w-full rounded-xl border border-ks-line p-3 font-semibold outline-none focus:border-ks-blue" placeholder="Reject requires comment..." />
-        <div className="mt-4 grid gap-2"><Button variant="success" className="rounded-xl">Approve</Button><Button variant="danger" className="rounded-xl">Reject</Button><Button variant="secondary" className="rounded-xl">Export Review Pack</Button></div>
-      </div>
-    </div>
-  );
-}
-
-export function ReportPreviewFrame({ title }: { title: string }) {
-  return (
-    <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_260px]">
-      <div className="rounded-2xl border border-ks-line bg-slate-200 p-8">
-        <div className="mx-auto min-h-[680px] max-w-[760px] rounded bg-white p-10 shadow-layer">
-          <p className="text-[11px] font-black uppercase tracking-widest text-ks-muted">PDF Preview</p>
-          <h2 className="mt-3 font-display text-3xl font-black text-ks-navy">{title}</h2>
-          <div className="mt-8 space-y-3">{Array.from({ length: 8 }).map((_, index) => <div key={index} className="h-8 rounded bg-ks-paper" />)}</div>
-        </div>
-      </div>
-      <div className="space-y-2"><Button className="w-full rounded-xl"><Download className="h-4 w-4" /> Download</Button><Button variant="secondary" className="w-full rounded-xl"><Printer className="h-4 w-4" /> Print</Button><Button variant="secondary" className="w-full rounded-xl">Zoom 100%</Button></div>
-    </div>
-  );
-}
-
 export function TimetableMatrix({ entries }: { entries: Array<{ id: string; className: string; teacher: string; subject: string; day: string; start: string; end: string; room: string }> }) {
   const conflict = timetableHasConflict(entries);
   const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];

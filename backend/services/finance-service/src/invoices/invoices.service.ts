@@ -3,10 +3,11 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { FinancialAuditAction, InvoiceStatus, Prisma } from '../../generated/prisma';
+import { FinancialAuditAction, InvoiceStatus, PaymentStatus, Prisma } from '../../generated/prisma';
 import { existsSync } from 'fs';
 import { join } from 'path';
 import { AuditService } from '../audit/audit.service';
@@ -14,6 +15,7 @@ import { AccessControlService } from '../common/helpers/access-control.service';
 import { NumberSequenceService } from '../common/helpers/number-sequence.service';
 import { RequestUser } from '../common/interfaces/request-user.interface';
 import { PrismaService } from '../prisma/prisma.service';
+import { schoolScopeFilter } from '../common/helpers/school-scope.helper';
 import { RabbitMqService } from '../rabbitmq/rabbitmq.service';
 import { RedisService } from '../redis/redis.service';
 import { StudentClientService } from '../student-client/student-client.service';
@@ -36,6 +38,7 @@ type InvoiceGenerationJob = {
 @Injectable()
 export class InvoicesService {
   private static readonly generationJobs = new Map<string, InvoiceGenerationJob>();
+  private readonly logger = new Logger(InvoicesService.name);
 
   constructor(
     private readonly prisma: PrismaService,
@@ -101,10 +104,13 @@ export class InvoicesService {
     ]);
     const studentGroupCodes = groupMemberships.map((item) => item.group.code);
 
+    const schoolId = actor.activeSchoolId ?? actor.schoolIds?.find((id) => id !== '*') ?? null;
+
     const structures = await this.prisma.feeStructure.findMany({
       where: {
         academicYearId: dto.academicYearId,
         isActive: true,
+        ...(schoolId ? { schoolId } : {}),
         AND: [
           { OR: [{ termId: dto.termId }, { termId: null }] },
           {
@@ -120,19 +126,37 @@ export class InvoicesService {
       include: { feeCategory: true },
     });
 
+    // Score specificity so that when multiple structures match the same category we keep
+    // the most targeted one (classId > stage+level > stage-only > studentGroup).
+    const specificity = (s: (typeof structures)[number]) => {
+      if (s.classId === classId) return 3;
+      if (s.educationStage === educationStage && s.classLevel === classLevel) return 2;
+      if (s.educationStage === educationStage && s.classLevel === null) return 1;
+      return 0;
+    };
+
     const optionalSet = new Set(assignments.map((a) => a.feeCategoryId));
-    const applicable = structures.filter((s) => !s.feeCategory.isOptional || optionalSet.has(s.feeCategoryId));
+    const deduped = new Map<string, (typeof structures)[number]>();
+    for (const s of structures) {
+      if (s.feeCategory.isOptional && !optionalSet.has(s.feeCategoryId)) continue;
+      const existing = deduped.get(s.feeCategoryId);
+      if (!existing || specificity(s) > specificity(existing)) {
+        deduped.set(s.feeCategoryId, s);
+      }
+    }
+    const applicable = [...deduped.values()];
     if (!applicable.length) return null;
 
     const subtotal = applicable.reduce((acc, item) => acc.plus(item.amount), new Prisma.Decimal(0));
     const total = subtotal;
     const grace = Number(this.configService.get<string>('FEE_DUE_GRACE_DAYS', '14'));
     const dueDate = new Date(Date.now() + grace * 24 * 60 * 60 * 1000);
-    const invoiceNumber = await this.numberService.invoiceNumber(dto.termId.replace(/[^A-Za-z0-9]/g, '').toUpperCase());
+    const invoiceNumber = await this.numberService.invoiceNumber(dto.termId.replace(/[^A-Za-z0-9]/g, '').toUpperCase(), schoolId);
 
     const invoice = await this.prisma.invoice.create({
       data: {
         invoiceNumber,
+        schoolId,
         studentId: student.id,
         classId,
         educationStage,
@@ -159,19 +183,28 @@ export class InvoicesService {
       include: { lineItems: true },
     });
 
-    const pdfUrl = await this.pdf.generate({
-      invoiceNumber: invoice.invoiceNumber,
-      studentName: `${student.firstName} ${student.lastName}`,
-      registrationNumber: student.registrationNumber,
-      className: student.enrolments?.[0]?.class?.name || classId,
-      termId: dto.termId,
-      academicYearId: dto.academicYearId,
-      lineItems: invoice.lineItems.map((item) => ({ feeCategoryName: item.feeCategoryName, amount: item.amount.toString() })),
-      totalAmount: invoice.totalAmount.toString(),
-      paidAmount: invoice.paidAmount.toString(),
-      outstandingBalance: invoice.outstandingBalance.toString(),
-      dueDate: invoice.dueDate,
-    });
+    // PDF rendering is decoupled from invoice creation: a rendering hiccup must
+    // not lose or miscount an otherwise-valid invoice (it can be regenerated).
+    let pdfUrl: string | null = null;
+    try {
+      pdfUrl = await this.pdf.generate({
+        invoiceNumber: invoice.invoiceNumber,
+        studentName: `${student.firstName ?? ''} ${student.lastName ?? ''}`.trim() || 'Student',
+        registrationNumber: student.registrationNumber,
+        className: student.enrolments?.[0]?.class?.name || classId,
+        termId: dto.termId,
+        academicYearId: dto.academicYearId,
+        lineItems: invoice.lineItems.map((item) => ({ feeCategoryName: item.feeCategoryName, amount: item.amount.toString() })),
+        totalAmount: invoice.totalAmount.toString(),
+        paidAmount: invoice.paidAmount.toString(),
+        outstandingBalance: invoice.outstandingBalance.toString(),
+        dueDate: invoice.dueDate,
+      });
+    } catch (err) {
+      this.logger.error(
+        `Invoice PDF generation failed for ${invoice.invoiceNumber} (${invoice.id}): ${(err as Error)?.stack ?? err}`,
+      );
+    }
 
     const withPdf = await this.prisma.invoice.update({ where: { id: invoice.id }, data: { pdfUrl } });
 
@@ -214,7 +247,7 @@ export class InvoicesService {
         ? await Promise.all(
             dto.classIds.map((classId) =>
               this.studentClient.get<any>(
-                '/api/v1/students',
+                '/students',
                 { classId, page: 1, limit: 2000 },
                 {
                   'X-User-Id': user.id,
@@ -225,7 +258,7 @@ export class InvoicesService {
           )
         : [
             await this.studentClient.get<any>(
-              '/api/v1/students',
+              '/students',
               { page: 1, limit: 5000 },
               {
                 'X-User-Id': user.id,
@@ -250,8 +283,11 @@ export class InvoicesService {
           } else {
             skipped += 1;
           }
-        } catch {
+        } catch (err) {
           failed += 1;
+          this.logger.error(
+            `Invoice generation failed for student ${student?.id}: ${(err as Error)?.stack ?? err}`,
+          );
         }
       }
 
@@ -356,6 +392,7 @@ export class InvoicesService {
 
     return this.prisma.invoice.findMany({
       where: {
+        ...schoolScopeFilter(user),
         studentId: studentFilter,
         classId: filters.classId,
         termId: filters.termId,
@@ -409,8 +446,10 @@ export class InvoicesService {
   async applyDiscount(id: string, discountAmount: string, discountReason: string, user: RequestUser) {
     const invoice = await this.byId(id, user);
     const discount = this.decimal(discountAmount);
-    if (discount.lt(0) || discount.gt(invoice.subtotal)) {
-      throw new BadRequestException('Invalid discount amount');
+    // Discount must not exceed unpaid balance — prevents negative outstanding.
+    const maxDiscount = invoice.totalAmount.minus(invoice.paidAmount);
+    if (discount.lt(0) || discount.gt(maxDiscount)) {
+      throw new BadRequestException(`Invalid discount amount — maximum allowable discount is ${maxDiscount.toString()}`);
     }
 
     const total = invoice.subtotal.minus(discount);
@@ -443,7 +482,7 @@ export class InvoicesService {
 
   async cancel(id: string, reason: string, user: RequestUser) {
     const invoice = await this.byId(id, user);
-    if (invoice.payments.some((p) => p.status === 'CONFIRMED')) {
+    if (invoice.payments.some((p) => p.status === PaymentStatus.CONFIRMED)) {
       throw new ConflictException('Cannot cancel invoice with confirmed payment');
     }
 
@@ -454,6 +493,7 @@ export class InvoicesService {
         cancelledAt: new Date(),
         cancelledById: user.id,
         cancellationReason: reason,
+        outstandingBalance: new Prisma.Decimal(0),
       },
     });
 
@@ -471,6 +511,9 @@ export class InvoicesService {
 
   async waive(id: string, reason: string, user: RequestUser) {
     const invoice = await this.byId(id, user);
+    if (([InvoiceStatus.CANCELLED, InvoiceStatus.PAID] as InvoiceStatus[]).includes(invoice.status)) {
+      throw new BadRequestException(`Cannot waive an invoice that is already ${invoice.status.toLowerCase()}`);
+    }
     const updated = await this.prisma.invoice.update({
       where: { id },
       data: {
@@ -523,7 +566,7 @@ export class InvoicesService {
     try {
       student = this.unwrap<any>(
         await this.studentClient.get(
-          `/api/v1/students/${invoice.studentId}`,
+          `/students/${invoice.studentId}`,
           {},
           {
             'X-User-Id': 'finance-service',

@@ -3,12 +3,14 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
   Optional,
   forwardRef,
 } from '@nestjs/common';
 import { ApprovalAction, AssessmentStatus } from '../../generated/prisma';
 import { PrismaService } from '../prisma/prisma.service';
+import { assertSchoolInScope, resolveWriteSchoolId, schoolScopeFilter } from '../common/helpers/school-scope.helper';
 import { StudentClientService } from '../student-client/student-client.service';
 import { RedisService } from '../redis/redis.service';
 import { RabbitMqService } from '../rabbitmq/rabbitmq.service';
@@ -25,6 +27,8 @@ import { UpdateMarkDto } from './dto/update-mark.dto';
 
 @Injectable()
 export class AssessmentsService {
+  private readonly logger = new Logger(AssessmentsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly studentClient: StudentClientService,
@@ -39,6 +43,16 @@ export class AssessmentsService {
     }
 
     return payload as T;
+  }
+
+  private studentServiceHeaders(user: RequestUser): Record<string, string> {
+    return {
+      'X-User-Id': user.id,
+      'X-User-Role': user.role,
+      'X-User-Scope': user.scope ?? 'GROUP',
+      'X-User-School-Ids': user.scope === 'SCHOOL' ? (user.schoolIds ?? []).join(',') : '*',
+      ...(user.activeSchoolId ? { 'X-Active-School': user.activeSchoolId } : {}),
+    };
   }
 
   private ensureTeacherScope(user: RequestUser, teacherId: string): void {
@@ -158,6 +172,7 @@ export class AssessmentsService {
             combinationId: classSubject.combinationId,
             termId: dto.termId,
             academicYearId: dto.academicYearId,
+            schoolId: (classSubject as any).schoolId ?? null,
             name: `${classSubject.subject.name} ${type.name} - ${dto.termId}`,
             status: AssessmentStatus.OPEN,
           },
@@ -181,6 +196,7 @@ export class AssessmentsService {
 
     return this.prisma.assessment.findMany({
       where: {
+        ...schoolScopeFilter(user),
         classId: filters.classId,
         subjectId: filters.subjectId,
         termId: filters.termId,
@@ -199,6 +215,7 @@ export class AssessmentsService {
     const assessment = await this.getAssessmentOrThrow(id);
     if (user) {
       this.ensureTeacherScope(user, assessment.classSubject.teacherId);
+      resolveWriteSchoolId(user, (assessment as { schoolId?: string | null }).schoolId ?? null);
     }
 
     return assessment;
@@ -207,6 +224,7 @@ export class AssessmentsService {
   async getMarksSheet(id: string, user: RequestUser) {
     const assessment = await this.getAssessmentOrThrow(id);
     this.ensureTeacherScope(user, assessment.classSubject.teacherId);
+    resolveWriteSchoolId(user, (assessment as { schoolId?: string | null }).schoolId ?? null);
 
     const cacheKey = `marks-sheet:${id}`;
     const cached = await this.redis.get(cacheKey);
@@ -215,9 +233,9 @@ export class AssessmentsService {
     }
 
     const studentsPayload = await this.studentClient.get<any>(
-        '/students',
+      '/students',
       { classId: assessment.classId, limit: 1000, page: 1 },
-      { 'X-User-Id': user.id, 'X-User-Role': ROLES.PRINCIPAL },
+      this.studentServiceHeaders(user),
     );
 
     const studentsData = this.unwrap<any>(studentsPayload);
@@ -258,6 +276,7 @@ export class AssessmentsService {
   async bulkUpsertMarks(id: string, dto: BulkMarksDto, user: RequestUser) {
     const assessment = await this.getAssessmentOrThrow(id);
     this.ensureAssignedTeacherScope(user, assessment.classSubject.teacherId);
+    resolveWriteSchoolId(user, (assessment as { schoolId?: string | null }).schoolId ?? null);
 
     if (!([AssessmentStatus.OPEN, AssessmentStatus.DRAFT, AssessmentStatus.REJECTED] as AssessmentStatus[]).includes(assessment.status)) {
       throw new BadRequestException('Assessment is not open for editing');
@@ -268,6 +287,20 @@ export class AssessmentsService {
       isAbsent: item.isAbsent ?? false,
       score: item.isAbsent ? 0 : item.score,
     }));
+
+    const expectedIdsPayload = await this.studentClient.get<unknown>(
+      `/students/internal/class/${assessment.classId}/student-ids`,
+    );
+    const expectedStudentIds = new Set(this.unwrap<string[]>(expectedIdsPayload));
+    const submittedStudentIds = new Set(normalizedMarks.map((mark) => mark.studentId));
+    if (submittedStudentIds.size !== normalizedMarks.length) {
+      throw new BadRequestException('Each student may appear only once in a bulk marks submission');
+    }
+    for (const studentId of submittedStudentIds) {
+      if (!expectedStudentIds.has(studentId)) {
+        throw new ForbiddenException('Bulk marks may only include students enrolled in the assessment class');
+      }
+    }
 
     for (const mark of normalizedMarks) {
       if (mark.score === undefined || mark.score === null) {
@@ -329,7 +362,7 @@ export class AssessmentsService {
       throw new NotFoundException('Mark not found');
     }
 
-    if (mark.isLocked && ![ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL].includes(user.role as any)) {
+    if (mark.isLocked && ![ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL, ROLES.HEAD_OF_SCHOOL, ROLES.MANAGER, ROLES.SUPER_ADMIN].includes(user.role as any)) {
       throw new ForbiddenException('Locked marks can only be edited by HOD or Principal');
     }
 
@@ -349,7 +382,7 @@ export class AssessmentsService {
       },
     });
 
-    if (mark.isLocked && [ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL].includes(user.role as any)) {
+    if (mark.isLocked && [ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL, ROLES.HEAD_OF_SCHOOL, ROLES.MANAGER, ROLES.SUPER_ADMIN].includes(user.role as any)) {
       await this.prisma.approvalLog.create({
         data: {
           assessmentId,
@@ -368,6 +401,11 @@ export class AssessmentsService {
   async submitAssessment(id: string, _dto: SubmitAssessmentDto, user: RequestUser) {
     const assessment = await this.getAssessmentOrThrow(id);
     this.ensureAssignedTeacherScope(user, assessment.classSubject.teacherId);
+
+    const submittableStatuses: AssessmentStatus[] = [AssessmentStatus.OPEN, AssessmentStatus.DRAFT, AssessmentStatus.REJECTED];
+    if (!submittableStatuses.includes(assessment.status)) {
+      throw new BadRequestException(`Cannot submit an assessment with status ${assessment.status}`);
+    }
 
     const studentIdsPayload = await this.studentClient.get<any>(
       `/students/internal/class/${assessment.classId}/student-ids`,
@@ -429,7 +467,16 @@ export class AssessmentsService {
   }
 
   async pendingApproval(filters: { classId?: string; subjectId?: string }, user: RequestUser) {
-    const status = user.role === ROLES.PRINCIPAL ? AssessmentStatus.HOD_APPROVED : AssessmentStatus.SUBMITTED;
+    const finalApproverRoles: string[] = [
+      ROLES.PRINCIPAL,
+      ROLES.ACADEMIC_QA,
+      ROLES.HEAD_OF_SCHOOL,
+      ROLES.MANAGER,
+      ROLES.SUPER_ADMIN,
+    ];
+    const status = finalApproverRoles.includes(user.role)
+      ? AssessmentStatus.HOD_APPROVED
+      : AssessmentStatus.SUBMITTED;
 
     let hodSubjectFilter: { in: string[] } | string | undefined;
 
@@ -470,6 +517,7 @@ export class AssessmentsService {
 
     const list = await this.prisma.assessment.findMany({
       where: {
+        ...schoolScopeFilter(user),
         status,
         classId: filters.classId,
         subjectId: hodSubjectFilter as any,
@@ -536,6 +584,8 @@ export class AssessmentsService {
 
   async approveAssessment(id: string, dto: ApproveAssessmentDto, user: RequestUser) {
     const assessment = await this.getAssessmentOrThrow(id);
+    // Multi-school isolation: approvals only within the caller's school scope
+    assertSchoolInScope(user, (assessment as { schoolId?: string | null }).schoolId ?? null);
 
     if (user.role === ROLES.HEAD_OF_DEPARTMENT) {
       await this.assertHodSubjectScope(user, assessment.subjectId);
@@ -566,15 +616,30 @@ export class AssessmentsService {
       return updated;
     }
 
-    if (user.role !== ROLES.PRINCIPAL && user.role !== ROLES.ACADEMIC_QA) {
-      throw new ForbiddenException('Only HOD or Principal can approve');
+    const finalApprovers: string[] = [
+      ROLES.PRINCIPAL,
+      ROLES.ACADEMIC_QA,
+      ROLES.HEAD_OF_SCHOOL,
+      ROLES.MANAGER,
+      ROLES.SUPER_ADMIN,
+    ];
+    if (!finalApprovers.includes(user.role)) {
+      throw new ForbiddenException('Only HOD, Head of School, Manager or Principal can approve');
     }
 
     if (!([AssessmentStatus.SUBMITTED, AssessmentStatus.HOD_APPROVED] as AssessmentStatus[]).includes(assessment.status)) {
       throw new BadRequestException('Assessment is not awaiting principal approval');
     }
 
-    const updated = await this.prisma.$transaction(async (tx) => {
+    // openCount check is inside the transaction so two concurrent final-approvals
+    // can't both see openCount === 0 and double-trigger computeTermResults.
+    const { updated, shouldComputeResults } = await this.prisma.$transaction(async (tx) => {
+      // Re-read under transaction to guard against double-lock on concurrent requests.
+      const current = await tx.assessment.findUnique({ where: { id }, select: { status: true } });
+      if (current?.status === AssessmentStatus.LOCKED) {
+        throw new BadRequestException('Assessment is already locked');
+      }
+
       await tx.mark.updateMany({ where: { assessmentId: id }, data: { isLocked: true } });
       await tx.approvalLog.create({
         data: {
@@ -586,7 +651,7 @@ export class AssessmentsService {
         },
       });
 
-      return tx.assessment.update({
+      const lockedAssessment = await tx.assessment.update({
         where: { id },
         data: {
           status: AssessmentStatus.LOCKED,
@@ -595,34 +660,46 @@ export class AssessmentsService {
           approvedById: user.id,
         },
       });
+
+      const openCount = await tx.assessment.count({
+        where: {
+          classSubjectId: assessment.classSubjectId,
+          termId: assessment.termId,
+          status: { not: AssessmentStatus.LOCKED },
+        },
+      });
+
+      return { updated: lockedAssessment, shouldComputeResults: openCount === 0 };
     });
 
     await this.rabbitMq.publish('marks.approved', { assessmentId: id, approvedById: user.id, role: user.role });
 
-    const openCount = await this.prisma.assessment.count({
-      where: {
-        classSubjectId: assessment.classSubjectId,
-        termId: assessment.termId,
-        status: { not: AssessmentStatus.LOCKED },
-      },
-    });
-
     let computed: unknown = null;
-    if (openCount === 0 && this.resultsService) {
+    if (shouldComputeResults && this.resultsService) {
       computed = await this.resultsService.computeTermResults(assessment.classSubjectId, assessment.termId);
     }
 
-    const highAlertsPayload = await this.studentClient.get<any>(
+    // Post-approval enrichment: high/critical performance alerts. This is
+    // supplementary — a downstream hiccup must never fail an already-committed
+    // approval, so failures degrade to an empty alert set.
+    let alerts: any[] = [];
+    try {
+      const highAlertsPayload = await this.studentClient.get<any>(
         '/students/performance/alerts',
-      { classId: assessment.classId, isResolved: false, severity: 'HIGH,CRITICAL' },
-      { 'X-User-Id': user.id, 'X-User-Role': user.role },
-    );
-    const alertsResponse = this.unwrap<any>(highAlertsPayload);
-    const alerts = Array.isArray(alertsResponse?.items)
-      ? alertsResponse.items
-      : Array.isArray(alertsResponse)
-        ? alertsResponse
-        : [];
+        { classId: assessment.classId, isResolved: false, severity: 'HIGH,CRITICAL' },
+        { 'X-User-Id': user.id, 'X-User-Role': user.role },
+      );
+      const alertsResponse = this.unwrap<any>(highAlertsPayload);
+      alerts = Array.isArray(alertsResponse?.items)
+        ? alertsResponse.items
+        : Array.isArray(alertsResponse)
+          ? alertsResponse
+          : [];
+    } catch (err) {
+      this.logger?.warn?.(
+        `Post-approval alert enrichment failed for assessment ${id}: ${(err as Error)?.message ?? err}`,
+      );
+    }
 
     const criticalStudents = alerts
       .filter((item: any) => item.severity === 'CRITICAL')
@@ -661,12 +738,16 @@ export class AssessmentsService {
   }
 
   async rejectAssessment(id: string, dto: RejectAssessmentDto, user: RequestUser) {
-    if (![ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA].includes(user.role as any)) {
-      throw new ForbiddenException('Only HOD/Principal/Academic QA can reject');
+    if (![ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA, ROLES.HEAD_OF_SCHOOL, ROLES.MANAGER, ROLES.SUPER_ADMIN].includes(user.role as any)) {
+      throw new ForbiddenException('Only HOD/Principal/Academic QA/Head of School/Manager can reject');
     }
 
     const assessment = await this.getAssessmentOrThrow(id);
     await this.assertHodSubjectScope(user, assessment.subjectId);
+
+    if (assessment.status === AssessmentStatus.LOCKED) {
+      throw new BadRequestException('A locked assessment cannot be rejected. Unlock marks first.');
+    }
 
     const updated = await this.prisma.assessment.update({
       where: { id },
@@ -714,7 +795,7 @@ export class AssessmentsService {
     }
 
     const assessments = await this.prisma.assessment.findMany({
-      where: where as any,
+      where: { ...schoolScopeFilter(user), ...(where as any) },
       include: {
         classSubject: { include: { subject: true } },
         assessmentType: true,

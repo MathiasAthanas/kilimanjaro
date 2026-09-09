@@ -26,44 +26,50 @@ export class PaymentsController {
   }
 
   @Post('bank-transfer')
-  @Roles(ROLES.FINANCE, ROLES.SYSTEM_ADMIN)
+  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.SYSTEM_ADMIN)
   bankTransfer(@Body() dto: CreateManualPaymentDto, @CurrentUser() user?: RequestUser) {
     return this.paymentsService.bankTransfer(dto, user!);
   }
 
   @Post('cash')
-  @Roles(ROLES.FINANCE, ROLES.SYSTEM_ADMIN)
+  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.SYSTEM_ADMIN)
   cash(@Body() dto: CreateManualPaymentDto, @CurrentUser() user?: RequestUser) {
     return this.paymentsService.cash(dto, user!);
   }
 
   @Get()
-  @Roles(ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN)
+  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
   list(@Query() query: any, @CurrentUser() user?: RequestUser) {
     return this.paymentsService.list(query, user!);
   }
 
   @Get('pending-approval')
-  @Roles(ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN)
+  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
   pending(@CurrentUser() user?: RequestUser) {
     return this.paymentsService.pendingApprovals(user!);
   }
 
   @Patch('approvals/:approvalId/approve')
-  @Roles(ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN)
+  @Roles(ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
   approve(@Param('approvalId') approvalId: string, @CurrentUser() user?: RequestUser) {
     return this.paymentsService.approve(approvalId, user!);
   }
 
   @Patch('approvals/:approvalId/reject')
-  @Roles(ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN)
+  @Roles(ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
   reject(@Param('approvalId') approvalId: string, @Body() dto: RejectApprovalDto, @CurrentUser() user?: RequestUser) {
     return this.paymentsService.reject(approvalId, dto.rejectionReason, user!);
   }
 
   @Patch(':id/refund')
-  @Roles(ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN)
+  @Roles(ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
   refund(@Param('id') id: string, @Body() dto: RefundPaymentDto, @CurrentUser() user?: RequestUser) {
     return this.paymentsService.refund(id, dto.refundReason, user!);
+  }
+
+  @Post(':id/notes')
+  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
+  addNotes(@Param('id') id: string, @Body() body: { note: string }, @CurrentUser() user?: RequestUser) {
+    return this.paymentsService.addNote(id, body.note, user!);
   }
 }

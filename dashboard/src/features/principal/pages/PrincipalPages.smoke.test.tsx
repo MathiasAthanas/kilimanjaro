@@ -22,6 +22,7 @@ vi.mock('../api/principal.hooks', () => ({
   usePrincipalPendingPayments:            () => ({ data: [], isLoading: false }),
   usePrincipalDiscipline:                 () => ({ data: [], isLoading: false, isError: false, refetch: vi.fn() }),
   usePrincipalStudents:                   () => ({ data: [], isLoading: false, isError: false, refetch: vi.fn() }),
+  usePrincipalStudentAnalytics:           () => ({ data: undefined, isLoading: false }),
   usePrincipalStaff:                      () => ({ data: [], isLoading: false }),
   usePrincipalAudit:                      () => ({ data: [], isLoading: false }),
   usePrincipalAnnouncements:              () => ({ data: [], isLoading: false }),
@@ -45,8 +46,9 @@ vi.mock('../api/principal.hooks', () => ({
 
 // ─── Mock operations hooks ────────────────────────────────────────────────────
 vi.mock('../../operations/api/operations.hooks', () => ({
-  useGenerateReportMutation: () => ({ mutate: vi.fn(), isPending: false, data: undefined }),
-  downloadReportWhenReady:   vi.fn(),
+  useGenerateReportMutation:       () => ({ mutate: vi.fn(), isPending: false, data: undefined }),
+  useGenerateReportCardsMutation:  () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
+  downloadReportWhenReady:         vi.fn(),
 }));
 
 // ─── Mock elearning hooks (used by PrincipalElearningPage) ───────────────────

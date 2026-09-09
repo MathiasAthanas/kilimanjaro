@@ -33,6 +33,15 @@ vi.mock('../api/teacher.hooks', () => ({
   useCreateAnnouncementMutation:   () => ({ mutate: vi.fn(), isPending: false }),
   useCreateInterventionMutation:   () => ({ mutate: vi.fn(), isPending: false }),
   useResolveAlertMutation:         () => ({ mutate: vi.fn(), isPending: false }),
+  useTeacherSyllabus:              () => ({ data: [], isLoading: false, isError: false, refetch: vi.fn() }),
+  useCurrentTerm:                  () => ({ data: undefined }),
+  useUpdateSyllabusMutation:       () => ({ mutate: vi.fn(), isPending: false }),
+  useCreatePairingMutation:        () => ({ mutate: vi.fn(), isPending: false }),
+  useUpdatePairingStatusMutation:  () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
+  useStudentReportCards:           () => ({ data: [], isLoading: false }),
+  useUpdateReportCardCommentsMutation: () => ({ mutate: vi.fn(), isPending: false }),
+  useAssessmentDetail:             () => ({ data: undefined, isLoading: false }),
+  useMarksReview:                  () => ({ data: [], isLoading: false }),
 }));
 
 // ─── Mock operations hooks ────────────────────────────────────────────────────

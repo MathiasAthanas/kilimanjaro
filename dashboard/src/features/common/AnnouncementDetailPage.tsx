@@ -5,7 +5,6 @@ import { Badge } from '../../components/common/Badge';
 import { Button } from '../../components/common/Button';
 import { Card } from '../../components/common/Card';
 import { useAnnouncement, useAnnouncements } from './common.hooks';
-import { announcements } from './mockData';
 import { PageScaffold } from './PageScaffold';
 
 function audienceIcon(audience: string): LucideIcon {
@@ -18,16 +17,28 @@ function audienceIcon(audience: string): LucideIcon {
 export function AnnouncementDetailPage() {
   const { id } = useParams();
 
-  // Try fetching the single announcement directly first
-  const { data: singleRaw } = useAnnouncement(id) as { data: Record<string, unknown> | undefined };
-  // Fall back to list lookup
-  const { data: rawList } = useAnnouncements() as { data: Record<string, unknown>[] | undefined };
+  const { data: singleRaw, isLoading: isSingleLoading } = useAnnouncement(id) as {
+    data: Record<string, unknown> | undefined;
+    isLoading: boolean;
+  };
+  const { data: rawList, isLoading: isListLoading } = useAnnouncements() as {
+    data: Record<string, unknown>[] | undefined;
+    isLoading: boolean;
+  };
 
-  // Resolve item: prefer single fetch, then list, then mock
   const rawItem: Record<string, unknown> | undefined =
-    singleRaw ??
-    rawList?.find((a) => String(a.id) === id) ??
-    (announcements.find((a) => a.id === id) as unknown as Record<string, unknown>);
+    singleRaw ?? rawList?.find((a) => String(a.id) === id);
+
+  if ((isSingleLoading || isListLoading) && !rawItem) {
+    return (
+      <PageScaffold title="Loading…" description="">
+        <div className="mx-auto max-w-4xl animate-pulse space-y-4 p-8">
+          <div className="h-6 w-24 rounded-lg bg-ks-paper" />
+          <div className="h-32 rounded-xl bg-ks-paper" />
+        </div>
+      </PageScaffold>
+    );
+  }
 
   if (!rawItem) return <Navigate to="/app/404" replace />;
 
@@ -58,12 +69,8 @@ export function AnnouncementDetailPage() {
     >
       <Card className="mx-auto max-w-4xl p-8">
         <Badge tone={item.priority === 'High' ? 'rose' : 'blue'}>{`${item.priority} Priority`}</Badge>
-        <article className="prose prose-slate mt-6 max-w-none">
+        <article className="mt-6 max-w-none">
           <p className="text-lg leading-8 text-ks-navy">{item.body}</p>
-          <h2 className="font-display text-2xl text-ks-navy">1. Review Objectives</h2>
-          <p className="text-ks-muted">Evaluate operational readiness, identify unresolved blockers, and ensure each department acts before deadlines.</p>
-          <h2 className="font-display text-2xl text-ks-navy">2. Documentation Requirements</h2>
-          <p className="text-ks-muted">All related approvals, reports, comments and exports should remain traceable through the staff portal.</p>
         </article>
         <div className="mt-8 flex items-center justify-between rounded-lg border border-ks-line bg-ks-paper p-4">
           <span className="text-sm font-bold text-ks-navy">Was this announcement helpful?</span>

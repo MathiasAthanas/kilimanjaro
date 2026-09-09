@@ -11,6 +11,7 @@ import { RedisService } from '../redis/redis.service';
 import { ROLES } from '../common/constants/roles';
 import { RequestUser } from '../common/interfaces/request-user.interface';
 import { StudentClientService } from '../student-client/student-client.service';
+import { resolveWriteSchoolId } from '../common/helpers/school-scope.helper';
 
 @Injectable()
 export class SubjectsService {
@@ -19,6 +20,44 @@ export class SubjectsService {
     private readonly redis: RedisService,
     private readonly studentClient: StudentClientService,
   ) {}
+
+  private studentServiceHeaders(user: RequestUser): Record<string, string> {
+    return {
+      'X-User-Id': user.id,
+      'X-User-Role': user.role,
+      'X-User-Scope': user.scope ?? 'GROUP',
+      'X-User-School-Ids': user.scope === 'SCHOOL' ? (user.schoolIds ?? []).join(',') : '*',
+      ...(user.activeSchoolId ? { 'X-Active-School': user.activeSchoolId } : {}),
+    };
+  }
+
+  private async assertBulkEnrollmentScope(dto: BulkStudentSubjectEnrollmentDto, user: RequestUser): Promise<void> {
+    const uniqueStudentIds = [...new Set(dto.studentIds)];
+    if (!uniqueStudentIds.length) {
+      throw new BadRequestException('Select at least one student');
+    }
+    if (uniqueStudentIds.length !== dto.studentIds.length) {
+      throw new BadRequestException('A student can only be assigned once per bulk request');
+    }
+    const payload = await this.studentClient.get<unknown>(
+      '/students',
+      { classId: dto.classId, academicYearId: dto.academicYearId, limit: 1000, page: 1 },
+      this.studentServiceHeaders(user),
+    );
+    const root = payload && typeof payload === 'object' && 'data' in payload
+      ? (payload as { data: unknown }).data
+      : payload;
+    const items = root && typeof root === 'object' && 'items' in root && Array.isArray((root as { items?: unknown }).items)
+      ? (root as { items: Array<{ id: string; schoolId?: string | null }> }).items
+      : [];
+    const selected = new Map(items.map((student) => [student.id, student]));
+    if (uniqueStudentIds.some((id) => !selected.has(id))) {
+      throw new ForbiddenException('Every selected student must be actively enrolled in the selected class and school');
+    }
+    for (const student of selected.values()) {
+      resolveWriteSchoolId(user, student.schoolId ?? null);
+    }
+  }
 
   async createSubject(dto: CreateSubjectDto) {
     const subject = await this.prisma.subject.create({ data: dto });
@@ -171,15 +210,17 @@ export class SubjectsService {
     return this.prisma.classSubject.update({ where: { id }, data: dto, include: { subject: true, combination: true } });
   }
 
-  async createSubjectCombination(dto: CreateSubjectCombinationDto) {
+  async createSubjectCombination(dto: CreateSubjectCombinationDto, user?: RequestUser) {
     if ((dto.educationStage ?? 'A_LEVEL') !== 'A_LEVEL') {
       throw new BadRequestException('Subject combinations are only supported for A-Level');
     }
     await this.assertCombinationSubjectsActive(dto.subjects.map((s) => s.subjectId));
     this.assertALevelCombinationValid(dto.subjects);
+    const schoolId = user?.scope === 'SCHOOL' ? (user.activeSchoolId ?? user.schoolIds?.[0] ?? null) : null;
     try {
       return await this.prisma.subjectCombination.create({
         data: {
+          schoolId,
           code: dto.code,
           name: dto.name,
           educationStage: dto.educationStage ?? 'A_LEVEL',
@@ -297,12 +338,15 @@ export class SubjectsService {
     });
   }
 
-  async listSubjectCombinations(filters: { academicYearId?: string; educationStage?: string; isActive?: string }) {
+  async listSubjectCombinations(filters: { academicYearId?: string; educationStage?: string; isActive?: string }, user?: RequestUser) {
+    const schoolId = user?.scope === 'SCHOOL' ? (user.activeSchoolId ?? user.schoolIds?.[0] ?? null) : null;
     return this.prisma.subjectCombination.findMany({
       where: {
         academicYearId: filters.academicYearId,
         educationStage: filters.educationStage as any,
         isActive: filters.isActive === undefined ? undefined : filters.isActive === 'true',
+        // Return combinations belonging to this school OR group-wide combinations (schoolId = null)
+        ...(schoolId ? { OR: [{ schoolId }, { schoolId: null }] } : {}),
       },
       include: { subjects: { include: { subject: true }, orderBy: { displayOrder: 'asc' } } },
       orderBy: [{ academicYearId: 'desc' }, { code: 'asc' }],
@@ -388,7 +432,7 @@ export class SubjectsService {
     });
   }
 
-  async bulkEnrollStudentCombination(dto: BulkStudentSubjectEnrollmentDto) {
+  async bulkEnrollStudentCombination(dto: BulkStudentSubjectEnrollmentDto, user: RequestUser) {
     const combination = await this.prisma.subjectCombination.findUnique({
       where: { id: dto.combinationId },
       include: { subjects: true },
@@ -396,6 +440,8 @@ export class SubjectsService {
     if (!combination || combination.educationStage !== 'A_LEVEL' || !combination.isActive) {
       throw new BadRequestException('Bulk assignment requires an active A-Level combination');
     }
+    if (combination.schoolId) resolveWriteSchoolId(user, combination.schoolId);
+    await this.assertBulkEnrollmentScope(dto, user);
     const rows: Array<Promise<unknown>> = [];
     for (const studentId of dto.studentIds) {
       for (const subject of combination.subjects) {

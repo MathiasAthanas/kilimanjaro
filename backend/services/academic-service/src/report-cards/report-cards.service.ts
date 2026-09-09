@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { schoolScopeFilter } from '../common/helpers/school-scope.helper';
 import { RedisService } from '../redis/redis.service';
 import { StudentClientService } from '../student-client/student-client.service';
 import { RabbitMqService } from '../rabbitmq/rabbitmq.service';
@@ -42,11 +43,14 @@ export class ReportCardsService {
     avg: number,
     academicYearId: string,
     scope: { educationStage?: string | null; classLevel?: number | null },
+    schoolId?: string | null,
   ): Promise<{ grade: string; points: number; remark: string }> {
     const scales = await this.prisma.gradingScale.findMany({
       where: {
         academicYearId,
         isActive: true,
+        // Prefer school-specific scales; fall back to global (schoolId: null).
+        ...(schoolId ? { OR: [{ schoolId }, { schoolId: null }] } : {}),
         OR: [
           { educationStage: scope.educationStage as any, classLevel: scope.classLevel ?? null, subjectId: null },
           { educationStage: scope.educationStage as any, classLevel: null, subjectId: null },
@@ -57,7 +61,10 @@ export class ReportCardsService {
     });
     const scale = scales
       .sort((a, b) => {
-        const score = (item: typeof a) => (item.classLevel !== null ? 2 : 0) + (item.educationStage ? 1 : 0);
+        const score = (item: typeof a) =>
+          (item.schoolId === schoolId ? 8 : 0) +
+          (item.classLevel !== null ? 2 : 0) +
+          (item.educationStage ? 1 : 0);
         return score(b) - score(a);
       })[0];
     const boundary = scale?.grades.find((grade) => avg >= grade.minScore && avg <= grade.maxScore);
@@ -217,7 +224,7 @@ export class ReportCardsService {
       const resolved = await this.gradeFromAverage(avg, firstRow.academicYearId, {
         educationStage: firstRow.educationStage,
         classLevel: firstRow.classLevel,
-      });
+      }, (firstRow as any).schoolId ?? null);
       const subjectCount = rows.length;
       const failingSubjectCount = rows.filter((item) => !item.isPassing).length;
       const reportTemplateCode = this.reportTemplateFor(firstRow.educationStage, firstRow.classLevel);
@@ -226,11 +233,14 @@ export class ReportCardsService {
         : undefined;
       const divisionSummary = this.divisionSummaryFor(firstRow.educationStage, rows, principalSubjectIds);
 
+      const schoolId = (firstRow as any).schoolId ?? null;
+
       const current = await this.prisma.reportCard.upsert({
         where: { studentId_termId: { studentId, termId } },
         create: {
           studentId,
           classId,
+          schoolId,
           educationStage: firstRow.educationStage,
           classLevel: firstRow.classLevel,
           combinationId: firstRow.combinationId,
@@ -248,6 +258,7 @@ export class ReportCardsService {
           failingSubjectCount,
         },
         update: {
+          schoolId,
           educationStage: firstRow.educationStage,
           classLevel: firstRow.classLevel,
           combinationId: firstRow.combinationId,
@@ -264,25 +275,26 @@ export class ReportCardsService {
         },
       });
 
-      const studentProfilePayload = await this.studentClient.get<any>(`/students/${studentId}`, undefined, {
-        'X-User-Id': actorId,
-        'X-User-Role': ROLES.PRINCIPAL,
-      });
+      // Fetch student profile, attendance, and performance in parallel instead of sequentially.
+      const [studentProfilePayload, attendancePayload, performancePayload] = await Promise.all([
+        this.studentClient.get<any>(`/students/${studentId}`, undefined, {
+          'X-User-Id': actorId,
+          'X-User-Role': ROLES.PRINCIPAL,
+        }),
+        this.studentClient.get<any>(`/students/attendance/summary/${studentId}`, {}, {
+          'X-User-Id': actorId,
+          'X-User-Role': ROLES.PRINCIPAL,
+        }),
+        this.studentClient.get<any>(`/students/performance/${studentId}`, {}, {
+          'X-User-Id': actorId,
+          'X-User-Role': ROLES.PRINCIPAL,
+        }),
+      ]);
 
       const studentProfile = this.unwrap<any>(studentProfilePayload);
       const className = studentProfile?.enrolments?.[0]?.class?.name || classId;
-      const attendancePayload = await this.studentClient.get<any>(
-        `/students/attendance/summary/${studentId}`,
-        {},
-        { 'X-User-Id': actorId, 'X-User-Role': ROLES.PRINCIPAL },
-      );
       const attendanceSummary = (this.unwrap<any[]>(attendancePayload) || []).find((item) => item.termId === termId);
 
-      const performancePayload = await this.studentClient.get<any>(
-        `/students/performance/${studentId}`,
-        {},
-        { 'X-User-Id': actorId, 'X-User-Role': ROLES.PRINCIPAL },
-      );
       const performance = this.unwrap<any>(performancePayload);
       const hasActivePairing = Array.isArray(performance?.pairings)
         ? performance.pairings.some((item: any) => ['ACTIVE', 'SUGGESTED'].includes(item.status))
@@ -402,6 +414,47 @@ export class ReportCardsService {
     });
   }
 
+  /**
+   * All report cards for a class + term, enriched with student identity so
+   * the dashboard report-card centre can list and download per student.
+   */
+  async listForClass(classId: string, termId: string, actorId: string) {
+    const cards = await this.prisma.reportCard.findMany({
+      where: { classId, termId },
+      orderBy: [{ rank: 'asc' }, { overallAverage: 'desc' }],
+    });
+
+    const studentsPayload = await this.studentClient.get<any>(
+      `/students/classes/${classId}/students`,
+      { limit: 500 },
+      { 'X-User-Id': actorId, 'X-User-Role': ROLES.PRINCIPAL },
+    );
+    const studentsData = this.unwrap<any>(studentsPayload);
+    // Endpoint returns enrolment rows with the student nested inside
+    const enrolmentItems: any[] = Array.isArray(studentsData?.items)
+      ? studentsData.items
+      : Array.isArray(studentsData)
+        ? studentsData
+        : [];
+    const studentById = new Map<string, any>(
+      enrolmentItems
+        .map((item) => item.student ?? item)
+        .filter((student) => student?.id)
+        .map((student) => [String(student.id), student]),
+    );
+
+    return cards.map((card) => {
+      const student = studentById.get(card.studentId);
+      return {
+        ...card,
+        studentName: student
+          ? `${student.firstName ?? ''} ${student.lastName ?? ''}`.trim()
+          : card.studentId,
+        registrationNumber: student?.registrationNumber ?? null,
+      };
+    });
+  }
+
   async getReportPdfPath(studentId: string, termId: string, user: RequestUser) {
     const reportCard = await this.getReportCard(studentId, termId, user);
     if (!reportCard.pdfUrl) {
@@ -409,6 +462,30 @@ export class ReportCardsService {
     }
 
     return reportCard.pdfUrl;
+  }
+
+  async signReportCard(id: string, signatureText: string, user: RequestUser) {
+    const existing = await this.prisma.reportCard.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Report card not found');
+
+    const updated = await this.prisma.reportCard.update({
+      where: { id },
+      data: {
+        principalComment: signatureText || existing.principalComment || 'Approved',
+        principalSignedAt: new Date(),
+        principalSignedById: user.id,
+      },
+    });
+
+    await this.rabbitMq.publish('report_card.signed', {
+      reportCardId: id,
+      studentId: updated.studentId,
+      termId: updated.termId,
+      signedById: user.id,
+      signedAt: updated.principalSignedAt,
+    });
+
+    return updated;
   }
 
   async updateComments(id: string, dto: UpdateCommentsDto, user: RequestUser) {
@@ -429,7 +506,122 @@ export class ReportCardsService {
 
     const updated = await this.prisma.reportCard.update({ where: { id }, data });
 
-    await this.generateForClassTerm(existing.classId, existing.termId, user.id);
+    // Regenerate only this student's PDF — not the entire class. The class-wide
+    // call was O(students × 5 HTTP calls + PDF file writes) for a single comment update.
+    await this.regenerateSingleStudentPdf(existing.studentId, existing.termId, user.id, updated);
     return updated;
+  }
+
+  private async regenerateSingleStudentPdf(
+    studentId: string,
+    termId: string,
+    actorId: string,
+    currentCard: any,
+  ): Promise<void> {
+    const rows = await this.prisma.termResult.findMany({
+      where: { studentId, termId },
+      orderBy: { weightedTotal: 'desc' },
+    });
+    if (!rows.length) return;
+
+    const firstRow = rows[0];
+
+    // Resolve A-Level principal subjects for this student (if applicable).
+    let principalSubjectIds: Set<string> | undefined;
+    if (firstRow.combinationId) {
+      const comboSubjects = await this.prisma.subjectCombinationSubject.findMany({
+        where: { combinationId: firstRow.combinationId, subjectRole: 'PRINCIPAL' },
+        select: { subjectId: true },
+      });
+      principalSubjectIds = new Set(comboSubjects.map((cs) => cs.subjectId));
+    }
+
+    const avg = rows.reduce((sum, r) => sum + r.weightedTotal, 0) / Math.max(rows.length, 1);
+
+    const [studentProfilePayload, attendancePayload, performancePayload] = await Promise.all([
+      this.studentClient.get<any>(`/students/${studentId}`, undefined, {
+        'X-User-Id': actorId,
+        'X-User-Role': ROLES.PRINCIPAL,
+      }),
+      this.studentClient.get<any>(`/students/attendance/summary/${studentId}`, {}, {
+        'X-User-Id': actorId,
+        'X-User-Role': ROLES.PRINCIPAL,
+      }),
+      this.studentClient.get<any>(`/students/performance/${studentId}`, {}, {
+        'X-User-Id': actorId,
+        'X-User-Role': ROLES.PRINCIPAL,
+      }),
+    ]);
+
+    const studentProfile = this.unwrap<any>(studentProfilePayload);
+    const attendanceSummary = (this.unwrap<any[]>(attendancePayload) || []).find((a) => a.termId === termId);
+    const performance = this.unwrap<any>(performancePayload);
+    const hasActivePairing = Array.isArray(performance?.pairings)
+      ? performance.pairings.some((p: any) => ['ACTIVE', 'SUGGESTED'].includes(p.status))
+      : false;
+
+    const resolved = await this.gradeFromAverage(avg, firstRow.academicYearId, {
+      educationStage: firstRow.educationStage,
+      classLevel: firstRow.classLevel,
+    }, (firstRow as any).schoolId ?? null);
+
+    const divisionSummary = this.divisionSummaryFor(firstRow.educationStage, rows, principalSubjectIds);
+    const reportTemplateCode = this.reportTemplateFor(firstRow.educationStage, firstRow.classLevel);
+    const className = studentProfile?.enrolments?.[0]?.class?.name || firstRow.classId;
+
+    const pdfUrl = await this.pdfService.generatePdf({
+      studentId,
+      termId,
+      academicYearId: firstRow.academicYearId,
+      studentName: `${studentProfile?.firstName || ''} ${studentProfile?.lastName || ''}`.trim() || studentId,
+      registrationNumber: studentProfile?.registrationNumber || '-',
+      className,
+      generatedAt: new Date(),
+      results: rows.map((row) => {
+        const role = principalSubjectIds
+          ? (principalSubjectIds.has(row.subjectId) ? 'PRINCIPAL' : 'SUBSIDIARY')
+          : undefined;
+        return {
+          subjectName: row.subjectName,
+          subjectRole: role,
+          ...(row.assessmentScores as any),
+          total: row.weightedTotal,
+          grade: row.grade,
+          remark: row.remark,
+        };
+      }),
+      average: avg,
+      overallGrade: resolved.grade,
+      reportTemplateCode,
+      divisionSummary,
+      rank: currentCard.rank,
+      totalStudents: currentCard.totalStudentsInClass,
+      teacherComment: currentCard.teacherComment,
+      principalComment: currentCard.principalComment,
+      internalPerformanceNote: undefined,
+      attendance: attendanceSummary
+        ? {
+            total: attendanceSummary.total,
+            present: attendanceSummary.present,
+            absent: attendanceSummary.absent,
+            late: attendanceSummary.late,
+            attendanceRate: attendanceSummary.attendanceRate,
+            belowThreshold: attendanceSummary.belowThreshold,
+          }
+        : undefined,
+      pairingStatus: hasActivePairing ? 'Active/Suggested pairing present' : 'No active pairing',
+      behaviourGrade: currentCard.behaviourGrade,
+      socialSkillsGrade: currentCard.socialSkillsGrade,
+      extraCurricularNote: currentCard.extraCurricularNote,
+      readingAbility: currentCard.readingAbility,
+      writingAbility: currentCard.writingAbility,
+      numeracyAbility: currentCard.numeracyAbility,
+    });
+
+    await this.prisma.reportCard.update({
+      where: { id: currentCard.id },
+      data: { pdfUrl, pdfGeneratedAt: new Date() },
+    });
+    await this.redis.del(`report-card:${studentId}:${termId}`);
   }
 }

@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Cron } from '@nestjs/schedule';
 import { InvoiceStatus } from '../../generated/prisma';
 import { PrismaService } from '../prisma/prisma.service';
@@ -13,6 +14,7 @@ export class JobsService {
     private readonly prisma: PrismaService,
     private readonly rabbitMq: RabbitMqService,
     private readonly redis: RedisService,
+    private readonly config: ConfigService,
   ) {}
 
   @Cron('0 6 * * *')
@@ -40,7 +42,7 @@ export class JobsService {
 
   @Cron('0 7 * * *')
   async feeReminder() {
-    const thresholds = (process.env.REMINDER_DAYS_BEFORE || '7,3,1').split(',').map((v) => Number(v.trim()));
+    const thresholds = this.config.get<string>('REMINDER_DAYS_BEFORE', '7,3,1').split(',').map((v) => Number(v.trim()));
     const invoices = await this.prisma.invoice.findMany({
       where: { status: { in: [InvoiceStatus.ISSUED, InvoiceStatus.PARTIALLY_PAID] } },
     });

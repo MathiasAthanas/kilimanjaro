@@ -2,8 +2,8 @@
   "name": "@kilimanjaro/api-gateway",
   "version": "1.0.0",
   "scripts": {
-    "dev": "nest start --watch",
-    "start:dev": "nest start --watch",
+    "dev": "npm run prisma:generate && node ../../scripts/copy-prisma-generated.js && nest start --watch",
+    "start:dev": "npm run prisma:generate && node ../../scripts/copy-prisma-generated.js && nest start --watch",
     "prebuild": "prisma generate",
     "build": "nest build",
     "postbuild": "node ../../scripts/copy-prisma-generated.js",

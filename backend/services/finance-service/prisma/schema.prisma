@@ -76,6 +76,7 @@ enum FinancialAuditAction {
   PAYMENT_CONFIRMED
   PAYMENT_REJECTED
   PAYMENT_REFUNDED
+  PAYMENT_NOTE_ADDED
   MANUAL_PAYMENT_APPROVED
   MANUAL_PAYMENT_REJECTED
   RECEIPT_ISSUED
@@ -151,6 +152,7 @@ enum EducationStage {
 
 model FeeCategory {
   id                String                 @id @default(uuid())
+  schoolId          String?
   name              String                 @unique
   code              String                 @unique
   description       String?
@@ -203,6 +205,7 @@ model StudentGroupMembership {
 
 model FeeStructure {
   id             String            @id @default(uuid())
+  schoolId          String?
   feeCategoryId  String
   classId        String?
   educationStage EducationStage?
@@ -248,6 +251,7 @@ model StudentFeeAssignment {
 
 model Invoice {
   id                 String            @id @default(uuid())
+  schoolId          String?
   invoiceNumber      String            @unique
   studentId          String
   classId            String
@@ -307,6 +311,7 @@ model InvoiceLineItem {
 
 model Payment {
   id               String                 @id @default(uuid())
+  schoolId          String?
   paymentNumber    String                 @unique
   invoiceId        String
   studentId        String
@@ -349,6 +354,7 @@ model Payment {
 
 model Receipt {
   id              String          @id @default(uuid())
+  schoolId          String?
   receiptNumber   String          @unique
   paymentId       String          @unique
   invoiceId       String
@@ -499,6 +505,9 @@ enum FundRequestStatus {
   REJECTED
   DISBURSED
   CANCELLED
+  SCHOOL_APPROVED
+  FINANCE_REVIEWED
+  MANAGER_APPROVED
 
   @@schema("finance")
 }
@@ -510,12 +519,16 @@ enum FundRequestAction {
   REJECTED
   DISBURSED
   CANCELLED
+  SCHOOL_APPROVED
+  FINANCE_REVIEWED
+  MANAGER_APPROVED
 
   @@schema("finance")
 }
 
 model Expense {
   id             String          @id @default(uuid())
+  schoolId          String?
   expenseNumber  String          @unique
   category       ExpenseCategory
   description    String
@@ -546,6 +559,7 @@ model Expense {
 
 model FundRequest {
   id            String            @id @default(uuid())
+  schoolId          String?
   requestNumber String            @unique
   title         String
   description   String
@@ -571,6 +585,13 @@ model FundRequest {
   decidedAt       DateTime?
   rejectionReason String?
   rejectedByRole  String?
+
+  // Manager = final approval authority in the redesigned chain
+  // (initiate → Head of School → Finance review → Manager approval → disburse)
+  managerId       String?
+  managerName     String?
+  managerNote     String?
+  managerDecidedAt DateTime?
 
   disbursedById      String?
   disbursedByName    String?
@@ -633,6 +654,7 @@ enum StoreMovementType {
 
 model StoreItem {
   id             String        @id @default(uuid())
+  schoolId          String?
   itemCode       String        @unique
   name           String
   category       StoreCategory

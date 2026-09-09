@@ -33,7 +33,7 @@ export class PerformanceController {
   ) {}
 
   @Get('alerts')
-  @Roles('PRINCIPAL', 'ACADEMIC_QA', 'HEAD_OF_DEPARTMENT', 'SYSTEM_ADMIN', 'TEACHER')
+  @Roles('PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN', 'ACADEMIC_QA', 'HEAD_OF_DEPARTMENT', 'SYSTEM_ADMIN', 'TEACHER')
   @ApiOperation({ summary: 'Paginated active alerts with role-aware filtering' })
   @ApiResponse({ status: 200, description: 'Alert list returned' })
   async alerts(@Query() query: PerformanceFilterDto, @CurrentUser() user?: RequestUser) {
@@ -41,14 +41,14 @@ export class PerformanceController {
   }
 
   @Get('alerts/class/:classId')
-  @Roles('TEACHER', 'HEAD_OF_DEPARTMENT', 'PRINCIPAL', 'ACADEMIC_QA')
+  @Roles('TEACHER', 'HEAD_OF_DEPARTMENT', 'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN', 'ACADEMIC_QA')
   @ApiOperation({ summary: 'Class alerts grouped by subject' })
   async alertsByClass(@Param('classId') classId: string, @CurrentUser() user?: RequestUser) {
     return this.performanceService.alertsByClass(classId, user || { id: 'system', role: 'SYSTEM_ADMIN' });
   }
 
   @Patch('alerts/:alertId/resolve')
-  @Roles('TEACHER', 'HEAD_OF_DEPARTMENT', 'PRINCIPAL', 'ACADEMIC_QA')
+  @Roles('TEACHER', 'HEAD_OF_DEPARTMENT', 'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN', 'ACADEMIC_QA')
   @ApiOperation({ summary: 'Manually resolve alert' })
   async resolveAlert(
     @Param('alertId') alertId: string,
@@ -64,28 +64,28 @@ export class PerformanceController {
   }
 
   @Get('pairings')
-  @Roles('TEACHER', 'HEAD_OF_DEPARTMENT', 'PRINCIPAL', 'ACADEMIC_QA', 'SYSTEM_ADMIN')
+  @Roles('TEACHER', 'HEAD_OF_DEPARTMENT', 'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN', 'ACADEMIC_QA', 'SYSTEM_ADMIN')
   @ApiOperation({ summary: 'List peer pairings with filters' })
-  async pairings(@Query() query: PerformanceFilterDto) {
-    return this.performanceService.listPairings(query);
+  async pairings(@Query() query: PerformanceFilterDto, @CurrentUser() user?: RequestUser) {
+    return this.performanceService.listPairings(query, user);
   }
 
   @Patch('pairings/:pairingId/status')
-  @Roles('TEACHER', 'HEAD_OF_DEPARTMENT', 'PRINCIPAL')
+  @Roles('TEACHER', 'HEAD_OF_DEPARTMENT', 'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN')
   @ApiOperation({ summary: 'Update pairing lifecycle status' })
   async updatePairingStatus(@Param('pairingId') pairingId: string, @Body() dto: UpdatePairingStatusDto) {
     return this.performanceService.updatePairingStatus(pairingId, dto);
   }
 
   @Post('pairings')
-  @Roles('TEACHER', 'HEAD_OF_DEPARTMENT', 'PRINCIPAL')
+  @Roles('TEACHER', 'HEAD_OF_DEPARTMENT', 'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN')
   @ApiOperation({ summary: 'Create manual peer pairing recommendation' })
   async createPairing(@Body() dto: CreatePairingDto, @CurrentUser() user?: RequestUser) {
     return this.performanceService.manualPairing(dto, user?.role || 'TEACHER');
   }
 
   @Post('engine/run')
-  @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'ACADEMIC_QA')
+  @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN', 'ACADEMIC_QA')
   @ApiOperation({ summary: 'Trigger asynchronous performance engine run' })
   async runEngine(@Body() dto: RunEngineDto) {
     const estimatedRecords = await this.engine.runScopeAsync(dto.scope, dto.studentId, dto.classId);
@@ -97,44 +97,45 @@ export class PerformanceController {
   }
 
   @Get('engine/config')
-  @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'ACADEMIC_QA')
+  @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN', 'ACADEMIC_QA')
   @ApiOperation({ summary: 'Read current engine thresholds and toggles' })
   async config() {
     return this.engine.getEngineConfig();
   }
 
   @Patch('engine/config')
-  @Roles('SYSTEM_ADMIN', 'PRINCIPAL')
+  @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN')
   @ApiOperation({ summary: 'Update engine thresholds and invalidate cached summaries' })
   async updateConfig(@Body() dto: UpdateEngineConfigDto, @CurrentUser() user?: RequestUser) {
     return this.engine.updateEngineConfig(dto as unknown as Record<string, unknown>, user?.id || 'system');
   }
 
   @Get('summary/class/:classId')
-  @Roles('TEACHER', 'HEAD_OF_DEPARTMENT', 'PRINCIPAL', 'ACADEMIC_QA')
+  @Roles('TEACHER', 'HEAD_OF_DEPARTMENT', 'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN', 'ACADEMIC_QA')
   @ApiOperation({ summary: 'Class-level performance summary by subject' })
   async classSummary(@Param('classId') classId: string) {
     return this.performanceService.classSummary(classId);
   }
 
   @Get('summary/school')
-  @Roles('PRINCIPAL', 'ACADEMIC_QA', 'MANAGING_DIRECTOR', 'SYSTEM_ADMIN')
+  @Roles('PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN', 'ACADEMIC_QA', 'MANAGING_DIRECTOR', 'SYSTEM_ADMIN')
   @ApiOperation({ summary: 'School-wide risk and effectiveness summary' })
-  async schoolSummary() {
-    return this.performanceService.schoolSummary();
+  async schoolSummary(@CurrentUser() user?: RequestUser) {
+    const schoolId = user?.scope === 'SCHOOL' ? (user.activeSchoolId ?? user.schoolIds?.[0] ?? null) : null;
+    return this.performanceService.schoolSummary(schoolId);
   }
 
   @Get('pairings/effectiveness')
-  @Roles('PRINCIPAL', 'ACADEMIC_QA', 'SYSTEM_ADMIN')
+  @Roles('PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN', 'ACADEMIC_QA', 'SYSTEM_ADMIN')
   @ApiOperation({ summary: 'Pairing outcome effectiveness analytics' })
-  async effectiveness() {
-    return this.performanceService.pairingEffectiveness();
+  async effectiveness(@CurrentUser() user?: RequestUser) {
+    return this.performanceService.pairingEffectiveness(user);
   }
 
   @Get(':studentId/subject/:subjectId')
   @Roles(
     'SYSTEM_ADMIN',
-    'PRINCIPAL',
+    'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN',
     'ACADEMIC_QA',
     'FINANCE',
     'HEAD_OF_DEPARTMENT',
@@ -150,7 +151,7 @@ export class PerformanceController {
   @Get(':studentId')
   @Roles(
     'SYSTEM_ADMIN',
-    'PRINCIPAL',
+    'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN',
     'ACADEMIC_QA',
     'FINANCE',
     'HEAD_OF_DEPARTMENT',

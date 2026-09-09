@@ -1,5 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { RequestUser } from '../common/interfaces/request-user.interface';
+import { schoolScopeFilter, resolveWriteSchoolId, assertSchoolInScope } from '../common/helpers/school-scope.helper';
 
 // ─── DTOs (inline for single-file simplicity) ─────────────────────────────────
 
@@ -24,6 +26,7 @@ export interface CreateSheetDto {
   name: string;
   timetableType?: string;
   stage?: string;
+  schoolId?: string;
   classId?: string;
   className?: string;
   academicYearId: string;
@@ -174,11 +177,12 @@ export class TimetableService {
 
   // ── Timetable Sheets ──────────────────────────────────────────────────────
 
-  async createSheet(dto: CreateSheetDto) {
+  async createSheet(dto: CreateSheetDto, user?: RequestUser) {
     return this.prisma.timetableSheet.create({ data: {
       name: dto.name,
       timetableType: dto.timetableType as any ?? 'CLASS',
       stage: dto.stage,
+      schoolId: resolveWriteSchoolId(user, dto.schoolId ?? null),
       classId: dto.classId,
       className: dto.className,
       academicYearId: dto.academicYearId,
@@ -187,9 +191,10 @@ export class TimetableService {
     }, include: { slots: true }});
   }
 
-  async listSheets(filters: { timetableType?: string; stage?: string; academicYearId?: string; termId?: string; classId?: string }) {
+  async listSheets(filters: { timetableType?: string; stage?: string; academicYearId?: string; termId?: string; classId?: string }, user?: RequestUser) {
     return this.prisma.timetableSheet.findMany({
       where: {
+        ...schoolScopeFilter(user),
         timetableType: filters.timetableType as any,
         stage: filters.stage,
         academicYearId: filters.academicYearId,
@@ -201,18 +206,40 @@ export class TimetableService {
     });
   }
 
-  async getSheet(id: string) {
+  // Multi-school isolation: a sheet belongs to one school. When it carries a
+  // schoolId, only callers whose scope includes that school (or group-scope
+  // roles) may read or mutate it. Returns the sheet's schoolId for reuse.
+  private async assertSheetScope(sheetId: string, user?: RequestUser): Promise<string | null> {
+    const sheet = await this.prisma.timetableSheet.findUnique({
+      where: { id: sheetId },
+      select: { schoolId: true },
+    });
+    if (!sheet) throw new NotFoundException('Timetable not found');
+    if (sheet.schoolId) assertSchoolInScope(user, sheet.schoolId);
+    return sheet.schoolId;
+  }
+
+  private async assertSlotScope(slotId: string, user?: RequestUser): Promise<void> {
+    const slot = await this.prisma.timetableSlot.findUnique({
+      where: { id: slotId },
+      select: { sheetId: true },
+    });
+    if (!slot) throw new NotFoundException('Slot not found');
+    await this.assertSheetScope(slot.sheetId, user);
+  }
+
+  async getSheet(id: string, user?: RequestUser) {
     const sheet = await this.prisma.timetableSheet.findUnique({
       where: { id },
       include: { slots: { include: { venue: true, activity: true }, orderBy: [{ dayOfWeek: 'asc' }, { startTime: 'asc' }] } },
     });
     if (!sheet) throw new NotFoundException('Timetable not found');
+    if (sheet.schoolId) assertSchoolInScope(user, sheet.schoolId);
     return sheet;
   }
 
-  async updateSheet(id: string, dto: Partial<CreateSheetDto> & { isPublished?: boolean }) {
-    const existing = await this.prisma.timetableSheet.findUnique({ where: { id } });
-    if (!existing) throw new NotFoundException('Timetable not found');
+  async updateSheet(id: string, dto: Partial<CreateSheetDto> & { isPublished?: boolean }, user?: RequestUser) {
+    await this.assertSheetScope(id, user);
     return this.prisma.timetableSheet.update({ where: { id }, data: {
       name: dto.name,
       timetableType: dto.timetableType as any,
@@ -225,15 +252,15 @@ export class TimetableService {
     }, include: { slots: { include: { venue: true, activity: true }, orderBy: [{ dayOfWeek: 'asc' }, { startTime: 'asc' }] } }});
   }
 
-  async deleteSheet(id: string) {
-    const existing = await this.prisma.timetableSheet.findUnique({ where: { id } });
-    if (!existing) throw new NotFoundException('Timetable not found');
+  async deleteSheet(id: string, user?: RequestUser) {
+    await this.assertSheetScope(id, user);
     return this.prisma.timetableSheet.delete({ where: { id } });
   }
 
   // ── Timetable Slots ───────────────────────────────────────────────────────
 
-  async createSlot(dto: CreateSlotDto) {
+  async createSlot(dto: CreateSlotDto, user?: RequestUser) {
+    await this.assertSheetScope(dto.sheetId, user);
     await this.assertNoConflicts(dto);
     return this.prisma.timetableSlot.create({
       data: {
@@ -262,9 +289,10 @@ export class TimetableService {
     });
   }
 
-  async updateSlot(id: string, dto: Partial<CreateSlotDto>) {
+  async updateSlot(id: string, dto: Partial<CreateSlotDto>, user?: RequestUser) {
     const existing = await this.prisma.timetableSlot.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Slot not found');
+    await this.assertSheetScope(existing.sheetId, user);
     const merged = { ...existing, ...dto, sheetId: existing.sheetId };
     await this.assertNoConflicts(merged as any, id);
     return this.prisma.timetableSlot.update({
@@ -294,9 +322,8 @@ export class TimetableService {
     });
   }
 
-  async deleteSlot(id: string) {
-    const existing = await this.prisma.timetableSlot.findUnique({ where: { id } });
-    if (!existing) throw new NotFoundException('Slot not found');
+  async deleteSlot(id: string, user?: RequestUser) {
+    await this.assertSlotScope(id, user);
     return this.prisma.timetableSlot.delete({ where: { id } });
   }
 
@@ -322,12 +349,17 @@ export class TimetableService {
     const sheet = await this.prisma.timetableSheet.findUnique({ where: { id: sheetId } });
     if (!sheet) return { conflicts: [] };
 
-    // Get all slots for the same academicYear/termId on the same day that could conflict
+    // Scope conflict search to the same school to avoid false cross-school conflicts.
+    // Teacher IDs are globally unique, but timetables are per-school — a teacher at
+    // School A must not be blocked by a School B slot when they are different buildings.
     const candidates = await this.prisma.timetableSlot.findMany({
       where: {
         dayOfWeek: dayOfWeek as any,
         id: excludeSlotId ? { not: excludeSlotId } : undefined,
-        sheet: { academicYearId: sheet.academicYearId },
+        sheet: {
+          academicYearId: sheet.academicYearId,
+          ...(sheet.schoolId ? { schoolId: sheet.schoolId } : {}),
+        },
       },
       include: { sheet: true },
     });
@@ -360,9 +392,18 @@ export class TimetableService {
 
   // ── Auto-Generate ─────────────────────────────────────────────────────────
 
-  async autoGenerate(dto: AutoGenerateDto) {
+  async autoGenerate(dto: AutoGenerateDto, user?: RequestUser) {
     const sheet = await this.prisma.timetableSheet.findUnique({ where: { id: dto.sheetId } });
     if (!sheet) throw new NotFoundException('Timetable sheet not found');
+    // Isolation: only act on a sheet within the caller's school scope.
+    if (sheet.schoolId) assertSchoolInScope(user, sheet.schoolId);
+
+    // Guard: never silently overwrite a published timetable
+    if ((sheet as any).isPublished) {
+      throw new BadRequestException(
+        'This timetable is published. Unpublish it before auto-generating to prevent overwriting the live schedule.',
+      );
+    }
 
     // Resolve field name aliases (frontend uses different names than the DTO)
     const duration   = dto.periodDurationMinutes ?? dto.periodDuration ?? 40;
@@ -370,23 +411,28 @@ export class TimetableService {
     const breakAfter = dto.breakAfterPeriod      ?? dto.breakAfterPeriods ?? 3;
     const breakDur   = dto.breakDurationMinutes  ?? dto.breakDuration     ?? 20;
 
-    // Auto-fetch class subjects from DB when not supplied by caller
-    type PeriodEntry = { subjectId: string; subjectName: string; teacherId: string; teacherName: string };
-    let classSubjects = dto.classSubjects ?? [];
+    // Auto-fetch class subjects from DB when not supplied by caller.
+    // Use Prisma's typed client — avoid `as any` which silently breaks on rename.
+    type PeriodEntry = { subjectId: string; subjectName: string; teacherId: string; teacherName: string; periodsPerWeek: number };
+    let classSubjects: PeriodEntry[] = dto.classSubjects
+      ? dto.classSubjects.map((cs) => ({ ...cs, periodsPerWeek: cs.periodsPerWeek ?? 4 }))
+      : [];
 
     if (classSubjects.length === 0 && sheet.academicYearId) {
-      const where: Record<string, unknown> = { academicYearId: sheet.academicYearId, isActive: true };
-      if (sheet.classId) where['classId'] = sheet.classId;
-      const dbSubjects = await (this.prisma as any).classSubject.findMany({
-        where,
+      const dbSubjects = await this.prisma.classSubject.findMany({
+        where: {
+          academicYearId: sheet.academicYearId,
+          isActive: true,
+          ...(sheet.classId ? { classId: sheet.classId } : {}),
+        },
         include: { subject: true },
       });
-      classSubjects = dbSubjects.map((cs: any) => ({
+      classSubjects = dbSubjects.map((cs) => ({
         subjectId:      cs.subjectId,
         subjectName:    cs.subject?.name ?? 'Subject',
         teacherId:      cs.teacherId ?? '',
         teacherName:    '',
-        periodsPerWeek: 4,
+        periodsPerWeek: cs.periodsPerWeek,
       }));
     }
 
@@ -397,16 +443,11 @@ export class TimetableService {
       throw new BadRequestException(`No subjects found to schedule. ${hint}`);
     }
 
-    // Clear existing slots for this sheet first
-    await this.prisma.timetableSlot.deleteMany({ where: { sheetId: dto.sheetId } });
-
-    const days: Array<'MONDAY' | 'TUESDAY' | 'WEDNESDAY' | 'THURSDAY' | 'FRIDAY'> = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY'];
-
-    // Build full period queue: each subject repeated periodsPerWeek times
+    // Build full period queue: each subject repeated its periodsPerWeek times
     const fullQueue: PeriodEntry[] = [];
     for (const cs of classSubjects) {
-      for (let i = 0; i < (cs.periodsPerWeek ?? 4); i++) {
-        fullQueue.push({ subjectId: cs.subjectId, subjectName: cs.subjectName, teacherId: cs.teacherId, teacherName: cs.teacherName });
+      for (let i = 0; i < cs.periodsPerWeek; i++) {
+        fullQueue.push(cs);
       }
     }
 
@@ -416,11 +457,12 @@ export class TimetableService {
       [fullQueue[i], fullQueue[j]] = [fullQueue[j], fullQueue[i]];
     }
 
-    // ── Distribute evenly across days ─────────────────────────────────────────
-    // Split queue into 5 roughly equal chunks (one per day) so every day gets lessons
+    // Distribute evenly across days
+    const days: Array<'MONDAY' | 'TUESDAY' | 'WEDNESDAY' | 'THURSDAY' | 'FRIDAY'> = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY'];
     const periodsPerDay = Math.ceil(fullQueue.length / days.length);
 
     const slotsToCreate: Omit<CreateSlotDto, 'sheetId'>[] = [];
+    let droppedSubjectCount = 0;
 
     for (let di = 0; di < days.length; di++) {
       const day = days[di];
@@ -431,7 +473,10 @@ export class TimetableService {
       let periodCount = 0;
 
       for (const entry of daySlice) {
-        if (startH >= 17) break; // don't schedule past 5 PM
+        if (startH >= 17) {
+          droppedSubjectCount++;
+          continue;
+        }
 
         // Insert break before this period if needed
         if (periodCount > 0 && periodCount % breakAfter === 0) {
@@ -440,7 +485,7 @@ export class TimetableService {
           if (startM >= 60) { startH += Math.floor(startM / 60); startM %= 60; }
           const bEnd = `${String(startH).padStart(2, '0')}:${String(startM).padStart(2, '0')}`;
           slotsToCreate.push({ dayOfWeek: day, startTime: bStart, endTime: bEnd, activityType: 'BREAK', label: 'Break', colorCode: '#94A3B8', attendeeIds: [], staffIds: [], staffNames: [] });
-          if (startH >= 17) break;
+          if (startH >= 17) { droppedSubjectCount++; continue; }
         }
 
         const slotStart = `${String(startH).padStart(2, '0')}:${String(startM).padStart(2, '0')}`;
@@ -475,17 +520,27 @@ export class TimetableService {
       throw new BadRequestException('No slots could be generated. Check that start time is before 17:00 and period duration is valid.');
     }
 
-    // Batch create
-    await this.prisma.timetableSlot.createMany({
-      data: slotsToCreate.map((s) => ({
-        ...s,
-        sheetId: dto.sheetId,
-        dayOfWeek: s.dayOfWeek as any,
-        activityType: s.activityType as any ?? 'LESSON',
-      })),
-    });
+    // Wrap delete + create in a transaction so a crash never leaves the sheet empty
+    await this.prisma.$transaction([
+      this.prisma.timetableSlot.deleteMany({ where: { sheetId: dto.sheetId } }),
+      this.prisma.timetableSlot.createMany({
+        data: slotsToCreate.map((s) => ({
+          ...s,
+          sheetId: dto.sheetId,
+          dayOfWeek: s.dayOfWeek as any,
+          activityType: s.activityType as any ?? 'LESSON',
+        })),
+      }),
+    ]);
 
-    return this.getSheet(dto.sheetId);
+    const result = await this.getSheet(dto.sheetId);
+    return {
+      sheet: result,
+      slotsCreated: slotsToCreate.length,
+      warnings: droppedSubjectCount > 0
+        ? [`${droppedSubjectCount} period(s) could not be scheduled before 17:00. Reduce the number of periods per week or start the day earlier.`]
+        : [],
+    };
   }
 
   // ── Legacy (existing Timetable model) ────────────────────────────────────

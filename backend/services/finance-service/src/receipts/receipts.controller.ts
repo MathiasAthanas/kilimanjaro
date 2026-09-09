@@ -15,19 +15,19 @@ export class ReceiptsController {
   constructor(private readonly receiptsService: ReceiptsService) {}
 
   @Get()
-  @Roles(ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN, ROLES.PARENT, ROLES.STUDENT)
+  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN, ROLES.PARENT, ROLES.STUDENT)
   list(@Query() query: any, @CurrentUser() user?: RequestUser) {
     return this.receiptsService.list(query, user!);
   }
 
   @Get(':id')
-  @Roles(ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN, ROLES.PARENT, ROLES.STUDENT)
+  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN, ROLES.PARENT, ROLES.STUDENT)
   byId(@Param('id') id: string, @CurrentUser() user?: RequestUser) {
     return this.receiptsService.byId(id, user!);
   }
 
   @Get(':id/pdf')
-  @Roles(ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.PARENT, ROLES.STUDENT)
+  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.PARENT, ROLES.STUDENT)
   async pdf(@Param('id') id: string, @CurrentUser() user: RequestUser, @Res() res: Response) {
     const file = await this.receiptsService.getPdfFile(id, user);
     res.setHeader('Content-Type', 'application/pdf');
@@ -36,7 +36,7 @@ export class ReceiptsController {
   }
 
   @Patch(':id/void')
-  @Roles(ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN)
+  @Roles(ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
   void(@Param('id') id: string, @Body() dto: VoidReceiptDto, @CurrentUser() user?: RequestUser) {
     return this.receiptsService.void(id, dto.voidReason, user!);
   }

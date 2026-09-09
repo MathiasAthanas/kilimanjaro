@@ -76,90 +76,38 @@ final drawerSectionsByRole = <UserRole, List<DrawerSection>>{
     ], title: 'Account'),
     _section([_item('Logout', 'logout.svg', destructive: true)]),
   ],
-  UserRole.academicQa: [
+  UserRole.admissions: [
     _section([
-      _item('All Classes', 'classes.svg', route: '/shell/aqa/classes'),
-      _item('All Teachers', 'teacher.svg', route: '/shell/aqa/teachers'),
-      _item('Engine Config', 'cpu-chip.svg', route: '/shell/aqa/engine-config'),
-    ], title: 'Academic'),
+      _item('Pipeline Summary', 'analytics.svg', route: '/shell/admissions/home'),
+      _item('Applicants', 'students.svg', route: '/shell/admissions/applicants'),
+      _item('New Inquiry', 'edit-pencil.svg', route: '/shell/admissions/inquiry'),
+    ], title: 'Admissions'),
     _section([
-      _item('Reports', 'report-card.svg', route: '/shell/aqa/reports'),
-    ], title: 'Reports'),
-    _section([
-      _item('Announcements', 'announcements.svg', route: '/shell/aqa/announcements'),
-    ], title: 'Communication'),
-    _section([
-      _item('Settings', 'settings.svg', route: '/shell/aqa/settings'),
-      _item('My Profile', 'user-circle.svg', route: '/shell/aqa/profile'),
+      _item('Settings', 'settings.svg', route: '/shell/admissions/settings'),
+      _item('My Profile', 'user-circle.svg', route: '/shell/admissions/profile'),
     ], title: 'Account'),
     _section([_item('Logout', 'logout.svg', destructive: true)]),
   ],
-  UserRole.principal: [
-    _section([
-      _item('Finance', 'finance.svg', route: '/shell/principal/finance'),
-      _item('Performance', 'performance.svg', route: '/shell/principal/performance'),
-      _item('Discipline Overview', 'discipline.svg', route: '/shell/principal/discipline'),
-      _item('Staff Overview', 'staff.svg', route: '/shell/principal/staff'),
-    ], title: 'Operations'),
-    _section([
-      _item('Announcements', 'announcements.svg', route: '/shell/principal/announcements'),
-    ], title: 'Communication'),
-    _section([
-      _item('Generate Reports', 'report-card.svg', route: '/shell/principal/reports'),
-    ], title: 'Reports'),
-    _section([
-      _item('School Settings', 'settings.svg', route: '/shell/principal/school-settings'),
-    ], title: 'System'),
-    _section([
-      _item('Settings', 'settings.svg', route: '/shell/principal/settings'),
-      _item('My Profile', 'user-circle.svg', route: '/shell/principal/profile'),
-    ], title: 'Account'),
-    _section([_item('Logout', 'logout.svg', destructive: true)]),
-  ],
-  UserRole.finance: [
-    _section([
-      _item('Fee Categories', 'finance.svg', route: '/shell/finance/fee-categories'),
-      _item('Fee Structures', 'document-text.svg', route: '/shell/finance/fee-structures'),
-      _item('Fee Assignments', 'receipt.svg', route: '/shell/finance/fee-assignments'),
-      _item('Assets', 'assets.svg', route: '/shell/finance/assets'),
-      _item('Audit Log', 'audit.svg', route: '/shell/finance/audit'),
-    ], title: 'Finance'),
-    _section([
-      _item('Settings', 'settings.svg', route: '/shell/finance/settings'),
-      _item('My Profile', 'user-circle.svg', route: '/shell/finance/profile'),
-    ], title: 'Account'),
-    _section([_item('Logout', 'logout.svg', destructive: true)]),
-  ],
-  UserRole.admin: [
-    _section([
-      _item('Students', 'students.svg', route: '/shell/admin/students'),
-      _item('Classes', 'classes.svg', route: '/shell/admin/classes'),
-      _item('Subjects', 'subjects.svg', route: '/shell/admin/subjects'),
-      _item('Grading Scales', 'grading.svg', route: '/shell/admin/grading-scales'),
-      _item('Assessment Types', 'assessment-types.svg', route: '/shell/admin/assessment-types'),
-    ], title: 'Academic'),
-    _section([
-      _item('Fee Categories', 'finance.svg', route: '/shell/admin/fee-categories'),
-      _item('Performance Engine', 'cpu-chip.svg', route: '/shell/admin/performance-engine'),
-    ], title: 'Finance'),
-    _section([
-      _item('Notification Templates', 'bell.svg', route: '/shell/admin/notification-templates'),
-      _item('Send Manual Notification', 'announcements.svg', route: '/shell/admin/manual-notification'),
-      _item('Notification Logs', 'audit.svg', route: '/shell/admin/notification-logs'),
-    ], title: 'Communications'),
-    _section([
-      _item('Analytics', 'analytics.svg', route: '/shell/admin/analytics'),
-      _item('Generate Reports', 'report-card.svg', route: '/shell/admin/reports'),
-      _item('Financial Audit Log', 'audit.svg', route: '/shell/admin/financial-audit'),
-      _item('System Audit Log', 'audit.svg', route: '/shell/admin/system-audit'),
-    ], title: 'Reports & Audit'),
-    _section([
-      _item('System Settings', 'settings.svg', route: '/shell/admin/settings'),
-      _item('Announcements', 'announcements.svg', route: '/shell/admin/announcements'),
-    ], title: 'System'),
-    _section([
-      _item('My Profile', 'user-circle.svg', route: '/shell/admin/profile'),
-    ], title: 'Account'),
-    _section([_item('Logout', 'logout.svg', destructive: true)]),
-  ],
+  // Web-primary desk roles: mobile is a companion (pulse + notifications +
+  // profile); the full workspace lives in the web dashboard.
+  UserRole.academicQa: _deskRoleSections('aqa'),
+  UserRole.manager: _deskRoleSections('principal'),
+  UserRole.headOfSchool: _deskRoleSections('principal'),
+  UserRole.headOfFinance: _deskRoleSections('finance'),
+  UserRole.superAdmin: _deskRoleSections('admin'),
+  UserRole.principal: _deskRoleSections('principal'),
+  UserRole.finance: _deskRoleSections('finance'),
+  UserRole.admin: _deskRoleSections('admin'),
 };
+
+List<DrawerSection> _deskRoleSections(String prefix) => [
+      _section([
+        _item('Overview', 'analytics.svg', route: '/shell/$prefix/home'),
+        _item('Notifications', 'bell.svg', route: '/shell/$prefix/notifications'),
+      ], title: 'Summary'),
+      _section([
+        _item('Settings', 'settings.svg', route: '/shell/$prefix/settings'),
+        _item('My Profile', 'user-circle.svg', route: '/shell/$prefix/profile'),
+      ], title: 'Account'),
+      _section([_item('Logout', 'logout.svg', destructive: true)]),
+    ];

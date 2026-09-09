@@ -13,7 +13,7 @@ export class StudentsController {
   constructor(private readonly service: StudentsService) {}
 
   @Get()
-  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA, ROLES.HEAD_OF_DEPARTMENT, ROLES.TEACHER, ROLES.FINANCE)
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA, ROLES.HEAD_OF_DEPARTMENT, ROLES.TEACHER, ROLES.FINANCE, ROLES.HEAD_OF_FINANCE)
   @ApiOperation({ summary: 'Paginated student analytics list' })
   list(
     @Query('classId') classId?: string,
@@ -40,19 +40,19 @@ export class StudentsController {
   }
 
   @Get('at-risk')
-  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA, ROLES.HEAD_OF_DEPARTMENT, ROLES.TEACHER)
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA, ROLES.HEAD_OF_DEPARTMENT, ROLES.TEACHER)
   atRisk(@Query('classId') classId?: string) {
     return this.service.atRisk(classId);
   }
 
   @Get('top-performers')
-  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA, ROLES.HEAD_OF_DEPARTMENT)
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA, ROLES.HEAD_OF_DEPARTMENT)
   topPerformers(@Query('classId') classId?: string, @Query('subjectId') subjectId?: string, @Query('termId') termId?: string, @Query('limit') limit = '10') {
     return this.service.topPerformers(classId, subjectId, termId, Number(limit));
   }
 
   @Get('most-improved')
-  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA, ROLES.HEAD_OF_DEPARTMENT, ROLES.TEACHER, ROLES.FINANCE)
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA, ROLES.HEAD_OF_DEPARTMENT, ROLES.TEACHER, ROLES.FINANCE, ROLES.HEAD_OF_FINANCE)
   mostImproved(@Query('classId') classId?: string, @Query('subjectId') subjectId?: string, @Query('termId') termId?: string) {
     return this.service.mostImproved(classId, subjectId, termId);
   }
@@ -69,7 +69,7 @@ export class StudentsController {
   }
 
   @Get('parent-child/:childId')
-  @Roles(ROLES.PARENT, ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL)
+  @Roles(ROLES.PARENT, ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN)
   @ApiOperation({ summary: "Parent view of child's academic overview" })
   parentChildDashboard(
     @Param('childId') childId: string,
@@ -84,11 +84,11 @@ export class StudentsController {
   @Get(':studentId')
   @Roles(
     ROLES.SYSTEM_ADMIN,
-    ROLES.PRINCIPAL,
+    ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN,
     ROLES.ACADEMIC_QA,
     ROLES.HEAD_OF_DEPARTMENT,
     ROLES.TEACHER,
-    ROLES.FINANCE,
+    ROLES.FINANCE, ROLES.HEAD_OF_FINANCE,
     ROLES.PARENT,
     ROLES.STUDENT,
   )

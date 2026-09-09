@@ -4,8 +4,10 @@ import { APP_GUARD } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AssessmentModule } from './assessments/assessments.module';
+import { ExamsModule } from './exams/exams.module';
 import { GradingModule } from './grading/grading.module';
 import { HealthModule } from './health/health.module';
+import { ImportModule } from './import/import.module';
 import { InternalModule } from './internal/internal.module';
 import { JobsModule } from './jobs/jobs.module';
 import { PerformanceModule } from './performance/performance.module';
@@ -19,6 +21,7 @@ import { StudentClientModule } from './student-client/student-client.module';
 import { SubjectsModule } from './subjects/subjects.module';
 import { SyllabusModule } from './syllabus/syllabus.module';
 import { TimetableModule } from './timetable/timetable.module';
+import { InternalApiGuard } from './common/guards/internal-api.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { IdentityMiddleware } from './common/middleware/identity.middleware';
 import { AccessControlService } from './common/helpers/access-control.service';
@@ -44,11 +47,13 @@ import { validateEnv } from './config/env.validation';
     SubjectsModule,
     GradingModule,
     AssessmentModule,
+    ExamsModule,
     ResultsModule,
     ReportCardsModule,
     TimetableModule,
     SyllabusModule,
     PerformanceModule,
+    ImportModule,
     InternalModule,
     JobsModule,
   ],
@@ -56,6 +61,7 @@ import { validateEnv } from './config/env.validation';
     RabbitMqConsumer,
     AccessControlService,
     { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useClass: InternalApiGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
   ],
 })

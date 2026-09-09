@@ -6,7 +6,6 @@ import { Button } from '../../components/common/Button';
 import { Card } from '../../components/common/Card';
 import { AdvancedIcon } from '../../components/icons/AdvancedIcon';
 import { useMarkNotificationReadMutation, useNotifications } from './common.hooks';
-import { notifications } from './mockData';
 import { PageScaffold } from './PageScaffold';
 
 type NotifTone = 'blue' | 'emerald' | 'rose' | 'amber' | 'slate';
@@ -27,26 +26,38 @@ const CATEGORY_TONE: Record<string, NotifTone> = {
 
 export function NotificationDetailPage() {
   const { id } = useParams();
-  const { data: rawNotifs } = useNotifications() as { data: Record<string, unknown>[] | undefined };
+  const { data: rawNotifs, isLoading } = useNotifications() as {
+    data: Record<string, unknown>[] | undefined;
+    isLoading: boolean;
+  };
   const markRead = useMarkNotificationReadMutation();
 
-  // Normalise API data, fall back to mock
-  const allNotifs = rawNotifs
-    ? rawNotifs.map((n) => {
-        const cat = String(n.category ?? 'System');
-        return {
-          id:      String(n.id ?? ''),
-          title:   String(n.title ?? ''),
-          preview: String(n.message ?? n.preview ?? ''),
-          category: cat,
-          status:  String(n.status ?? 'Unread'),
-          time:    n.createdAt ? new Date(String(n.createdAt)).toLocaleString() : String(n.time ?? ''),
-          unread:  n.isRead === false || n.unread === true,
-          icon:    (CATEGORY_ICON[cat] ?? Bell) as LucideIcon,
-          tone:    (CATEGORY_TONE[cat] ?? 'slate') as NotifTone,
-        };
-      })
-    : notifications;
+  if (isLoading) {
+    return (
+      <PageScaffold title="Loading…" description="">
+        <div className="max-w-4xl animate-pulse space-y-4">
+          <div className="h-10 w-10 rounded-xl bg-ks-paper" />
+          <div className="h-6 w-48 rounded-lg bg-ks-paper" />
+          <div className="h-24 rounded-xl bg-ks-paper" />
+        </div>
+      </PageScaffold>
+    );
+  }
+
+  const allNotifs = (rawNotifs ?? []).map((n) => {
+    const cat = String(n.category ?? 'System');
+    return {
+      id:       String(n.id ?? ''),
+      title:    String(n.title ?? ''),
+      preview:  String(n.message ?? n.preview ?? ''),
+      category: cat,
+      status:   String(n.status ?? 'Unread'),
+      time:     n.createdAt ? new Date(String(n.createdAt)).toLocaleString() : String(n.time ?? ''),
+      unread:   n.isRead === false || n.unread === true,
+      icon:     (CATEGORY_ICON[cat] ?? Bell) as LucideIcon,
+      tone:     (CATEGORY_TONE[cat] ?? 'slate') as NotifTone,
+    };
+  });
 
   const item = allNotifs.find((n) => n.id === id);
   if (!item) return <Navigate to="/app/404" replace />;

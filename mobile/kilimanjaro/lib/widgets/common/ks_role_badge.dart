@@ -19,6 +19,11 @@ class KSRoleBadge extends StatelessWidget {
       UserRole.academicQa => AppColors.accentViolet,
       UserRole.principal => AppColors.accentEmerald,
       UserRole.finance => AppColors.accentAmber,
+      UserRole.admissions => AppColors.skyBlue600,
+      UserRole.superAdmin => AppColors.textSecondary,
+      UserRole.manager => AppColors.accentEmerald,
+      UserRole.headOfSchool => AppColors.accentEmerald,
+      UserRole.headOfFinance => AppColors.accentAmber,
       UserRole.admin => AppColors.textSecondary,
     };
     return KSChip(label: role.label, color: color, size: ChipSize.small);

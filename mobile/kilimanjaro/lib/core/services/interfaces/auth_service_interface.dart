@@ -22,5 +22,10 @@ abstract interface class IAuthService {
     required String newPassword,
   });
 
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  });
+
   Future<AuthUser?> getCurrentUser();
 }

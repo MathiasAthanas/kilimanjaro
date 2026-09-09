@@ -99,17 +99,3 @@ export const reportJobs = [
   { id: 'rpt-001', name: 'Finance Collection Summary', status: 'COMPLETED', requestedBy: 'Grace Temba', role: 'FINANCE', scope: 'Term II', format: 'PDF', created: '2026-05-21T08:10:00Z' },
   { id: 'rpt-002', name: 'Academic Overview', status: 'RUNNING', requestedBy: 'David Mwasimba', role: 'PRINCIPAL', scope: 'Whole School', format: 'XLSX', created: '2026-05-21T09:30:00Z' },
 ];
-
-export const adminApi = {
-  getUsers: async () => adminUsers,
-  getStudents: async () => adminStudents,
-  getClasses: async () => adminClasses,
-  getSubjects: async () => adminSubjects,
-  getGradingScales: async () => gradingScales,
-  getAssessmentTypes: async () => assessmentTypes,
-  getServiceHealth: async () => serviceHealth,
-  getNotificationTemplates: async () => notificationTemplates,
-  getNotificationLogs: async () => notificationLogs,
-  getAudit: async () => adminAuditEvents,
-  getReports: async () => reportJobs,
-};

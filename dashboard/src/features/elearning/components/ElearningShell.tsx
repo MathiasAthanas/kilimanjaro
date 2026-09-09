@@ -10,7 +10,7 @@ export function ElearningShell({ title, eyebrow, children, action }: { title: st
             <p className="text-xs font-black uppercase tracking-[0.28em] text-[#6C63FF]">{eyebrow}</p>
             <h1 className="mt-2 font-display text-4xl font-black text-ks-slate">{title}</h1>
             <p className="mt-3 max-w-2xl text-sm font-semibold leading-6 text-ks-muted">
-              Course spaces, lessons, materials, assignments, quizzes, parent visibility, and engagement analytics are prepared with mock data until backend integration is approved.
+              Course spaces, lessons, materials, assignments, quizzes, parent visibility, and engagement analytics — all synced live with the e-learning service.
             </p>
           </div>
           {action}

@@ -13,7 +13,7 @@ export class AttendanceController {
   constructor(private readonly service: AttendanceService) {}
 
   @Get('overview')
-  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA, ROLES.MANAGING_DIRECTOR)
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA, ROLES.MANAGING_DIRECTOR)
   @ApiOperation({ summary: 'Attendance overview analytics' })
   overview(@Query('termId') termId?: string, @Query('academicYearId') academicYearId?: string, @Query('classId') classId?: string) {
     return this.service.getOverview(termId, academicYearId, classId);
@@ -22,10 +22,10 @@ export class AttendanceController {
   @Get('student/:studentId')
   @Roles(
     ROLES.SYSTEM_ADMIN,
-    ROLES.PRINCIPAL,
+    ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN,
     ROLES.ACADEMIC_QA,
     ROLES.MANAGING_DIRECTOR,
-    ROLES.FINANCE,
+    ROLES.FINANCE, ROLES.HEAD_OF_FINANCE,
     ROLES.HEAD_OF_DEPARTMENT,
     ROLES.TEACHER,
     ROLES.PARENT,

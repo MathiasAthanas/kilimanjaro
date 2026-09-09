@@ -13,6 +13,7 @@ import { RabbitMqService } from '../rabbitmq/rabbitmq.service';
 import { StudentClientService } from '../student-client/student-client.service';
 import { ROLES } from '../common/constants/roles';
 import { RequestUser } from '../common/interfaces/request-user.interface';
+import { schoolScopeFilter } from '../common/helpers/school-scope.helper';
 import { PublishResultsDto } from './dto/publish-results.dto';
 import { ResultsFilterDto } from './dto/results-filter.dto';
 import { ReportCardsService } from '../report-cards/report-cards.service';
@@ -61,8 +62,10 @@ export class ResultsService {
   private async getActiveScale(
     academicYearId: string,
     scope: { educationStage?: string | null; classLevel?: number | null; subjectId?: string | null } = {},
+    schoolId?: string | null,
   ) {
-    const cacheKey = `grading-scale:active:${academicYearId}:${scope.educationStage ?? 'ALL'}:${scope.classLevel ?? 'ALL'}:${scope.subjectId ?? 'ALL'}`;
+    // Include schoolId in cache key so different schools never share a cached scale.
+    const cacheKey = `grading-scale:active:${schoolId ?? 'global'}:${academicYearId}:${scope.educationStage ?? 'ALL'}:${scope.classLevel ?? 'ALL'}:${scope.subjectId ?? 'ALL'}`;
     const cached = await this.redis.get<any>(cacheKey);
     if (cached) {
       return cached;
@@ -72,37 +75,32 @@ export class ResultsService {
       where: {
         academicYearId,
         isActive: true,
-        OR: [
+        // Prefer school-specific scale; fall back to global (schoolId = null).
+        AND: [
+          schoolId
+            ? { OR: [{ schoolId }, { schoolId: null }] }
+            : { schoolId: null },
           {
-            educationStage: scope.educationStage as any,
-            classLevel: scope.classLevel ?? null,
-            subjectId: scope.subjectId ?? null,
-          },
-          {
-            educationStage: scope.educationStage as any,
-            classLevel: scope.classLevel ?? null,
-            subjectId: null,
-          },
-          {
-            educationStage: scope.educationStage as any,
-            classLevel: null,
-            subjectId: null,
-          },
-          {
-            educationStage: null,
-            classLevel: null,
-            subjectId: null,
+            OR: [
+              { educationStage: scope.educationStage as any, classLevel: scope.classLevel ?? null, subjectId: scope.subjectId ?? null },
+              { educationStage: scope.educationStage as any, classLevel: scope.classLevel ?? null, subjectId: null },
+              { educationStage: scope.educationStage as any, classLevel: null, subjectId: null },
+              { educationStage: null, classLevel: null, subjectId: null },
+            ],
           },
         ],
       },
       include: { grades: { orderBy: { minScore: 'asc' } } },
     });
-    const scale = candidates
-      .sort((a, b) => {
-        const score = (item: typeof a) =>
-          (item.subjectId ? 4 : 0) + (item.classLevel !== null ? 2 : 0) + (item.educationStage ? 1 : 0);
-        return score(b) - score(a);
-      })[0];
+
+    const scale = candidates.sort((a, b) => {
+      const score = (item: typeof a) =>
+        (item.schoolId ? 8 : 0) +
+        (item.subjectId ? 4 : 0) +
+        (item.classLevel !== null ? 2 : 0) +
+        (item.educationStage ? 1 : 0);
+      return score(b) - score(a);
+    })[0];
 
     if (!scale) {
       throw new BadRequestException(`No active grading scale for academicYearId ${academicYearId}`);
@@ -128,7 +126,9 @@ export class ResultsService {
 
   async computeTermResults(classSubjectId: string, termId: string) {
     const assessments = await this.prisma.assessment.findMany({
-      where: { classSubjectId, termId, status: 'LOCKED' },
+      // Legacy weighted term-result path only: exam-window assessments (which have
+      // a null assessmentTypeId) are ranked via ExamWindowResult instead.
+      where: { classSubjectId, termId, status: 'LOCKED', assessmentTypeId: { not: null } },
       include: { assessmentType: true, classSubject: { include: { subject: true } } },
       orderBy: { createdAt: 'asc' },
     });
@@ -138,11 +138,15 @@ export class ResultsService {
     }
 
     const first = assessments[0];
-    const scale = await this.getActiveScale(first.academicYearId, {
-      educationStage: first.classSubject.educationStage,
-      classLevel: first.classSubject.classLevel,
-      subjectId: first.subjectId,
-    });
+    const scale = await this.getActiveScale(
+      first.academicYearId,
+      {
+        educationStage: first.classSubject.educationStage,
+        classLevel: first.classSubject.classLevel,
+        subjectId: first.subjectId,
+      },
+      (first as any).schoolId ?? null,
+    );
 
     const studentIdsPayload = await this.studentClient.get<any>(`/students/internal/class/${first.classId}/student-ids`);
     const studentIds = this.unwrap<string[]>(studentIdsPayload) || [];
@@ -173,9 +177,12 @@ export class ResultsService {
       for (const assessment of assessments) {
         const score = map.get(assessment.id) ?? 0;
         const normalized = (score / assessment.maxScore) * 100;
-        const contribution = normalized * (assessment.assessmentType.weightPercentage / 100);
+        const weightPercentage = assessment.assessmentType?.weightPercentage ?? 0;
+        const contribution = normalized * (weightPercentage / 100);
         weightedTotal += contribution;
-        breakdown[assessment.assessmentType.code] = score;
+        if (assessment.assessmentType?.code) {
+          breakdown[assessment.assessmentType.code] = score;
+        }
       }
 
       computedRows.push({ studentId, weightedTotal: Number(weightedTotal.toFixed(2)), breakdown });
@@ -185,58 +192,57 @@ export class ResultsService {
       computedRows.map((row) => ({ studentId: row.studentId, score: row.weightedTotal })),
     );
 
-    const upserts: Promise<TermResult>[] = [];
-    for (const row of computedRows) {
+    const upsertOps = computedRows.map((row) => {
       const resolved = this.resolveGrade(scale, row.weightedTotal);
-      upserts.push(
-        this.prisma.termResult.upsert({
-          where: {
-            studentId_classSubjectId_termId: {
-              studentId: row.studentId,
-              classSubjectId,
-              termId,
-            },
-          },
-          create: {
+      return this.prisma.termResult.upsert({
+        where: {
+          studentId_classSubjectId_termId: {
             studentId: row.studentId,
-            classId: first.classId,
             classSubjectId,
-            subjectId: first.subjectId,
-            subjectName: first.classSubject.subject.name,
-            educationStage: first.classSubject.educationStage,
-            classLevel: first.classSubject.classLevel,
-            combinationId: first.classSubject.combinationId,
             termId,
-            academicYearId: first.academicYearId,
-            assessmentScores: row.breakdown,
-            weightedTotal: row.weightedTotal,
-            grade: resolved.grade,
-            gradePoints: resolved.points,
-            remark: resolved.remark,
-            isPassing: resolved.isPassing,
-            rank: ranking[row.studentId],
-            totalStudentsInClass: studentIds.length,
-            teacherId: first.classSubject.teacherId,
           },
-          update: {
-            educationStage: first.classSubject.educationStage,
-            classLevel: first.classSubject.classLevel,
-            combinationId: first.classSubject.combinationId,
-            assessmentScores: row.breakdown,
-            weightedTotal: row.weightedTotal,
-            grade: resolved.grade,
-            gradePoints: resolved.points,
-            remark: resolved.remark,
-            isPassing: resolved.isPassing,
-            rank: ranking[row.studentId],
-            totalStudentsInClass: studentIds.length,
-            teacherId: first.classSubject.teacherId,
-          },
-        }),
-      );
-    }
+        },
+        create: {
+          studentId: row.studentId,
+          classId: first.classId,
+          classSubjectId,
+          subjectId: first.subjectId,
+          subjectName: first.classSubject.subject.name,
+          educationStage: first.classSubject.educationStage,
+          classLevel: first.classSubject.classLevel,
+          combinationId: first.classSubject.combinationId,
+          termId,
+          academicYearId: first.academicYearId,
+          schoolId: (first as any).schoolId ?? null,
+          assessmentScores: row.breakdown,
+          weightedTotal: row.weightedTotal,
+          grade: resolved.grade,
+          gradePoints: resolved.points,
+          remark: resolved.remark,
+          isPassing: resolved.isPassing,
+          rank: ranking[row.studentId],
+          totalStudentsInClass: studentIds.length,
+          teacherId: first.classSubject.teacherId,
+        },
+        update: {
+          educationStage: first.classSubject.educationStage,
+          classLevel: first.classSubject.classLevel,
+          combinationId: first.classSubject.combinationId,
+          assessmentScores: row.breakdown,
+          weightedTotal: row.weightedTotal,
+          grade: resolved.grade,
+          gradePoints: resolved.points,
+          remark: resolved.remark,
+          isPassing: resolved.isPassing,
+          rank: ranking[row.studentId],
+          totalStudentsInClass: studentIds.length,
+          teacherId: first.classSubject.teacherId,
+        },
+      });
+    });
 
-    const results = await Promise.all(upserts);
+    // All upserts in one atomic transaction — partial failure leaves no half-written class results.
+    const results = await this.prisma.$transaction(upsertOps);
 
     for (const result of results) {
       await this.rabbitMq.publish('performance.snapshot.ready', {
@@ -267,6 +273,7 @@ export class ResultsService {
 
   async listResults(filters: ResultsFilterDto, user?: RequestUser) {
     const where: Prisma.TermResultWhereInput = {
+      ...schoolScopeFilter(user),
       studentId: filters.studentId,
       classId: filters.classId,
       termId: filters.termId,
@@ -347,8 +354,9 @@ export class ResultsService {
   }
 
   async publishResults(dto: PublishResultsDto, user: RequestUser) {
-    if (user.role !== ROLES.PRINCIPAL) {
-      throw new ForbiddenException('Only principal can publish results');
+    const publisherRoles = [ROLES.PRINCIPAL, ROLES.HEAD_OF_SCHOOL, ROLES.MANAGER, ROLES.SUPER_ADMIN];
+    if (!publisherRoles.includes(user.role as any)) {
+      throw new ForbiddenException('Only Principal, Head of School, Manager or Super Admin can publish results');
     }
 
     const results = await this.prisma.termResult.findMany({ where: { classId: dto.classId, termId: dto.termId } });
@@ -441,6 +449,25 @@ export class ResultsService {
             ? [`${criticalStudents.length} students require immediate intervention.`]
             : ['Continue regular monitoring and weekly intervention reviews.'],
       },
+    };
+  }
+
+  async readiness(termId?: string) {
+    const where = termId ? { termId } : {};
+    const [totalResults, publishedResults, totalAssessments, gradedAssessments] = await Promise.all([
+      this.prisma.termResult.count({ where }),
+      this.prisma.termResult.count({ where: { ...where, isPublished: true } }),
+      this.prisma.assessment.count({ where: termId ? { termId } : {} }),
+      this.prisma.assessment.count({ where: { ...(termId ? { termId } : {}), status: 'LOCKED' } }),
+    ]);
+    const resultsReadiness = totalResults > 0 ? Math.round((publishedResults / totalResults) * 100) : 0;
+    const gradingReadiness = totalAssessments > 0 ? Math.round((gradedAssessments / totalAssessments) * 100) : 0;
+    return {
+      termId: termId || null,
+      results: { total: totalResults, published: publishedResults, unpublished: totalResults - publishedResults, readinessPercent: resultsReadiness },
+      assessments: { total: totalAssessments, approved: gradedAssessments, pending: totalAssessments - gradedAssessments, readinessPercent: gradingReadiness },
+      isReadyToPublish: gradingReadiness >= 80 && resultsReadiness < 100,
+      checkedAt: new Date(),
     };
   }
 }

@@ -26,7 +26,7 @@ export class AssessmentsController {
   constructor(private readonly assessmentsService: AssessmentsService) {}
 
   @Post('assessments/generate')
-  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA)
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA)
   generate(@Body() dto: GenerateAssessmentsDto) {
     return this.assessmentsService.generateAssessments(dto);
   }
@@ -34,7 +34,7 @@ export class AssessmentsController {
   @Get('assessments')
   @Roles(
     ROLES.SYSTEM_ADMIN,
-    ROLES.PRINCIPAL,
+    ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN,
     ROLES.ACADEMIC_QA,
     ROLES.HEAD_OF_DEPARTMENT,
     ROLES.TEACHER,
@@ -51,7 +51,7 @@ export class AssessmentsController {
   }
 
   @Get('assessments/pending-approval')
-  @Roles(ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA)
+  @Roles(ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA)
   pending(
     @Query('classId') classId: string | undefined,
     @Query('subjectId') subjectId: string | undefined,
@@ -61,7 +61,7 @@ export class AssessmentsController {
   }
 
   @Get('assessments/approval-history')
-  @Roles(ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA)
+  @Roles(ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA)
   approvalHistory(@CurrentUser() user?: RequestUser) {
     return this.assessmentsService.listApprovalHistory(user!);
   }
@@ -69,7 +69,7 @@ export class AssessmentsController {
   @Get('assessments/:id')
   @Roles(
     ROLES.SYSTEM_ADMIN,
-    ROLES.PRINCIPAL,
+    ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN,
     ROLES.ACADEMIC_QA,
     ROLES.HEAD_OF_DEPARTMENT,
     ROLES.TEACHER,
@@ -79,7 +79,7 @@ export class AssessmentsController {
   }
 
   @Get('assessments/:id/marks/sheet')
-  @Roles(ROLES.TEACHER, ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA)
+  @Roles(ROLES.TEACHER, ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA)
   marksSheet(@Param('id') id: string, @CurrentUser() user?: RequestUser) {
     return this.assessmentsService.getMarksSheet(id, user!);
   }
@@ -91,7 +91,7 @@ export class AssessmentsController {
   }
 
   @Patch('assessments/:id/marks/:markId')
-  @Roles(ROLES.TEACHER, ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL)
+  @Roles(ROLES.TEACHER, ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN)
   updateMark(
     @Param('id') id: string,
     @Param('markId') markId: string,
@@ -108,19 +108,19 @@ export class AssessmentsController {
   }
 
   @Get('assessments/:id/marks/review')
-  @Roles(ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA)
+  @Roles(ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA)
   review(@Param('id') id: string) {
     return this.assessmentsService.reviewAssessment(id);
   }
 
   @Patch('assessments/:id/approve')
-  @Roles(ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA)
+  @Roles(ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA)
   approve(@Param('id') id: string, @Body() dto: ApproveAssessmentDto, @CurrentUser() user?: RequestUser) {
     return this.assessmentsService.approveAssessment(id, dto, user!);
   }
 
   @Patch('assessments/:id/reject')
-  @Roles(ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA)
+  @Roles(ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA)
   reject(@Param('id') id: string, @Body() dto: RejectAssessmentDto, @CurrentUser() user?: RequestUser) {
     return this.assessmentsService.rejectAssessment(id, dto, user!);
   }

@@ -6,7 +6,6 @@ import { Badge } from '../../components/common/Badge';
 import { Card } from '../../components/common/Card';
 import { AdvancedIcon } from '../../components/icons/AdvancedIcon';
 import { useAnnouncements } from './common.hooks';
-import { announcements } from './mockData';
 import { MetricCard, PageScaffold } from './PageScaffold';
 
 type AnnTone = 'blue' | 'emerald' | 'rose' | 'amber' | 'slate';
@@ -45,7 +44,7 @@ export function AnnouncementsPage() {
   const [query, setQuery] = useState('');
   const { data: rawAnnouncements } = useAnnouncements() as { data: Record<string, unknown>[] | undefined };
 
-  const apiAnnouncements = rawAnnouncements?.map(normalizeAnn) ?? announcements;
+  const apiAnnouncements = rawAnnouncements?.map(normalizeAnn) ?? [];
 
   const filtered = query.length > 1
     ? apiAnnouncements.filter((a) =>
@@ -63,7 +62,7 @@ export function AnnouncementsPage() {
       <div className="mb-6 grid gap-6 md:grid-cols-4">
         <MetricCard label="Published" value={String(publishedCount).padStart(2, '0')} />
         <MetricCard label="Urgent"    value={String(urgentCount).padStart(2, '0')} tone="text-ks-rose" />
-        <MetricCard label="Read Rate" value="89%" />
+        <MetricCard label="Read Rate" value="—" />
         <MetricCard label="Drafts"    value={String(draftCount).padStart(2, '0')} />
       </div>
       <div className="mb-6 flex max-w-md items-center gap-3 rounded-xl border border-ks-line bg-white px-4 py-2.5 shadow-sm transition focus-within:ring-2 focus-within:ring-ks-blue/20">

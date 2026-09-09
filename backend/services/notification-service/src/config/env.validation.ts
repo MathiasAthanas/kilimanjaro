@@ -33,6 +33,10 @@ export function validateEnv(config: EnvConfig): EnvConfig {
 
   if (asString(config, 'NODE_ENV') === 'production') {
     requireKeys(config, requiredInProduction);
+    if (!asString(config, 'FIREBASE_SERVICE_ACCOUNT_JSON')) {
+      // Not required — push notifications will be silently disabled.
+      console.warn('[notification-service] WARNING: FIREBASE_SERVICE_ACCOUNT_JSON is not set — push notifications (FCM) will be disabled in production.');
+    }
   }
 
   return config;

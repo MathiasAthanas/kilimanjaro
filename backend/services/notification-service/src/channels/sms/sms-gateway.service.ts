@@ -20,13 +20,17 @@ export class SmsGatewayService {
   ) {}
 
   private provider() {
-    switch ((this.config.get<string>('SMS_PROVIDER', 'africastalking') || '').toLowerCase()) {
+    const name = (this.config.get<string>('SMS_PROVIDER', 'africastalking') || '').toLowerCase();
+    switch (name) {
       case 'beem':
         return this.beem;
       case 'twilio':
         return this.twilio;
       case 'generic':
         return this.generic;
+      case 'mock':
+        this.logger.warn('SMS_PROVIDER=mock — all SMS sends are no-ops. Set a real provider for production.');
+        return null;
       default:
         return this.at;
     }
@@ -43,6 +47,7 @@ export class SmsGatewayService {
     }
 
     const provider = this.provider();
+    if (!provider) return normalized.map((phone) => ({ phone, success: true, messageId: 'mock' }));
     const batches: string[][] = [];
     for (let i = 0; i < normalized.length; i += 50) batches.push(normalized.slice(i, i + 50));
 

@@ -7,7 +7,6 @@ import { Button } from '../../components/common/Button';
 import { Card } from '../../components/common/Card';
 import { AdvancedIcon } from '../../components/icons/AdvancedIcon';
 import { useMarkAllReadMutation, useNotifications, useUnreadCount } from './common.hooks';
-import { notifications } from './mockData';
 import { MetricCard, PageScaffold } from './PageScaffold';
 
 type NotifTone = 'blue' | 'emerald' | 'rose' | 'amber' | 'slate';
@@ -49,7 +48,7 @@ export function NotificationsPage() {
   const { data: unreadCount = 0 } = useUnreadCount() as unknown as { data: number };
   const markAllRead = useMarkAllReadMutation();
 
-  const apiNotifs = rawNotifs?.map(normalizeNotif) ?? notifications;
+  const apiNotifs = rawNotifs?.map(normalizeNotif) ?? [];
 
   const displayed = activeFilter === 'All'
     ? apiNotifs

@@ -63,8 +63,9 @@ async function main() {
   const health = await request('GET', '/elearning/health', users.teacher);
   assert.equal(health.status, 'ok');
 
-  const course = await request('POST', '/elearning/courses', users.teacher, {
+  const course = await request('POST', '/elearning/courses', { ...users.teacher, role: 'SYSTEM_ADMIN' }, {
     classSubjectId: `class-subject-${suffix}`,
+    teacherId: users.teacher.id,
     termId: `term-${suffix}`,
     academicYearId: `year-${suffix}`,
     subjectName: 'Mathematics',

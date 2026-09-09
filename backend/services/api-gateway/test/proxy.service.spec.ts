@@ -69,7 +69,7 @@ describe('gateway proxy service', () => {
       { id: 'user-1', role: 'STUDENT', email: 'student@example.com' },
     );
 
-    expect(result).toEqual({ statusCode: 202, data: { ok: true } });
+    expect(result).toMatchObject({ statusCode: 202, data: { ok: true }, isBinary: false });
     expect(httpService.request).toHaveBeenCalledWith(
       expect.objectContaining({
         method: 'POST',

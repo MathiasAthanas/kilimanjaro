@@ -12,10 +12,14 @@ class AuthResult {
   final AuthUser user;
 
   factory AuthResult.fromJson(Map<String, dynamic> json) {
+    // The backend wraps responses as { success, data: {...} } — unwrap first.
+    final payload = json['data'] is Map<String, dynamic>
+        ? json['data'] as Map<String, dynamic>
+        : json;
     return AuthResult(
-      token: json['access_token'] as String? ?? json['accessToken'] as String? ?? '',
-      refreshToken: json['refresh_token'] as String? ?? json['refreshToken'] as String? ?? '',
-      user: AuthUser.fromJson(json['user'] as Map<String, dynamic>? ?? {}),
+      token: payload['access_token'] as String? ?? payload['accessToken'] as String? ?? '',
+      refreshToken: payload['refresh_token'] as String? ?? payload['refreshToken'] as String? ?? '',
+      user: AuthUser.fromJson(payload['user'] as Map<String, dynamic>? ?? {}),
     );
   }
 }

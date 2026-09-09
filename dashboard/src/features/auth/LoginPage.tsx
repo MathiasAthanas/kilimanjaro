@@ -14,11 +14,14 @@ import { loginSchema, type LoginForm } from './schemas';
 
 const demo = [
   ['Admin', 'admin@demo.kilimanjaro.test', 'Admin@Kili2026'],
-  ['Principal', 'principal@demo.kilimanjaro.test', 'Principal@Kili2026'],
   ['AQA', 'aqa@demo.kilimanjaro.test', 'Aqa@Kili2026'],
   ['Finance', 'finance@demo.kilimanjaro.test', 'Finance@Kili2026'],
   ['Teacher', 't-english@demo.kilimanjaro.test', 'Teacher@Kili2026'],
   ['HOD', 'hod-science@demo.kilimanjaro.test', 'Hod@Kili2026'],
+  ['Admissions', 'admissions@demo.kilimanjaro.test', 'Admissions@Kili2026'],
+  ['Manager', 'principal@demo.kilimanjaro.test', 'Principal@Kili2026'],
+  ['Super Admin', 'superadmin@demo.kilimanjaro.test', 'Super@Kili2026'],
+  ['Head of School', 'hos-primary@demo.kilimanjaro.test', 'Head@Kili2026'],
 ];
 
 export function LoginPage() {
@@ -85,7 +88,7 @@ export function LoginPage() {
         </div>
         {import.meta.env.DEV ? (
           <div className="mt-6 w-full rounded-lg border border-ks-line bg-ks-mist/30 p-5">
-            <div className="mb-4 flex items-center gap-2 text-ks-navy"><School className="h-5 w-5" /><span className="text-sm font-black">Quick Login (Dev Only)</span></div>
+            <div className="mb-4 flex items-center gap-2 text-ks-navy"><School className="h-5 w-5" /><span className="text-sm font-black">Quick Fill (Dev Only)</span></div>
             <div className="grid gap-2">
               {demo.map(([role, email, password]) => <button key={email} className="flex justify-between rounded-lg border border-ks-line bg-white p-3 text-left hover:border-ks-blue" onClick={() => fill(email, password)}><span className="font-bold text-ks-navy">{role}</span><span className="text-xs text-ks-muted">{email}</span></button>)}
             </div>

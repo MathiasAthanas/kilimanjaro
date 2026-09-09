@@ -40,6 +40,12 @@ export class CreateUserDto {
   @IsString()
   department?: string;
 
+  /** Required for school-scoped roles unless the caller has one school only. */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  schoolId?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsBoolean()

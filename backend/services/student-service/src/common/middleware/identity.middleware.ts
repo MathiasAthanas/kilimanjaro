@@ -10,9 +10,23 @@ export class IdentityMiddleware implements NestMiddleware {
     const id = req.header('x-user-id');
     const role = req.header('x-user-role');
     const email = req.header('x-user-email') || undefined;
+    const scopeHeader = req.header('x-user-scope');
+    const schoolIdsHeader = req.header('x-user-school-ids');
+    const activeSchoolId = req.header('x-active-school') || undefined;
 
     if (id && role) {
-      req.user = { id, role, email };
+      // The gateway sets x-user-scope for every real user request. Its ABSENCE
+      // means this is a trusted service-to-service call, which must see all
+      // schools (GROUP) rather than being filtered to zero schools.
+      const scope: 'GROUP' | 'SCHOOL' = scopeHeader === 'SCHOOL' ? 'SCHOOL' : 'GROUP';
+      const schoolIds =
+        schoolIdsHeader === '*' || (scope === 'GROUP' && !schoolIdsHeader)
+          ? ['*']
+          : (schoolIdsHeader || '')
+              .split(',')
+              .map((s) => s.trim())
+              .filter(Boolean);
+      req.user = { id, role, email, scope, schoolIds, activeSchoolId };
     }
 
     req.isInternalRequest = req.header('x-internal-request') === 'true';

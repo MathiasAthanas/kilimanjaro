@@ -1,8 +1,11 @@
 import {
   Controller,
   Delete,
+  ForbiddenException,
   Get,
+  Logger,
   NotFoundException,
+  OnModuleInit,
   Param,
   Post,
   Res,
@@ -13,7 +16,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Response } from 'express';
 import { createReadStream, existsSync } from 'fs';
-import { unlink } from 'fs/promises';
+import { mkdir, unlink } from 'fs/promises';
 import { diskStorage } from 'multer';
 import * as path from 'path';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -48,11 +51,18 @@ const fileFilter = (_req: unknown, file: Express.Multer.File, cb: (e: Error | nu
 @ApiTags('Files')
 @ApiBearerAuth()
 @Controller(['files', 'api/v1/files'])
-export class UploadController {
+export class UploadController implements OnModuleInit {
+  private readonly logger = new Logger(UploadController.name);
+
   constructor(
     private readonly store: OperationsStoreService,
     private readonly ui: UiApiService,
   ) {}
+
+  async onModuleInit() {
+    await mkdir(UPLOAD_DIR, { recursive: true });
+    this.logger.log(`Upload directory ready: ${UPLOAD_DIR}`);
+  }
 
   /** Upload a file via multipart/form-data — returns {file: {id, url, ...}} */
   @Post('upload')
@@ -63,6 +73,7 @@ export class UploadController {
   uploadFile(@UploadedFile() file: Express.Multer.File, @CurrentUser() user: GatewayUser) {
     if (!file) throw new NotFoundException('No file received — use field name "file"');
     const record = this.store.create('files', {
+      schoolId: user.activeSchoolId,
       originalName: file.originalname,
       mimeType: file.mimetype,
       sizeBytes: file.size,
@@ -82,6 +93,7 @@ export class UploadController {
   async serveFile(@Param('id') id: string, @Res() res: Response, @CurrentUser() user: GatewayUser) {
     const record = this.store.get<OperationRecord>('files', id);
     if (!record) throw new NotFoundException('File not found');
+    this.assertSchoolAccess(record, user);
     const storageKey = String(record.storageKey ?? '');
     if (!storageKey.startsWith('disk://')) return res.status(404).json({ success: false, message: 'File not available for streaming' });
     const filename = storageKey.slice(7);
@@ -99,6 +111,7 @@ export class UploadController {
   async deleteFile(@Param('id') id: string, @CurrentUser() user: GatewayUser) {
     const record = this.store.get<OperationRecord>('files', id);
     if (!record) throw new NotFoundException('File not found');
+    this.assertSchoolAccess(record, user);
     const storageKey = String(record.storageKey ?? '');
     if (storageKey.startsWith('disk://')) {
       const fp = path.join(UPLOAD_DIR, storageKey.slice(7));
@@ -107,5 +120,12 @@ export class UploadController {
     this.store.remove('files', id);
     this.store.appendAudit({ action: 'FILE_DELETED', entityType: 'FileObject', entityId: id, beforeJson: record }, user);
     return this.ui.envelope({ deleted: true });
+  }
+
+  private assertSchoolAccess(record: OperationRecord, user: GatewayUser): void {
+    const schoolId = typeof record.schoolId === 'string' ? record.schoolId : undefined;
+    if (schoolId && user.scope !== 'GROUP' && !user.schoolIds?.includes(schoolId)) {
+      throw new ForbiddenException('File belongs to another school');
+    }
   }
 }

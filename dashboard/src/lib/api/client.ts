@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { useAuthStore } from '../auth/authStore';
+import { useSchoolStore } from '../school/schoolStore';
 import { endpoints } from './endpoints';
 import { normalizeApiError } from './errors';
 
@@ -14,6 +15,11 @@ api.interceptors.request.use((config) => {
   config.headers.set('x-correlation-id', crypto.randomUUID());
   if (session?.accessToken) {
     config.headers.set('Authorization', `Bearer ${session.accessToken}`);
+  }
+  // Multi-school: scope every call to the selected school (gateway validates)
+  const activeSchool = useSchoolStore.getState().activeSchool;
+  if (activeSchool?.id) {
+    config.headers.set('X-Active-School', activeSchool.id);
   }
   return config;
 });

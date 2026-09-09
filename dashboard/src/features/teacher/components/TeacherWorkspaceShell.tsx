@@ -24,7 +24,6 @@ export function TeacherWorkspaceShell({ title, eyebrow, children, action }: { ti
             <p className="mt-1 max-w-3xl text-sm font-semibold text-ks-mist/70">{teacherName} · Teacher Portal</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Badge tone="gold">Term II · 2026</Badge>
             <Badge tone="blue">Autosave on</Badge>
             {action}
           </div>

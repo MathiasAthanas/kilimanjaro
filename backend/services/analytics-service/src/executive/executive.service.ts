@@ -77,13 +77,25 @@ export class ExecutiveService {
             ? ((overview.academic.atRiskStudentCount / overview.enrolment.totalStudents) * 100)
             : 0,
       },
-      yearOverYearComparison: (await this.prisma.academicYear.findMany({ orderBy: { name: 'asc' }, take: 3 })).map((year) => ({
-        year: year.name,
-        students: overview.enrolment?.totalStudents || 0,
-        passRate,
-        collectionRate,
-        attendanceRate,
-      })),
+      yearOverYearComparison: await (async () => {
+        const academicYears = await this.prisma.academicYear.findMany({ orderBy: { name: 'asc' }, take: 3 });
+        const allKpi = await this.prisma.kpiHistory.findMany({ where: { scope: 'school' }, orderBy: { period: 'asc' } });
+        return academicYears.map((year) => {
+          const yearPrefix = year.name.substring(0, 4);
+          const rows = allKpi.filter((row) => row.period.startsWith(yearPrefix));
+          const kpiAvg = (name: string) => {
+            const vals = rows.filter((r) => r.kpiName === name).map((r) => r.value);
+            return vals.length ? mean(vals) : 0;
+          };
+          return {
+            year: year.name,
+            students: kpiAvg('school_enrolment') || (yearPrefix === new Date().getFullYear().toString() ? overview.enrolment?.totalStudents || 0 : 0),
+            passRate: kpiAvg('pass_rate') || (yearPrefix === new Date().getFullYear().toString() ? passRate : 0),
+            collectionRate: kpiAvg('collection_rate') || (yearPrefix === new Date().getFullYear().toString() ? collectionRate : 0),
+            attendanceRate: kpiAvg('attendance_rate') || (yearPrefix === new Date().getFullYear().toString() ? attendanceRate : 0),
+          };
+        });
+      })(),
       complianceAndGovernance: {
         resultsPublishedOnTime: reportCards.length ? 100 : 0,
         financialAuditsClean: invoices.every((invoice) => invoice.status !== 'CANCELLED'),
@@ -100,13 +112,15 @@ export class ExecutiveService {
     const cached = await this.redis.get<any>(key);
     if (cached) return cached;
 
-    const [board, pairings, notifications, classSubjects, syllabus] = await Promise.all([
+    const [board, pairings, notifications, classSubjects, allSyllabus] = await Promise.all([
       this.boardDashboard(academicYearId),
       this.prisma.peerPairing.findMany(),
       this.prisma.notification.findMany({ where: { createdAt: { gte: new Date(Date.now() - 7 * 86400000) } } }),
-      this.prisma.classSubject.findMany(),
+      this.prisma.classSubject.findMany({ where: academicYearId ? { academicYearId } : undefined }),
       this.prisma.syllabusTracker.findMany(),
     ]);
+    const scopedCsIds = new Set(classSubjects.map((cs) => cs.id));
+    const syllabus = academicYearId ? allSyllabus.filter((s) => scopedCsIds.has(s.classSubjectId)) : allSyllabus;
 
     const result = {
       ...board,

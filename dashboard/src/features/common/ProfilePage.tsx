@@ -5,12 +5,19 @@ import { Button } from '../../components/common/Button';
 import { Card } from '../../components/common/Card';
 import { AdvancedIcon } from '../../components/icons/AdvancedIcon';
 import { useAuthStore } from '../../lib/auth/authStore';
+import { useUnreadCount } from './common.hooks';
 import { MetricCard, PageScaffold } from './PageScaffold';
 
 export function ProfilePage() {
   const user = useAuthStore((state) => state.session?.user);
+  const { data: unreadCount = 0 } = useUnreadCount() as unknown as { data: number };
+
   return (
-    <PageScaffold title="My Profile" description="Your school portal identity, role scope and security status." action={<Link to="/app/settings"><Button variant="secondary">Edit preferences</Button></Link>}>
+    <PageScaffold
+      title="My Profile"
+      description="Your school portal identity, role scope and security status."
+      action={<Link to="/app/settings"><Button variant="secondary">Edit preferences</Button></Link>}
+    >
       <div className="grid gap-6 xl:grid-cols-[1.4fr_0.8fr]">
         <Card className="overflow-hidden">
           <div className="bg-ks-navy p-8 text-white">
@@ -36,18 +43,21 @@ export function ProfilePage() {
           </div>
         </Card>
         <div className="grid gap-6">
-          <MetricCard label="Account grade" value="A+" tone="text-ks-gold" />
-          <MetricCard label="Unread alerts" value="03" />
+          <MetricCard label="Account status" value="Active" tone="text-ks-emerald" />
+          <MetricCard label="Unread alerts" value={String(unreadCount).padStart(2, '0')} />
           <Card className="p-6">
-            <h3 className="font-display text-xl font-bold text-ks-navy">Recent security events</h3>
+            <h3 className="font-display text-xl font-bold text-ks-navy">Session security</h3>
             <div className="mt-4 space-y-2">
-              {['Password updated', 'Successful login', 'Session refreshed'].map((event, index) => (
-                <div key={event} className="flex items-center gap-3 rounded-lg border border-ks-line bg-ks-paper p-3">
-                  <div className="h-2 w-2 shrink-0 rounded-full bg-ks-emerald" />
-                  <p className="text-sm font-bold text-ks-navy">{event}</p>
-                  <span className="ml-auto text-[10px] text-ks-muted">{index === 0 ? '2d ago' : index === 1 ? 'Today' : '1h ago'}</span>
-                </div>
-              ))}
+              <div className="flex items-center gap-3 rounded-lg border border-ks-line bg-ks-paper p-3">
+                <div className="h-2 w-2 shrink-0 rounded-full bg-ks-emerald" />
+                <p className="text-sm font-bold text-ks-navy">Active session</p>
+                <span className="ml-auto text-[10px] text-ks-muted">Now</span>
+              </div>
+              <div className="flex items-center gap-3 rounded-lg border border-ks-line bg-ks-paper p-3">
+                <div className="h-2 w-2 shrink-0 rounded-full bg-ks-blue" />
+                <p className="text-sm font-bold text-ks-navy">Gateway secured</p>
+                <span className="ml-auto text-[10px] text-ks-muted">/api/v1</span>
+              </div>
             </div>
           </Card>
         </div>
@@ -57,5 +67,15 @@ export function ProfilePage() {
 }
 
 function Info({ icon: Icon, label, value }: { icon: typeof Mail; label: string; value: string }) {
-  return <div className="rounded-lg border border-ks-line bg-ks-paper p-4"><div className="flex items-center gap-3"><AdvancedIcon icon={Icon} tone="blue" /><div><p className="text-xs font-black uppercase tracking-wider text-ks-muted">{label}</p><p className="mt-1 font-bold text-ks-navy">{value}</p></div></div></div>;
+  return (
+    <div className="rounded-lg border border-ks-line bg-ks-paper p-4">
+      <div className="flex items-center gap-3">
+        <AdvancedIcon icon={Icon} tone="blue" />
+        <div>
+          <p className="text-xs font-black uppercase tracking-wider text-ks-muted">{label}</p>
+          <p className="mt-1 font-bold text-ks-navy">{value}</p>
+        </div>
+      </div>
+    </div>
+  );
 }

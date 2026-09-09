@@ -6,6 +6,7 @@ import { RabbitMqService } from '../rabbitmq/rabbitmq.service';
 import { RequestUser } from '../common/interfaces/request-user.interface';
 import { ROLES } from '../common/constants/roles';
 import { AccessControlService } from '../common/helpers/access-control.service';
+import { schoolScopeFilter } from '../common/helpers/school-scope.helper';
 
 @Injectable()
 export class PerformanceProxyService {
@@ -25,8 +26,13 @@ export class PerformanceProxyService {
     return payload as T;
   }
 
-  private buildCacheKey(path: string, query?: Record<string, unknown>): string {
-    return `performance-proxy:${path}:${JSON.stringify(query || {})}`;
+  private buildCacheKey(path: string, query?: Record<string, unknown>, user?: RequestUser): string {
+    const scopeKey = user?.scope === 'SCHOOL' ? (user.activeSchoolId ?? user.schoolIds?.[0] ?? 'group') : 'group';
+    return `performance-proxy:${scopeKey}:${path}:${JSON.stringify(query || {})}`;
+  }
+
+  private schoolId(user: RequestUser): string | null {
+    return user.scope === 'SCHOOL' ? (user.activeSchoolId ?? user.schoolIds?.[0] ?? null) : null;
   }
 
   async alerts(query: Record<string, unknown>, user: RequestUser) {
@@ -35,7 +41,7 @@ export class PerformanceProxyService {
       finalQuery.teacherId = user.id;
     }
 
-    const cacheKey = this.buildCacheKey('alerts', finalQuery);
+    const cacheKey = this.buildCacheKey('alerts', finalQuery, user);
     const cached = await this.redis.get(cacheKey);
     if (cached) {
       return cached;
@@ -74,6 +80,7 @@ export class PerformanceProxyService {
     if (resolved?.studentId) {
       await this.prisma.academicIntervention.create({
         data: {
+          schoolId: this.schoolId(user),
           alertId,
           studentId: resolved.studentId,
           subjectId: resolved.subjectId,
@@ -92,6 +99,7 @@ export class PerformanceProxyService {
   async escalateAlert(alertId: string, body: { studentId: string; subjectName?: string; note: string }, user: RequestUser) {
     const intervention = await this.prisma.academicIntervention.create({
       data: {
+        schoolId: this.schoolId(user),
         alertId,
         studentId: body.studentId,
         subjectName: body.subjectName,
@@ -122,12 +130,16 @@ export class PerformanceProxyService {
     return this.unwrap(payload);
   }
 
+  completePairing(pairingId: string, user: RequestUser) {
+    return this.pairingAction(pairingId, 'COMPLETED', undefined, user, 'PAIRING_COMPLETED');
+  }
+
   private async pairingAction(
     pairingId: string,
-    status: 'ACTIVE' | 'REJECTED',
+    status: 'ACTIVE' | 'REJECTED' | 'COMPLETED',
     reason: string | undefined,
     user: RequestUser,
-    interventionType: 'PAIRING_ACTIVATED' | 'PAIRING_REJECTED',
+    interventionType: 'PAIRING_ACTIVATED' | 'PAIRING_REJECTED' | 'PAIRING_COMPLETED',
   ) {
     const payload = await this.studentClient.patch<any>(
       `/students/performance/pairings/${pairingId}/status`,
@@ -140,6 +152,7 @@ export class PerformanceProxyService {
     if (result?.studentId) {
       await this.prisma.academicIntervention.create({
         data: {
+          schoolId: this.schoolId(user),
           pairingId,
           studentId: result.studentId,
           subjectId: result.subjectId,
@@ -174,6 +187,7 @@ export class PerformanceProxyService {
     if (result?.studentId) {
       await this.prisma.academicIntervention.create({
         data: {
+          schoolId: this.schoolId(user),
           pairingId: result.id,
           studentId: result.studentId,
           subjectId: result.subjectId,
@@ -266,6 +280,7 @@ export class PerformanceProxyService {
     const [local, remote] = await Promise.all([
       this.prisma.termResult.groupBy({
         by: ['subjectId', 'subjectName'],
+        where: schoolScopeFilter(user),
         _avg: { weightedTotal: true },
       }),
       this.studentClient.get<any>('/students/performance/summary/school', {}, {
@@ -302,6 +317,7 @@ export class PerformanceProxyService {
 
     await this.prisma.academicAuditLog.create({
       data: {
+        schoolId: this.schoolId(user),
         action: 'ENGINE_CONFIG_UPDATED',
         performedById: user.id,
         payload: body,

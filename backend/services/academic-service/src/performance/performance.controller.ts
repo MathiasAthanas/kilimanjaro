@@ -28,19 +28,19 @@ export class PerformanceController {
   ) {}
 
   @Get('performance/alerts')
-  @Roles(ROLES.PRINCIPAL, ROLES.ACADEMIC_QA, ROLES.HEAD_OF_DEPARTMENT, ROLES.SYSTEM_ADMIN, ROLES.TEACHER)
+  @Roles(ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA, ROLES.HEAD_OF_DEPARTMENT, ROLES.SYSTEM_ADMIN, ROLES.TEACHER)
   alerts(@Query() query: PerformanceFilterDto, @CurrentUser() user?: RequestUser) {
     return this.performanceProxyService.alerts(query as unknown as Record<string, unknown>, user!);
   }
 
   @Get('performance/alerts/class/:classId')
-  @Roles(ROLES.TEACHER, ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA)
+  @Roles(ROLES.TEACHER, ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA)
   alertsByClass(@Param('classId') classId: string, @CurrentUser() user?: RequestUser) {
     return this.performanceProxyService.alertsByClass(classId, user!);
   }
 
   @Patch('performance/alerts/:alertId/resolve')
-  @Roles(ROLES.TEACHER, ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA)
+  @Roles(ROLES.TEACHER, ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA)
   resolve(
     @Param('alertId') alertId: string,
     @Body() body: { resolutionNote: string },
@@ -60,19 +60,19 @@ export class PerformanceController {
   }
 
   @Get('performance/pairings')
-  @Roles(ROLES.TEACHER, ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA)
+  @Roles(ROLES.TEACHER, ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA)
   pairings(@Query() query: Record<string, unknown>, @CurrentUser() user?: RequestUser) {
     return this.performanceProxyService.pairings(query, user!);
   }
 
   @Patch('performance/pairings/:pairingId/activate')
-  @Roles(ROLES.TEACHER, ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL)
+  @Roles(ROLES.TEACHER, ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN)
   activatePairing(@Param('pairingId') pairingId: string, @CurrentUser() user?: RequestUser) {
     return this.performanceProxyService.activatePairing(pairingId, user!);
   }
 
   @Patch('performance/pairings/:pairingId/reject')
-  @Roles(ROLES.TEACHER, ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL)
+  @Roles(ROLES.TEACHER, ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN)
   rejectPairing(
     @Param('pairingId') pairingId: string,
     @Body() body: { reason: string },
@@ -81,14 +81,20 @@ export class PerformanceController {
     return this.performanceProxyService.rejectPairing(pairingId, body.reason, user!);
   }
 
+  @Patch('performance/pairings/:pairingId/complete')
+  @Roles(ROLES.TEACHER, ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
+  completePairing(@Param('pairingId') pairingId: string, @CurrentUser() user?: RequestUser) {
+    return this.performanceProxyService.completePairing(pairingId, user!);
+  }
+
   @Post('performance/pairings')
-  @Roles(ROLES.TEACHER, ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL)
+  @Roles(ROLES.TEACHER, ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN)
   createPairing(@Body() body: Record<string, unknown>, @CurrentUser() user?: RequestUser) {
     return this.performanceProxyService.createPairing(body, user!);
   }
 
   @Get('performance/pairings/effectiveness')
-  @Roles(ROLES.PRINCIPAL, ROLES.ACADEMIC_QA, ROLES.SYSTEM_ADMIN)
+  @Roles(ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA, ROLES.SYSTEM_ADMIN)
   pairingsEffectiveness(@CurrentUser() user?: RequestUser) {
     return this.performanceProxyService.pairingsEffectiveness(user!);
   }
@@ -96,7 +102,7 @@ export class PerformanceController {
   @Get('performance/student/:studentId')
   @Roles(
     ROLES.SYSTEM_ADMIN,
-    ROLES.PRINCIPAL,
+    ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN,
     ROLES.ACADEMIC_QA,
     ROLES.HEAD_OF_DEPARTMENT,
     ROLES.TEACHER,
@@ -108,55 +114,57 @@ export class PerformanceController {
   }
 
   @Get('performance/class/:classId/summary')
-  @Roles(ROLES.TEACHER, ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA)
+  @Roles(ROLES.TEACHER, ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA)
   classSummary(@Param('classId') classId: string, @CurrentUser() user?: RequestUser) {
     return this.performanceProxyService.classSummary(classId, user!);
   }
 
   @Get('performance/school/summary')
-  @Roles(ROLES.PRINCIPAL, ROLES.ACADEMIC_QA, ROLES.MANAGING_DIRECTOR, ROLES.SYSTEM_ADMIN)
+  @Roles(ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA, ROLES.MANAGING_DIRECTOR, ROLES.SYSTEM_ADMIN)
   schoolSummary(@CurrentUser() user?: RequestUser) {
     return this.performanceProxyService.schoolSummary(user!);
   }
 
   @Post('performance/engine/run')
-  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA)
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA)
   runEngine(@Body() body: RunEngineDto, @CurrentUser() user?: RequestUser) {
     return this.performanceProxyService.runEngine(body, user!);
   }
 
   @Get('performance/engine/config')
-  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA)
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA)
   engineConfig(@CurrentUser() user?: RequestUser) {
     return this.performanceProxyService.getEngineConfig(user!);
   }
 
   @Patch('performance/engine/config')
-  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL)
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN)
   updateEngineConfig(@Body() body: Record<string, unknown>, @CurrentUser() user?: RequestUser) {
     return this.performanceProxyService.updateEngineConfig(body, user!);
   }
 
   @Get('interventions')
-  @Roles(ROLES.PRINCIPAL, ROLES.ACADEMIC_QA, ROLES.HEAD_OF_DEPARTMENT, ROLES.SYSTEM_ADMIN)
+  @Roles(ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA, ROLES.HEAD_OF_DEPARTMENT, ROLES.SYSTEM_ADMIN)
   interventions(
     @Query('studentId') studentId?: string,
     @Query('type') type?: string,
     @Query('performedById') performedById?: string,
     @Query('isFollowedUp') isFollowedUp?: string,
     @Query('subjectId') subjectId?: string,
+    @CurrentUser() user?: RequestUser,
   ) {
-    return this.interventionsService.list({ studentId, type, performedById, isFollowedUp, subjectId });
+    const schoolId = user?.scope === 'SCHOOL' ? (user.activeSchoolId ?? user.schoolIds?.[0] ?? null) : null;
+    return this.interventionsService.list({ studentId, type, performedById, isFollowedUp, subjectId, schoolId });
   }
 
   @Post('interventions')
-  @Roles(ROLES.TEACHER, ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA)
+  @Roles(ROLES.TEACHER, ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA)
   createIntervention(@Body() dto: CreateInterventionDto, @CurrentUser() user?: RequestUser) {
     return this.interventionsService.create(dto, user!);
   }
 
   @Patch('interventions/:id')
-  @Roles(ROLES.TEACHER, ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA)
+  @Roles(ROLES.TEACHER, ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA)
   updateIntervention(@Param('id') id: string, @Body() dto: UpdateInterventionDto) {
     return this.interventionsService.update(id, dto);
   }
@@ -164,7 +172,7 @@ export class PerformanceController {
   @Get('interventions/student/:studentId')
   @Roles(
     ROLES.SYSTEM_ADMIN,
-    ROLES.PRINCIPAL,
+    ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN,
     ROLES.ACADEMIC_QA,
     ROLES.HEAD_OF_DEPARTMENT,
     ROLES.TEACHER,

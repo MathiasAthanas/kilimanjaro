@@ -11,6 +11,7 @@ import { RedisModule } from './redis/redis.module';
 import { StudentClientModule } from './student-client/student-client.module';
 import { IdentityMiddleware } from './common/middleware/identity.middleware';
 import { CommonModule } from './common/common.module';
+import { InternalApiGuard } from './common/guards/internal-api.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { FeeCategoriesModule } from './fee-categories/fee-categories.module';
 import { FeeStructuresModule } from './fee-structures/fee-structures.module';
@@ -26,6 +27,7 @@ import { StoreModule } from './store/store.module';
 import { InternalModule } from './internal/internal.module';
 import { JobsModule } from './jobs/jobs.module';
 import { AuditModule } from './audit/audit.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 import { NumberSequenceService } from './common/helpers/number-sequence.service';
 import { validateEnv } from './config/env.validation';
 
@@ -61,11 +63,13 @@ import { validateEnv } from './config/env.validation';
     StoreModule,
     InternalModule,
     JobsModule,
+    DashboardModule,
   ],
   providers: [
     RabbitMqConsumer,
     NumberSequenceService,
     { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useClass: InternalApiGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
   ],
 })

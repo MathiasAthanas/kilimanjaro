@@ -871,10 +871,10 @@ export function InvoiceDetailPage() {
   if (!apiInvoice) return <FinanceWorkspaceShell title="Not Found" eyebrow="Invoice detail"><EmptyState title="Invoice not found" description="This invoice does not exist or has been cancelled." /></FinanceWorkspaceShell>;
 
   const invoice = apiInvoice;
-  const embeddedPayments = Array.isArray((invoice as any).payments) ? (invoice as any).payments : [];
+  const embeddedPayments: Array<(typeof payments)[number]> = Array.isArray((invoice as any).payments) ? (invoice as any).payments : [];
   const invoicePayments = embeddedPayments.length > 0
     ? embeddedPayments
-    : allPayments.filter((p) => p.invoiceId === invoice.id || p.invoiceNumber === invoice.number);
+    : allPayments.filter((p: (typeof payments)[number]) => p.invoiceId === invoice.id || p.invoiceNumber === invoice.number);
   const hasConfirmedPayment = invoicePayments.some((p) => String(p.status).toUpperCase() === 'CONFIRMED');
   const isPending = cancelMutation.isPending || discountMutation.isPending || waiveMutation.isPending || pdfLoading;
   const discountPreviewBalance = invoice.outstanding - (Number(discountForm.amount) || 0);
@@ -1166,7 +1166,10 @@ export function StudentLedgerPage() {
       generateStatement.mutate(
         { reportType: 'STUDENT_STATEMENT', params: { studentId: studentId ?? '' } },
         {
-          onSuccess: (job) => downloadReportWhenReady(job),
+          onSuccess: (job) => {
+            const reportId = typeof job === 'string' ? job : String((job as Record<string, unknown>)?.id ?? (job as Record<string, unknown>)?.jobId ?? '');
+            if (reportId) void downloadReportWhenReady(reportId, `student-statement-${studentId ?? 'student'}.pdf`);
+          },
           onError: () => toast('Failed to generate statement', 'error'),
         },
       );

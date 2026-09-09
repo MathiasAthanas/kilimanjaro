@@ -30,11 +30,27 @@ class ApiAuthService implements IAuthService {
     );
   }
 
+  /// The backend expects the login identifier under a specific key:
+  /// `email`, `phoneNumber` (parents — any local format) or
+  /// `registrationNumber` (students).
+  static Map<String, String> loginPayload(String identifier, String password) {
+    final trimmed = identifier.trim();
+    final digitsOnly = trimmed.replaceAll(RegExp(r'[\s\-()]'), '');
+    final looksLikePhone = RegExp(r'^\+?\d{9,13}$').hasMatch(digitsOnly);
+    if (trimmed.contains('@')) {
+      return {'email': trimmed.toLowerCase(), 'password': password};
+    }
+    if (looksLikePhone) {
+      return {'phoneNumber': digitsOnly, 'password': password};
+    }
+    return {'registrationNumber': trimmed, 'password': password};
+  }
+
   @override
   Future<AuthResult> login({required String identifier, required String password}) async {
     final resp = await _dio.post<Map<String, dynamic>>(
       '/auth/login',
-      data: {'identifier': identifier, 'password': password},
+      data: loginPayload(identifier, password),
     );
     final result = AuthResult.fromJson(resp.data!);
     await _storage.write(key: 'access_token', value: result.token);
@@ -82,13 +98,29 @@ class ApiAuthService implements IAuthService {
   }
 
   @override
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    final opts = await _authOptions();
+    await _dio.patch<void>(
+      '/auth/change-password',
+      data: {'currentPassword': currentPassword, 'newPassword': newPassword},
+      options: opts,
+    );
+  }
+
+  @override
   Future<AuthUser?> getCurrentUser() async {
     final token = await _storage.read(key: 'access_token');
     if (token == null) return null;
     try {
       final opts = await _authOptions();
       final resp = await _dio.get<Map<String, dynamic>>('/auth/me', options: opts);
-      return AuthUser.fromJson(resp.data!);
+      final raw = resp.data!;
+      final payload = raw['data'] is Map<String, dynamic> ? raw['data'] as Map<String, dynamic> : raw;
+      final userJson = payload['user'] is Map<String, dynamic> ? payload['user'] as Map<String, dynamic> : payload;
+      return AuthUser.fromJson(userJson);
     } on DioException {
       return null;
     }

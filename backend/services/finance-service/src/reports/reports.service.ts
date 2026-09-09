@@ -2,6 +2,7 @@ import { ForbiddenException, Injectable } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma';
 import { AccessControlService } from '../common/helpers/access-control.service';
 import { RequestUser } from '../common/interfaces/request-user.interface';
+import { schoolScopeFilter } from '../common/helpers/school-scope.helper';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -138,5 +139,55 @@ export class ReportsService {
       },
       orderBy: { outstandingBalance: 'desc' },
     });
+  }
+
+  async dashboard(user?: RequestUser) {
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const scope = schoolScopeFilter(user);
+
+    const [invoiceTotals, monthPayments, recentPayments, overdueCount, pendingApprovals] = await Promise.all([
+      this.prisma.invoice.aggregate({
+        where: { ...scope },
+        _sum: { totalAmount: true, paidAmount: true, outstandingBalance: true },
+        _count: { _all: true },
+      }),
+      this.prisma.payment.aggregate({
+        where: { ...scope, status: 'CONFIRMED', createdAt: { gte: startOfMonth } },
+        _sum: { amount: true },
+        _count: { _all: true },
+      }),
+      this.prisma.payment.findMany({
+        where: { ...scope, status: 'CONFIRMED' },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+        select: { id: true, paymentNumber: true, amount: true, method: true, createdAt: true, studentId: true },
+      }),
+      this.prisma.invoice.count({ where: { ...scope, status: 'OVERDUE' } }),
+      this.prisma.manualPaymentApproval.count({ where: { decision: null } }),
+    ]);
+
+    const totalBilled = invoiceTotals._sum.totalAmount || new Prisma.Decimal(0);
+    const totalCollected = invoiceTotals._sum.paidAmount || new Prisma.Decimal(0);
+    const totalOutstanding = invoiceTotals._sum.outstandingBalance || new Prisma.Decimal(0);
+
+    return {
+      summary: {
+        totalBilled: totalBilled.toString(),
+        totalCollected: totalCollected.toString(),
+        totalOutstanding: totalOutstanding.toString(),
+        collectionRate: totalBilled.gt(0) ? totalCollected.div(totalBilled).mul(100).toDecimalPlaces(2).toString() : '0',
+        invoiceCount: invoiceTotals._count._all,
+        overdueCount,
+        pendingApprovals,
+      },
+      thisMonth: {
+        collected: (monthPayments._sum.amount || new Prisma.Decimal(0)).toString(),
+        transactions: monthPayments._count._all,
+      },
+      recentPayments,
+      generatedAt: now.toISOString(),
+    };
   }
 }

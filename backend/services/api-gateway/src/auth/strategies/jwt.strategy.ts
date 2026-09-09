@@ -12,6 +12,8 @@ interface AccessPayload {
   email?: string | null;
   registrationNumber?: string | null;
   jti: string;
+  scope?: 'GROUP' | 'SCHOOL';
+  schoolIds?: string[];
   iat?: number;
   exp?: number;
 }
@@ -33,7 +35,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(payload: AccessPayload): Promise<{ id: string; role: string; email?: string | null; jti: string }> {
+  async validate(payload: AccessPayload): Promise<{ id: string; role: string; email?: string | null; jti: string; scope: 'GROUP' | 'SCHOOL'; schoolIds: string[] }> {
     const authUrl = this.configService.get<string>('AUTH_SERVICE_URL') || 'http://localhost:3001';
     const internalApiKey = this.configService.get<string>('INTERNAL_API_KEY');
 
@@ -65,7 +67,14 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     const cacheKey = `gateway:user_active:${payload.sub}`;
     const cached = await this.redisService.get(cacheKey);
     if (cached === '1') {
-      return { id: payload.sub, role: payload.role, email: payload.email ?? null, jti: payload.jti };
+      return {
+        id: payload.sub,
+        role: payload.role,
+        email: payload.email ?? null,
+        jti: payload.jti,
+        scope: payload.scope ?? 'SCHOOL',
+        schoolIds: payload.schoolIds ?? [],
+      };
     }
     if (cached === '0') {
       throw new UnauthorizedException('User account is inactive');
@@ -92,6 +101,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         role: user?.role || payload.role,
         email: payload.email ?? null,
         jti: payload.jti,
+        scope: payload.scope ?? 'SCHOOL',
+        schoolIds: payload.schoolIds ?? [],
       };
     } catch (error) {
       if (error instanceof UnauthorizedException) {

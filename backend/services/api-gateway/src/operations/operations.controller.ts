@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, NotFoundException, Param, Patch, Post, Query } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, ForbiddenException, Get, NotFoundException, Param, Patch, Post, Query } from '@nestjs/common';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { GatewayUser, UiApiService, UiEnvelope } from '../ui/ui-api.service';
@@ -145,6 +145,116 @@ export class OperationsController {
     }, health.warnings);
   }
 
+  // ─── Role dashboards ──────────────────────────────────────────────
+
+  @Get('admin/dashboard')
+  @Roles('SYSTEM_ADMIN')
+  async adminDashboard(@CurrentUser() user: GatewayUser): Promise<UiEnvelope> {
+    const { data, warnings } = await this.ui.collect({
+      users: { service: 'auth', path: '/auth/internal/users-stats', fallback: null },
+      students: { service: 'student', path: '/students/stats', fallback: null },
+      analytics: { service: 'analytics', path: '/analytics/overview', fallback: null },
+      health: { service: 'analytics', path: '/analytics/health', fallback: null },
+    }, user);
+    return this.ui.envelope({
+      ...data,
+      systemSettings: this.currentSettings(),
+      auditEventCount: this.store.list('audit-events').length,
+    }, warnings);
+  }
+
+  @Get('hod/dashboard')
+  @Roles('HEAD_OF_DEPARTMENT', 'SYSTEM_ADMIN')
+  async hodDashboard(@CurrentUser() user: GatewayUser): Promise<UiEnvelope> {
+    const { data, warnings } = await this.ui.collect({
+      pendingApprovals: { service: 'academic', path: '/academics/assessments/pending-approval', fallback: [] },
+      alerts: { service: 'academic', path: '/academics/performance/alerts', fallback: [] },
+      pairings: { service: 'academic', path: '/academics/performance/pairings', fallback: [] },
+      schoolSummary: { service: 'academic', path: '/academics/performance/school/summary', fallback: null },
+    }, user);
+    return this.ui.envelope({ userId: user.id, role: user.role, ...data }, warnings);
+  }
+
+  @Get('teacher/dashboard')
+  @Roles('TEACHER', 'HEAD_OF_DEPARTMENT', 'SYSTEM_ADMIN')
+  async teacherDashboard(@CurrentUser() user: GatewayUser): Promise<UiEnvelope> {
+    const { data, warnings } = await this.ui.collect({
+      assessments: { service: 'academic', path: '/academics/assessments', params: { teacherId: user.id }, fallback: [] },
+      alerts: { service: 'academic', path: '/academics/performance/alerts', fallback: [] },
+      timetable: { service: 'academic', path: '/academics/timetable-sheets', params: { teacherId: user.id }, fallback: [] },
+    }, user);
+    return this.ui.envelope({ userId: user.id, role: user.role, ...data }, warnings);
+  }
+
+  @Get('aqa/dashboard')
+  @Roles('ACADEMIC_QA', 'PRINCIPAL', 'SYSTEM_ADMIN')
+  async aqaDashboard(@CurrentUser() user: GatewayUser): Promise<UiEnvelope> {
+    const { data, warnings } = await this.ui.collect({
+      schoolSummary: { service: 'academic', path: '/academics/performance/school/summary', fallback: null },
+      engineConfig: { service: 'academic', path: '/academics/performance/engine/config', fallback: null },
+      atRisk: { service: 'analytics', path: '/analytics/students/at-risk', fallback: [] },
+      topPerformers: { service: 'analytics', path: '/analytics/students/top-performers', fallback: [] },
+      overview: { service: 'analytics', path: '/analytics/academic/overview', fallback: null },
+    }, user);
+    return this.ui.envelope({ userId: user.id, role: user.role, ...data }, warnings);
+  }
+
+  // ─── Report management (catalog, list, scheduled, audit, readiness) ─
+
+  @Get('reports/catalog')
+  @Roles(...LEADERSHIP)
+  reportCatalog(): UiEnvelope {
+    return this.ui.envelope({
+      catalog: [
+        { id: 'SCHOOL_OVERVIEW', name: 'School Overview', description: 'Enrollment, attendance, and academic summary', category: 'executive', formats: ['PDF', 'XLSX'] },
+        { id: 'CLASS_ACADEMIC', name: 'Class Academic Performance', description: 'Per-class marks and grade distribution', category: 'academic', formats: ['PDF', 'XLSX', 'CSV'] },
+        { id: 'FINANCE_COLLECTION', name: 'Fee Collection Report', description: 'Invoiced vs collected vs outstanding', category: 'finance', formats: ['PDF', 'XLSX'] },
+        { id: 'OUTSTANDING_BALANCES', name: 'Outstanding Balances', description: 'Students with unpaid invoices by term', category: 'finance', formats: ['PDF', 'XLSX', 'CSV'] },
+        { id: 'PERFORMANCE_ENGINE', name: 'Performance Engine Report', description: 'At-risk students, pairing outcomes, alert resolution', category: 'academic', formats: ['PDF'] },
+        { id: 'ATTENDANCE_SUMMARY', name: 'Attendance Summary', description: 'Daily and term attendance rates by class', category: 'academic', formats: ['PDF', 'XLSX'] },
+        { id: 'TEACHER_PERFORMANCE', name: 'Teacher Performance', description: 'Assessment submission rates and class averages per teacher', category: 'executive', formats: ['PDF'] },
+        { id: 'TERM_SUMMARY', name: 'Term Summary', description: 'End-of-term academic and financial summary', category: 'executive', formats: ['PDF'] },
+        { id: 'BOARD_EXECUTIVE', name: 'Board Executive Report', description: 'High-level KPIs for board review', category: 'executive', formats: ['PDF'] },
+        { id: 'REPORT_CARD', name: 'Student Report Cards', description: 'Individual student report cards in bulk', category: 'academic', formats: ['PDF'] },
+        { id: 'CUSTOM', name: 'Custom Report', description: 'Build a report from selected metrics', category: 'custom', formats: ['PDF', 'XLSX', 'CSV'] },
+      ],
+    });
+  }
+
+  @Get('reports/jobs')
+  @Roles(...LEADERSHIP)
+  listReportJobs(): UiEnvelope {
+    const jobs = this.store.list('report-jobs').sort((a, b) =>
+      new Date(b.createdAt as string).getTime() - new Date(a.createdAt as string).getTime(),
+    );
+    return this.ui.envelope({ jobs, total: jobs.length });
+  }
+
+  @Get('reports/scheduled')
+  @Roles(...LEADERSHIP)
+  listScheduledReports(): UiEnvelope {
+    const scheduled = this.store.list('scheduled-reports');
+    return this.ui.envelope({ scheduled, total: scheduled.length });
+  }
+
+  @Get('reports/audit')
+  @Roles(...ADMIN)
+  reportsAudit(@CurrentUser() user: GatewayUser, @Query() query: Record<string, string>): UiEnvelope {
+    let events = this.store.list('audit-events').filter((e) => {
+      const entityType = e.entityType as string;
+      return entityType === 'ReportJob' || entityType === 'ReportPreview' || entityType === 'BackupJob';
+    });
+    if (query.action) events = events.filter((e) => e.action === query.action);
+    return this.ui.envelope({ events, actor: { id: user.id, role: user.role } });
+  }
+
+  @Get('reports/results-publishing/readiness')
+  @Roles('PRINCIPAL', 'ACADEMIC_QA', 'SYSTEM_ADMIN')
+  async resultsPublishingReadiness(@CurrentUser() user: GatewayUser): Promise<UiEnvelope> {
+    const result = await this.ui.tryGet({ service: 'academic', path: '/academics/results/readiness' }, null, user);
+    return this.ui.envelope({ readiness: result.data }, this.warning(result));
+  }
+
   @Post('files')
   @Roles(...LEADERSHIP, 'TEACHER', 'PARENT', 'STUDENT')
   createFile(@CurrentUser() user: GatewayUser, @Body() body: Record<string, unknown>): UiEnvelope {
@@ -167,9 +277,14 @@ export class OperationsController {
 
   @Get('files/:id')
   @Roles(...LEADERSHIP, 'TEACHER', 'PARENT', 'STUDENT')
-  getFile(@Param('id') id: string): UiEnvelope {
+  getFile(@CurrentUser() user: GatewayUser, @Param('id') id: string): UiEnvelope {
     const file = this.store.get('files', id);
     if (!file) throw new NotFoundException('File not found');
+    const isOwner = file.uploadedById === user.id;
+    const isLeadership = LEADERSHIP.includes(user.role);
+    if (!isOwner && !isLeadership && file.visibility !== 'PUBLIC') {
+      throw new ForbiddenException('You do not have permission to access this file');
+    }
     return this.ui.envelope({ file });
   }
 
@@ -178,6 +293,11 @@ export class OperationsController {
   downloadFile(@CurrentUser() user: GatewayUser, @Param('id') id: string): UiEnvelope {
     const file = this.store.get('files', id);
     if (!file) throw new NotFoundException('File not found');
+    const isOwner = file.uploadedById === user.id;
+    const isLeadership = LEADERSHIP.includes(user.role);
+    if (!isOwner && !isLeadership && file.visibility !== 'PUBLIC') {
+      throw new ForbiddenException('You do not have permission to download this file');
+    }
     this.store.appendAudit({ action: 'FILE_DOWNLOADED', entityType: 'FileObject', entityId: id, metadataJson: { storageKey: file.storageKey } }, user);
     return this.ui.envelope({ file, download: { url: file.storageKey, expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString() } });
   }
@@ -372,7 +492,9 @@ export class OperationsController {
   @Post('finance/reconciliation/bank-statements/import')
   @Roles('FINANCE', 'SYSTEM_ADMIN')
   importBankStatement(@CurrentUser() user: GatewayUser, @Body() body: Record<string, unknown>): UiEnvelope {
+    const schoolId = this.requireActiveSchool(user);
     const statement = this.store.create('bank-statement-imports', {
+      schoolId,
       fileObjectId: body.fileObjectId,
       status: 'IMPORTED',
       totalRows: Number(body.totalRows || 0),
@@ -465,7 +587,9 @@ export class OperationsController {
   @Post('academics/marks/import/commit')
   @Roles(...TEACHERS)
   commitMarksImport(@CurrentUser() user: GatewayUser, @Body() body: Record<string, unknown>): UiEnvelope {
+    const schoolId = this.requireActiveSchool(user);
     const job = this.store.create('marks-imports', {
+      schoolId,
       assessmentId: body.assessmentId,
       status: 'COMMITTED',
       rowCount: Array.isArray(body.rows) ? body.rows.length : 0,
@@ -543,15 +667,10 @@ export class OperationsController {
 
   @Post('principal/report-cards/:id/sign')
   @Roles('PRINCIPAL', 'SYSTEM_ADMIN')
-  signReportCard(@CurrentUser() user: GatewayUser, @Param('id') id: string, @Body() body: Record<string, unknown>): UiEnvelope {
-    const signature = this.store.update('report-card-signatures', id, {
-      reportCardId: id,
-      signedById: user.id,
-      signatureText: body.signatureText || 'Approved',
-      signedAt: new Date().toISOString(),
-    });
-    this.store.appendAudit({ action: 'REPORT_CARD_SIGNED', entityType: 'ReportCard', entityId: id, afterJson: signature }, user);
-    return this.ui.envelope({ signature });
+  async signReportCard(@CurrentUser() user: GatewayUser, @Param('id') id: string, @Body() body: Record<string, unknown>): Promise<UiEnvelope> {
+    const result = await this.ui.patch('academic', `/academics/report-cards/${id}/sign`, { signatureText: body.signatureText || 'Approved' }, user);
+    this.store.appendAudit({ action: 'REPORT_CARD_SIGNED', entityType: 'ReportCard', entityId: id, afterJson: result }, user);
+    return this.ui.envelope({ reportCard: result });
   }
 
   @Post('academics/timetables/validate-conflicts')
@@ -847,28 +966,18 @@ export class OperationsController {
 
   @Patch('mobile/hod/approvals/:assessmentId/approve')
   @Roles('HEAD_OF_DEPARTMENT', 'SYSTEM_ADMIN')
-  mobileHodApprove(@CurrentUser() user: GatewayUser, @Param('assessmentId') assessmentId: string, @Body() body: Record<string, unknown>): UiEnvelope {
-    const approval = this.store.create('mobile-hod-decisions', {
-      assessmentId,
-      decision: 'APPROVED',
-      note: body.note,
-      decidedById: user.id,
-    }, user);
-    this.store.appendAudit({ action: 'MOBILE_HOD_MARKS_APPROVED', entityType: 'Assessment', entityId: assessmentId, afterJson: approval }, user);
-    return this.ui.envelope({ approval });
+  async mobileHodApprove(@CurrentUser() user: GatewayUser, @Param('assessmentId') assessmentId: string, @Body() body: Record<string, unknown>): Promise<UiEnvelope> {
+    const result = await this.ui.patch('academic', `/academics/assessments/${assessmentId}/approve`, { comment: body.note }, user);
+    this.store.appendAudit({ action: 'MOBILE_HOD_MARKS_APPROVED', entityType: 'Assessment', entityId: assessmentId, afterJson: result }, user);
+    return this.ui.envelope({ assessment: result });
   }
 
   @Patch('mobile/hod/approvals/:assessmentId/reject')
   @Roles('HEAD_OF_DEPARTMENT', 'SYSTEM_ADMIN')
-  mobileHodReject(@CurrentUser() user: GatewayUser, @Param('assessmentId') assessmentId: string, @Body() body: Record<string, unknown>): UiEnvelope {
-    const rejection = this.store.create('mobile-hod-decisions', {
-      assessmentId,
-      decision: 'REJECTED',
-      reason: body.reason,
-      decidedById: user.id,
-    }, user);
-    this.store.appendAudit({ action: 'MOBILE_HOD_MARKS_REJECTED', entityType: 'Assessment', entityId: assessmentId, afterJson: rejection }, user);
-    return this.ui.envelope({ rejection });
+  async mobileHodReject(@CurrentUser() user: GatewayUser, @Param('assessmentId') assessmentId: string, @Body() body: Record<string, unknown>): Promise<UiEnvelope> {
+    const result = await this.ui.patch('academic', `/academics/assessments/${assessmentId}/reject`, { reason: body.reason }, user);
+    this.store.appendAudit({ action: 'MOBILE_HOD_MARKS_REJECTED', entityType: 'Assessment', entityId: assessmentId, afterJson: result }, user);
+    return this.ui.envelope({ assessment: result });
   }
 
   private auditEnvelope(user: GatewayUser, query: Record<string, string>): UiEnvelope {
@@ -876,6 +985,13 @@ export class OperationsController {
     if (query.action) events = events.filter((event) => event.action === query.action);
     if (query.actorId) events = events.filter((event) => event.actorId === query.actorId);
     return this.ui.envelope({ events, actor: { id: user.id, role: user.role } });
+  }
+
+  private requireActiveSchool(user: GatewayUser): string {
+    if (!user.activeSchoolId) {
+      throw new BadRequestException('Select a school before importing records');
+    }
+    return user.activeSchoolId;
   }
 
   private currentSettings(): Record<string, unknown> {

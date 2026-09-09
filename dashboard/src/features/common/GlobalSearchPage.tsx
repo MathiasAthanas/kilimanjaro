@@ -4,17 +4,18 @@ import { Link } from 'react-router-dom';
 import { Badge } from '../../components/common/Badge';
 import { Card } from '../../components/common/Card';
 import { useSearch } from './common.hooks';
-import { searchResults } from './mockData';
 import { PageScaffold } from './PageScaffold';
+
+type SearchResult = { type: string; title: string; meta: string; to: string };
 
 const FILTERS = ['All', 'Students', 'Classes', 'Finance', 'Announcements', 'Help'] as const;
 
 export function GlobalSearchPage() {
-  const [query, setQuery] = useState('Standard 7');
+  const [query, setQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<string>('All');
 
-  const { data: apiResults } = useSearch(query) as { data: typeof searchResults | undefined };
-  const results = apiResults ?? (query.length > 2 ? searchResults : searchResults);
+  const { data: apiResults } = useSearch(query) as { data: SearchResult[] | undefined };
+  const results: SearchResult[] = apiResults ?? [];
 
   const filtered = activeFilter === 'All'
     ? results
@@ -22,7 +23,7 @@ export function GlobalSearchPage() {
 
   return (
     <PageScaffold
-      title={`Search Results for "${query}"`}
+      title={query.length > 2 ? `Search Results for "${query}"` : 'Search'}
       description="Global staff search across students, classes, reports, announcements and help."
     >
       <div className="mb-6 flex max-w-2xl items-center gap-3 rounded-full border border-ks-line bg-white px-4 py-3 shadow-sm transition focus-within:scale-[1.01] focus-within:ring-2 focus-within:ring-ks-blue/20">
@@ -32,6 +33,7 @@ export function GlobalSearchPage() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search anything…"
+          autoFocus
         />
       </div>
       <div className="grid gap-6 lg:grid-cols-[260px_1fr]">
@@ -56,13 +58,29 @@ export function GlobalSearchPage() {
           <div className="mt-4 rounded-lg border border-dashed border-ks-line bg-ks-paper p-4 text-center">
             <SearchX className="mx-auto h-8 w-8 text-ks-muted" />
             <p className="mt-2 text-xs font-bold text-ks-muted">
-              {query.length > 2 ? `${results.length} results found.` : 'Type 3+ characters to search.'}
+              {query.length > 2
+                ? `${results.length} result${results.length !== 1 ? 's' : ''} found.`
+                : 'Type 3+ characters to search.'}
             </p>
           </div>
         </Card>
         <div className="grid gap-3">
+          {query.length <= 2 && (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <Search className="mb-4 h-10 w-10 text-ks-muted/40" />
+              <p className="font-bold text-ks-muted">Start typing to search</p>
+              <p className="mt-1 text-sm text-ks-muted/60">Search across students, classes, reports, and announcements.</p>
+            </div>
+          )}
+          {query.length > 2 && filtered.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <SearchX className="mb-4 h-10 w-10 text-ks-muted/40" />
+              <p className="font-bold text-ks-muted">No results for &ldquo;{query}&rdquo;</p>
+              <p className="mt-1 text-sm text-ks-muted/60">Try a different search term.</p>
+            </div>
+          )}
           {filtered.map((result) => (
-            <Link key={result.title} to={result.to}>
+            <Link key={`${result.type}-${result.title}`} to={result.to}>
               <Card className="flex items-center justify-between p-5 transition hover:border-ks-blue hover:shadow-layer">
                 <div>
                   <Badge tone="blue">{result.type}</Badge>

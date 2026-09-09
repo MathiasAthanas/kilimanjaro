@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { NumberSequenceService } from '../common/helpers/number-sequence.service';
 import { RequestUser } from '../common/interfaces/request-user.interface';
+import { schoolScopeFilter } from '../common/helpers/school-scope.helper';
 import { CreateExpenseDto } from './dto/create-expense.dto';
 import { VoidExpenseDto } from './dto/void-expense.dto';
 
@@ -21,7 +22,7 @@ export class ExpensesService {
 
     const row = await this.prisma.expense.create({
       data: {
-        expenseNumber: await this.numberService.expenseNumber(),
+        expenseNumber: await this.numberService.expenseNumber(user.activeSchoolId ?? user.schoolIds?.find((id) => id !== '*') ?? null),
         category: dto.category as any,
         description: dto.description,
         amount,
@@ -59,11 +60,12 @@ export class ExpensesService {
     startDate?: string;
     endDate?: string;
     search?: string;
-  }) {
+  }, user?: RequestUser) {
     const page = Math.max(1, Number(filters.page || 1));
     const limit = Math.min(200, Math.max(1, Number(filters.limit || 50)));
 
     const where: Prisma.ExpenseWhereInput = {
+      ...schoolScopeFilter(user),
       category: filters.category as any,
       status: (filters.status as any) ?? undefined,
       department: filters.department,
@@ -96,8 +98,9 @@ export class ExpensesService {
     return row;
   }
 
-  async summary(filters: { startDate?: string; endDate?: string }) {
+  async summary(filters: { startDate?: string; endDate?: string }, user?: RequestUser) {
     const where: Prisma.ExpenseWhereInput = {
+      ...schoolScopeFilter(user),
       status: 'RECORDED',
       incurredAt:
         filters.startDate || filters.endDate

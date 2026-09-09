@@ -19,8 +19,10 @@ export class LoginDto {
   @IsOptional()
   phoneNumber?: string;
 
+  // Login only checks presence, not strength — bulk-imported student accounts
+  // use the surname convention which can be shorter than 8 characters.
   @ApiProperty()
   @IsString()
-  @MinLength(8)
+  @MinLength(4)
   password: string;
 }

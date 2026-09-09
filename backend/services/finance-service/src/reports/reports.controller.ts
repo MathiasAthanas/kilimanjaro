@@ -8,7 +8,7 @@ import { ReportsService } from './reports.service';
 import { FinancialStatementService, PeriodType } from './financial-statement.service';
 import { toCsv, toPdf } from './financial-statement.export';
 
-const STATEMENT_ROLES = [ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN, ROLES.MANAGING_DIRECTOR, ROLES.BOARD_DIRECTOR];
+const STATEMENT_ROLES = [ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN, ROLES.MANAGING_DIRECTOR, ROLES.BOARD_DIRECTOR];
 
 @ApiTags('Finance - Reports')
 @Controller('finance/reports')
@@ -20,30 +20,30 @@ export class ReportsController {
 
   @Get('financial-statement')
   @Roles(...STATEMENT_ROLES)
-  statementJson(@Query('start') start?: string, @Query('end') end?: string, @Query('period') period?: PeriodType) {
-    return this.statementService.build({ start, end, period });
+  statementJson(@Query('start') start?: string, @Query('end') end?: string, @Query('period') period?: PeriodType, @CurrentUser() user?: RequestUser) {
+    return this.statementService.build({ start, end, period }, user);
   }
 
   @Get('financial-statement/pdf')
   @Roles(...STATEMENT_ROLES)
-  async statementPdf(@Query('start') start?: string, @Query('end') end?: string, @Query('period') period?: PeriodType) {
-    return toPdf(await this.statementService.build({ start, end, period }));
+  async statementPdf(@Query('start') start?: string, @Query('end') end?: string, @Query('period') period?: PeriodType, @CurrentUser() user?: RequestUser) {
+    return toPdf(await this.statementService.build({ start, end, period }, user));
   }
 
   @Get('financial-statement/csv')
   @Roles(...STATEMENT_ROLES)
-  async statementCsv(@Query('start') start?: string, @Query('end') end?: string, @Query('period') period?: PeriodType) {
-    return toCsv(await this.statementService.build({ start, end, period }));
+  async statementCsv(@Query('start') start?: string, @Query('end') end?: string, @Query('period') period?: PeriodType, @CurrentUser() user?: RequestUser) {
+    return toCsv(await this.statementService.build({ start, end, period }, user));
   }
 
   @Get('collection-summary')
-  @Roles(ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN, ROLES.MANAGING_DIRECTOR, ROLES.BOARD_DIRECTOR)
+  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN, ROLES.MANAGING_DIRECTOR, ROLES.BOARD_DIRECTOR)
   collectionSummary(@Query('termId') termId?: string, @Query('academicYearId') academicYearId?: string, @Query('classId') classId?: string) {
     return this.reportsService.collectionSummary({ termId, academicYearId, classId });
   }
 
   @Get('outstanding-balances')
-  @Roles(ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN)
+  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
   outstanding(
     @Query('termId') termId?: string,
     @Query('academicYearId') academicYearId?: string,
@@ -54,19 +54,19 @@ export class ReportsController {
   }
 
   @Get('daily-collections')
-  @Roles(ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN)
+  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
   daily(@Query('date') date?: string, @Query('startDate') startDate?: string, @Query('endDate') endDate?: string) {
     return this.reportsService.dailyCollections({ date, startDate, endDate });
   }
 
   @Get('student-statement/:studentId')
-  @Roles(ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN, ROLES.PARENT, ROLES.STUDENT)
+  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN, ROLES.PARENT, ROLES.STUDENT)
   statement(@Param('studentId') studentId: string, @Query('academicYearId') academicYearId?: string, @CurrentUser() user?: RequestUser) {
     return this.reportsService.studentStatement(studentId, { academicYearId }, user!);
   }
 
   @Get('fee-defaulters')
-  @Roles(ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN)
+  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
   defaulters(@Query('termId') termId?: string, @Query('academicYearId') academicYearId?: string, @Query('daysOverdue') daysOverdue?: string) {
     return this.reportsService.feeDefaulters({ termId, academicYearId, daysOverdue });
   }

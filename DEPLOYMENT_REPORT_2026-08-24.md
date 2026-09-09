@@ -1,0 +1,234 @@
+# Kilimanjaro Production Deployment Report - 2026-08-24
+
+Target VPS:
+
+- IP: `179.198.193.172`
+- SSH user used: `root`
+- SSH key path used locally: `$HOME\.ssh\kilimanjaro`
+- Domains expected to point here:
+  - `manage.kilimanjaroschools.site`
+  - `srms.kilimanjaroschools.site`
+- Certbot email: `athanas.mathy@gmail.com`
+
+Rules followed:
+
+- No malicious actions.
+- No private key contents copied or printed.
+- No local agent/editor metadata intentionally uploaded to the server.
+- Deployment actions are recorded here.
+
+## Action Log
+
+- Verified SSH access to the new VPS with `ssh -i $HOME\.ssh\kilimanjaro root@179.198.193.172`.
+- Server responded as `root` on hostname `srv1912213`.
+- Server kernel reported: `Linux srv1912213 7.0.0-29-generic ... x86_64 GNU/Linux`.
+- Checked baseline server state:
+  - Root filesystem had about `94G` available.
+  - Memory was about `7.7Gi`.
+  - Only SSH and provider/system local agents were listening before deployment.
+  - Nginx, PostgreSQL, Redis, RabbitMQ, Node, npm, PM2, and Certbot were not installed/running initially.
+- Installed production dependencies with apt/npm:
+  - `nginx`
+  - `postgresql`
+  - `postgresql-contrib`
+  - `redis-server`
+  - `rabbitmq-server`
+  - `certbot`
+  - `python3-certbot-nginx`
+  - `build-essential`
+  - `openssl`
+  - `nodejs` from NodeSource 22.x
+  - global `pm2`
+  - global `npm@11.4.2`
+- Enabled and started base services:
+  - `postgresql`
+  - `redis-server`
+  - `rabbitmq-server`
+  - `nginx`
+- Verified installed runtime versions:
+  - Node: `v22.23.2`
+  - npm: `11.4.2`
+  - PM2: `7.0.3`
+- Created a clean source archive locally and uploaded it to `/tmp/kilimanjaro-release-source.tar.gz` on the VPS.
+- Extracted the release into `/opt/kilimanjaro/app`.
+- Created/verified runtime directories:
+  - `/opt/kilimanjaro/app`
+  - `/opt/kilimanjaro/releases`
+  - `/opt/kilimanjaro/storage/uploads`
+  - `/opt/kilimanjaro/storage/report-cards`
+  - `/opt/kilimanjaro/storage/receipts`
+  - `/opt/kilimanjaro/storage/analytics`
+  - `/opt/kilimanjaro/storage/elearning`
+  - `/var/www/kilimanjaro-manage`
+  - `/var/log/kilimanjaro`
+- Verified no `.git`, `.env`, local agent/editor metadata, or matching `codex`/`openai` named files were present under `/opt/kilimanjaro/app` after extraction.
+- Bootstrapped a clean PostgreSQL production database:
+  - Database: `kilimanjaro_prod`
+  - Application role: `kilimanjaro_app`
+  - Schemas: `auth`, `students`, `academics`, `finance`, `notifications`, `analytics`, `operations`, `elearning`
+- Generated production secrets directly on the VPS and wrote service `.env` files with `600` permissions.
+- Configured Redis to bind locally with password authentication.
+- Configured a dedicated RabbitMQ vhost and application user for the backend.
+- Removed the temporary setup script from `/tmp` after successful execution.
+- Installed backend dependencies with `npm ci`.
+  - Result: install completed.
+  - npm audit reported `58` dependency vulnerabilities (`5 low`, `27 moderate`, `23 high`, `3 critical`).
+- Built the backend with `npm run build`.
+  - Result: build completed successfully for all 8 backend services.
+- Disabled Turbo telemetry for the deployed backend workspace.
+- Found migration-history issues in the current repo:
+  - `student-service` migrations reference tables that are present in the current Prisma schema but missing from the migration sequence.
+  - `academic-service` migration `20260704122000_multischool_scoping` referenced timetable tables before those tables existed.
+  - `analytics-service` initial migration tried to create duplicate shadow tables in `students`, `academics`, `finance`, and `notifications`.
+- Corrected local migration files for:
+  - `backend/services/academic-service/prisma/migrations/20260704122000_multischool_scoping/migration.sql`
+  - `backend/services/academic-service/prisma/migrations/20260809000002_timetable_system/migration.sql`
+  - `backend/services/analytics-service/prisma/migrations/20260514192952_init_analytics/migration.sql`
+- Recreated the still-empty production database after migration testing.
+- Applied database structure:
+  - `auth-service`, `finance-service`, `notification-service`, `api-gateway`, `elearning-service`, and `analytics-service` used `prisma migrate deploy`.
+  - `student-service` and `academic-service` used `prisma db push --skip-generate` because their migration histories are incomplete for a clean DB.
+- Created a bootstrap `SUPER_ADMIN` account for first login using `athanas.mathy@gmail.com`.
+  - The generated temporary password is not stored in this report.
+  - The account is flagged with `mustChangePassword`.
+  - The refresh token from the deployment login test was revoked.
+- Started backend services with PM2 as the `kilimanjaro` user and saved the PM2 process list.
+- Enabled PM2 startup with systemd service `pm2-kilimanjaro`.
+- Created dashboard production env:
+  - `VITE_API_BASE_URL=https://srms.kilimanjaroschools.site/api/v1`
+- Installed dashboard dependencies with `npm install`.
+  - Result: install completed.
+  - npm audit reported `13` dependency vulnerabilities (`1 low`, `2 moderate`, `9 high`, `1 critical`).
+- Built the dashboard with `npm run build`.
+  - Result: build completed successfully.
+  - Vite reported a large chunk warning for the main bundle.
+- Published dashboard static files to `/var/www/kilimanjaro-manage`.
+- Configured Nginx:
+  - `manage.kilimanjaroschools.site` serves the dashboard SPA.
+  - `srms.kilimanjaroschools.site` reverse-proxies to the API gateway on `127.0.0.1:3000`.
+- Enabled UFW firewall:
+  - Allowed inbound `22/tcp`, `80/tcp`, and `443/tcp`.
+  - Default inbound policy is deny.
+- Installed Let's Encrypt TLS certificates with Certbot for:
+  - `manage.kilimanjaroschools.site`
+  - `srms.kilimanjaroschools.site`
+  - Certificate expiry reported by Certbot: `2026-11-22`
+  - Certbot auto-renewal timer is enabled.
+- Verified public URLs:
+  - `https://manage.kilimanjaroschools.site` returned HTTP `200`.
+  - `https://srms.kilimanjaroschools.site/health` returned `status: ok`.
+  - Gateway health reported `auth`, `students`, `academics`, `finance`, `notifications`, and `analytics` reachable.
+- Verified direct public access to backend/RabbitMQ ports is blocked by UFW:
+  - `srms.kilimanjaroschools.site:3000` failed from outside.
+  - `srms.kilimanjaroschools.site:5672` failed from outside.
+- Removed deployment artifacts from `/tmp`.
+- Removed `.claude` directories that appeared inside third-party dashboard `node_modules` packages on the server.
+- Re-checked `/opt/kilimanjaro/app` for matching `codex`, `openai`, `.claude`, and `.qoder` paths after cleanup; no matches remained.
+- Ran final validation:
+  - `nginx -t` passed.
+  - `certbot renew --dry-run --quiet` exited successfully.
+  - PM2 reported all eight backend services online.
+  - Public login test for the bootstrap account succeeded, then the created refresh token was revoked.
+- Fixed dashboard production API URL after browser testing showed requests going to `/api/v1n/auth/login`.
+  - Corrected `/opt/kilimanjaro/app/dashboard/.env.production` to `https://srms.kilimanjaroschools.site/api/v1`.
+  - Rebuilt the dashboard and republished `/var/www/kilimanjaro-manage`.
+  - Verified the live bundle contains `baseURL: "https://srms.kilimanjaroschools.site/api/v1"`.
+  - Re-tested public login successfully and revoked the created refresh tokens.
+- Added production admin accounts:
+  - `sanga@teyora.co.tz` with role `SUPER_ADMIN`.
+  - `teyoraadmin@teyora.co.tz` with role `SYSTEM_ADMIN`.
+  - Both accounts are active, email-verified, forced to change password, and assigned group-wide memberships.
+  - Any existing refresh tokens for those accounts were revoked.
+  - Temporary passwords were returned in chat and are not stored in this report.
+- Added production admin accounts:
+  - `ben@teyora.co.tz` with role `SUPER_ADMIN`.
+  - `benadmin@teyora.co.tz` with role `SYSTEM_ADMIN`.
+  - Both accounts are active, email-verified, forced to change password, and assigned group-wide memberships.
+  - Any existing refresh tokens for those accounts were revoked.
+  - Temporary passwords were returned in chat and are not stored in this report.
+- Verified production UI login for the Ben accounts through `https://manage.kilimanjaroschools.site/login`.
+  - `ben@teyora.co.tz` posted to `https://srms.kilimanjaroschools.site/api/v1/auth/login`, received HTTP `200`, and routed to `/superadmin`.
+  - `benadmin@teyora.co.tz` posted to `https://srms.kilimanjaroschools.site/api/v1/auth/login`, received HTTP `200`, and routed to `/admin`.
+  - No visible login errors were present after either UI login.
+  - Refresh tokens created by the verification logins were revoked after testing.
+- Reviewed `KLM TEST RESULTS.docx` and resolved the reported production integration failures.
+  - The document reported school creation failing with `Save failed`, browser `404` responses for school/student APIs, navigation concern for `/app/help`, and frontend/backend integration failure.
+  - Root cause: the API gateway was forwarding student-service routes to downstream paths with an extra `/api/v1` prefix, while `student-service` is mounted at root paths such as `/schools`, `/students/classes`, `/students/academic-years`, `/students/terms`, and `/students/class-pathways`.
+  - Updated `backend/services/api-gateway/src/proxy/proxy.service.ts` so student-service routes bypass the downstream `/api/v1` prefix while other services keep it.
+  - Updated `backend/services/api-gateway/test/proxy.service.spec.ts` to match the current proxy response shape.
+  - Verified locally with `npm run test --workspace=services/api-gateway -- proxy.service.spec.ts`; result: `6/6` passed.
+  - Verified locally with `npm run build --workspace=services/api-gateway`; result: build completed successfully.
+  - Deployed the gateway fix to `/opt/kilimanjaro/app/backend/services/api-gateway` on `179.198.193.172`.
+  - Verified on the VPS with the same gateway test and build commands; both passed.
+  - Restarted `ks-api-gateway` with PM2; PM2 reported the gateway and the other seven backend services online.
+  - Verified live API routes returned HTTP `200` after authenticated login:
+    - `GET /api/v1/schools`
+    - `GET /api/v1/students/classes`
+    - `GET /api/v1/students/academic-years`
+    - `GET /api/v1/students/terms`
+    - `GET /api/v1/students/class-pathways`
+    - `GET /api/v1/analytics/group/overview`
+  - Verified live school creation through the API with `POST /api/v1/schools`; the temporary API test school was created successfully.
+  - Verified live UI flow through `https://manage.kilimanjaroschools.site/login`:
+    - Logged in with a temporary throwaway `SUPER_ADMIN` account.
+    - Opened `/superadmin`.
+    - Created a school from `/superadmin/schools/new`.
+    - Confirmed navigation to the created school's edit page.
+    - Opened `/app/help` and confirmed the Help & Support page rendered.
+    - Opened `/admin/classes` and confirmed Class Management rendered.
+    - Captured no API failures and no browser console errors during the checked UI flow.
+  - Removed all temporary verification data after testing:
+    - Deleted temporary auth refresh tokens.
+    - Deleted temporary auth membership.
+    - Deleted the temporary auth user.
+    - Deleted temporary API/UI test schools.
+  - Final public health checks passed:
+    - `https://srms.kilimanjaroschools.site/health` returned `status: ok` with backend services reachable.
+    - `https://manage.kilimanjaroschools.site` returned HTTP `200`.
+    - `nginx -t` passed.
+- Removed stray production school `vibonk` / `KS-VIBONK`.
+  - Verified the school had zero linked students, classes, applicants, terms, and auth memberships before deletion.
+  - Deleted the school directly from the production database because the current product only exposes activate/deactivate for schools.
+  - Verified remaining `KS-VIBONK` school count is `0`.
+- Deployed the super-admin-to-administrator provisioning flow and administrator isolation rules.
+  - Updated `auth-service` user management so `SUPER_ADMIN` can create `SYSTEM_ADMIN` accounts.
+  - Updated `auth-service` user management so `SYSTEM_ADMIN` cannot create, list, fetch, edit, deactivate, reset, invite, view sessions for, or revoke sessions for `SUPER_ADMIN` accounts.
+  - Updated membership assignment/listing so `SYSTEM_ADMIN` cannot assign, revoke, list, or infer `SUPER_ADMIN` memberships.
+  - Added a `System Administrators` panel on `/superadmin` so the initiator can create daily system administrators directly from the group setup page.
+  - Ensured that panel renders even when the group has no schools yet.
+  - Updated dashboard membership query keys so role-filtered membership lists do not reuse stale cached data.
+  - Local verification:
+    - `npm run build --workspace=services/auth-service` passed.
+    - `npx tsc --noEmit --pretty false` in `dashboard` passed.
+    - `npx vite build` in `dashboard` passed.
+    - The broader local auth integration suite still depends on unavailable demo login state in this environment and returned `404` for `admin@demo.kilimanjaro.test`; this was not caused by the deployed permission change.
+  - Production deployment:
+    - Rebuilt `auth-service` on the VPS.
+    - Restarted `ks-auth-service` with PM2.
+    - Rebuilt the dashboard on the VPS and republished `/var/www/kilimanjaro-manage`.
+    - `nginx -t` passed.
+    - PM2 reported all eight Kilimanjaro backend services online.
+  - Production API verification:
+    - Temporary `SUPER_ADMIN` test account could create a `SYSTEM_ADMIN` through `/api/v1/auth/memberships/with-user`.
+    - Created temporary `SYSTEM_ADMIN` could log in.
+    - Temporary `SYSTEM_ADMIN` received zero rows for `/api/v1/auth/users?role=SUPER_ADMIN`.
+    - Temporary `SYSTEM_ADMIN` received zero rows for `/api/v1/auth/memberships?role=SUPER_ADMIN`.
+    - Temporary `SYSTEM_ADMIN` received `404` for direct fetch of the temporary `SUPER_ADMIN` user id.
+    - Temporary `SYSTEM_ADMIN` received `403` when attempting to create a `SUPER_ADMIN`.
+    - Checked live endpoint status for `/schools`, `/analytics/group/overview`, `/auth/users`, `/auth/users?role=SYSTEM_ADMIN`, `/auth/memberships?role=SYSTEM_ADMIN`, `/students/classes`, `/students/academic-years`, `/students/terms`, `/students/class-pathways`, and `/admin/dashboard`; all returned HTTP `200` for the appropriate test role.
+  - Production UI verification:
+    - Logged into `https://manage.kilimanjaroschools.site/login` with a temporary `SUPER_ADMIN`.
+    - Confirmed `/superadmin` renders the `System Administrators` panel.
+    - Created a temporary administrator through the live UI.
+    - The UI request returned HTTP `201`, the first-login password was displayed, and no API failures or browser console errors were captured.
+  - Removed all temporary verification data:
+    - Temporary auth refresh tokens.
+    - Temporary auth memberships.
+    - Temporary auth users.
+    - Temporary local and remote verification scripts.
+
+Current limitation:
+
+- Real outbound email, SMS, and Firebase push credentials were not provided. Notification service is configured to run, but external delivery remains disabled/mock until provider credentials are supplied.
+- `student-service` and `academic-service` migration folders need follow-up cleanup so future production deployments can use pure `prisma migrate deploy` from an empty database.
+- Dependency vulnerability reports should be reviewed and remediated separately; automatic `npm audit fix --force` was not run because it may introduce breaking dependency upgrades.

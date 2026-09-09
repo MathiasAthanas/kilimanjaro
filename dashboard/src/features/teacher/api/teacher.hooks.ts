@@ -262,7 +262,7 @@ export function usePerfPairings(classIds?: string[]) {
     queryFn: () =>
       api
         .get('/students/performance/pairings', {
-          params: { classIds: classIds!.join(',') },
+          params: { classIds: classIds!.join(','), limit: 100 },
         })
         .then((r) =>
           arrayFromApi(payloadOf(r), ['items', 'pairings']).map((raw) => {
@@ -470,6 +470,17 @@ export function useCreatePairingMutation() {
     mutationFn: (payload: Record<string, unknown>) =>
       api
         .post('/students/performance/pairings', payload)
+        .then((r) => r.data?.data ?? r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [...teacherKeys.all, 'performance', 'pairings'] }),
+  });
+}
+
+export function useUpdatePairingStatusMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, status, rejectionReason }: { id: string; status: string; rejectionReason?: string }) =>
+      api
+        .patch(`/students/performance/pairings/${id}/status`, { status, rejectionReason })
         .then((r) => r.data?.data ?? r.data),
     onSuccess: () => qc.invalidateQueries({ queryKey: [...teacherKeys.all, 'performance', 'pairings'] }),
   });

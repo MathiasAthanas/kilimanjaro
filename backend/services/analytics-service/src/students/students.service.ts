@@ -38,8 +38,8 @@ export class StudentsService {
     if (user.role === 'STUDENT') return user.id === studentId;
     if (user.role !== 'PARENT') return true;
 
-    const link = await this.prisma.studentGuardianLink.findFirst({ where: { guardianId: user.id, studentId } });
-    if (link) return true;
+    // Analytics StudentGuardianLink.guardianId stores the student-service internal
+    // guardian UUID, not the auth UUID carried in user.id. Go via downstream only.
     const ids = await this.downstream.guardianStudentIds(user.id);
     return ids.includes(studentId);
   }
@@ -102,7 +102,9 @@ export class StudentsService {
         select: { id: true, firstName: true, lastName: true },
       }),
     ]);
-    const teacherByClassSubjectId = new Map(classSubjects.map((row) => [row.id, row.teacherId]));
+    const teacherIdByClassSubjectId = new Map(classSubjects.map((row) => [row.id, row.teacherId]));
+    const uniqueTeacherIds = [...new Set(classSubjects.map((row) => row.teacherId).filter(Boolean))];
+    const teacherNameById = await this.downstream.resolveUserNames(uniqueTeacherIds);
     const peerNameById = new Map(peerStudents.map((row) => [row.id, `${row.firstName} ${row.lastName}`]));
 
     const currentEnrolment = [...enrolments].reverse().find((row) => row.isActive) || enrolments[enrolments.length - 1];
@@ -229,7 +231,7 @@ export class StudentsService {
           failingSubjects: currentResults.filter((row) => !row.isPassing).length,
           subjectResults: currentResults.map((row) => ({
             subjectName: row.subjectName,
-            teacherName: `Teacher ${teacherByClassSubjectId.get(row.classSubjectId) || 'N/A'}`,
+            teacherName: teacherNameById.get(teacherIdByClassSubjectId.get(row.classSubjectId) || '') || 'Unknown Teacher',
             assessmentBreakdown: {
               CAT1: Number((row.weightedTotal * 0.1).toFixed(2)),
               CAT2: Number((row.weightedTotal * 0.1).toFixed(2)),
@@ -482,6 +484,13 @@ export class StudentsService {
         { registrationNumber: { contains: params.search, mode: 'insensitive' } },
       ];
     }
+    if (params.classId) {
+      const classEnrolments = await this.prisma.enrolment.findMany({
+        where: { classId: params.classId, isActive: true },
+        select: { studentId: true },
+      });
+      where.id = { in: classEnrolments.map((e) => e.studentId) };
+    }
     const students = await this.prisma.student.findMany({ where });
 
     const rows = await Promise.all(
@@ -529,7 +538,7 @@ export class StudentsService {
     );
 
     const filtered = rows.filter((row) => {
-      if (params.classId && row.className !== params.classId) return false;
+      // classId is already applied at the DB level above — skip post-filter
       if (params.riskLevel && row.riskLevel !== params.riskLevel) return false;
       if (params.hasAlert && String(row.hasAlert) !== params.hasAlert) return false;
       if (params.isOverdue && String(row.isOverdue) !== params.isOverdue) return false;
@@ -753,13 +762,10 @@ export class StudentsService {
   }
 
   async parentChildDashboard(childId: string, parentAuthId: string, academicYearId?: string, termId?: string) {
-    const link = await this.prisma.studentGuardianLink.findFirst({ where: { studentId: childId, guardianId: parentAuthId } });
-    if (!link) {
-      const ids = await this.downstream.guardianStudentIds(parentAuthId);
-      if (!ids.includes(childId)) {
-        const { ForbiddenException } = await import('@nestjs/common');
-        throw new ForbiddenException('Not authorized to view this student');
-      }
+    const ids = await this.downstream.guardianStudentIds(parentAuthId);
+    if (!ids.includes(childId)) {
+      const { ForbiddenException } = await import('@nestjs/common');
+      throw new ForbiddenException('Not authorized to view this student');
     }
 
     const yearId = await this.resolveYear(academicYearId);
@@ -859,5 +865,108 @@ export class StudentsService {
 
     await this.redis.set(cacheKey, result, 300);
     return result;
+  }
+
+  /**
+   * Full data set for the branded student report-card PDF: identity,
+   * per-subject term results, attendance for the term and the report-card
+   * summary row (grades, rank, remarks) written by academic-service.
+   */
+  async getReportCard(studentId: string, termId: string) {
+    const [student, term, reportCard] = await Promise.all([
+      this.prisma.student.findUnique({ where: { id: studentId } }),
+      this.prisma.term.findUnique({ where: { id: termId } }),
+      this.prisma.reportCard.findFirst({ where: { studentId, termId } }),
+    ]);
+    if (!student) throw new NotFoundException('Student not found');
+    if (!term) throw new NotFoundException('Term not found');
+    if (!reportCard) {
+      throw new NotFoundException('No report card exists for this student and term — generate report cards first');
+    }
+
+    const [cls, academicYear, subjectResults, attendance] = await Promise.all([
+      this.prisma.class.findUnique({ where: { id: reportCard.classId } }),
+      this.prisma.academicYear.findUnique({ where: { id: reportCard.academicYearId } }),
+      this.prisma.termResult.findMany({
+        where: { studentId, termId },
+        orderBy: { subjectName: 'asc' },
+      }),
+      this.prisma.attendanceRecord.groupBy({
+        by: ['status'],
+        where: { studentId, termId },
+        _count: { _all: true },
+      }),
+    ]);
+
+    const attendanceCounts = { PRESENT: 0, ABSENT: 0, LATE: 0, EXCUSED: 0 } as Record<string, number>;
+    for (const row of attendance) attendanceCounts[row.status as string] = row._count._all;
+    const attendanceTotal = Object.values(attendanceCounts).reduce((a, b) => a + b, 0);
+    const attendanceRate = attendanceTotal
+      ? Number((((attendanceCounts.PRESENT + attendanceCounts.LATE) / attendanceTotal) * 100).toFixed(1))
+      : null;
+
+    const level = reportCard.classLevel ?? cls?.level ?? 0;
+    const stageLabel =
+      level <= 0 ? 'Pre-Primary' : level <= 7 ? 'Primary' : level <= 11 ? 'O-Level' : 'A-Level';
+
+    return {
+      student: {
+        id: student.id,
+        fullName: `${student.firstName} ${student.lastName}`.trim(),
+        registrationNumber: student.registrationNumber,
+        gender: student.gender as string,
+      },
+      class: {
+        id: reportCard.classId,
+        name: cls ? (cls.stream ? `${cls.name} ${cls.stream}` : cls.name) : 'N/A',
+        level,
+        stageLabel,
+      },
+      term: { id: term.id, name: term.name },
+      academicYear: academicYear ? { id: academicYear.id, name: academicYear.name } : null,
+      summary: {
+        overallAverage: reportCard.overallAverage,
+        overallGrade: reportCard.overallGrade,
+        overallPoints: reportCard.overallPoints,
+        overallRemark: reportCard.overallRemark,
+        rank: reportCard.rank,
+        totalStudentsInClass: reportCard.totalStudentsInClass,
+        subjectCount: reportCard.subjectCount,
+        failingSubjectCount: reportCard.failingSubjectCount,
+        divisionSummary: reportCard.divisionSummary,
+        isPublished: reportCard.isPublished,
+        publishedAt: reportCard.publishedAt,
+        generatedAt: reportCard.createdAt,
+      },
+      remarks: {
+        teacherComment: reportCard.teacherComment,
+        principalComment: reportCard.principalComment,
+      },
+      holistic: {
+        behaviourGrade: reportCard.behaviourGrade,
+        socialSkillsGrade: reportCard.socialSkillsGrade,
+        extraCurricularNote: reportCard.extraCurricularNote,
+        readingAbility: reportCard.readingAbility,
+        writingAbility: reportCard.writingAbility,
+        numeracyAbility: reportCard.numeracyAbility,
+      },
+      subjects: subjectResults.map((row) => ({
+        subjectName: row.subjectName,
+        score: row.weightedTotal,
+        grade: row.grade,
+        gradePoints: row.gradePoints,
+        isPassing: row.isPassing,
+        rank: row.rank,
+        totalStudentsInClass: row.totalStudentsInClass,
+      })),
+      attendance: {
+        present: attendanceCounts.PRESENT,
+        absent: attendanceCounts.ABSENT,
+        late: attendanceCounts.LATE,
+        excused: attendanceCounts.EXCUSED,
+        totalDays: attendanceTotal,
+        rate: attendanceRate,
+      },
+    };
   }
 }

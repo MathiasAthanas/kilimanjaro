@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import {
   AlertSeverity,
   AlertType,
@@ -121,7 +121,9 @@ export class PerformanceService {
     const paging = paginate(filters.page, filters.limit);
     const where: Prisma.PerformanceAlertWhereInput = {
       alertType: filters.alertType,
-      severity: filters.severity,
+      severity: Array.isArray(filters.severity)
+        ? { in: filters.severity }
+        : filters.severity,
       isResolved: filters.isResolved,
       subjectId: filters.subjectId,
       ...(filters.classId || filters.teacherId
@@ -178,10 +180,18 @@ export class PerformanceService {
       }
     }
 
+    // For non-teacher roles also validate that the class belongs to the caller's school.
+    const schoolId = (user as any)?.scope === 'SCHOOL'
+      ? ((user as any).activeSchoolId ?? (user as any).schoolIds?.find((id: string) => id !== '*') ?? null)
+      : null;
+
     const alerts = await this.prisma.performanceAlert.findMany({
       where: {
         isResolved: false,
-        triggeredBySnapshot: { classId },
+        triggeredBySnapshot: {
+          classId,
+          ...(schoolId ? { class: { schoolId } } : {}),
+        },
       },
       include: { student: true },
       orderBy: { createdAt: 'desc' },
@@ -238,11 +248,25 @@ export class PerformanceService {
     });
   }
 
-  async listPairings(filters: PerformanceFilterDto): Promise<unknown> {
+  async listPairings(filters: PerformanceFilterDto & { classIds?: string }, user?: { id: string; role: string; scope?: string; activeSchoolId?: string; schoolIds?: string[] }): Promise<unknown> {
+    const schoolId = user?.scope === 'SCHOOL' ? (user.activeSchoolId ?? user.schoolIds?.find((id) => id !== '*') ?? null) : null;
+
+    // Accept both classId (singular) and classIds (comma-separated string) for backward compatibility.
+    const classIdFilter: { classId?: string | { in: string[] } } =
+      filters.classIds
+        ? { classId: { in: filters.classIds.split(',').map((s) => s.trim()).filter(Boolean) } }
+        : filters.classId
+        ? { classId: filters.classId }
+        : {};
+
+    const page = Math.max(1, filters.page ?? 1);
+    const limit = Math.min(100, Math.max(1, filters.limit ?? 20));
+
     return this.prisma.peerPairing.findMany({
       where: {
+        ...(schoolId ? { schoolId } : {}),
+        ...classIdFilter,
         status: filters.status,
-        classId: filters.classId,
         subjectId: filters.subjectId,
         termId: filters.termId,
       },
@@ -251,6 +275,8 @@ export class PerformanceService {
         peer: true,
       },
       orderBy: { createdAt: 'desc' },
+      skip: (page - 1) * limit,
+      take: limit,
     });
   }
 
@@ -261,27 +287,35 @@ export class PerformanceService {
   }
 
   async manualPairing(dto: CreatePairingDto, role: string): Promise<unknown> {
-    const studentSnapshot = await this.prisma.performanceSnapshot.findFirst({
-      where: {
-        studentId: dto.studentId,
-        subjectId: dto.subjectId,
-        termId: dto.termId,
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    const peerSnapshot = await this.prisma.performanceSnapshot.findFirst({
-      where: {
-        studentId: dto.peerId,
-        subjectId: dto.subjectId,
-        termId: dto.termId,
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+    const [studentSnapshot, peerSnapshot, config] = await Promise.all([
+      this.prisma.performanceSnapshot.findFirst({
+        where: { studentId: dto.studentId, subjectId: dto.subjectId, termId: dto.termId },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.performanceSnapshot.findFirst({
+        where: { studentId: dto.peerId, subjectId: dto.subjectId, termId: dto.termId },
+        orderBy: { createdAt: 'desc' },
+      }),
+      // Fetch engine config to enforce the same peer score minimum as auto-pairing
+      this.prisma.performanceEngineConfig.findFirst(),
+    ]);
 
     if (!studentSnapshot || !peerSnapshot) {
       throw new NotFoundException('Performance snapshots required to create pairing');
     }
+
+    const minPeerScore = config?.peerSuggestionMinPeerScore ?? 75;
+    if (peerSnapshot.score < minPeerScore) {
+      throw new BadRequestException(
+        `Peer score ${peerSnapshot.score} is below the minimum threshold of ${minPeerScore}. Choose a peer with a higher score.`,
+      );
+    }
+
+    // Fetch the student's class to get schoolId for multi-school isolation
+    const studentClass = await this.prisma.class.findUnique({
+      where: { id: studentSnapshot.classId },
+      select: { schoolId: true },
+    });
 
     const term = await this.prisma.term.findUnique({ where: { id: dto.termId } });
     const pairing = await this.prisma.peerPairing.create({
@@ -291,6 +325,7 @@ export class PerformanceService {
         subjectId: dto.subjectId,
         subjectName: dto.subjectName,
         classId: studentSnapshot.classId,
+        schoolId: studentClass?.schoolId ?? null,
         termId: dto.termId,
         suggestedBy: this.toSuggestedBy(role),
         status: PairingStatus.SUGGESTED,
@@ -312,13 +347,15 @@ export class PerformanceService {
     return pairing;
   }
 
-  async updatePairingStatus(pairingId: string, dto: UpdatePairingStatusDto): Promise<unknown> {
+  async updatePairingStatus(pairingId: string, dto: UpdatePairingStatusDto & { rejectionReason?: string }): Promise<unknown> {
     return this.prisma.peerPairing.update({
       where: { id: pairingId },
       data: {
         status: dto.status,
         activatedAt: dto.status === PairingStatus.ACTIVE ? new Date() : undefined,
         completedAt: dto.status === PairingStatus.COMPLETED ? new Date() : undefined,
+        rejectedAt: dto.status === PairingStatus.REJECTED ? new Date() : undefined,
+        rejectionReason: dto.status === PairingStatus.REJECTED ? (dto.rejectionReason ?? null) : undefined,
       },
     });
   }
@@ -330,15 +367,17 @@ export class PerformanceService {
       return cached;
     }
 
-    const snapshots = await this.prisma.performanceSnapshot.findMany({
-      where: { classId },
-      include: { student: true },
-    });
+    // Use engine config thresholds so summary aligns with the actual alert counts.
+    const [snapshots, config] = await Promise.all([
+      this.prisma.performanceSnapshot.findMany({ where: { classId }, include: { student: true } }),
+      this.prisma.performanceEngineConfig.findFirst(),
+    ]);
+
+    const atRiskThreshold = config?.atRiskThreshold ?? 50;
+    const failureThreshold = config?.failureThreshold ?? 40;
 
     const grouped = snapshots.reduce<Record<string, typeof snapshots>>((acc, snapshot) => {
-      if (!acc[snapshot.subjectId]) {
-        acc[snapshot.subjectId] = [];
-      }
+      if (!acc[snapshot.subjectId]) acc[snapshot.subjectId] = [];
       acc[snapshot.subjectId].push(snapshot);
       return acc;
     }, {});
@@ -355,8 +394,8 @@ export class PerformanceService {
         bottomPerformer: sorted[sorted.length - 1]
           ? { studentId: sorted[sorted.length - 1].studentId, score: sorted[sorted.length - 1].score }
           : null,
-        atRiskCount: group.filter((item) => item.score < 50 && item.score >= 40).length,
-        criticalCount: group.filter((item) => item.score < 40).length,
+        atRiskCount: group.filter((item) => item.score < atRiskThreshold && item.score >= failureThreshold).length,
+        criticalCount: group.filter((item) => item.score < failureThreshold).length,
         improvingCount: 0,
       };
     });
@@ -365,22 +404,26 @@ export class PerformanceService {
     return summary;
   }
 
-  async schoolSummary(): Promise<unknown> {
-    const cacheKey = 'performance:school:summary';
+  async schoolSummary(schoolId?: string | null): Promise<unknown> {
+    const scopeKey = schoolId || 'group';
+    const cacheKey = `performance:school:${scopeKey}:summary`;
     const cached = await this.redis.get<unknown>(cacheKey);
     if (cached) {
       return cached;
     }
 
+    const studentScope = schoolId ? { student: { schoolId } } : {};
+    const classScope = schoolId ? { class: { schoolId } } : {};
+
     const [atRiskCount, criticalCount, improvingCount, pairings] = await Promise.all([
       this.prisma.performanceAlert.count({
-        where: { isResolved: false, alertType: AlertType.AT_RISK },
+        where: { isResolved: false, alertType: AlertType.AT_RISK, ...studentScope },
       }),
       this.prisma.performanceAlert.count({
-        where: { isResolved: false, alertType: AlertType.FAILURE_RISK },
+        where: { isResolved: false, alertType: AlertType.FAILURE_RISK, ...studentScope },
       }),
-      this.prisma.performanceTrend.count({ where: { trendDirection: TrendDirection.IMPROVING } }),
-      this.prisma.peerPairing.findMany({ where: { status: PairingStatus.COMPLETED, outcomeDelta: { not: null } } }),
+      this.prisma.performanceTrend.count({ where: { trendDirection: TrendDirection.IMPROVING, ...studentScope } }),
+      this.prisma.peerPairing.findMany({ where: { status: PairingStatus.COMPLETED, outcomeDelta: { not: null }, ...classScope } }),
     ]);
 
     const positiveOutcomes = pairings.filter((pairing) => (pairing.outcomeDelta ?? 0) > 0).length;
@@ -397,9 +440,11 @@ export class PerformanceService {
     return payload;
   }
 
-  async pairingEffectiveness(): Promise<unknown> {
+  async pairingEffectiveness(user?: { id: string; role: string; scope?: string; activeSchoolId?: string; schoolIds?: string[] }): Promise<unknown> {
+    const schoolId = user?.scope === 'SCHOOL' ? (user.activeSchoolId ?? user.schoolIds?.find((id) => id !== '*') ?? null) : null;
     const pairings = await this.prisma.peerPairing.findMany({
       where: {
+        ...(schoolId ? { schoolId } : {}),
         status: PairingStatus.COMPLETED,
         outcomeDelta: { not: null },
       },

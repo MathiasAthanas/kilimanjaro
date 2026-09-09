@@ -5,6 +5,7 @@ import { useSessionValidation } from '../../lib/auth/useSessionValidation';
 import { OfflineBanner } from '../feedback/OfflineBanner';
 import { CommandPalette } from '../navigation/CommandPalette';
 import { RoleSidebar } from './RoleSidebar';
+import { SchoolContextBar } from './SchoolContextBar';
 import { TopCommandBar } from './TopCommandBar';
 
 export function AppShell() {
@@ -19,6 +20,7 @@ export function AppShell() {
       <RoleSidebar mobileOpen={mobileNavOpen} onClose={closeMobileNav} />
       <main className="min-w-0 lg:ml-sidebar-width">
         <TopCommandBar onMenuToggle={toggleMobileNav} />
+        <SchoolContextBar />
         <motion.div
           className="p-5 lg:p-margin-page"
           initial={{ opacity: 0, y: 6 }}

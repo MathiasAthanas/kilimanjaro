@@ -63,6 +63,13 @@ export class DispatchService {
         const admins = await this.resolver.resolveStaffByRole(['SYSTEM_ADMIN']);
         for (const user of admins) recipients.push({ userId: user.id || user.authUserId, role: 'SYSTEM_ADMIN', email: user.email, phone: user.phone });
       }
+    } else if (eventType === 'discipline.recorded') {
+      const principal = await this.resolver.resolveStaffByRole(['PRINCIPAL', 'ACADEMIC_QA', 'HEAD_OF_DEPARTMENT']);
+      for (const user of principal) recipients.push({ userId: user.id || user.authUserId, role: user.role || 'PRINCIPAL', email: user.email, phone: user.phone });
+      if (payload.requiresParentNotification && payload.studentId) {
+        const guardian = await this.resolver.resolveGuardian(payload.studentId);
+        if (guardian?.authUserId) recipients.push({ userId: guardian.authUserId, role: 'PARENT', email: guardian.email, phone: guardian.phone });
+      }
     } else if (eventType === 'submission.graded' || eventType === 'quiz.result') {
       if (payload.studentId) {
         const student = await this.resolver.resolveUser(payload.studentId);
@@ -102,6 +109,7 @@ export class DispatchService {
     if (eventType.includes('payment') || eventType.includes('fee') || eventType.includes('invoice') || eventType.includes('receipt')) {
       return ['SMS', 'EMAIL', 'IN_APP'];
     }
+    if (eventType === 'discipline.recorded') return ['IN_APP', 'SMS'];
     if (eventType.includes('alert') || eventType.includes('marks') || eventType.includes('report_card')) return ['EMAIL', 'IN_APP', 'PUSH'];
     if (eventType === 'submission.graded' || eventType === 'quiz.result') return ['PUSH', 'IN_APP'];
     if (eventType === 'assignment.published' || eventType === 'quiz.published' || eventType === 'announcement.published') return ['PUSH', 'IN_APP'];

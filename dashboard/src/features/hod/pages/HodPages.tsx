@@ -1797,7 +1797,7 @@ export function HodStudentPerformancePage() {
           <Card className={`rounded-xl p-5 ${riskLevel === 'rose' ? 'border-2 border-ks-rose bg-ks-rose/5' : riskLevel === 'amber' ? 'border-2 border-ks-amber bg-ks-amber/5' : 'border border-ks-border'}`}>
             <div className="flex items-start gap-4">
               <div className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-xl text-xl font-black text-white ${overallAvg >= 65 ? 'bg-ks-emerald' : overallAvg >= 50 ? 'bg-ks-amber' : overallAvg > 0 ? 'bg-ks-rose' : 'bg-ks-navy'}`}>
-                {studentName.split(' ').map((p) => p[0]).join('').slice(0,2).toUpperCase()}
+                {studentName.split(' ').map((p: string) => p[0]).join('').slice(0,2).toUpperCase()}
               </div>
               <div className="flex-1 min-w-0">
                 <p className={`text-[10px] font-black uppercase tracking-[0.22em] ${riskLevel === 'rose' ? 'text-ks-rose' : riskLevel === 'amber' ? 'text-ks-amber' : 'text-ks-muted'}`}>
@@ -2968,7 +2968,7 @@ function TeachersTable() {
   );
 }
 
-function MarksReviewTable({ marks = hodMarks, average }: { marks?: typeof hodMarks; average: number }) {
+function MarksReviewTable({ marks = [], average }: { marks?: typeof hodMarks; average: number }) {
   return (
     <HodTable columns={['Student', 'Registration', 'Score', 'Percentage', 'Grade', 'Absent', 'Outlier', 'Notes']}>
       {marks.map((row) => {

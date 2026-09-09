@@ -46,8 +46,9 @@ export class DownstreamService {
   async guardianStudentIds(authUserId: string): Promise<string[]> {
     const base = this.config.get<string>('STUDENT_SERVICE_URL', 'http://localhost:3002');
     const payload: any = await this.get(`${base}/students/internal/guardian-by-auth/${authUserId}`);
-    const data = payload?.data || payload;
-    return data?.studentIds || [];
+    const data = payload?.data ?? payload;
+    // guardian-by-auth returns an array of child objects: [{id, firstName, ...}, ...]
+    return Array.isArray(data) ? data.map((s: any) => s.id).filter(Boolean) : [];
   }
 
   async authUsersByRole(roles: string[]): Promise<Array<{ id: string; role: string }>> {
@@ -65,6 +66,19 @@ export class DownstreamService {
       : [];
   }
 
+  async resolveUserNames(ids: string[]): Promise<Map<string, string>> {
+    if (!ids.length) return new Map();
+    const base = this.config.get<string>('AUTH_SERVICE_URL', 'http://localhost:3001');
+    const payload: any = await this.get(`${base}/api/v1/auth/internal/users-by-ids`, { ids: ids.join(',') });
+    const data = payload?.data ?? payload;
+    const users: Array<{ id: string; fullName: string }> = Array.isArray(data?.users) ? data.users : Array.isArray(data) ? data : [];
+    const map = new Map<string, string>();
+    for (const u of users) {
+      if (u?.id && u?.fullName) map.set(u.id, u.fullName);
+    }
+    return map;
+  }
+
   async dispatchInternalNotification(payload: {
     eventType: string;
     sourceService: string;
@@ -73,7 +87,8 @@ export class DownstreamService {
     recipientIds: string[];
   }) {
     const base = this.config.get<string>('NOTIFICATION_SERVICE_URL', 'http://localhost:3005');
-    return this.post(`${base}/notifications/internal/dispatch`, {
+    // notification-service mounts routes under the /api/v1 global prefix.
+    return this.post(`${base}/api/v1/notifications/internal/dispatch`, {
       eventType: payload.eventType,
       sourceService: payload.sourceService,
       payload: {

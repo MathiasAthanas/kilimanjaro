@@ -11,7 +11,7 @@ export class DepartmentController {
   constructor(private readonly service: DepartmentService) {}
 
   @Get(':subjectId')
-  @Roles(ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA, ROLES.SYSTEM_ADMIN)
+  @Roles(ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA, ROLES.SYSTEM_ADMIN)
   @ApiOperation({ summary: 'Department analytics by subject' })
   get(@Param('subjectId') subjectId: string, @Query('academicYearId') academicYearId?: string, @Query('termId') termId?: string) {
     return this.service.getDepartmentSubjectAnalytics(subjectId, academicYearId, termId);

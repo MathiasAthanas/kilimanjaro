@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { InternalApiGuard } from './common/guards/internal-api.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { IdentityMiddleware } from './common/middleware/identity.middleware';
 import { validateEnv } from './config/env.validation';
@@ -32,6 +33,7 @@ import { RabbitMqModule } from './rabbitmq/rabbitmq.module';
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useClass: InternalApiGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
   ],
 })

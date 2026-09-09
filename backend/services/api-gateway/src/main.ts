@@ -2,6 +2,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import * as express from 'express';
 import helmet from 'helmet';
 import * as morgan from 'morgan';
 import { AppModule } from './app.module';
@@ -12,6 +13,10 @@ async function bootstrap() {
 
   app.use(helmet());
   app.use(morgan(configService.get<string>('NODE_ENV') === 'production' ? 'combined' : 'dev'));
+
+  const requestLimit = configService.get<string>('REQUEST_BODY_LIMIT', '100mb');
+  app.use(express.json({ limit: requestLimit }));
+  app.use(express.urlencoded({ extended: true, limit: requestLimit }));
 
   app.useGlobalPipes(
     new ValidationPipe({
@@ -39,6 +44,8 @@ async function bootstrap() {
       'Authorization',
       'Accept',
       'Accept-Language',
+      'X-Active-School',
+      'x-active-school',
       'x-internal-api-key',
       'x-correlation-id',
     ],

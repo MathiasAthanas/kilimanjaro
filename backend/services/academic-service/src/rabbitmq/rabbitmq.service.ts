@@ -21,12 +21,17 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
       this.connection = await amqplib.connect(url);
       this.channel = await this.connection.createChannel();
       const channel = this.channel;
-      if (!channel) {
-        return;
-      }
+      if (!channel) return;
 
       await channel.assertExchange('student.events', 'topic', { durable: true });
       await channel.assertExchange('academic.events', 'topic', { durable: true });
+      this.connection.on('error', (err: Error) => this.logger.warn(`RabbitMQ connection error: ${err.message}`));
+      this.connection.on('close', () => {
+        this.logger.warn('RabbitMQ connection closed — reconnecting in 5s');
+        this.channel = undefined;
+        this.connection = undefined;
+        setTimeout(() => this.connect(), 5000);
+      });
     } catch (error) {
       this.logger.warn(`RabbitMQ unavailable: ${(error as Error).message}`);
     }
@@ -50,6 +55,7 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
     }
 
     if (!this.channel) {
+      this.logger.warn(`RabbitMQ unavailable — event dropped: ${routingKey}`);
       return;
     }
 

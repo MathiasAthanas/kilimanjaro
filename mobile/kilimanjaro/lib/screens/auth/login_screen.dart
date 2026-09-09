@@ -71,6 +71,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         .read(authControllerProvider.notifier)
         .login(_identifierController.text.trim(), _passwordController.text);
     if (result == null || !mounted) return;
+    // First login with a default password (e.g. new parent accounts) must
+    // set a personal password before using the app.
+    if (result.user.mustChangePassword) {
+      ref
+          .read(snackbarProvider.notifier)
+          .show('Welcome, ${result.user.name} — please set a new password.');
+      AppRouter.go(
+        context,
+        '/shell/${result.user.role.shellSegment}/change-password',
+      );
+      return;
+    }
     ref
         .read(snackbarProvider.notifier)
         .show('Welcome back, ${result.user.name}');

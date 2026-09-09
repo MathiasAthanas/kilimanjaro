@@ -18,7 +18,7 @@ import { adminKeys } from '../api/admin.hooks';
 
 // ─── Shell ────────────────────────────────────────────────────────────────────
 
-export function AdminShell({ title, eyebrow, children, action }: { title: string; eyebrow: string; children: ReactNode; action?: ReactNode }) {
+export function AdminShell({ title, eyebrow, children, action, subtitle }: { title: string; eyebrow: string; children: ReactNode; action?: ReactNode; subtitle?: string }) {
   return (
     <div className="space-y-gutter">
       <section className="relative overflow-hidden rounded-2xl border border-indigo-300/30 bg-[radial-gradient(circle_at_8%_18%,rgba(14,165,233,0.30),transparent_30%),radial-gradient(circle_at_88%_8%,rgba(99,102,241,0.22),transparent_32%),linear-gradient(135deg,#1E1B4B_0%,#312E81_50%,#4338CA_100%)] shadow-layer">
@@ -29,7 +29,7 @@ export function AdminShell({ title, eyebrow, children, action }: { title: string
           <div>
             <p className="text-[11px] font-black uppercase tracking-[0.32em] text-sky-300">{eyebrow}</p>
             <h1 className="mt-2 font-display text-[44px] font-black leading-tight tracking-[-0.04em] text-white">{title}</h1>
-            <p className="mt-1.5 text-sm font-semibold text-white/60">System Admin · admin@ks.ac.tz · Production console</p>
+            <p className="mt-1.5 text-sm font-semibold text-white/60">{subtitle ?? 'System Admin · admin@ks.ac.tz · Production console'}</p>
           </div>
           <div className="flex shrink-0 flex-wrap items-start gap-2 xl:pt-2">
             <AdminHeaderPill label="Env"    value="Production" color="text-sky-300" />
@@ -425,11 +425,6 @@ function normalisePhone(phone: string): string {
   return `+${digits}`;
 }
 
-function parentDefaultPassword(phone: string): string {
-  const last4 = normalisePhone(phone).replace(/[^\d]/g, '').slice(-4);
-  return `Parent@${last4}`;
-}
-
 async function importStudents(rows: Record<string, string>[]) {
   const lookup = await loadImportLookup();
   const currentYear = lookup.academicYears.find((year) => Boolean(year.isCurrent)) ?? lookup.academicYears[0];
@@ -456,27 +451,16 @@ async function importStudents(rows: Record<string, string>[]) {
 
     if (parentCache.has(phone)) return parentCache.get(phone)!;
 
-    // Check if this parent already has an auth account
-    const existing = await api.get('/auth/users', { params: { role: 'PARENT', phoneNumber: phone, limit: 1 } })
-      .then((r) => r.data?.data ?? r.data);
-    const items: { id: string }[] = Array.isArray(existing) ? existing : (existing?.items ?? []);
-    if (items.length > 0) {
-      parentCache.set(phone, items[0].id);
-      return items[0].id;
-    }
-
-    // Create a new PARENT auth account
-    const newParent = await api.post('/auth/users', {
+    // The server deduplicates by phone across the group and attaches this
+    // import's school membership without exposing other schools in the UI.
+    const parent = await api.post('/auth/users/ensure-parent', {
       firstName: row.guardian_first_name.trim(),
       lastName: row.guardian_last_name?.trim() || row.last_name.trim(),
-      role: 'PARENT',
       phoneNumber: phone,
-      password: parentDefaultPassword(row.guardian_phone.trim()),
-      isActive: true,
     }).then((r) => r.data?.data ?? r.data);
 
-    parentCache.set(phone, newParent.id);
-    return newParent.id;
+    parentCache.set(phone, parent.id);
+    return parent.id;
   }
 
   const created = [];

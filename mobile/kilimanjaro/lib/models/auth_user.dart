@@ -6,6 +6,11 @@ enum UserRole {
   academicQa('ACADEMIC_QA'),
   principal('PRINCIPAL'),
   finance('FINANCE'),
+  admissions('ADMISSIONS'),
+  superAdmin('SUPER_ADMIN'),
+  manager('MANAGER'),
+  headOfSchool('HEAD_OF_SCHOOL'),
+  headOfFinance('HEAD_OF_FINANCE'),
   admin('SYSTEM_ADMIN');
 
   const UserRole(this.value);
@@ -19,6 +24,11 @@ enum UserRole {
         UserRole.academicQa => 'aqa',
         UserRole.principal => 'principal',
         UserRole.finance => 'finance',
+        UserRole.admissions => 'admissions',
+        UserRole.superAdmin => 'admin',
+        UserRole.manager => 'principal',
+        UserRole.headOfSchool => 'principal',
+        UserRole.headOfFinance => 'finance',
         UserRole.admin => 'admin',
       };
 
@@ -30,6 +40,11 @@ enum UserRole {
         UserRole.academicQa => 'Academic QA',
         UserRole.principal => 'Principal',
         UserRole.finance => 'Finance',
+        UserRole.admissions => 'Admissions Officer',
+        UserRole.superAdmin => 'Super Admin',
+        UserRole.manager => 'Group Manager',
+        UserRole.headOfSchool => 'Head of School',
+        UserRole.headOfFinance => 'Head of Finances',
         UserRole.admin => 'System Admin',
       };
 
@@ -53,6 +68,7 @@ class AuthUser {
     this.joinedAt,
     this.lastLoginAt,
     this.bio,
+    this.mustChangePassword = false,
   });
 
   final String id;
@@ -65,6 +81,10 @@ class AuthUser {
   final DateTime? joinedAt;
   final DateTime? lastLoginAt;
   final String? bio;
+
+  /// True on first login with a default password (e.g. parent accounts
+  /// created during enrolment) — the app must force a password change.
+  final bool mustChangePassword;
 
   factory AuthUser.fromJson(Map<String, dynamic> json) {
     final first = json['firstName'] as String? ?? '';
@@ -80,11 +100,14 @@ class AuthUser {
       role: UserRole.fromValue(json['role'] as String? ?? 'STUDENT'),
       email: json['email'] as String?,
       registrationNumber: json['registrationNumber'] as String?,
-      phone: json['phone'] as String?,
+      phone: json['phone'] as String? ?? json['phoneNumber'] as String?,
       profilePhotoUrl: json['profilePhotoUrl'] as String? ?? json['avatarUrl'] as String?,
       joinedAt: joinedRaw != null ? DateTime.parse(joinedRaw) : null,
       lastLoginAt: lastLoginRaw != null ? DateTime.parse(lastLoginRaw) : null,
       bio: json['bio'] as String?,
+      mustChangePassword: json['mustChangePassword'] as bool? ??
+          json['requiresPasswordChange'] as bool? ??
+          false,
     );
   }
 }

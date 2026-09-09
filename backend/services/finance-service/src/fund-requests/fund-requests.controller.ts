@@ -20,7 +20,7 @@ export class FundRequestsController {
   constructor(private readonly service: FundRequestsService) {}
 
   @Post()
-  @Roles(ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL, ROLES.FINANCE, ROLES.SYSTEM_ADMIN)
+  @Roles(ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.SYSTEM_ADMIN)
   create(@Body() dto: CreateFundRequestDto, @CurrentUser() user?: RequestUser) {
     return this.service.create(dto, user!);
   }
@@ -28,8 +28,8 @@ export class FundRequestsController {
   @Get()
   @Roles(
     ROLES.HEAD_OF_DEPARTMENT,
-    ROLES.FINANCE,
-    ROLES.PRINCIPAL,
+    ROLES.FINANCE, ROLES.HEAD_OF_FINANCE,
+    ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN,
     ROLES.SYSTEM_ADMIN,
     ROLES.MANAGING_DIRECTOR,
     ROLES.BOARD_DIRECTOR,
@@ -41,8 +41,8 @@ export class FundRequestsController {
   @Get('summary')
   @Roles(
     ROLES.HEAD_OF_DEPARTMENT,
-    ROLES.FINANCE,
-    ROLES.PRINCIPAL,
+    ROLES.FINANCE, ROLES.HEAD_OF_FINANCE,
+    ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN,
     ROLES.SYSTEM_ADMIN,
     ROLES.MANAGING_DIRECTOR,
     ROLES.BOARD_DIRECTOR,
@@ -54,8 +54,8 @@ export class FundRequestsController {
   @Get(':id')
   @Roles(
     ROLES.HEAD_OF_DEPARTMENT,
-    ROLES.FINANCE,
-    ROLES.PRINCIPAL,
+    ROLES.FINANCE, ROLES.HEAD_OF_FINANCE,
+    ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN,
     ROLES.SYSTEM_ADMIN,
     ROLES.MANAGING_DIRECTOR,
     ROLES.BOARD_DIRECTOR,
@@ -64,32 +64,41 @@ export class FundRequestsController {
     return this.service.byId(id, user!);
   }
 
-  @Patch(':id/forward')
-  @Roles(ROLES.FINANCE, ROLES.SYSTEM_ADMIN)
-  forward(@Param('id') id: string, @Body() dto: ForwardFundRequestDto, @CurrentUser() user?: RequestUser) {
-    return this.service.forward(id, dto, user!);
+  // Step 1 — Head of School approves an HOD-initiated request
+  @Patch(':id/school-approve')
+  @Roles(ROLES.HEAD_OF_SCHOOL, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
+  schoolApprove(@Param('id') id: string, @Body() dto: ApproveFundRequestDto, @CurrentUser() user?: RequestUser) {
+    return this.service.schoolApprove(id, dto, user!);
   }
 
-  @Patch(':id/approve')
-  @Roles(ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN)
-  approve(@Param('id') id: string, @Body() dto: ApproveFundRequestDto, @CurrentUser() user?: RequestUser) {
-    return this.service.approve(id, dto, user!);
+  // Step 2 — Finance reviews and forwards to the Manager
+  @Patch(':id/finance-review')
+  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.SYSTEM_ADMIN)
+  financeReview(@Param('id') id: string, @Body() dto: ForwardFundRequestDto, @CurrentUser() user?: RequestUser) {
+    return this.service.financeReview(id, dto, user!);
+  }
+
+  // Step 3 — Manager gives final approval
+  @Patch(':id/manager-approve')
+  @Roles(ROLES.MANAGER, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
+  managerApprove(@Param('id') id: string, @Body() dto: ApproveFundRequestDto, @CurrentUser() user?: RequestUser) {
+    return this.service.managerApprove(id, dto, user!);
   }
 
   @Patch(':id/reject')
-  @Roles(ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN)
+  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
   reject(@Param('id') id: string, @Body() dto: RejectFundRequestDto, @CurrentUser() user?: RequestUser) {
     return this.service.reject(id, dto, user!);
   }
 
   @Patch(':id/disburse')
-  @Roles(ROLES.FINANCE, ROLES.SYSTEM_ADMIN)
+  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.SYSTEM_ADMIN)
   disburse(@Param('id') id: string, @Body() dto: DisburseFundRequestDto, @CurrentUser() user?: RequestUser) {
     return this.service.disburse(id, dto, user!);
   }
 
   @Patch(':id/cancel')
-  @Roles(ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL, ROLES.FINANCE, ROLES.SYSTEM_ADMIN)
+  @Roles(ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.SYSTEM_ADMIN)
   cancel(@Param('id') id: string, @Body() dto: CancelFundRequestDto, @CurrentUser() user?: RequestUser) {
     return this.service.cancel(id, dto, user!);
   }

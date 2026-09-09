@@ -1,7 +1,9 @@
 import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { ROLES } from '../common/constants/roles';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
+import { RequestUser } from '../common/interfaces/request-user.interface';
 import { CreateAssessmentTypeDto } from './dto/create-assessment-type.dto';
 import { CreateGradingScaleDto } from './dto/create-grading-scale.dto';
 import { GradingService } from './grading.service';
@@ -12,7 +14,7 @@ export class GradingController {
   constructor(private readonly gradingService: GradingService) {}
 
   @Post('grading-scales')
-  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL)
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN)
   createGradingScale(@Body() dto: CreateGradingScaleDto) {
     return this.gradingService.createGradingScale(dto);
   }
@@ -20,7 +22,7 @@ export class GradingController {
   @Get('grading-scales')
   @Roles(
     ROLES.SYSTEM_ADMIN,
-    ROLES.PRINCIPAL,
+    ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN,
     ROLES.ACADEMIC_QA,
     ROLES.HEAD_OF_DEPARTMENT,
     ROLES.TEACHER,
@@ -40,32 +42,32 @@ export class GradingController {
   }
 
   @Patch('grading-scales/:id')
-  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL)
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN)
   updateGradingScale(@Param('id') id: string, @Body() dto: { name: string; grades: any[] }) {
     return this.gradingService.updateGradingScale(id, dto);
   }
 
   @Patch('grading-scales/:id/activate')
-  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL)
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN)
   activateGradingScale(@Param('id') id: string) {
     return this.gradingService.activateGradingScale(id);
   }
 
   @Delete('grading-scales/:id')
-  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL)
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN)
   @HttpCode(HttpStatus.NO_CONTENT)
   deleteGradingScale(@Param('id') id: string) {
     return this.gradingService.deleteGradingScale(id);
   }
 
   @Post('assessment-types')
-  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA)
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA)
   createAssessmentType(@Body() dto: CreateAssessmentTypeDto) {
     return this.gradingService.createAssessmentType(dto);
   }
 
   @Patch('assessment-types/:id')
-  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.ACADEMIC_QA)
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA)
   updateAssessmentType(@Param('id') id: string, @Body() dto: Partial<CreateAssessmentTypeDto>) {
     return this.gradingService.updateAssessmentType(id, dto);
   }
@@ -73,7 +75,7 @@ export class GradingController {
   @Get('assessment-types')
   @Roles(
     ROLES.SYSTEM_ADMIN,
-    ROLES.PRINCIPAL,
+    ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN,
     ROLES.ACADEMIC_QA,
     ROLES.HEAD_OF_DEPARTMENT,
     ROLES.TEACHER,

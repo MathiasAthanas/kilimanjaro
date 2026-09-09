@@ -19,8 +19,15 @@ import {
   useOperationsFinanceOverview,
   useAttendanceOverview,
   useEnrolmentAnalytics,
+  useClassAnalytics,
+  useClassReportCards,
+  useGenerateReportMutation,
+  useStudentAnalyticsProfile,
+  useSubjectAnalytics,
+  useTeacherAnalyticsDetail,
+  downloadReportWhenReady,
 } from '../api/operations.hooks';
-import { AnalyticsInsightPanel, BulkMarksGrid, ChartCard, ExportCenterDrawer, MarksReviewPanel, OperationsShell, OperationsTable, ReportBuilderCanvas, ReportPreviewFrame, ReportTile, Td, TimetableMatrix } from '../components/OperationsWorkspace';
+import { AnalyticsInsightPanel, BulkMarksGrid, ChartCard, ExportCenterDrawer, OperationsShell, OperationsTable, ReportBuilderCanvas, ReportTile, Td, TimetableMatrix } from '../components/OperationsWorkspace';
 
 export function ReportsHomePage() {
   const { data: apiCatalog = [], isLoading: catLoading } = useReportCatalog() as { data: Array<Record<string, unknown>>; isLoading: boolean };
@@ -84,7 +91,18 @@ export function ReportJobDetailPage() {
   return (
     <OperationsShell title={String(job.name ?? 'Report')} eyebrow="Report job detail">
       <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_320px]">
-        <ReportPreviewFrame title={String(job.name ?? 'Report')} />
+        <div className="rounded-2xl border border-ks-line bg-white p-8">
+          <p className="text-[11px] font-black uppercase tracking-widest text-ks-muted">Report job</p>
+          <h2 className="mt-3 font-display text-3xl font-black text-ks-navy">{String(job.name ?? 'Report')}</h2>
+          <div className="mt-6 grid gap-3 md:grid-cols-2">
+            {([['Status', String(job.status ?? '—')], ['Requested By', String(job.requestedBy ?? '—')], ['Scope', String(job.scope ?? '—')], ['Format', String(job.format ?? 'PDF')], ['Created', String(job.created ?? '').slice(0, 16).replace('T', ' ')]] as Array<[string, string]>).map(([label, value]) => (
+              <div key={label} className="rounded-xl border border-ks-line bg-ks-paper p-4">
+                <p className="text-[10px] font-black uppercase tracking-widest text-ks-muted">{label}</p>
+                <p className="mt-1 font-black text-ks-navy">{value}</p>
+              </div>
+            ))}
+          </div>
+        </div>
         <ExportCenterDrawer jobs={[job] as Parameters<typeof ExportCenterDrawer>[0]['jobs']} />
       </div>
     </OperationsShell>
@@ -175,7 +193,59 @@ export function BulkMarksSheetPage() {
 }
 
 export function MarksReviewWorkspacePage() {
-  return <OperationsShell title="Marks Review Workspace" eyebrow="Approval and validation"><MarksReviewPanel /></OperationsShell>;
+  const { assessmentId } = useParams();
+  const { data: rawAssessments = [] } = useAllAssessments() as { data: Record<string, unknown>[] };
+  const { data: marks = [], isLoading, isError, refetch } = useAssessmentMarksSheet(assessmentId) as { data: Array<Record<string, unknown>>; isLoading: boolean; isError: boolean; refetch: () => void };
+  const assessment = rawAssessments.find((item) => String(item.id) === assessmentId) ?? null;
+
+  const scores = marks.map((m) => Number(m.score ?? 0)).filter((v) => Number.isFinite(v));
+  const mean = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
+  const buckets = [0, 0, 0, 0, 0];
+  scores.forEach((s) => { buckets[Math.min(4, Math.floor(s / 20))] += 1; });
+
+  return (
+    <OperationsShell title={String(assessment?.title ?? assessment?.assessment ?? 'Marks Review')} eyebrow="Approval and validation">
+      {isLoading ? <SkeletonTable cols={5} /> : isError ? <DataError onRetry={refetch} /> : marks.length === 0 ? (
+        <EmptyState title="No marks to review" description="Marks appear here once the teacher submits this assessment." />
+      ) : (
+        <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_340px]">
+          <div className="space-y-gutter">
+            <ChartCard title="Mark Distribution" values={buckets} labels={['0–20', '21–40', '41–60', '61–80', '81–100']} />
+            <OperationsTable columns={['Student', 'Score', 'vs Class Mean', 'Flag']} minWidth={720}>
+              {marks.map((mark) => {
+                const score = Number(mark.score ?? 0);
+                const diff = Math.round(score - mean);
+                const flag = score < 40 ? 'Below pass mark' : diff <= -25 ? 'Outlier (low)' : diff >= 25 ? 'Top performer' : '—';
+                return (
+                  <tr key={String(mark.id)} className={score < 40 ? 'bg-ks-rose/5' : undefined}>
+                    <Td>{String(mark.student ?? '')}</Td>
+                    <Td>{score}%</Td>
+                    <Td>{diff > 0 ? `+${diff}` : diff}</Td>
+                    <Td>{flag === '—' ? <span className="text-ks-muted">—</span> : <Badge tone={flag === 'Top performer' ? 'emerald' : 'rose'}>{flag}</Badge>}</Td>
+                  </tr>
+                );
+              })}
+            </OperationsTable>
+          </div>
+          <div className="sticky top-24 h-fit rounded-2xl border border-ks-line bg-white p-5 shadow-sm">
+            <h2 className="font-display text-xl font-black text-ks-navy">Decision Panel</h2>
+            <p className="mt-3 text-sm font-semibold text-ks-muted">
+              Class mean is <span className="font-black text-ks-navy">{mean.toFixed(1)}%</span> across {scores.length} students.
+              Approving or rejecting this submission is done in the department approval queue, which records the decision with an audit trail.
+            </p>
+            <div className="mt-4 grid gap-2">
+              <NavLink to={`/hod/approvals/${assessmentId}`}>
+                <Button className="w-full rounded-xl">Open Approval Review</Button>
+              </NavLink>
+              <NavLink to="/academics/marks/bulk">
+                <Button variant="secondary" className="w-full rounded-xl">Back to Bulk Marks</Button>
+              </NavLink>
+            </div>
+          </div>
+        </div>
+      )}
+    </OperationsShell>
+  );
 }
 
 export function ResultsWorkspacePage() {
@@ -210,8 +280,30 @@ function ResultsTable() {
 }
 
 export function ClassResultsReviewPage() {
-  const { classId, termId } = useParams();
-  return <OperationsShell title={`${classId ?? 'Class'} Results`} eyebrow={`Term ${termId ?? 'review'}`}><ReportPreviewFrame title="Class Results Review" /><ResultsTable /></OperationsShell>;
+  const { classId } = useParams();
+  const { data, isLoading } = useClassAnalytics(classId) as { data: Record<string, unknown> | undefined; isLoading: boolean };
+  const subjects = (data?.subjectSummaries ?? []) as Array<Record<string, unknown>>;
+  const className = data?.className ? `${String(data.className)}${data?.stream ? ` ${String(data.stream)}` : ''}` : 'Class';
+  return (
+    <OperationsShell title={`${className} Results`} eyebrow="Term results review">
+      {isLoading ? <SkeletonTable cols={4} /> : subjects.length > 0 ? (
+        <OperationsTable columns={['Subject', 'Average', 'Pass Rate', 'Highest', 'Lowest']}>
+          {subjects.map((subject) => (
+            <tr key={String(subject.subjectId ?? subject.subjectName)}>
+              <Td>{String(subject.subjectName ?? '')}</Td>
+              <Td>{Number(subject.average ?? subject.classAverage ?? 0).toFixed(1)}%</Td>
+              <Td>{subject.passRate != null ? `${Number(subject.passRate).toFixed(1)}%` : '—'}</Td>
+              <Td>{String(subject.highestScore ?? '—')}</Td>
+              <Td>{String(subject.lowestScore ?? '—')}</Td>
+            </tr>
+          ))}
+        </OperationsTable>
+      ) : (
+        <EmptyState title="No published results" description="Subject results appear here once marks are locked and published for this class." />
+      )}
+      <ResultsTable />
+    </OperationsShell>
+  );
 }
 
 export function ResultsPublishingSupportPage() {
@@ -241,7 +333,66 @@ export function ReportCardGenerationCenterPage() {
 }
 
 export function ReportCardPreviewPage() {
-  return <OperationsShell title="Report Card Preview" eyebrow="PDF-style report card"><ReportPreviewFrame title="Student Report Card" /></OperationsShell>;
+  const { classId, termId } = useParams();
+  const { data: cards = [], isLoading, isError, refetch } = useClassReportCards(classId, termId) as { data: Array<Record<string, unknown>>; isLoading: boolean; isError: boolean; refetch: () => void };
+  const generateReport = useGenerateReportMutation();
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+
+  const handleDownload = async (card: Record<string, unknown>) => {
+    const studentId = String(card.studentId ?? '');
+    const studentName = String(card.studentName ?? 'student');
+    setDownloadingId(studentId);
+    try {
+      const result = (await generateReport.mutateAsync({
+        reportType: 'REPORT_CARD',
+        scope: 'student',
+        scopeId: studentId,
+        termId,
+        academicYearId: card.academicYearId ? String(card.academicYearId) : undefined,
+      })) as Record<string, unknown>;
+      await downloadReportWhenReady(String(result.reportId), `Report_Card_${studentName.replace(/\s+/g, '_')}.pdf`);
+      toast('Report card PDF downloaded', 'success');
+    } catch {
+      toast('Report card generation failed. Please try again.', 'error');
+    } finally {
+      setDownloadingId(null);
+    }
+  };
+
+  return (
+    <OperationsShell title="Class Report Cards" eyebrow="Preview and download official PDFs">
+      {isLoading ? <SkeletonTable cols={7} /> : isError ? <DataError onRetry={refetch} /> : cards.length === 0 ? (
+        <EmptyState title="No report cards yet" description="Generate report cards for this class and term first (Principal → Report Cards → Generate), then download the official PDFs here." />
+      ) : (
+        <OperationsTable columns={['Student', 'Reg No.', 'Average', 'Grade', 'Rank', 'Status', 'Official PDF']}>
+          {cards.map((card) => {
+            const studentId = String(card.studentId ?? '');
+            const published = Boolean(card.isPublished);
+            return (
+              <tr key={String(card.id)}>
+                <Td>{String(card.studentName ?? studentId)}</Td>
+                <Td>{String(card.registrationNumber ?? '—')}</Td>
+                <Td>{Number(card.overallAverage ?? 0).toFixed(1)}%</Td>
+                <Td><Badge tone={String(card.overallGrade ?? '').startsWith('A') ? 'emerald' : String(card.overallGrade ?? '').startsWith('F') ? 'rose' : 'blue'}>{String(card.overallGrade ?? '—')}</Badge></Td>
+                <Td>{card.rank != null ? `${card.rank} / ${card.totalStudentsInClass ?? '—'}` : '—'}</Td>
+                <Td><Badge tone={published ? 'emerald' : 'amber'}>{published ? 'PUBLISHED' : 'PROVISIONAL'}</Badge></Td>
+                <Td>
+                  <Button
+                    variant="secondary"
+                    className="rounded-lg py-1.5 text-xs"
+                    disabled={downloadingId === studentId}
+                    onClick={() => handleDownload(card)}
+                  >
+                    {downloadingId === studentId ? 'Preparing…' : 'Download PDF'}
+                  </Button>
+                </Td>
+              </tr>
+            );
+          })}
+        </OperationsTable>
+      )}
+    </OperationsShell>
+  );
 }
 
 export function AnalyticsWorkspacePage() {
@@ -278,48 +429,89 @@ function AnalyticsGrid() {
 }
 
 export function AcademicAnalyticsOpsPage() {
+  const { data, isLoading, isError, refetch } = useAcademicOverview() as { data: Record<string, unknown> | undefined; isLoading: boolean; isError: boolean; refetch: () => void };
+  const rankings = (data?.subjectRankings ?? []) as Array<Record<string, unknown>>;
+  const top = rankings.slice(0, 8);
   return (
     <OperationsShell title="Academic Analytics" eyebrow="Academic overview and engine">
-      <div className="grid gap-gutter xl:grid-cols-2">
-        <ChartCard title="Subject Ranking" values={[54, 66, 78, 82]} />
-        <AnalyticsInsightPanel title="Academic Insight" insight="Navigate to AQA for full school-wide analytics and engine controls." />
-      </div>
+      {isLoading ? <SkeletonTable cols={2} /> : isError ? <DataError onRetry={refetch} /> : (
+        <div className="grid gap-gutter xl:grid-cols-2">
+          {top.length > 0
+            ? <ChartCard title="Subject Averages" values={top.map((s) => Math.round(Number(s.average ?? 0)))} labels={top.map((s) => String(s.subjectName ?? ''))} />
+            : <EmptyState title="No subject data" description="Subject averages appear once marks are published for the term." />}
+          <AnalyticsInsightPanel
+            title={`School Average: ${data?.schoolAverage != null ? Number(data.schoolAverage).toFixed(1) : '—'}%`}
+            insight={`Pass rate is ${data?.passRate != null ? Number(data.passRate).toFixed(1) : '—'}% across ${rankings.length} ranked subjects. Open AQA for engine controls and interventions.`}
+          />
+        </div>
+      )}
     </OperationsShell>
   );
 }
 
 export function ClassAnalyticsDetailPage() {
   const { classId } = useParams();
+  const { data, isLoading, isError, refetch } = useClassAnalytics(classId) as { data: Record<string, unknown> | undefined; isLoading: boolean; isError: boolean; refetch: () => void };
+  const subjects = (data?.subjectSummaries ?? []) as Array<Record<string, unknown>>;
+  const className = data?.className ? `${String(data.className)}${data?.stream ? ` ${String(data.stream)}` : ''}` : 'Class';
   return (
-    <OperationsShell title={`${classId ?? 'Class'} Analytics`} eyebrow="Class drilldown">
-      <div className="grid gap-gutter xl:grid-cols-2">
-        <ChartCard title="Performance Trend" values={[60, 64, 67, 71, 74]} />
-        <AnalyticsInsightPanel title="Next action" insight="Review at-risk students and check teacher submission timeliness." />
-      </div>
+    <OperationsShell title={`${className} Analytics`} eyebrow="Class drilldown">
+      {isLoading ? <SkeletonTable cols={2} /> : isError ? <DataError onRetry={refetch} /> : (
+        <div className="grid gap-gutter xl:grid-cols-2">
+          {subjects.length > 0
+            ? <ChartCard title="Subject Averages" values={subjects.slice(0, 10).map((s) => Math.round(Number(s.average ?? s.classAverage ?? 0)))} labels={subjects.slice(0, 10).map((s) => String(s.subjectName ?? ''))} />
+            : <EmptyState title="No published results" description="Class analytics appear once term results are published." />}
+          <AnalyticsInsightPanel
+            title={`Pass Rate: ${data?.passRate != null ? Number(data.passRate).toFixed(1) : '—'}%`}
+            insight={`${String(data?.studentCount ?? '—')} students | ${String(data?.atRiskCount ?? 0)} at risk, ${String(data?.criticalCount ?? 0)} critical. ${String(data?.activePairings ?? 0)} active peer pairings.`}
+          />
+        </div>
+      )}
     </OperationsShell>
   );
 }
 
 export function SubjectAnalyticsDetailPage() {
   const { subjectId } = useParams();
+  const { data, isLoading, isError, refetch } = useSubjectAnalytics(subjectId) as { data: Record<string, unknown> | undefined; isLoading: boolean; isError: boolean; refetch: () => void };
+  const byClass = (data?.byClass ?? []) as Array<Record<string, unknown>>;
   return (
-    <OperationsShell title={`${subjectId ?? 'Subject'} Analytics`} eyebrow="Subject drilldown">
-      <div className="grid gap-gutter xl:grid-cols-2">
-        <ChartCard title="Subject Trend" values={[55, 58, 61, 59, 64]} />
-        <AnalyticsInsightPanel title="Next action" insight="Compare class sections and teacher assignments." />
-      </div>
+    <OperationsShell title={`${String(data?.subjectName ?? 'Subject')} Analytics`} eyebrow="Subject drilldown">
+      {isLoading ? <SkeletonTable cols={2} /> : isError ? <DataError onRetry={refetch} /> : (
+        <div className="grid gap-gutter xl:grid-cols-2">
+          {byClass.length > 0
+            ? <ChartCard title="Average by Class" values={byClass.slice(0, 10).map((c) => Math.round(Number(c.average ?? 0)))} labels={byClass.slice(0, 10).map((c) => String(c.className ?? ''))} />
+            : <EmptyState title="No class data" description="Class-level subject analytics appear once marks are published." />}
+          <AnalyticsInsightPanel
+            title={`Overall: ${data?.overallAverage != null ? Number(data.overallAverage).toFixed(1) : '—'}%`}
+            insight={`Pass rate ${data?.passRate != null ? Number(data.passRate).toFixed(1) : '—'}%. ${(data?.needsAttention as unknown[] | undefined)?.length ?? 0} students flagged as needing attention in this subject.`}
+          />
+        </div>
+      )}
     </OperationsShell>
   );
 }
 
 export function TeacherAnalyticsDetailPage() {
   const { teacherId } = useParams();
+  const { data, isLoading, isError, refetch } = useTeacherAnalyticsDetail(teacherId) as { data: Record<string, unknown> | undefined; isLoading: boolean; isError: boolean; refetch: () => void };
+  const trend = (data?.termTrend ?? []) as Array<Record<string, unknown>>;
+  const subjects = (data?.subjects ?? []) as Array<Record<string, unknown>>;
   return (
-    <OperationsShell title={`${teacherId ?? 'Teacher'} Analytics`} eyebrow="Teacher performance pack">
-      <div className="grid gap-gutter xl:grid-cols-2">
-        <ChartCard title="Submission and performance" values={[42, 58, 76, 84]} />
-        <AnalyticsInsightPanel title="Next action" insight="Review timeliness and syllabus completion." />
-      </div>
+    <OperationsShell title={`${String(data?.teacherName ?? 'Teacher')} Analytics`} eyebrow="Teacher performance pack">
+      {isLoading ? <SkeletonTable cols={2} /> : isError ? <DataError onRetry={refetch} /> : (
+        <div className="grid gap-gutter xl:grid-cols-2">
+          {trend.length > 0
+            ? <ChartCard title="Term Trend (Class Average)" values={trend.map((t) => Math.round(Number(t.average ?? t.classAverage ?? 0)))} labels={trend.map((t) => String(t.termName ?? t.period ?? ''))} />
+            : subjects.length > 0
+              ? <ChartCard title="Subject Averages" values={subjects.slice(0, 8).map((s) => Math.round(Number(s.average ?? s.classAverage ?? 0)))} labels={subjects.slice(0, 8).map((s) => String(s.subjectName ?? ''))} />
+              : <EmptyState title="No performance data" description="Teacher analytics appear once their assessments are approved and published." />}
+          <AnalyticsInsightPanel
+            title={`Class Average: ${data?.overallClassAverage != null ? Number(data.overallClassAverage).toFixed(1) : '—'}%`}
+            insight={`Overall pass rate ${data?.overallPassRate != null ? Number(data.overallPassRate).toFixed(1) : '—'}% across ${subjects.length} subject assignment(s).`}
+          />
+        </div>
+      )}
     </OperationsShell>
   );
 }
@@ -338,35 +530,73 @@ export function StudentAnalyticsDirectoryPage() {
 
 export function StudentAnalyticsProfilePage() {
   const { studentId } = useParams();
+  const { data, isLoading, isError, refetch } = useStudentAnalyticsProfile(studentId) as { data: Record<string, unknown> | undefined; isLoading: boolean; isError: boolean; refetch: () => void };
+  const student = (data?.student ?? {}) as Record<string, unknown>;
+  const academic = (data?.academic ?? {}) as Record<string, unknown>;
+  const termHistory = (academic.termHistory ?? []) as Array<Record<string, unknown>>;
+  const summary = (academic.currentTermSummary ?? {}) as Record<string, unknown>;
   return (
-    <OperationsShell title={`Student ${studentId ?? ''} Analytics`} eyebrow="Student drilldown">
-      <div className="grid gap-gutter xl:grid-cols-2">
-        <ChartCard title="Performance Trend" values={[48, 51, 44, 58, 62]} />
-        <AnalyticsInsightPanel title="Student Insight" insight="Finance signals are shown only for roles with finance read access." />
-      </div>
+    <OperationsShell title={`${String(student.fullName ?? 'Student')} Analytics`} eyebrow="Student drilldown">
+      {isLoading ? <SkeletonTable cols={2} /> : isError ? <DataError onRetry={refetch} /> : (
+        <div className="grid gap-gutter xl:grid-cols-2">
+          {termHistory.length > 0
+            ? <ChartCard title="Term Average History" values={termHistory.map((t) => Math.round(Number(t.overallAverage ?? t.average ?? 0)))} labels={termHistory.map((t) => String(t.termName ?? t.term ?? ''))} />
+            : <EmptyState title="No term history yet" description="Term averages appear once results are published for this student." />}
+          <AnalyticsInsightPanel
+            title={`Current Average: ${summary.overallAverage != null ? Number(summary.overallAverage).toFixed(1) : '—'}%`}
+            insight={`Grade ${String(summary.overallGrade ?? '—')} | Best subject: ${String((academic.bestSubject as Record<string, unknown> | undefined)?.subjectName ?? '—')} | Projected grade: ${String(academic.projectedGrade ?? '—')}.`}
+          />
+        </div>
+      )}
     </OperationsShell>
   );
 }
 
 export function FinanceAnalyticsOpsPage() {
+  const { data, isLoading, isError, refetch } = useOperationsFinanceOverview() as { data: Record<string, unknown> | undefined; isLoading: boolean; isError: boolean; refetch: () => void };
+  const trend = (data?.collectionTrend ?? []) as Array<Record<string, unknown>>;
+  const billing = (data?.billing ?? {}) as Record<string, unknown>;
+  const overdue = (data?.overdueAnalysis ?? {}) as Record<string, unknown>;
+  const buckets = (overdue.byDaysOverdue ?? []) as Array<Record<string, unknown>>;
+  const fmtTzs = (v: unknown) => `TZS ${Number(v ?? 0).toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
   return (
     <OperationsShell title="Finance Analytics" eyebrow="Collection, assets, forecast">
-      <div className="grid gap-gutter xl:grid-cols-3">
-        <ChartCard title="Collection" values={[54, 61, 69, 73]} />
-        <ChartCard title="Outstanding" values={[118, 86, 62, 45]} />
-        <AnalyticsInsightPanel title="Finance Insight" insight="Navigate to the Finance module for live invoice, payment, and collection data." />
-      </div>
+      {isLoading ? <SkeletonTable cols={3} /> : isError ? <DataError onRetry={refetch} /> : (
+        <div className="grid gap-gutter xl:grid-cols-3">
+          {trend.length > 0
+            ? <ChartCard title="Collection Rate by Term" values={trend.map((t) => Math.round(Number(t.rate ?? 0)))} labels={trend.map((t) => String(t.period ?? ''))} />
+            : <EmptyState title="No collection data" description="Collection trend appears once invoices and payments exist." />}
+          {buckets.length > 0
+            ? <ChartCard title="Overdue Invoices by Age" values={buckets.map((b) => Number(b.count ?? 0))} labels={buckets.map((b) => String(b.bucket ?? ''))} />
+            : <EmptyState title="Nothing overdue" description="Overdue aging buckets appear when invoices pass their due date." />}
+          <AnalyticsInsightPanel
+            title={`Collection Rate: ${billing.collectionRate != null ? Number(billing.collectionRate).toFixed(1) : '—'}%`}
+            insight={`${fmtTzs(billing.totalCollected)} collected of ${fmtTzs(billing.totalInvoiced)} invoiced. Outstanding: ${fmtTzs(billing.totalOutstanding)}.`}
+          />
+        </div>
+      )}
     </OperationsShell>
   );
 }
 
 export function EnrolmentAnalyticsPage() {
+  const { data, isLoading, isError, refetch } = useEnrolmentAnalytics() as { data: Record<string, unknown> | undefined; isLoading: boolean; isError: boolean; refetch: () => void };
+  const summary = (data?.summary ?? {}) as Record<string, unknown>;
+  const byClass = (summary.byClass ?? []) as Array<Record<string, unknown>>;
+  const byGender = (summary.byGender ?? {}) as Record<string, unknown>;
   return (
     <OperationsShell title="Enrolment Analytics" eyebrow="Trends and capacity">
-      <div className="grid gap-gutter xl:grid-cols-2">
-        <ChartCard title="Enrolment Trend" values={[280, 292, 301, 312]} />
-        <AnalyticsInsightPanel title="Enrolment Insight" insight="Navigate to Admin → Students for detailed enrolment and class assignment data." />
-      </div>
+      {isLoading ? <SkeletonTable cols={2} /> : isError ? <DataError onRetry={refetch} /> : (
+        <div className="grid gap-gutter xl:grid-cols-2">
+          {byClass.length > 0
+            ? <ChartCard title="Enrolment by Class" values={byClass.map((c) => Number(c.count ?? 0))} labels={byClass.map((c) => String(c.className ?? ''))} />
+            : <EmptyState title="No enrolment data" description="Class enrolment counts appear once students are enrolled." />}
+          <AnalyticsInsightPanel
+            title={`Active Students: ${String(summary.active ?? summary.total ?? '—')}`}
+            insight={`${String(byGender.MALE ?? 0)} male and ${String(byGender.FEMALE ?? 0)} female students across ${byClass.length} classes. Seat capacity per class is tracked in the Admissions workspace.`}
+          />
+        </div>
+      )}
     </OperationsShell>
   );
 }
@@ -441,17 +671,55 @@ export function CreateTimetableEntryPage() {
   );
 }
 
-export function FinanceReportPage({ type }: { type: string }) {
+const FINANCE_REPORT_TYPE_MAP: Record<string, string> = {
+  'Collection Summary Report': 'FINANCE_COLLECTION',
+  'Daily Collections Report': 'FINANCE_COLLECTION',
+  'Outstanding Balances Report': 'OUTSTANDING_BALANCES',
+  'Fee Defaulters Report': 'OUTSTANDING_BALANCES',
+};
+
+export function FinanceReportPage({ type, scopeId }: { type: string; scopeId?: string }) {
+  const generateReport = useGenerateReportMutation();
+  const [downloading, setDownloading] = useState(false);
+  const reportType = scopeId ? 'STUDENT_PROFILE' : FINANCE_REPORT_TYPE_MAP[type] ?? 'FINANCE_COLLECTION';
+
+  const handleDownload = async () => {
+    setDownloading(true);
+    try {
+      const result = (await generateReport.mutateAsync({
+        reportType,
+        scope: scopeId ? 'student' : 'school',
+        scopeId,
+      })) as Record<string, unknown>;
+      await downloadReportWhenReady(String(result.reportId), `${type.replace(/\s+/g, '_')}.pdf`);
+      toast('Report downloaded', 'success');
+    } catch {
+      toast('Report generation failed. Please try again.', 'error');
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   return (
     <OperationsShell title={type} eyebrow="Finance report">
       <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_320px]">
-        <ReportPreviewFrame title={type} />
-        <AnalyticsInsightPanel title="Audit Context" insight="Sensitive finance downloads require a reason and immutable audit record." />
+        <div className="rounded-2xl border border-ks-line bg-white p-8">
+          <p className="text-[11px] font-black uppercase tracking-widest text-ks-muted">Official branded PDF</p>
+          <h2 className="mt-3 font-display text-3xl font-black text-ks-navy">{type}</h2>
+          <p className="mt-3 max-w-xl text-sm font-semibold leading-6 text-ks-muted">
+            Generates the latest {type.toLowerCase()} from live finance data and downloads it as a branded PDF. Generation is audited under your account.
+          </p>
+          <Button className="mt-6 rounded-xl" disabled={downloading} onClick={handleDownload}>
+            {downloading ? 'Generating…' : 'Generate & Download PDF'}
+          </Button>
+        </div>
+        <AnalyticsInsightPanel title="Audit Context" insight="Sensitive finance downloads are generated per-request and recorded against your user account in the report registry." />
       </div>
     </OperationsShell>
   );
 }
 
 export function StudentStatementReportPage() {
-  return <FinanceReportPage type="Student Statement Report" />;
+  const { studentId } = useParams();
+  return <FinanceReportPage type="Student Statement Report" scopeId={studentId} />;
 }

@@ -29,7 +29,6 @@ import {
   type CourseDisplay,
   type ElearningAnnouncement,
   type ElearningAssignment,
-  type ElearningAttemptDetail,
   type ElearningDiscussion,
   type ElearningLesson,
   type ElearningMaterial,
@@ -37,13 +36,18 @@ import {
   mapApiCourse,
   useAddDiscussionReply,
   useAddQuizQuestion,
+  useAdminRepairOrphans,
+  useAdminSyncCourses,
+  useAdminSyncEnrollments,
   useArchiveCourse,
   useAssignmentSubmissions,
+  useActiveAttempt,
   useAttemptDetail,
   useCloneCourseMutation,
   useCloseAssignment,
   useCloseQuiz,
   useCreateAnnouncement,
+  useCreateAssignment,
   useCreateCourseMutation,
   useCreateLesson,
   useCreateMaterial,
@@ -59,10 +63,16 @@ import {
   useElearningLessons,
   useElearningMaterials,
   useElearningQuiz,
+  useElearningQuizzes,
   useGradeShortAnswer,
   useGradeSubmission,
   useHodOverview,
+  useMarkMaterialViewedMutation,
   useMissingStudents,
+  useMyProgress,
+  useMyQuizAttempts,
+  useMySubmission,
+  useParentLearningSummary,
   usePrincipalOverview,
   usePublishAnnouncement,
   usePublishAssignment,
@@ -72,12 +82,20 @@ import {
   useQuizResults,
   useResolveDiscussion,
   useReturnSubmission,
+  useSaveAnswerMutation,
+  useStartAttemptMutation,
   useSubmission,
   useSubmissionSummary,
+  useSubmitAttemptMutation,
+  useSubmitSubmissionMutation,
+  useStudentLearningSummary,
+  useUpsertSubmissionMutation,
   useTeacherAnalytics,
-  useUpdateAssignment,
+  useTeacherTeachingLoad,
+  useTeacherToday,
   useUpdateLesson,
   useUpdateMaterial,
+  useUpdateQuizMutation,
   useUploadFile,
 } from '../api/elearning.hooks';
 import { useAcademicYears, useTerms } from '../../admin/api/admin.hooks';
@@ -110,6 +128,7 @@ function ErrorPlaceholder({ message }: { message: string }) {
 // ─── Pages ────────────────────────────────────────────────────────────────────
 
 export function TeacherCoursesPage() {
+  const navigate = useNavigate();
   const [filterYear, setFilterYear] = useState('');
   const [filterTerm, setFilterTerm] = useState('');
   const [cloningId, setCloningId] = useState<string | null>(null);
@@ -124,9 +143,12 @@ export function TeacherCoursesPage() {
 
   const { data: analytics } = useTeacherAnalytics(hasFilter ? filterParams : undefined);
   const { data: courses = [], isLoading, isError } = useElearningCourses(hasFilter ? filterParams : undefined);
+  const { data: teachingLoad, isLoading: loadLoading } = useTeacherTeachingLoad(hasFilter ? filterParams : undefined);
+  const { data: today } = useTeacherToday(hasFilter ? filterParams : undefined);
   const { data: rawYears = [] } = useAcademicYears();
   const { data: rawTerms = [] } = useTerms();
   const cloneMut = useCloneCourseMutation();
+  const createCourseMut = useCreateCourseMutation();
 
   const years = rawYears as { id: string; name: string }[];
   const terms = rawTerms as { id: string; name: string; academicYearId?: string }[];
@@ -145,18 +167,79 @@ export function TeacherCoursesPage() {
   }
 
   const cloningCourse = cloningId ? courses.find((c) => c.id === cloningId) : null;
+  const loadItems = teachingLoad?.classSubjects ?? [];
+
+  function setupCourse(classSubjectId: string) {
+    createCourseMut.mutate(
+      { classSubjectId, termId: filterTerm || undefined, academicYearId: filterYear || undefined },
+      {
+        onSuccess: (data) => {
+          const id = (data as Record<string, unknown>)?.id as string | undefined;
+          toast('Course workspace ready', 'success');
+          if (id) navigate(`/teacher/elearning/courses/${id}`);
+        },
+        onError: (e: unknown) => {
+          const err = e as { response?: { data?: { message?: string } }; message?: string };
+          toast(err?.response?.data?.message ?? err?.message ?? 'Failed to set up course', 'error');
+        },
+      },
+    );
+  }
 
   return (
     <ElearningShell
-      title="E-Learning Command Center"
-      eyebrow="Teacher workspace"
-      action={<ElButton to="/teacher/elearning/courses/new"><Plus className="mr-2 inline h-4 w-4" />Create course</ElButton>}
+      title="Teaching Today"
+      eyebrow="Teacher e-learning workspace"
+      action={<ElButton to="/teacher/elearning/courses/new"><Plus className="mr-2 inline h-4 w-4" />Set up course</ElButton>}
     >
       <div className="grid gap-5 md:grid-cols-4">
         <ElStat label="Review now" value={analytics?.submissionsPending != null ? `${analytics.submissionsPending}` : '—'} detail="Submissions and short answers" />
         <ElStat label="Active courses" value={analytics?.activeCourses != null ? `${analytics.activeCourses}` : '—'} detail="Published course spaces" />
         <ElStat label="Total enrolled" value={courses.reduce((n, c) => n + c.enrolledCount, 0).toString()} detail="Across all courses" />
         <ElStat label="Engagement" value="—" detail="Run engagement report per course" />
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+        <Panel title="Today's Teaching Schedule" icon={<Clock />}>
+          {loadLoading && <LoadingPlaceholder />}
+          <div className="space-y-3">
+            {(today?.schedule ?? []).map((slot, index) => {
+              const subject = String(slot.subjectName ?? (slot.subject as Record<string, unknown> | undefined)?.name ?? slot.subject ?? 'Subject');
+              const klass = String(slot.className ?? (slot.class as Record<string, unknown> | undefined)?.name ?? slot.class ?? 'Class');
+              const start = String(slot.startTime ?? slot.time ?? '');
+              const end = String(slot.endTime ?? '');
+              const room = String(slot.room ?? slot.venue ?? slot.location ?? '');
+              return (
+                <div key={String(slot.id ?? index)} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-sm font-black text-ks-slate">{subject} - {klass}</p>
+                  <p className="mt-1 text-xs font-bold uppercase tracking-widest text-ks-muted">{start}{end ? `-${end}` : ''}{room ? ` - ${room}` : ''}</p>
+                </div>
+              );
+            })}
+            {!loadLoading && (today?.schedule ?? []).length === 0 && (
+              <p className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm font-semibold text-ks-muted">No timetable lessons are scheduled for today.</p>
+            )}
+          </div>
+        </Panel>
+
+        <Panel title="Needs Attention" icon={<Bell />}>
+          <div className="space-y-3">
+            {(today?.warnings ?? []).slice(0, 5).map((warning) => (
+              <div key={`${warning.classSubjectId}-${warning.message}`} className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                <p className="text-sm font-black text-amber-800">{warning.subjectName} - {warning.className}</p>
+                <p className="mt-1 text-sm font-semibold text-amber-700">{warning.message}</p>
+                {warning.courseId ? (
+                  <NavLink className="mt-3 inline-block text-xs font-black uppercase tracking-widest text-amber-800 underline" to={`/teacher/elearning/courses/${warning.courseId}/lessons`}>Add lesson material</NavLink>
+                ) : (
+                  <button className="mt-3 text-xs font-black uppercase tracking-widest text-amber-800 underline" onClick={() => setupCourse(warning.classSubjectId)}>Set up course</button>
+                )}
+              </div>
+            ))}
+            {(today?.warnings ?? []).length === 0 && (
+              <p className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm font-semibold text-ks-muted">No urgent e-learning gaps found.</p>
+            )}
+          </div>
+        </Panel>
       </div>
 
       {/* Year/Term context filters */}
@@ -242,6 +325,48 @@ export function TeacherCoursesPage() {
           </div>
         </div>
       )}
+
+      <Panel title="My Teaching Load" icon={<BookOpen />}>
+        {loadLoading && <LoadingPlaceholder />}
+        <div className="grid gap-4 xl:grid-cols-3">
+          {loadItems.map((item) => (
+            <div key={item.classSubjectId} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-widest text-[#6C63FF]">{item.educationStage ?? 'Class subject'}</p>
+                  <h3 className="mt-1 font-display text-xl font-black text-ks-slate">{item.subjectName}</h3>
+                  <p className="text-sm font-semibold text-ks-muted">{item.className}</p>
+                </div>
+                <PublishBadge status={item.courseStatus} />
+              </div>
+              <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs font-black text-ks-muted">
+                <span>{item.publishedLessons}/{item.lessons} lessons</span>
+                <span>{item.pendingGrading} to mark</span>
+                <span>{item.course?.enrolledCount ?? 0} students</span>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {item.course ? (
+                  <>
+                    <NavLink className="rounded-2xl bg-[#6C63FF] px-4 py-2 text-xs font-black uppercase tracking-widest text-white" to={`/teacher/elearning/courses/${item.course.id}`}>
+                      Open course
+                    </NavLink>
+                    <NavLink className="rounded-2xl bg-slate-100 px-4 py-2 text-xs font-black uppercase tracking-widest text-ks-slate" to={`/teacher/elearning/courses/${item.course.id}/assignments`}>
+                      Review
+                    </NavLink>
+                  </>
+                ) : (
+                  <ButtonLike disabled={createCourseMut.isPending} onClick={() => setupCourse(item.classSubjectId)} tone="primary">
+                    {createCourseMut.isPending ? 'Setting up...' : 'Set up course'}
+                  </ButtonLike>
+                )}
+              </div>
+            </div>
+          ))}
+          {!loadLoading && loadItems.length === 0 && (
+            <p className="col-span-3 py-8 text-center text-sm font-semibold text-ks-muted">No assigned class-subjects found for this teacher.</p>
+          )}
+        </div>
+      </Panel>
 
       <div className="grid gap-6 xl:grid-cols-[1.45fr_0.9fr]">
         <Panel title="My Course Spaces" icon={<Layers3 />}>
@@ -468,6 +593,7 @@ export function LessonEditorPage() {
   const { data: lessons = [] } = useElearningLessons(courseId);
   const { data: materials = [], isLoading: loadingMaterials } = useElearningMaterials(courseId, lessonId);
   const lesson = lessons.find((l) => l.id === lessonId) ?? (lessonId ? undefined : lessons[0]);
+  const activeLessonId = lessonId ?? lesson?.id;
   const display = course ? mapApiCourse(course) : null;
   const createMut = useCreateLesson();
   const updateMut = useUpdateLesson();
@@ -488,7 +614,17 @@ export function LessonEditorPage() {
     if (lessonId) {
       updateMut.mutate({ courseId: courseId!, lessonId, body }, { onSuccess: () => toast('Lesson saved', 'success'), onError: () => toast('Failed to save lesson', 'error') });
     } else {
-      createMut.mutate({ courseId: courseId!, body }, { onSuccess: () => { toast('Lesson created', 'success'); navigate(`/teacher/elearning/courses/${courseId}/lessons`); }, onError: () => toast('Failed to create lesson', 'error') });
+      createMut.mutate({
+        courseId: courseId!,
+        body,
+      }, {
+        onSuccess: (created) => {
+          const createdLessonId = created.id;
+          toast('Lesson created', 'success');
+          navigate(createdLessonId ? `/teacher/elearning/courses/${courseId}/lessons/${createdLessonId}` : `/teacher/elearning/courses/${courseId}/lessons`);
+        },
+        onError: () => toast('Failed to create lesson', 'error'),
+      });
     }
   }
 
@@ -534,8 +670,8 @@ export function LessonEditorPage() {
           </div>
         </Panel>
         <Panel title="Lesson Build Blocks" icon={<Layers3 />}>
-          <ActionRow title="Add text-first note" detail="Create low-bandwidth reading material" to={`/teacher/elearning/courses/${courseId}/lessons/${lessonId}/materials/new`} />
-          <ActionRow title="Attach worksheet or slides" detail="Upload-ready file material workflow" to={`/teacher/elearning/courses/${courseId}/lessons/${lessonId}/materials/new`} />
+          <ActionRow title="Add text-first note" detail={activeLessonId ? 'Create low-bandwidth reading material' : 'Save this lesson first to attach material'} to={`/teacher/elearning/courses/${courseId}/lessons/${activeLessonId}/materials/new`} disabled={!activeLessonId} />
+          <ActionRow title="Attach worksheet or slides" detail={activeLessonId ? 'Upload-ready file material workflow' : 'Save this lesson first to attach files'} to={`/teacher/elearning/courses/${courseId}/lessons/${activeLessonId}/materials/new`} disabled={!activeLessonId} />
           <ActionRow title="Create linked homework" detail="Instructions, due date, late policy, max score" to={`/teacher/elearning/courses/${courseId}/assignments/new`} />
           <ActionRow title="Build lesson quiz" detail="MCQ, true/false and short answer" to={`/teacher/elearning/courses/${courseId}/quizzes/new`} />
         </Panel>
@@ -543,8 +679,11 @@ export function LessonEditorPage() {
       <Panel title="Materials in this Lesson" icon={<FileText />}>
         {loadingMaterials && <LoadingPlaceholder />}
         <div className="grid gap-4 lg:grid-cols-3">
-          {materials.map((item) => <MaterialCard key={item.id} item={item} courseId={courseId ?? ''} lessonId={lessonId ?? ''} />)}
-          {!loadingMaterials && materials.length === 0 && (
+          {materials.map((item) => <MaterialCard key={item.id} item={item} courseId={courseId ?? ''} lessonId={activeLessonId ?? ''} />)}
+          {!activeLessonId && (
+            <p className="col-span-3 py-4 text-sm font-semibold text-ks-muted">Save the lesson to unlock material uploads and student resources.</p>
+          )}
+          {activeLessonId && !loadingMaterials && materials.length === 0 && (
             <p className="col-span-3 py-4 text-sm font-semibold text-ks-muted">No materials yet for this lesson.</p>
           )}
         </div>
@@ -572,6 +711,8 @@ export function MaterialStudioPage() {
   const [externalUrl, setExternalUrl] = useState('');
   const [fileKey, setFileKey] = useState('');
   const [fileName, setFileName] = useState('');
+  const [fileMimeType, setFileMimeType] = useState('');
+  const [fileSizeBytes, setFileSizeBytes] = useState<number | null>(null);
   const [uploading, setUploading] = useState(false);
   const [initialized, setInitialized] = useState(false);
 
@@ -579,12 +720,14 @@ export function MaterialStudioPage() {
     if (isEdit && existingMaterial && !initialized) {
       setMType((existingMaterial.type as MaterialKind) ?? 'NOTE');
       setTitle(existingMaterial.title ?? '');
-      setEstimatedMinutes(existingMaterial.estimatedMinutes ? String(existingMaterial.estimatedMinutes) : '');
-      setIsDownloadable(existingMaterial.isDownloadable ?? false);
-      setNoteBody((existingMaterial as Record<string, unknown>).body as string ?? '');
+      setEstimatedMinutes((existingMaterial as unknown as Record<string, unknown>).estimatedMinutes ? String((existingMaterial as unknown as Record<string, unknown>).estimatedMinutes) : '');
+      setIsDownloadable(existingMaterial.downloadable ?? false);
+      setNoteBody((existingMaterial as unknown as Record<string, unknown>).body as string ?? '');
       setExternalUrl(existingMaterial.externalUrl ?? '');
       setFileKey(existingMaterial.fileKey ?? '');
       setFileName(existingMaterial.fileKey ? 'Existing file' : '');
+      setFileMimeType((existingMaterial as unknown as Record<string, unknown>).fileMimeType as string ?? '');
+      setFileSizeBytes(Number((existingMaterial as unknown as Record<string, unknown>).fileSizeBytes ?? 0) || null);
       setInitialized(true);
     }
   }, [isEdit, existingMaterial, initialized]);
@@ -600,6 +743,12 @@ export function MaterialStudioPage() {
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    const maxFileBytes = 50 * 1024 * 1024;
+    if (file.size > maxFileBytes) {
+      toast('File exceeds 50 MB limit', 'error');
+      e.target.value = '';
+      return;
+    }
     setFileName(file.name);
     setUploading(true);
     const reader = new FileReader();
@@ -611,8 +760,10 @@ export function MaterialStudioPage() {
         { fileName: file.name, contentBase64, mimeType: file.type, domain: 'materials' },
         {
           onSuccess: (data) => {
-            const d = data as { fileKey?: string; data?: { fileKey?: string } };
+            const d = data as { fileKey?: string; fileMimeType?: string; fileSizeBytes?: number; data?: { fileKey?: string; fileMimeType?: string; fileSizeBytes?: number } };
             setFileKey(d.fileKey ?? d.data?.fileKey ?? '');
+            setFileMimeType(d.fileMimeType ?? d.data?.fileMimeType ?? file.type ?? '');
+            setFileSizeBytes(d.fileSizeBytes ?? d.data?.fileSizeBytes ?? file.size);
             setUploading(false);
             toast('File uploaded — ready to save', 'success');
           },
@@ -624,6 +775,7 @@ export function MaterialStudioPage() {
   }
 
   function handleSave(publish: boolean) {
+    if (!courseId || !lessonId) { toast('Open a saved lesson before adding materials', 'warning'); return; }
     if (!title.trim()) { toast('Enter a material title', 'warning'); return; }
     if (mType === 'NOTE' && !noteBody.trim()) { toast('Write content for the text note', 'warning'); return; }
     if (needsFile && !fileKey) { toast('Upload a file first', 'warning'); return; }
@@ -633,13 +785,25 @@ export function MaterialStudioPage() {
     const body: Record<string, unknown> = {
       title: title.trim(),
       type: mType,
-      isDownloadable,
+      downloadable: isDownloadable,
       status: publish ? 'PUBLISHED' : 'DRAFT',
     };
     if (estimatedMinutes) body.estimatedMinutes = Number(estimatedMinutes);
     if (mType === 'NOTE') body.body = noteBody;
-    if (needsFile) body.fileKey = fileKey;
-    if (needsVideo) { if (fileKey) body.fileKey = fileKey; else body.externalUrl = externalUrl; }
+    if (needsFile) {
+      body.fileKey = fileKey;
+      body.fileOriginalName = fileName || undefined;
+      body.fileMimeType = fileMimeType || undefined;
+      body.fileSizeBytes = fileSizeBytes ?? undefined;
+    }
+    if (needsVideo) {
+      if (fileKey) {
+        body.fileKey = fileKey;
+        body.fileOriginalName = fileName || undefined;
+        body.fileMimeType = fileMimeType || undefined;
+        body.fileSizeBytes = fileSizeBytes ?? undefined;
+      } else body.externalUrl = externalUrl;
+    }
     if (needsUrl) body.externalUrl = externalUrl;
 
     if (isEdit && materialId) {
@@ -840,7 +1004,7 @@ export function AssignmentsPage() {
 
   const [form, setForm] = useState({
     title: '',
-    submissionMode: 'BOTH' as 'TEXT' | 'FILE_UPLOAD' | 'BOTH',
+    type: 'BOTH' as 'TEXT' | 'FILE_UPLOAD' | 'BOTH',
     dueAt: '',
     maxScore: '',
     allowLateSubmission: true,
@@ -853,7 +1017,7 @@ export function AssignmentsPage() {
     if (!form.title.trim()) { toast('Enter an assignment title', 'warning'); return; }
     const body: Record<string, unknown> = {
       title: form.title.trim(),
-      submissionMode: form.submissionMode,
+      type: form.type,
       allowLateSubmission: form.allowLateSubmission,
       latePenaltyPercent: Number(form.latePenaltyPercent) || 0,
     };
@@ -874,7 +1038,7 @@ export function AssignmentsPage() {
           } else {
             toast('Assignment draft saved', 'success');
           }
-          setForm({ title: '', submissionMode: 'BOTH', dueAt: '', maxScore: '', allowLateSubmission: true, latePenaltyPercent: '0', instructions: '' });
+          setForm({ title: '', type: 'BOTH', dueAt: '', maxScore: '', allowLateSubmission: true, latePenaltyPercent: '0', instructions: '' });
           setShowForm(false);
           if (newId) navigate(`/teacher/elearning/courses/${courseId}/assignments/${newId}`);
         },
@@ -887,7 +1051,7 @@ export function AssignmentsPage() {
     <ElearningShell
       title="Assignment Builder"
       eyebrow={display ? `${display.subjectName} — ${display.className}` : 'Course'}
-      action={<ElButton onClick={() => setShowForm((p) => !p)}><Plus className="mr-2 inline h-4 w-4" />{showForm ? 'Close form' : 'New assignment'}</ElButton>}
+      action={<button onClick={() => setShowForm((p) => !p)} className="rounded-2xl bg-[#6C63FF] px-5 py-3 text-sm font-black text-white shadow-lg shadow-indigo-200 transition hover:bg-[#3D35CC]"><Plus className="mr-2 inline h-4 w-4" />{showForm ? 'Close form' : 'New assignment'}</button>}
     >
       {display && <CourseTabs courseId={display.id} active="assignments" />}
       {isLoading && <LoadingPlaceholder />}
@@ -913,8 +1077,8 @@ export function AssignmentsPage() {
               <span className="text-xs font-black uppercase tracking-widest text-ks-muted">Submission mode</span>
               <select
                 className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold outline-none focus:border-[#6C63FF]"
-                value={form.submissionMode}
-                onChange={(e) => setForm((p) => ({ ...p, submissionMode: e.target.value as 'TEXT' | 'FILE_UPLOAD' | 'BOTH' }))}
+                value={form.type}
+                onChange={(e) => setForm((p) => ({ ...p, type: e.target.value as 'TEXT' | 'FILE_UPLOAD' | 'BOTH' }))}
               >
                 <option value="BOTH">Text + File upload</option>
                 <option value="TEXT">Text only</option>
@@ -1010,7 +1174,7 @@ export function AssignmentDetailPage() {
           <Panel title="Assignment Rules" icon={<ClipboardCheck />}>
             <InfoList rows={[
               ['Status', assignment.status],
-              ['Mode', assignment.submissionMode],
+              ['Mode', assignment.type],
               ['Due', fmtDate(assignment.dueAt)],
               ['Max score', `${assignment.maxScore ?? '—'}`],
               ['Late allowed', assignment.allowLateSubmission ? 'Yes' : 'No'],
@@ -1064,19 +1228,32 @@ export function SubmissionsGradingPage() {
   const { courseId, assignmentId } = useParams();
   const { data: submissions = [], isLoading } = useAssignmentSubmissions(courseId, assignmentId);
   const { data: missing = [] } = useMissingStudents(courseId, assignmentId);
+  const [activeFilter, setActiveFilter] = useState('All');
+
+  const filtered = submissions.filter((s) => {
+    if (activeFilter === 'All') return true;
+    if (activeFilter === 'Submitted') return s.status === 'SUBMITTED';
+    if (activeFilter === 'Ungraded') return s.status === 'SUBMITTED' && s.score == null;
+    if (activeFilter === 'Late') return s.isLate;
+    if (activeFilter === 'Returned') return s.status === 'RETURNED';
+    if (activeFilter === 'Graded') return s.status === 'GRADED';
+    return true;
+  });
 
   return (
     <ElearningShell title="Submissions Queue" eyebrow="Grading desk">
       <Panel title="Filters" icon={<Users />}>
-        <div className="flex flex-wrap gap-2">{['All', 'Submitted', 'Ungraded', 'Late', 'Missing', 'Returned', 'Graded'].map((item) => <FilterChip key={item}>{item}</FilterChip>)}</div>
+        <div className="flex flex-wrap gap-2">{['All', 'Submitted', 'Ungraded', 'Late', 'Returned', 'Graded'].map((label) => (
+          <FilterChip key={label} active={activeFilter === label} onClick={() => setActiveFilter(label)}>{label}</FilterChip>
+        ))}</div>
       </Panel>
       <Panel title="Ready for Review" icon={<FileText />}>
         {isLoading && <LoadingPlaceholder />}
         <Table columns={['Student', 'Status', 'Submitted', 'File', 'Score', 'Action']}>
-          {submissions.map((item) => (
+          {filtered.map((item) => (
             <tr key={item.id} className="even:bg-slate-50">
               <Td>{item.studentName ?? item.studentId}</Td>
-              <Td><PublishBadge status={item.status} /></Td>
+              <Td><PublishBadge status={item.status} />{item.isLate && <span className="ml-1 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-black text-amber-700">Late</span>}</Td>
               <Td>{fmtDate(item.submittedAt)}</Td>
               <Td>{item.fileKey ? 'File attached' : 'Text only'}</Td>
               <Td>{item.score == null ? 'Pending' : `${item.score}/${item.maxScore}`}</Td>
@@ -1180,6 +1357,7 @@ export function QuizBuilderPage() {
   const { courseId, quizId } = useParams();
   const { data: quiz, isLoading } = useElearningQuiz(courseId, quizId);
   const createQuizMut = useCreateQuiz();
+  const updateQuizMut = useUpdateQuizMutation();
   const publishMut = usePublishQuiz();
   const closeMut = useCloseQuiz();
   const addQuestionMut = useAddQuizQuestion();
@@ -1202,7 +1380,10 @@ export function QuizBuilderPage() {
     if (!settings.title.trim()) { toast('Enter a quiz title', 'warning'); return; }
     const body: Record<string, unknown> = { title: settings.title, timeLimitMinutes: settings.timeLimitMinutes ? Number(settings.timeLimitMinutes) : undefined, maxAttempts: settings.maxAttempts ? Number(settings.maxAttempts) : undefined, passingScore: settings.passingScore ? Number(settings.passingScore) : undefined };
     if (resolvedQuizId) {
-      toast('Quiz settings saved', 'success');
+      updateQuizMut.mutate({ courseId: courseId!, quizId: resolvedQuizId, body }, {
+        onSuccess: () => toast('Quiz settings updated', 'success'),
+        onError: () => toast('Failed to update quiz', 'error'),
+      });
     } else {
       createQuizMut.mutate({ courseId: courseId!, body }, {
         onSuccess: (data) => { const id = (data as unknown as Record<string, unknown>)?.id as string | undefined; toast('Quiz created', 'success'); if (id) setResolvedQuizId(id); },
@@ -1221,7 +1402,8 @@ export function QuizBuilderPage() {
     const id = resolvedQuizId;
     if (!id) { toast('Save the quiz settings first', 'warning'); return; }
     if (!qForm.prompt.trim()) { toast('Enter a question prompt', 'warning'); return; }
-    const body: Record<string, unknown> = { type: qType, prompt: qForm.prompt, points: Number(qForm.points) || 1, correctAnswer: qForm.correctAnswer || undefined, explanation: qForm.explanation || undefined };
+    const apiType = qType === 'MCQ' ? 'MULTIPLE_CHOICE' : qType;
+    const body: Record<string, unknown> = { type: apiType, prompt: qForm.prompt, points: Number(qForm.points) || 1, correctAnswer: qForm.correctAnswer || undefined, explanation: qForm.explanation || undefined };
     if (qType === 'MCQ') {
       body.options = options.filter(Boolean).map((text, i) => ({ text, isCorrect: i === correctOption }));
     }
@@ -1393,7 +1575,7 @@ function AttemptMarkingCard({ attempt }: { attempt: { id: string; studentName?: 
     const score = Number(scores[answerId]);
     if (isNaN(score)) { toast('Enter a numeric score', 'warning'); return; }
     gradeMut.mutate(
-      { attemptId: attempt.id, questionId, score, feedback: feedbacks[answerId] || undefined },
+      { attemptId: attempt.id, questionId, scoreAwarded: score, feedback: feedbacks[answerId] || undefined },
       {
         onSuccess: () => { setSaved((p) => ({ ...p, [answerId]: true })); toast('Answer marked', 'success'); },
         onError: () => toast('Failed to save mark', 'error'),
@@ -1671,6 +1853,92 @@ export function CourseCommunicationPage() {
 
 // ─── Leadership pages ─────────────────────────────────────────────────────────
 
+export function StudentElearningPage() {
+  const { data, isLoading, isError } = useStudentLearningSummary();
+  const enrollments = data?.courses ?? [];
+  return (
+    <ElearningShell title="My Learning" eyebrow="Student learning desk">
+      <div className="grid gap-5 md:grid-cols-4">
+        <ElStat label="My subjects" value={`${enrollments.length}`} detail="Enrolled e-learning courses" />
+        <ElStat label="Assignments" value={`${data?.pendingAssignments ?? 0}`} detail="Pending or due" />
+        <ElStat label="Open quizzes" value={`${data?.availableQuizzes ?? 0}`} detail="Ready to attempt" />
+        <ElStat label="Unread materials" value={`${data?.unviewedMaterials ?? 0}`} detail="Notes and files to read" />
+      </div>
+      <Panel title="My Subjects" icon={<BookOpen />}>
+        {isLoading && <LoadingPlaceholder />}
+        {isError && <ErrorPlaceholder message="Could not load your learning summary." />}
+        <div className="grid gap-4 lg:grid-cols-3">
+          {enrollments.map((enrollment) => {
+            const course = enrollment.courseSpace;
+            if (!course) return null;
+            return (
+              <NavLink to={`/student/elearning/courses/${course.id}`} key={course.id} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-lg hover:border-[#6C63FF]">
+                <PublishBadge status={course.status} />
+                <h3 className="mt-4 font-display text-xl font-black text-ks-slate">{course.subjectName}</h3>
+                <p className="text-sm font-semibold text-ks-muted">{course.className}</p>
+                <div className="mt-4 grid grid-cols-2 gap-2 text-xs font-black text-ks-muted">
+                  <span>{course.lessons?.length ?? 0} lessons</span>
+                  <span>{course.enrolledCount} learners</span>
+                </div>
+              </NavLink>
+            );
+          })}
+          {!isLoading && enrollments.length === 0 && <p className="col-span-3 py-6 text-sm font-semibold text-ks-muted">No e-learning courses are available yet.</p>}
+        </div>
+      </Panel>
+    </ElearningShell>
+  );
+}
+
+export function ParentElearningPage() {
+  const { childId } = useParams();
+  const { data, isLoading, isError } = useParentLearningSummary(childId);
+  const enrollments = data?.enrollments ?? [];
+
+  if (!childId) {
+    return (
+      <ElearningShell title="Child Learning Summary" eyebrow="Parent learning desk">
+        <Panel title="Select a Child" icon={<Users />}>
+          <p className="text-sm font-semibold text-ks-muted">Open this page from a child profile so the learning summary can be scoped correctly.</p>
+        </Panel>
+      </ElearningShell>
+    );
+  }
+
+  return (
+    <ElearningShell title="Child Learning Summary" eyebrow={`Student ${childId}`}>
+      <div className="grid gap-5 md:grid-cols-4">
+        <ElStat label="Overall progress" value={`${data?.overallCompletion ?? 0}%`} detail="Across enrolled courses" />
+        <ElStat label="Missing or pending" value={`${data?.pendingAssignments ?? 0}`} detail="Assignments needing action" />
+        <ElStat label="Open quizzes" value={`${data?.availableQuizzes ?? 0}`} detail="Quiz attempts available" />
+        <ElStat label="Unread materials" value={`${data?.unviewedMaterials ?? 0}`} detail="Materials not yet viewed" />
+      </div>
+      <Panel title="Subject Progress" icon={<BarChart3 />}>
+        {isLoading && <LoadingPlaceholder />}
+        {isError && <ErrorPlaceholder message="Could not load child learning summary." />}
+        <div className="grid gap-4 lg:grid-cols-3">
+          {enrollments.map((enrollment) => {
+            const course = enrollment.courseSpace;
+            const progress = data?.progresses?.find((item) => item.courseId === enrollment.courseSpaceId || item.courseId === course?.id);
+            if (!course) return null;
+            return (
+              <div key={course.id} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h3 className="font-display text-xl font-black text-ks-slate">{course.subjectName}</h3>
+                <p className="text-sm font-semibold text-ks-muted">{course.className}</p>
+                <div className="mt-4">
+                  <ProgressBar value={progress?.completionPercent ?? 0} />
+                  <p className="mt-2 text-xs font-black uppercase tracking-widest text-ks-muted">{progress?.completionPercent ?? 0}% complete</p>
+                </div>
+              </div>
+            );
+          })}
+          {!isLoading && enrollments.length === 0 && <p className="col-span-3 py-6 text-sm font-semibold text-ks-muted">No e-learning courses are linked to this child yet.</p>}
+        </div>
+      </Panel>
+    </ElearningShell>
+  );
+}
+
 export function HodElearningOverviewPage() {
   const { data: overview } = useHodOverview();
   const { data: courses = [] } = useElearningCourses();
@@ -1748,6 +2016,18 @@ export function AqaElearningAuditPage() {
 
 export function AdminElearningPage() {
   const { data: courses = [] } = useElearningCourses();
+  const syncCourses = useAdminSyncCourses();
+  const syncEnrollments = useAdminSyncEnrollments();
+  const repairOrphans = useAdminRepairOrphans();
+
+  function runAdminAction(label: string, action: () => Promise<unknown>) {
+    action()
+      .then(() => toast(`${label} completed`, 'success'))
+      .catch((e: unknown) => {
+        const err = e as { response?: { data?: { message?: string } }; message?: string };
+        toast(err?.response?.data?.message ?? err?.message ?? `${label} failed`, 'error');
+      });
+  }
 
   return (
     <ElearningShell title="E-Learning Administration" eyebrow="System management">
@@ -1762,6 +2042,34 @@ export function AdminElearningPage() {
           <MetricPill label="Active" value={`${courses.filter((c) => c.status === 'ACTIVE').length}`} />
           <MetricPill label="Draft" value={`${courses.filter((c) => c.status === 'DRAFT').length}`} />
           <MetricPill label="Archived" value={`${courses.filter((c) => c.status === 'ARCHIVED').length}`} />
+        </div>
+      </Panel>
+      <Panel title="Course Generation and Repair" icon={<MonitorCheck />}>
+        <div className="grid gap-4 md:grid-cols-3">
+          <button
+            onClick={() => runAdminAction('Course generation', () => syncCourses.mutateAsync({}))}
+            disabled={syncCourses.isPending}
+            className="rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-[#6C63FF] disabled:opacity-50"
+          >
+            <p className="font-black text-ks-slate">Generate missing courses</p>
+            <p className="mt-1 text-sm font-semibold text-ks-muted">Create course spaces from official class-subject assignments.</p>
+          </button>
+          <button
+            onClick={() => runAdminAction('Enrollment sync', () => syncEnrollments.mutateAsync({}))}
+            disabled={syncEnrollments.isPending}
+            className="rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-[#6C63FF] disabled:opacity-50"
+          >
+            <p className="font-black text-ks-slate">Sync enrollments</p>
+            <p className="mt-1 text-sm font-semibold text-ks-muted">Pull students from class rosters and A-Level subject enrollments.</p>
+          </button>
+          <button
+            onClick={() => runAdminAction('Orphan repair', () => repairOrphans.mutateAsync({}))}
+            disabled={repairOrphans.isPending}
+            className="rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-[#6C63FF] disabled:opacity-50"
+          >
+            <p className="font-black text-ks-slate">Repair orphaned courses</p>
+            <p className="mt-1 text-sm font-semibold text-ks-muted">Archive courses without assignments and update teacher ownership.</p>
+          </button>
         </div>
       </Panel>
     </ElearningShell>
@@ -1908,10 +2216,9 @@ function MaterialCard({ item, courseId, lessonId }: { item: ElearningMaterial; c
     <NavLink to={`/teacher/elearning/courses/${courseId}/lessons/${lessonId}/materials/${item.id}/edit`} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-lg">
       <div className="flex justify-between gap-3"><FileText className="h-6 w-6 text-[#6C63FF]" /><PublishBadge status={item.status} /></div>
       <h3 className="mt-4 font-display text-lg font-black text-ks-slate">{item.title}</h3>
-      <p className="mt-2 text-sm font-semibold text-ks-muted">{item.type} · {item.isDownloadable ? 'Downloadable' : 'View only'}</p>
-      <div className="mt-4 grid grid-cols-2 gap-2 text-xs font-black text-ks-muted">
+      <p className="mt-2 text-sm font-semibold text-ks-muted">{item.type} · {item.downloadable ? 'Downloadable' : 'View only'}</p>
+      <div className="mt-4 text-xs font-black text-ks-muted">
         <span>{item.viewCount} views</span>
-        <span>{item.downloadCount} downloads</span>
       </div>
     </NavLink>
   );
@@ -1922,7 +2229,7 @@ function AssignmentCard({ item, courseId }: { item: ElearningAssignment; courseI
     <NavLink to={`/teacher/elearning/courses/${courseId}/assignments/${item.id}`} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-lg">
       <div className="flex justify-between"><ClipboardCheck className="h-6 w-6 text-[#6C63FF]" /><PublishBadge status={item.status} /></div>
       <h3 className="mt-5 font-display text-xl font-black text-ks-slate">{item.title}</h3>
-      <p className="mt-2 text-sm font-semibold text-ks-muted">Due {fmtDate(item.dueAt)} · {item.submissionMode}</p>
+      <p className="mt-2 text-sm font-semibold text-ks-muted">Due {fmtDate(item.dueAt)} · {item.type}</p>
       <div className="mt-4 grid grid-cols-2 gap-2 text-center text-xs font-black">
         <span>Max score: {item.maxScore ?? '—'}</span>
         <span>{item.allowLateSubmission ? 'Late allowed' : 'No late'}</span>
@@ -1988,7 +2295,15 @@ function Panel({ title, icon, children }: { title: string; icon: ReactNode; chil
   );
 }
 
-function ActionRow({ title, detail, to }: { title: string; detail: string; to: string }) {
+function ActionRow({ title, detail, to, disabled = false }: { title: string; detail: string; to: string; disabled?: boolean }) {
+  if (disabled) {
+    return (
+      <div className="mb-3 flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 p-4 opacity-70">
+        <div><p className="font-black text-ks-slate">{title}</p><p className="text-sm font-semibold text-ks-muted">{detail}</p></div>
+        <span className="text-sm font-black text-slate-400">Save first</span>
+      </div>
+    );
+  }
   return (
     <NavLink to={to} className="mb-3 flex items-center justify-between rounded-2xl border border-slate-200 p-4 transition hover:bg-[#fbfbff]">
       <div><p className="font-black text-ks-slate">{title}</p><p className="text-sm font-semibold text-ks-muted">{detail}</p></div>
@@ -2038,6 +2353,10 @@ function TypeGrid({ items }: { items: string[] }) {
   );
 }
 
+void FormGrid;
+void TextArea;
+void TypeGrid;
+
 function QuickGrid({ items }: { items: [string, string][] }) {
   return (
     <div className="grid gap-3 md:grid-cols-2">
@@ -2062,8 +2381,15 @@ function MetricPill({ label, value }: { label: string; value: string }) {
   );
 }
 
-function FilterChip({ children }: { children: ReactNode }) {
-  return <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-ks-muted">{children}</span>;
+function FilterChip({ children, active, onClick }: { children: ReactNode; active?: boolean; onClick?: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`rounded-full px-3 py-1 text-xs font-black transition ${active ? 'bg-[#6C63FF] text-white' : 'bg-slate-100 text-ks-muted hover:bg-slate-200'}`}
+    >
+      {children}
+    </button>
+  );
 }
 
 function CheckRow({ label }: { label: string }) {
@@ -2112,4 +2438,732 @@ function Table({ columns, children }: { columns: string[]; children: ReactNode }
 
 function Td({ children }: { children: ReactNode }) {
   return <td className="px-4 py-3 font-semibold text-ks-slate">{children}</td>;
+}
+
+// ─── Student Journey Pages ────────────────────────────────────────────────────
+
+export function StudentCourseViewPage() {
+  const { courseId } = useParams();
+  const navigate = useNavigate();
+  const { data: course, isLoading: courseLoading } = useElearningCourse(courseId);
+  const { data: lessons = [], isLoading: lessonsLoading } = useElearningLessons(courseId);
+  const { data: assignments = [] } = useElearningAssignments(courseId);
+  const { data: quizzes = [] } = useElearningQuizzes(courseId);
+  const { data: announcements = [] } = useElearningAnnouncements(courseId);
+  const { data: progress } = useMyProgress(courseId);
+  const display = course ? mapApiCourse(course) : null;
+
+  const progressPct = (progress as Record<string, unknown> | undefined)?.completionPercent as number | undefined ?? 0;
+  const publishedLessons = lessons.filter((l) => l.status === 'PUBLISHED');
+  const publishedAssignments = assignments.filter((a) => a.status === 'PUBLISHED');
+  const publishedQuizzes = quizzes.filter((q) => q.status === 'PUBLISHED');
+  const pinnedAnnouncements = announcements.filter((a) => (a as unknown as Record<string, unknown>).isPinned);
+  const latestAnnouncements = [...pinnedAnnouncements, ...announcements.filter((a) => !(a as unknown as Record<string, unknown>).isPinned)].slice(0, 3);
+
+  return (
+    <ElearningShell
+      title={display?.subjectName ?? 'Course'}
+      eyebrow={display ? `${display.className} · ${display.term}` : 'Loading…'}
+    >
+      {(courseLoading || lessonsLoading) && <LoadingPlaceholder />}
+      <div className="grid gap-5 md:grid-cols-4">
+        <ElStat label="Lessons" value={`${publishedLessons.length}`} detail="Published lessons" />
+        <ElStat label="Assignments" value={`${publishedAssignments.length}`} detail="Open assignments" />
+        <ElStat label="Quizzes" value={`${publishedQuizzes.length}`} detail="Available quizzes" />
+        <ElStat label="Progress" value={`${Math.round(progressPct)}%`} detail="Course completion" />
+      </div>
+      {progressPct > 0 && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+          <ProgressBar value={Math.round(progressPct)} />
+          <p className="mt-2 text-xs font-black uppercase tracking-widest text-ks-muted">{Math.round(progressPct)}% complete</p>
+        </div>
+      )}
+      {latestAnnouncements.length > 0 && (
+        <Panel title="Announcements" icon={<Bell />}>
+          <div className="space-y-3">
+            {latestAnnouncements.map((a) => (
+              <div key={a.id} className="rounded-2xl border border-slate-200 p-4">
+                <p className="text-sm font-black text-ks-slate">{a.title}</p>
+                <p className="mt-1 text-sm text-ks-muted">{a.body}</p>
+                <p className="mt-2 text-xs text-ks-muted">{fmtDate(a.createdAt)}</p>
+              </div>
+            ))}
+          </div>
+        </Panel>
+      )}
+      <Panel title="Lessons" icon={<BookOpen />}>
+        {publishedLessons.length === 0 && !lessonsLoading && (
+          <p className="py-4 text-sm font-semibold text-ks-muted">No lessons published yet.</p>
+        )}
+        <div className="space-y-3">
+          {publishedLessons.map((lesson, idx) => (
+            <button
+              key={lesson.id}
+              onClick={() => navigate(`/student/elearning/courses/${courseId}/lessons/${lesson.id}`)}
+              className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white p-4 text-left transition hover:border-[#6C63FF] hover:shadow-md"
+            >
+              <div className="flex items-center gap-3">
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#EEEDFF] text-xs font-black text-[#3D35CC]">{idx + 1}</span>
+                <div>
+                  <p className="font-black text-ks-slate">{lesson.title}</p>
+                  {lesson.description && <p className="text-xs text-ks-muted">{lesson.description}</p>}
+                </div>
+              </div>
+              <span className="text-xs font-semibold text-[#6C63FF]">Open &rarr;</span>
+            </button>
+          ))}
+        </div>
+      </Panel>
+      {publishedAssignments.length > 0 && (
+        <Panel title="Assignments" icon={<ClipboardCheck />}>
+          <div className="space-y-3">
+            {publishedAssignments.map((a) => (
+              <button
+                key={a.id}
+                onClick={() => navigate(`/student/elearning/courses/${courseId}/assignments/${a.id}`)}
+                className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white p-4 text-left transition hover:border-[#6C63FF] hover:shadow-md"
+              >
+                <div>
+                  <p className="font-black text-ks-slate">{a.title}</p>
+                  <p className="text-xs text-ks-muted">Due {fmtDate(a.dueAt)} · Max {a.maxScore ?? '—'} marks</p>
+                </div>
+                <span className="text-xs font-semibold text-[#6C63FF]">Submit &rarr;</span>
+              </button>
+            ))}
+          </div>
+        </Panel>
+      )}
+      {publishedQuizzes.length > 0 && (
+        <Panel title="Quizzes" icon={<HelpCircle />}>
+          <div className="space-y-3">
+            {publishedQuizzes.map((q) => (
+              <button
+                key={q.id}
+                onClick={() => navigate(`/student/elearning/courses/${courseId}/quizzes/${q.id}/attempt`)}
+                className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white p-4 text-left transition hover:border-[#6C63FF] hover:shadow-md"
+              >
+                <div>
+                  <p className="font-black text-ks-slate">{q.title}</p>
+                  <p className="text-xs text-ks-muted">{q.questions.length} questions · {q.timeLimitMinutes ? `${q.timeLimitMinutes} min` : 'No time limit'} · Max {q.maxAttempts} attempt{q.maxAttempts !== 1 ? 's' : ''}</p>
+                </div>
+                <span className="text-xs font-semibold text-[#6C63FF]">Attempt &rarr;</span>
+              </button>
+            ))}
+          </div>
+        </Panel>
+      )}
+    </ElearningShell>
+  );
+}
+
+export function StudentLessonViewPage() {
+  const { courseId, lessonId } = useParams();
+  const navigate = useNavigate();
+  const { data: allMaterials = [], isLoading } = useElearningMaterials(courseId, lessonId);
+  const { data: lessons = [] } = useElearningLessons(courseId);
+  const { data: assignments = [] } = useElearningAssignments(courseId);
+  const markViewedMut = useMarkMaterialViewedMutation();
+
+  const lesson = lessons.find((l) => l.id === lessonId);
+  const lessonAssignments = assignments.filter((a) => a.lessonId === lessonId && a.status === 'PUBLISHED');
+  const published = allMaterials.filter((m) => m.status === 'PUBLISHED').sort((a, b) => a.orderIndex - b.orderIndex);
+
+  function handleOpenMaterial(m: ElearningMaterial) {
+    markViewedMut.mutate(m.id);
+  }
+
+  function fileUrl(fileKey: string) {
+    const slash = fileKey.indexOf('/');
+    if (slash < 0) return `/api/v1/elearning/files/materials/${encodeURIComponent(fileKey)}`;
+    const domain = fileKey.substring(0, slash);
+    const filename = fileKey.substring(slash + 1);
+    return `/api/v1/elearning/files/${encodeURIComponent(domain)}/${encodeURIComponent(filename)}`;
+  }
+
+  function renderMaterial(m: ElearningMaterial) {
+    const type = m.type.toUpperCase();
+    if (type === 'NOTE') {
+      return (
+        <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-5">
+          <pre className="whitespace-pre-wrap font-sans text-sm leading-7 text-ks-slate">{m.body ?? '—'}</pre>
+        </div>
+      );
+    }
+    if (type === 'VIDEO') {
+      if (m.externalUrl) {
+        return (
+          <div className="mt-3 rounded-2xl border border-slate-200 bg-black p-2">
+            <iframe src={m.externalUrl} className="h-64 w-full rounded-xl" allow="autoplay; encrypted-media" allowFullScreen title={m.title} />
+          </div>
+        );
+      }
+      if (m.fileKey) {
+        return (
+          <div className="mt-3">
+            <a href={fileUrl(m.fileKey)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 rounded-2xl bg-[#6C63FF] px-5 py-3 text-sm font-black text-white hover:bg-[#3D35CC]">
+              <FileText className="h-4 w-4" /> Watch video
+            </a>
+          </div>
+        );
+      }
+    }
+    if (type === 'LINK') {
+      return (
+        <div className="mt-3">
+          <a href={m.externalUrl ?? '#'} target="_blank" rel="noopener noreferrer" onClick={() => handleOpenMaterial(m)} className="inline-flex items-center gap-2 rounded-2xl bg-[#6C63FF] px-5 py-3 text-sm font-black text-white hover:bg-[#3D35CC]">
+            Open resource &rarr;
+          </a>
+        </div>
+      );
+    }
+    if (m.fileKey) {
+      return (
+        <div className="mt-3">
+          <a href={fileUrl(m.fileKey)} target="_blank" rel="noopener noreferrer" onClick={() => handleOpenMaterial(m)} download={m.fileOriginalName ?? true} className="inline-flex items-center gap-2 rounded-2xl border border-[#6C63FF] px-5 py-3 text-sm font-black text-[#6C63FF] hover:bg-[#EEEDFF]">
+            <FileText className="h-4 w-4" /> {m.downloadable ? `Download ${m.fileOriginalName ?? 'file'}` : 'View file'}
+            {m.fileSizeBytes && <span className="font-normal text-xs">({(Number(m.fileSizeBytes) / 1024 / 1024).toFixed(1)} MB)</span>}
+          </a>
+        </div>
+      );
+    }
+    return null;
+  }
+
+  return (
+    <ElearningShell title={lesson?.title ?? 'Lesson'} eyebrow="Study materials">
+      {isLoading && <LoadingPlaceholder />}
+      {lesson?.description && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-5">
+          <p className="text-sm font-semibold text-ks-muted">{lesson.description}</p>
+          {lesson.estimatedMinutes && <p className="mt-2 text-xs text-ks-muted">Estimated time: {lesson.estimatedMinutes} minutes</p>}
+        </div>
+      )}
+      {published.length === 0 && !isLoading && (
+        <Panel title="Materials" icon={<FileText />}>
+          <p className="py-4 text-sm font-semibold text-ks-muted">No materials are available yet for this lesson.</p>
+        </Panel>
+      )}
+      {published.map((m, idx) => (
+        <Panel key={m.id} title={`${idx + 1}. ${m.title}`} icon={<FileText />}>
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-black text-ks-muted">{m.type}</span>
+            {m.downloadable && <span className="rounded-full bg-green-50 px-2.5 py-0.5 text-xs font-black text-green-700">Downloadable</span>}
+          </div>
+          {renderMaterial(m)}
+        </Panel>
+      ))}
+      {lessonAssignments.length > 0 && (
+        <Panel title="Assignments for this lesson" icon={<ClipboardCheck />}>
+          <div className="space-y-2">
+            {lessonAssignments.map((a) => (
+              <button key={a.id} onClick={() => navigate(`/student/elearning/courses/${courseId}/assignments/${a.id}`)} className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white p-4 text-left hover:border-[#6C63FF]">
+                <div>
+                  <p className="font-black text-ks-slate">{a.title}</p>
+                  <p className="text-xs text-ks-muted">Due {fmtDate(a.dueAt)}</p>
+                </div>
+                <span className="text-xs font-semibold text-[#6C63FF]">Open &rarr;</span>
+              </button>
+            ))}
+          </div>
+        </Panel>
+      )}
+      <div className="flex gap-3">
+        <ButtonLike onClick={() => navigate(`/student/elearning/courses/${courseId}`)}>Back to course</ButtonLike>
+      </div>
+    </ElearningShell>
+  );
+}
+
+export function StudentAssignmentPage() {
+  const { courseId, assignmentId } = useParams();
+  const navigate = useNavigate();
+  const { data: assignment, isLoading: assignLoading } = useElearningAssignment(courseId, assignmentId);
+  const { data: existingSubmission, isLoading: subLoading } = useMySubmission(assignmentId);
+  const upsertMut = useUpsertSubmissionMutation();
+  const submitMut = useSubmitSubmissionMutation();
+  const uploadMut = useUploadFile();
+
+  const [text, setText] = useState('');
+  const [fileKey, setFileKey] = useState('');
+  const [fileName, setFileName] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [initialized, setInitialized] = useState(false);
+
+  useEffect(() => {
+    if (existingSubmission && !initialized) {
+      setText(existingSubmission.textAnswer ?? '');
+      setFileKey(existingSubmission.fileKey ?? '');
+      setFileName(existingSubmission.fileKey ? 'Existing file' : '');
+      setInitialized(true);
+    }
+  }, [existingSubmission, initialized]);
+
+  const isSubmitted = existingSubmission?.status === 'SUBMITTED' || existingSubmission?.status === 'GRADED' || existingSubmission?.status === 'RETURNED';
+  const isGraded = existingSubmission?.status === 'GRADED' || existingSubmission?.status === 'RETURNED';
+  const needsFile = assignment?.type === 'FILE_UPLOAD' || assignment?.type === 'BOTH';
+  const needsText = assignment?.type === 'TEXT' || assignment?.type === 'BOTH';
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 50 * 1024 * 1024) { toast('File exceeds 50 MB', 'error'); return; }
+    setFileName(file.name);
+    setUploading(true);
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => {
+      const contentBase64 = (reader.result as string).split(',')[1];
+      uploadMut.mutate(
+        { fileName: file.name, contentBase64, mimeType: file.type, domain: 'submissions' },
+        {
+          onSuccess: (data) => {
+            const d = data as { fileKey?: string; data?: { fileKey?: string } };
+            setFileKey(d.fileKey ?? d.data?.fileKey ?? '');
+            setUploading(false);
+            toast('File uploaded', 'success');
+          },
+          onError: () => { setUploading(false); toast('Upload failed', 'error'); },
+        },
+      );
+    };
+    reader.onerror = () => { setUploading(false); toast('Could not read file', 'error'); };
+  }
+
+  function handleSaveDraft() {
+    if (!assignmentId) return;
+    const body: Record<string, unknown> = {};
+    if (needsText) body.textContent = text;
+    if (needsFile && fileKey) body.fileKey = fileKey;
+    upsertMut.mutate({ assignmentId, body }, {
+      onSuccess: () => toast('Draft saved', 'success'),
+      onError: () => toast('Failed to save draft', 'error'),
+    });
+  }
+
+  function handleSubmit() {
+    if (!assignmentId) return;
+    if (needsText && !text.trim()) { toast('Write your answer before submitting', 'warning'); return; }
+    if (needsFile && !fileKey) { toast('Upload a file before submitting', 'warning'); return; }
+    const body: Record<string, unknown> = {};
+    if (needsText) body.textContent = text;
+    if (needsFile && fileKey) body.fileKey = fileKey;
+
+    upsertMut.mutate({ assignmentId, body }, {
+      onSuccess: (saved) => {
+        const id = (saved as { id?: string })?.id ?? existingSubmission?.id;
+        if (!id) { toast('Submission saved but could not confirm ID', 'warning'); return; }
+        submitMut.mutate({ assignmentId, submissionId: id }, {
+          onSuccess: () => { toast('Assignment submitted!', 'success'); },
+          onError: () => toast('Submitted saved but final submit failed', 'warning'),
+        });
+      },
+      onError: () => toast('Failed to submit', 'error'),
+    });
+  }
+
+  if (assignLoading || subLoading) return <ElearningShell title="Assignment" eyebrow="Loading…"><LoadingPlaceholder /></ElearningShell>;
+  if (!assignment) return <ElearningShell title="Assignment" eyebrow="Not found"><p className="text-sm text-ks-muted">Assignment not found.</p></ElearningShell>;
+
+  return (
+    <ElearningShell title={assignment.title} eyebrow="Student submission">
+      <div className="grid gap-6 xl:grid-cols-[0.8fr_1.2fr]">
+        <Panel title="Assignment Details" icon={<ClipboardCheck />}>
+          <InfoList rows={[
+            ['Mode', assignment.type],
+            ['Due', fmtDate(assignment.dueAt)],
+            ['Max score', `${assignment.maxScore ?? '—'} marks`],
+            ['Late allowed', assignment.allowLateSubmission ? 'Yes' : 'No'],
+            ['Late penalty', assignment.latePenaltyPercent ? `${assignment.latePenaltyPercent}%` : '—'],
+          ]} />
+          {assignment.instructions && (
+            <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-xs font-black uppercase tracking-widest text-ks-muted">Instructions</p>
+              <p className="mt-2 text-sm leading-6 text-ks-slate">{assignment.instructions}</p>
+            </div>
+          )}
+          {assignment.attachmentKey && (
+            <div className="mt-4">
+              <a href={(() => { const k = assignment.attachmentKey ?? ''; const s = k.indexOf('/'); return s < 0 ? `/api/v1/elearning/files/materials/${encodeURIComponent(k)}` : `/api/v1/elearning/files/${encodeURIComponent(k.substring(0,s))}/${encodeURIComponent(k.substring(s+1))}`; })()} target="_blank" rel="noopener noreferrer" download={assignment.attachmentName ?? true} className="inline-flex items-center gap-2 text-sm font-black text-[#6C63FF] hover:underline">
+                <FileText className="h-4 w-4" />Download assignment file{assignment.attachmentName ? `: ${assignment.attachmentName}` : ''}
+              </a>
+            </div>
+          )}
+        </Panel>
+        <div className="space-y-5">
+          {isGraded && (
+            <Panel title="Your Grade" icon={<CheckCircle2 />}>
+              <div className="grid grid-cols-2 gap-4">
+                <MetricPill label="Score" value={`${existingSubmission?.score ?? '—'}/${existingSubmission?.maxScore ?? '—'}`} />
+                <MetricPill label="Status" value={existingSubmission?.status ?? '—'} />
+              </div>
+              {existingSubmission?.feedback && (
+                <div className="mt-4 rounded-2xl border border-green-200 bg-green-50 p-4">
+                  <p className="text-xs font-black uppercase tracking-widest text-green-700">Teacher Feedback</p>
+                  <p className="mt-2 text-sm text-ks-slate">{existingSubmission.feedback}</p>
+                </div>
+              )}
+            </Panel>
+          )}
+          <Panel title={isSubmitted ? 'Your Submission' : 'Submit Your Work'} icon={<FileText />}>
+            {isSubmitted && !isGraded && (
+              <div className="mb-4 rounded-2xl border border-blue-200 bg-blue-50 p-3">
+                <p className="text-sm font-black text-blue-700">Submitted — awaiting grading</p>
+              </div>
+            )}
+            {needsText && (
+              <div className="space-y-2">
+                <label className="text-xs font-black uppercase tracking-widest text-ks-muted">Your answer</label>
+                <textarea
+                  className="min-h-48 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold leading-6 outline-none focus:border-[#6C63FF] disabled:opacity-60"
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  disabled={isSubmitted}
+                  placeholder="Write your answer here…"
+                />
+              </div>
+            )}
+            {needsFile && (
+              <div className="mt-4 space-y-2">
+                <label className="text-xs font-black uppercase tracking-widest text-ks-muted">File upload</label>
+                {fileKey ? (
+                  <div className="flex items-center gap-3 rounded-2xl border border-green-200 bg-green-50 px-4 py-3">
+                    <CheckCircle2 className="h-5 w-5 text-green-600" />
+                    <span className="text-sm font-semibold text-green-700">{fileName || 'File attached'}</span>
+                    {!isSubmitted && <button onClick={() => { setFileKey(''); setFileName(''); }} className="ml-auto text-xs text-red-500 hover:underline">Remove</button>}
+                  </div>
+                ) : !isSubmitted ? (
+                  <label className="block cursor-pointer rounded-2xl border-2 border-dashed border-slate-300 p-6 text-center hover:border-[#6C63FF]">
+                    <UploadCloud className="mx-auto h-8 w-8 text-ks-muted" />
+                    <p className="mt-2 text-sm font-semibold text-ks-muted">{uploading ? 'Uploading…' : 'Click to upload (max 50 MB)'}</p>
+                    <input type="file" className="hidden" onChange={handleFileChange} disabled={uploading} />
+                  </label>
+                ) : (
+                  <p className="text-sm text-ks-muted">No file submitted.</p>
+                )}
+              </div>
+            )}
+            {!isSubmitted && (
+              <div className="mt-5 flex flex-wrap gap-3">
+                <ButtonLike onClick={handleSaveDraft} disabled={upsertMut.isPending || uploading}>
+                  <Save className="h-4 w-4" />{upsertMut.isPending ? 'Saving…' : 'Save draft'}
+                </ButtonLike>
+                <ButtonLike tone="primary" onClick={handleSubmit} disabled={upsertMut.isPending || submitMut.isPending || uploading}>
+                  {submitMut.isPending ? 'Submitting…' : 'Submit assignment'}
+                </ButtonLike>
+              </div>
+            )}
+          </Panel>
+        </div>
+      </div>
+      <ButtonLike onClick={() => navigate(`/student/elearning/courses/${courseId}`)}>Back to course</ButtonLike>
+    </ElearningShell>
+  );
+}
+
+export function StudentQuizPage() {
+  const { courseId, quizId } = useParams();
+  const navigate = useNavigate();
+  const { data: quiz, isLoading } = useElearningQuiz(courseId, quizId);
+  const { data: existingAttempts = [] } = useMyQuizAttempts(quizId);
+  const { data: activeAttempt, isLoading: activeLoading } = useActiveAttempt(quizId);
+  const startMut = useStartAttemptMutation();
+  const saveAnswerMut = useSaveAnswerMutation();
+  const submitMut = useSubmitAttemptMutation();
+
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [answers, setAnswers] = useState<Record<string, { selectedOptionId?: string; textAnswer?: string }>>({});
+  const [timeLeft, setTimeLeft] = useState<number | null>(null);
+  const [started, setStarted] = useState(false);
+  const [attemptId, setAttemptId] = useState<string | undefined>(activeAttempt?.id);
+
+  useEffect(() => {
+    if (activeAttempt?.id) {
+      setAttemptId(activeAttempt.id);
+      setStarted(true);
+      if (activeAttempt.answers) {
+        const saved: Record<string, { selectedOptionId?: string; textAnswer?: string }> = {};
+        for (const a of activeAttempt.answers) {
+          saved[a.questionId] = { selectedOptionId: a.selectedOptionId, textAnswer: a.textAnswer };
+        }
+        setAnswers(saved);
+      }
+    }
+  }, [activeAttempt?.id]);
+
+  useEffect(() => {
+    if (!started || !quiz?.timeLimitMinutes || !activeAttempt?.startedAt) return;
+    const elapsed = Math.round((Date.now() - new Date(activeAttempt.startedAt).getTime()) / 1000);
+    const remaining = quiz.timeLimitMinutes * 60 - elapsed;
+    setTimeLeft(Math.max(0, remaining));
+    const timer = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev == null || prev <= 1) {
+          clearInterval(timer);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [started, quiz?.timeLimitMinutes, activeAttempt?.startedAt]);
+
+  useEffect(() => {
+    if (timeLeft === 0 && attemptId) {
+      toast('Time is up! Submitting…', 'warning');
+      submitMut.mutate(attemptId, {
+        onSuccess: (result) => { const id = (result as { id?: string })?.id ?? attemptId; navigate(`/student/elearning/courses/${courseId}/quizzes/${quizId}/result/${id}`); },
+        onError: () => toast('Failed to auto-submit — please submit manually', 'error'),
+      });
+    }
+  }, [timeLeft]);
+
+  const submittedCount = existingAttempts.filter((a) => a.status !== 'IN_PROGRESS').length;
+  const attemptsLeft = (quiz?.maxAttempts ?? 1) - submittedCount;
+  const questions = quiz?.questions ?? [];
+  const currentQuestion = questions[currentIndex];
+
+  function formatTime(sec: number) {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  }
+
+  function handleStart() {
+    if (!quizId) return;
+    startMut.mutate(quizId, {
+      onSuccess: (attempt) => {
+        setAttemptId(attempt.id);
+        setStarted(true);
+        toast('Quiz started — good luck!', 'success');
+      },
+      onError: () => toast('Could not start the quiz. Try again.', 'error'),
+    });
+  }
+
+  function handleAnswer(field: 'selectedOptionId' | 'textAnswer', value: string) {
+    if (!currentQuestion || !attemptId) return;
+    const updated = { ...answers[currentQuestion.id], [field]: value };
+    setAnswers((prev) => ({ ...prev, [currentQuestion.id]: updated }));
+    saveAnswerMut.mutate({ attemptId, questionId: currentQuestion.id, ...updated });
+  }
+
+  function handleSubmitQuiz() {
+    if (!attemptId) return;
+    submitMut.mutate(attemptId, {
+      onSuccess: (result) => {
+        const id = (result as { id?: string })?.id ?? attemptId;
+        toast('Quiz submitted!', 'success');
+        navigate(`/student/elearning/courses/${courseId}/quizzes/${quizId}/result/${id}`);
+      },
+      onError: () => toast('Failed to submit quiz', 'error'),
+    });
+  }
+
+  if (isLoading || activeLoading) return <ElearningShell title="Quiz" eyebrow="Loading…"><LoadingPlaceholder /></ElearningShell>;
+  if (!quiz) return <ElearningShell title="Quiz" eyebrow="Not found"><p className="text-sm text-ks-muted">Quiz not found.</p></ElearningShell>;
+
+  if (!started) {
+    return (
+      <ElearningShell title={quiz.title} eyebrow="Quiz briefing">
+        <Panel title="Quiz Rules" icon={<HelpCircle />}>
+          <div className="grid gap-4 md:grid-cols-3">
+            <MetricPill label="Questions" value={`${questions.length}`} />
+            <MetricPill label="Time limit" value={quiz.timeLimitMinutes ? `${quiz.timeLimitMinutes} min` : 'No limit'} />
+            <MetricPill label="Max attempts" value={`${quiz.maxAttempts}`} />
+          </div>
+          {quiz.instructions && (
+            <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-sm leading-6 text-ks-slate">{quiz.instructions}</p>
+            </div>
+          )}
+          <div className="mt-4">
+            <InfoList rows={[
+              ['Passing score', quiz.passingScore ? `${quiz.passingScore}%` : 'No pass mark'],
+              ['Attempts used', `${submittedCount} of ${quiz.maxAttempts}`],
+              ['Attempts remaining', `${attemptsLeft}`],
+            ]} />
+          </div>
+          {attemptsLeft <= 0 ? (
+            <div className="mt-5">
+              <p className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-700">
+                You have used all available attempts for this quiz.
+              </p>
+              {existingAttempts.length > 0 && (
+                <div className="mt-3"><ButtonLike tone="primary" onClick={() => navigate(`/student/elearning/courses/${courseId}/quizzes/${quizId}/result/${existingAttempts[existingAttempts.length - 1].id}`)}>View last result</ButtonLike></div>
+              )}
+            </div>
+          ) : (
+            <div className="mt-5">
+              <ButtonLike tone="primary" onClick={handleStart} disabled={startMut.isPending}>
+                {startMut.isPending ? 'Starting…' : `Start attempt ${submittedCount + 1} of ${quiz.maxAttempts}`}
+              </ButtonLike>
+            </div>
+          )}
+        </Panel>
+        {existingAttempts.length > 0 && (
+          <Panel title="My Previous Attempts" icon={<BarChart3 />}>
+            <Table columns={['Attempt', 'Status', 'Score', 'Passed', 'Date']}>
+              {existingAttempts.map((a, i) => (
+                <tr key={a.id} className="even:bg-slate-50">
+                  <Td>{i + 1}</Td>
+                  <Td><PublishBadge status={a.status} /></Td>
+                  <Td>{a.percentScore != null ? `${Math.round(a.percentScore)}%` : '—'}</Td>
+                  <Td>{a.isPassed === true ? <span className="text-green-600 font-black">Yes</span> : a.isPassed === false ? <span className="text-red-500 font-black">No</span> : '—'}</Td>
+                  <Td>{fmtDate(a.submittedAt ?? a.startedAt)}</Td>
+                </tr>
+              ))}
+            </Table>
+          </Panel>
+        )}
+      </ElearningShell>
+    );
+  }
+
+  if (!currentQuestion) {
+    return (
+      <ElearningShell title={quiz.title} eyebrow="No questions">
+        <p className="text-sm text-ks-muted">This quiz has no questions yet.</p>
+      </ElearningShell>
+    );
+  }
+
+  const isAnswered = (qId: string) => Boolean(answers[qId]?.selectedOptionId || answers[qId]?.textAnswer);
+  const totalAnswered = questions.filter((q) => isAnswered(q.id)).length;
+  const currentAnswer = answers[currentQuestion.id] ?? {};
+  const qType = currentQuestion.type;
+
+  return (
+    <ElearningShell title={quiz.title} eyebrow={`Question ${currentIndex + 1} of ${questions.length}`}>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap gap-2">
+          {questions.map((q, i) => (
+            <button
+              key={q.id}
+              onClick={() => setCurrentIndex(i)}
+              className={`h-8 w-8 rounded-full text-xs font-black transition ${isAnswered(q.id) ? 'bg-[#6C63FF] text-white' : i === currentIndex ? 'border-2 border-[#6C63FF] text-[#6C63FF]' : 'bg-slate-100 text-ks-muted'}`}
+            >
+              {i + 1}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-4">
+          {timeLeft != null && (
+            <span className={`rounded-2xl px-4 py-2 text-sm font-black ${timeLeft < 60 ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-ks-slate'}`}>
+              <Clock className="inline h-4 w-4" /> {formatTime(timeLeft)}
+            </span>
+          )}
+          <span className="text-xs font-semibold text-ks-muted">{totalAnswered}/{questions.length} answered</span>
+        </div>
+      </div>
+      <Panel title={`Q${currentIndex + 1} · ${currentQuestion.points} point${currentQuestion.points !== 1 ? 's' : ''}`} icon={<HelpCircle />}>
+        <p className="text-base font-black text-ks-slate leading-7">{currentQuestion.prompt}</p>
+        <div className="mt-5 space-y-3">
+          {(qType === 'MULTIPLE_CHOICE' || qType === 'MCQ') && currentQuestion.options.map((opt) => (
+            <button
+              key={opt.id}
+              onClick={() => handleAnswer('selectedOptionId', opt.id)}
+              className={`flex w-full items-center gap-3 rounded-2xl border p-4 text-left transition ${currentAnswer.selectedOptionId === opt.id ? 'border-[#6C63FF] bg-[#EEEDFF]' : 'border-slate-200 bg-white hover:border-slate-400'}`}
+            >
+              <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-xs font-black ${currentAnswer.selectedOptionId === opt.id ? 'border-[#6C63FF] bg-[#6C63FF] text-white' : 'border-slate-300 text-ks-muted'}`}>
+                {['A', 'B', 'C', 'D', 'E'][opt.orderIndex] ?? opt.orderIndex + 1}
+              </span>
+              <span className="text-sm font-semibold text-ks-slate">{opt.text}</span>
+            </button>
+          ))}
+          {qType === 'TRUE_FALSE' && ['true', 'false'].map((val) => (
+            <button
+              key={val}
+              onClick={() => handleAnswer('textAnswer', val)}
+              className={`w-full rounded-2xl border p-4 text-center text-sm font-black transition ${currentAnswer.textAnswer === val ? 'border-[#6C63FF] bg-[#EEEDFF] text-[#3D35CC]' : 'border-slate-200 bg-white text-ks-muted hover:border-slate-400'}`}
+            >
+              {val.charAt(0).toUpperCase() + val.slice(1)}
+            </button>
+          ))}
+          {qType === 'SHORT_ANSWER' && (
+            <textarea
+              className="min-h-28 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold leading-6 outline-none focus:border-[#6C63FF]"
+              value={currentAnswer.textAnswer ?? ''}
+              onChange={(e) => handleAnswer('textAnswer', e.target.value)}
+              placeholder="Type your answer here…"
+            />
+          )}
+        </div>
+      </Panel>
+      <div className="flex flex-wrap justify-between gap-3">
+        <div className="flex gap-2">
+          {currentIndex > 0 && <ButtonLike onClick={() => setCurrentIndex((p) => p - 1)}>Previous</ButtonLike>}
+          {currentIndex < questions.length - 1 && <ButtonLike tone="primary" onClick={() => setCurrentIndex((p) => p + 1)}>Next question</ButtonLike>}
+        </div>
+        <ButtonLike
+          tone="danger"
+          onClick={handleSubmitQuiz}
+          disabled={submitMut.isPending || totalAnswered === 0}
+        >
+          {submitMut.isPending ? 'Submitting…' : `Submit quiz (${totalAnswered}/${questions.length} answered)`}
+        </ButtonLike>
+      </div>
+    </ElearningShell>
+  );
+}
+
+export function StudentQuizResultPage() {
+  const { courseId, quizId, attemptId } = useParams();
+  const navigate = useNavigate();
+  const { data: attempt, isLoading } = useAttemptDetail(attemptId);
+  const { data: quiz } = useElearningQuiz(courseId, quizId);
+
+  if (isLoading) return <ElearningShell title="Quiz Result" eyebrow="Loading…"><LoadingPlaceholder /></ElearningShell>;
+  if (!attempt) return <ElearningShell title="Quiz Result" eyebrow="Not found"><p className="text-sm text-ks-muted">Result not found.</p></ElearningShell>;
+
+  const totalScore = attempt.score ?? 0;
+  const maxScore = attempt.maxScore ?? 0;
+  const pct = attempt.percentScore != null ? Math.round(attempt.percentScore) : maxScore > 0 ? Math.round((totalScore / maxScore) * 100) : 0;
+  const timeTaken = (attempt as unknown as Record<string, unknown>).timeTakenSeconds as number | undefined;
+
+  return (
+    <ElearningShell title="Quiz Result" eyebrow={quiz?.title ?? 'Your score'}>
+      <div className={`rounded-3xl p-8 text-center ${attempt.isPassed ? 'bg-green-50 border border-green-200' : attempt.isPassed === false ? 'bg-red-50 border border-red-200' : 'bg-slate-50 border border-slate-200'}`}>
+        <p className="font-display text-6xl font-black" style={{ color: attempt.isPassed ? '#16a34a' : attempt.isPassed === false ? '#dc2626' : '#334155' }}>
+          {pct}%
+        </p>
+        <p className="mt-2 text-xl font-black text-ks-slate">{totalScore} / {maxScore} marks</p>
+        {attempt.isPassed != null && (
+          <p className={`mt-3 text-lg font-black ${attempt.isPassed ? 'text-green-700' : 'text-red-600'}`}>
+            {attempt.isPassed ? 'PASSED' : 'DID NOT PASS'}
+          </p>
+        )}
+        {timeTaken != null && (
+          <p className="mt-2 text-sm text-ks-muted">Completed in {Math.floor(timeTaken / 60)}m {timeTaken % 60}s</p>
+        )}
+      </div>
+      {attempt.answers && attempt.answers.length > 0 && (
+        <Panel title="Question Breakdown" icon={<ShieldCheck />}>
+          <div className="space-y-4">
+            {attempt.answers.map((a, i) => {
+              const q = quiz?.questions.find((q) => q.id === a.questionId);
+              const correct = a.isCorrect;
+              return (
+                <div key={a.id} className={`rounded-2xl border p-4 ${correct === true ? 'border-green-200 bg-green-50' : correct === false ? 'border-red-100 bg-red-50' : 'border-slate-200 bg-white'}`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="text-sm font-black text-ks-slate">{i + 1}. {q?.prompt ?? a.prompt ?? `Question ${i + 1}`}</p>
+                    <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-black ${correct === true ? 'bg-green-100 text-green-700' : correct === false ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-ks-muted'}`}>
+                      {a.score != null ? `${a.score}/${q?.points ?? '?'} pts` : correct === true ? 'Correct' : correct === false ? 'Wrong' : 'Pending'}
+                    </span>
+                  </div>
+                  {a.textAnswer && <p className="mt-2 text-xs text-ks-muted">Your answer: <span className="font-semibold text-ks-slate">{a.textAnswer}</span></p>}
+                  {q?.correctAnswer && correct === false && <p className="mt-1 text-xs text-green-700">Correct: <span className="font-semibold">{q.correctAnswer}</span></p>}
+                  {a.feedback && <p className="mt-2 text-xs text-[#6C63FF] font-semibold">Feedback: {a.feedback}</p>}
+                  {q?.explanation && <p className="mt-1 text-xs text-ks-muted italic">{q.explanation}</p>}
+                </div>
+              );
+            })}
+          </div>
+        </Panel>
+      )}
+      <div className="flex flex-wrap gap-3">
+        <ButtonLike onClick={() => navigate(`/student/elearning/courses/${courseId}/quizzes/${quizId}/attempt`)}>Try again</ButtonLike>
+        <ButtonLike tone="primary" onClick={() => navigate(`/student/elearning/courses/${courseId}`)}>Back to course</ButtonLike>
+      </div>
+    </ElearningShell>
+  );
 }

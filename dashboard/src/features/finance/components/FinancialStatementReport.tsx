@@ -44,7 +44,10 @@ export function FinancialStatementReport() {
   const [downloading, setDownloading] = useState<string | null>(null);
 
   const params: StatementParams = period === 'custom' && start && end ? { period: 'custom', start, end } : { period };
-  const { data: s, isLoading } = useFinancialStatement(params);
+  const { data: s, isLoading, isError, refetch } = useFinancialStatement(params);
+  // A valid statement always carries a period; guard against an error/empty body
+  // so a transient backend hiccup shows a recoverable message, not a crash.
+  const ready = Boolean(s && (s as Partial<FinancialStatement>).period);
 
   const doDownload = async (fmt: 'pdf' | 'csv') => {
     setDownloading(fmt);
@@ -110,16 +113,26 @@ export function FinancialStatementReport() {
         </div>
       </div>
 
-      {isLoading || !s ? (
+      {isLoading ? (
         <SkeletonTable cols={4} />
+      ) : !ready ? (
+        <div className="rounded-2xl border border-ks-amber/30 bg-ks-amber/5 px-5 py-8 text-center">
+          <p className="text-sm font-black text-ks-navy">Statement unavailable right now</p>
+          <p className="mx-auto mt-1 max-w-md text-xs font-semibold text-ks-muted">
+            {isError
+              ? 'The finance service did not return a statement for this period. This is usually temporary.'
+              : 'No financial data was returned for the selected period.'}
+          </p>
+          <Button variant="secondary" className="mt-4 rounded" onClick={() => refetch()}>Retry</Button>
+        </div>
       ) : (
         <>
-          <Header s={s} />
-          <Summary s={s} />
-          {view === 'overview' && <Overview s={s} />}
-          {view === 'receivables' && <Receivables s={s} />}
-          {view === 'operations' && <Operations s={s} />}
-          {view === 'ledger' && <Ledger s={s} />}
+          <Header s={s!} />
+          <Summary s={s!} />
+          {view === 'overview' && <Overview s={s!} />}
+          {view === 'receivables' && <Receivables s={s!} />}
+          {view === 'operations' && <Operations s={s!} />}
+          {view === 'ledger' && <Ledger s={s!} />}
         </>
       )}
     </div>

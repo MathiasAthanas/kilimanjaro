@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma';
 import { PrismaService } from '../prisma/prisma.service';
+import { RequestUser } from '../common/interfaces/request-user.interface';
+import { schoolScopeFilter } from '../common/helpers/school-scope.helper';
 
 export type PeriodType = 'weekly' | 'monthly' | 'quarterly' | 'yearly' | 'custom';
 
@@ -96,19 +98,28 @@ export class FinancialStatementService {
     return 'month';
   }
 
-  async build(params: StatementParams): Promise<FinancialStatement> {
+  async build(params: StatementParams, user?: RequestUser): Promise<FinancialStatement> {
     const { start, end, type, label } = this.resolveRange(params);
     const inPeriod = { gte: start, lte: end };
+
+    // Multi-school scope: a Head of School (or any school-scoped role) sees only
+    // their school's figures; group roles (Manager/Super Admin) see all schools,
+    // or a single school when an active school is selected. Applied to every
+    // school-tagged table below.
+    const scope = schoolScopeFilter(user);
+    const bySchool = scope.schoolId ? { schoolId: scope.schoolId } : {};
+    // StoreMovement carries no schoolId of its own — scope it through its item.
+    const movementSchool = scope.schoolId ? { storeItem: { is: { schoolId: scope.schoolId } } } : {};
 
     const [payments, invoices, outstandingAgg, expenseRows, disbursements, storeItems, movements, assets, assetAgg, assetCount] =
       await Promise.all([
         this.prisma.payment.findMany({
-          where: { status: 'CONFIRMED', paidAt: inPeriod },
+          where: { status: 'CONFIRMED', paidAt: inPeriod, ...bySchool },
           select: { amount: true, method: true, paidAt: true, referenceNumber: true, payerName: true },
           orderBy: { paidAt: 'desc' },
         }),
         this.prisma.invoice.findMany({
-          where: { issuedAt: inPeriod },
+          where: { issuedAt: inPeriod, ...bySchool },
           select: {
             invoiceNumber: true,
             studentId: true,
@@ -120,19 +131,21 @@ export class FinancialStatementService {
             dueDate: true,
           },
         }),
-        this.prisma.invoice.aggregate({ _sum: { outstandingBalance: true }, where: { status: { in: ['ISSUED', 'PARTIALLY_PAID', 'OVERDUE'] } } }),
+        this.prisma.invoice.aggregate({ _sum: { outstandingBalance: true }, where: { status: { in: ['ISSUED', 'PARTIALLY_PAID', 'OVERDUE'] }, ...bySchool } }),
         this.prisma.expense.findMany({
-          where: { status: 'RECORDED', incurredAt: inPeriod },
+          where: { status: 'RECORDED', incurredAt: inPeriod, ...bySchool },
           select: { amount: true, category: true, department: true, incurredAt: true, description: true, payee: true },
           orderBy: { incurredAt: 'desc' },
         }),
         this.prisma.fundRequest.findMany({
-          where: { status: 'DISBURSED', disbursedAt: inPeriod },
+          where: { status: 'DISBURSED', disbursedAt: inPeriod, ...bySchool },
           select: { requestNumber: true, title: true, department: true, amount: true, disbursedAt: true },
           orderBy: { disbursedAt: 'desc' },
         }),
-        this.prisma.storeItem.findMany({ where: { isActive: true }, select: { itemCode: true, name: true, category: true, quantityOnHand: true, reorderLevel: true, unitCost: true } }),
-        this.prisma.storeMovement.findMany({ where: { occurredAt: inPeriod }, select: { type: true, totalValue: true } }),
+        this.prisma.storeItem.findMany({ where: { isActive: true, ...bySchool }, select: { itemCode: true, name: true, category: true, quantityOnHand: true, reorderLevel: true, unitCost: true } }),
+        this.prisma.storeMovement.findMany({ where: { occurredAt: inPeriod, ...movementSchool }, select: { type: true, totalValue: true } }),
+        // NOTE: Asset has no schoolId column yet, so asset figures remain group-wide
+        // until that field + backfill land; the money flows above are school-scoped.
         this.prisma.asset.findMany({ where: { status: { not: 'DISPOSED' } }, select: { status: true, condition: true, currentValue: true } }),
         this.prisma.asset.aggregate({ _sum: { purchaseCost: true, currentValue: true }, where: { status: { not: 'DISPOSED' } } }),
         this.prisma.asset.count({ where: { status: { not: 'DISPOSED' } } }),
@@ -176,7 +189,7 @@ export class FinancialStatementService {
         : 0;
     const now = new Date();
     const openInvoices = await this.prisma.invoice.findMany({
-      where: { status: { in: ['ISSUED', 'PARTIALLY_PAID', 'OVERDUE'] } },
+      where: { status: { in: ['ISSUED', 'PARTIALLY_PAID', 'OVERDUE'] }, ...bySchool },
       select: { invoiceNumber: true, studentId: true, classId: true, outstandingBalance: true, status: true, dueDate: true },
     });
     const studentIds = [...new Set(openInvoices.map((i) => i.studentId).filter(Boolean))];

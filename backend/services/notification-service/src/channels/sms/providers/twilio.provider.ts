@@ -1,16 +1,22 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Twilio } from 'twilio';
 import { ISmsProvider, SmsSendResult } from './sms-provider.interface';
 
 @Injectable()
 export class TwilioProvider implements ISmsProvider {
+  constructor(private readonly config: ConfigService) {}
+
   private client(): Twilio {
-    return new Twilio(process.env.TWILIO_ACCOUNT_SID || '', process.env.TWILIO_AUTH_TOKEN || '');
+    return new Twilio(
+      this.config.get<string>('TWILIO_ACCOUNT_SID', ''),
+      this.config.get<string>('TWILIO_AUTH_TOKEN', ''),
+    );
   }
 
   async send(to: string[], message: string, senderId?: string): Promise<SmsSendResult[]> {
     const client = this.client();
-    const from = senderId || process.env.TWILIO_PHONE_NUMBER || '';
+    const from = senderId || this.config.get<string>('TWILIO_PHONE_NUMBER', '');
 
     const results: SmsSendResult[] = [];
     for (const phone of to) {

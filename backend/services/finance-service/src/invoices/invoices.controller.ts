@@ -18,15 +18,15 @@ export class InvoicesController {
   constructor(private readonly invoicesService: InvoicesService) {}
 
   @Post('generate')
-  @Roles(ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN)
+  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
   generate(@Body() dto: GenerateInvoicesDto, @CurrentUser() user?: RequestUser) {
     return this.invoicesService.generate(dto, user!);
   }
 
   @Get()
   @Roles(
-    ROLES.FINANCE,
-    ROLES.PRINCIPAL,
+    ROLES.FINANCE, ROLES.HEAD_OF_FINANCE,
+    ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN,
     ROLES.SYSTEM_ADMIN,
     ROLES.MANAGING_DIRECTOR,
     ROLES.BOARD_DIRECTOR,
@@ -36,15 +36,15 @@ export class InvoicesController {
   }
 
   @Get('jobs/:jobId')
-  @Roles(ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN)
+  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
   jobStatus(@Param('jobId') jobId: string) {
     return this.invoicesService.getJob(jobId);
   }
 
   @Get(':id')
   @Roles(
-    ROLES.FINANCE,
-    ROLES.PRINCIPAL,
+    ROLES.FINANCE, ROLES.HEAD_OF_FINANCE,
+    ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN,
     ROLES.SYSTEM_ADMIN,
     ROLES.PARENT,
     ROLES.STUDENT,
@@ -55,8 +55,8 @@ export class InvoicesController {
 
   @Get('student/:studentId')
   @Roles(
-    ROLES.FINANCE,
-    ROLES.PRINCIPAL,
+    ROLES.FINANCE, ROLES.HEAD_OF_FINANCE,
+    ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN,
     ROLES.SYSTEM_ADMIN,
     ROLES.PARENT,
     ROLES.STUDENT,
@@ -66,25 +66,25 @@ export class InvoicesController {
   }
 
   @Patch(':id/discount')
-  @Roles(ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN)
+  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
   discount(@Param('id') id: string, @Body() dto: ApplyDiscountDto, @CurrentUser() user?: RequestUser) {
     return this.invoicesService.applyDiscount(id, dto.discountAmount, dto.discountReason, user!);
   }
 
   @Patch(':id/cancel')
-  @Roles(ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN)
+  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
   cancel(@Param('id') id: string, @Body() dto: CancelInvoiceDto, @CurrentUser() user?: RequestUser) {
     return this.invoicesService.cancel(id, dto.cancellationReason, user!);
   }
 
   @Patch(':id/waive')
-  @Roles(ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN)
+  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
   waive(@Param('id') id: string, @Body() dto: WaiveInvoiceDto, @CurrentUser() user?: RequestUser) {
     return this.invoicesService.waive(id, dto.waiverReason, user!);
   }
 
   @Get(':id/pdf')
-  @Roles(ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.PARENT, ROLES.STUDENT)
+  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.PARENT, ROLES.STUDENT)
   async pdf(@Param('id') id: string, @CurrentUser() user: RequestUser, @Res() res: Response) {
     const file = await this.invoicesService.getPdfFile(id, user);
     res.setHeader('Content-Type', 'application/pdf');
@@ -93,7 +93,7 @@ export class InvoicesController {
   }
 
   @Post(':id/regenerate-pdf')
-  @Roles(ROLES.FINANCE, ROLES.PRINCIPAL, ROLES.SYSTEM_ADMIN)
+  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
   regenerate(@Param('id') id: string) {
     return this.invoicesService.regeneratePdf(id);
   }

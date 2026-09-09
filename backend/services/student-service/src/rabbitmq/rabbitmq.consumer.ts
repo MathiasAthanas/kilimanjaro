@@ -22,14 +22,26 @@ export class RabbitMqConsumer implements OnModuleInit {
 
     await channel.assertExchange('academic.events', 'topic', { durable: true });
     await channel.assertExchange('auth.events', 'topic', { durable: true });
+    await channel.assertExchange('dlq.direct', 'direct', { durable: true });
+    await channel.prefetch(10);
 
     const academicQueue = 'student-service.academic';
-    await channel.assertQueue(academicQueue, { durable: true });
+    await channel.assertQueue(academicQueue, {
+      durable: true,
+      arguments: { 'x-dead-letter-exchange': 'dlq.direct', 'x-dead-letter-routing-key': academicQueue },
+    });
+    await channel.assertQueue(`${academicQueue}.dlq`, { durable: true });
+    await channel.bindQueue(`${academicQueue}.dlq`, 'dlq.direct', academicQueue);
     await channel.bindQueue(academicQueue, 'academic.events', 'performance.snapshot.ready');
     await channel.bindQueue(academicQueue, 'academic.events', 'results.published');
 
     const authQueue = 'student-service.auth';
-    await channel.assertQueue(authQueue, { durable: true });
+    await channel.assertQueue(authQueue, {
+      durable: true,
+      arguments: { 'x-dead-letter-exchange': 'dlq.direct', 'x-dead-letter-routing-key': authQueue },
+    });
+    await channel.assertQueue(`${authQueue}.dlq`, { durable: true });
+    await channel.bindQueue(`${authQueue}.dlq`, 'dlq.direct', authQueue);
     await channel.bindQueue(authQueue, 'auth.events', 'user.created');
 
     await channel.consume(academicQueue, async (message) => this.handleMessage(channel, message));
@@ -57,7 +69,7 @@ export class RabbitMqConsumer implements OnModuleInit {
       channel.ack(message);
     } catch (error) {
       this.logger.error(`Failed to process event ${routingKey}`, error as Error);
-      channel.ack(message);
+      channel.nack(message, false, false);
     }
   }
 

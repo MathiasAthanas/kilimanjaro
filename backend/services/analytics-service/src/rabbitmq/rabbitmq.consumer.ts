@@ -20,7 +20,18 @@ export class RabbitMqConsumer implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
-    await this.bootstrap().catch((error) => this.logger.warn(`RabbitMQ disabled: ${error.message}`));
+    this.connectWithRetry().catch((error) => this.logger.warn(`RabbitMQ permanently disabled: ${error.message}`));
+  }
+
+  private async connectWithRetry(attempt = 0): Promise<void> {
+    try {
+      await this.bootstrap();
+    } catch (error: any) {
+      const delay = Math.min(5000 * 2 ** attempt, 60000);
+      this.logger.warn(`RabbitMQ connect failed (attempt ${attempt + 1}), retrying in ${delay}ms: ${error.message}`);
+      await new Promise((r) => setTimeout(r, delay));
+      return this.connectWithRetry(attempt + 1);
+    }
   }
 
   private async bootstrap() {
@@ -28,15 +39,35 @@ export class RabbitMqConsumer implements OnModuleInit {
     const conn = await amqp.connect(url);
     const channel = await conn.createChannel();
 
+    conn.on('error', (err: Error) => this.logger.warn(`RabbitMQ connection error: ${err.message}`));
+    conn.on('close', () => {
+      this.logger.warn('RabbitMQ connection closed — reconnecting analytics consumer');
+      this.connectWithRetry().catch((e) => this.logger.error(`Reconnect failed permanently: ${e.message}`));
+    });
+
+    await channel.prefetch(20);
+
+    // Assert the DLQ exchange once — all analytics queues route nacked messages here.
+    await channel.assertExchange('dlq.direct', 'direct', { durable: true });
+
     const bindings = [
       { exchange: 'student.events', queue: 'analytics-service.student' },
       { exchange: 'academic.events', queue: 'analytics-service.academic' },
       { exchange: 'finance.events', queue: 'analytics-service.finance' },
+      { exchange: 'elearning.events', queue: 'analytics-service.elearning' },
     ];
 
     for (const binding of bindings) {
       await channel.assertExchange(binding.exchange, 'topic', { durable: true });
-      await channel.assertQueue(binding.queue, { durable: true });
+      await channel.assertQueue(binding.queue, {
+        durable: true,
+        arguments: {
+          'x-dead-letter-exchange': 'dlq.direct',
+          'x-dead-letter-routing-key': binding.queue,
+        },
+      });
+      await channel.assertQueue(`${binding.queue}.dlq`, { durable: true });
+      await channel.bindQueue(`${binding.queue}.dlq`, 'dlq.direct', binding.queue);
       await channel.bindQueue(binding.queue, binding.exchange, '#');
       await channel.consume(binding.queue, async (msg) => {
         if (!msg) return;
@@ -51,10 +82,10 @@ export class RabbitMqConsumer implements OnModuleInit {
             },
           });
           await this.handleEvent(eventType, payload);
+          channel.ack(msg);
         } catch (error: any) {
           this.logger.error(`Failed to handle message from ${binding.queue}: ${error.message}`);
-        } finally {
-          channel.ack(msg);
+          channel.nack(msg, false, false);
         }
       });
     }
@@ -64,6 +95,7 @@ export class RabbitMqConsumer implements OnModuleInit {
 
   private async handleEvent(eventType: string, payload: any) {
     const period = payload.period || `${new Date().getFullYear()}-${`${new Date().getMonth() + 1}`.padStart(2, '0')}`;
+    const schoolId = payload.schoolId as string | undefined;
 
     if (eventType.includes('student.enrolled') || eventType.includes('status.changed')) {
       await this.redis.delByPattern('analytics:overview:*');
@@ -86,17 +118,31 @@ export class RabbitMqConsumer implements OnModuleInit {
       if (payload.studentId) await this.redis.delByPattern(`analytics:student:${payload.studentId}:*`);
     }
 
+    if (
+      eventType.includes('assignment.published') ||
+      eventType.includes('quiz.published') ||
+      eventType.includes('submission.graded') ||
+      eventType.includes('quiz.result') ||
+      eventType.includes('assignment.overdue')
+    ) {
+      await this.redis.delByPattern('analytics:elearning:*');
+      if (payload.studentId) await this.redis.delByPattern(`analytics:student:${payload.studentId}:*`);
+    }
+
     const upserts = [
       { name: 'school_enrolment', when: eventType.includes('student') },
       { name: 'pass_rate', when: eventType.includes('academic') },
       { name: 'collection_rate', when: eventType.includes('finance') || eventType.includes('payment') },
+      { name: 'elearning_submissions', when: eventType.includes('submission.graded') || eventType.includes('quiz.result') },
+      { name: 'elearning_content_published', when: eventType.includes('assignment.published') || eventType.includes('quiz.published') },
     ];
 
     for (const item of upserts) {
       if (!item.when) continue;
+      const scope = schoolId ? `school:${schoolId}` : 'school';
       await this.prisma.kpiHistory.upsert({
-        where: { kpiName_scope_period: { kpiName: item.name, scope: 'school', period } },
-        create: { kpiName: item.name, scope: 'school', period, value: Number(payload.value || 0) },
+        where: { kpiName_scope_period: { kpiName: item.name, scope, period } },
+        create: { kpiName: item.name, scope, period, value: Number(payload.value || 0) },
         update: { value: Number(payload.value || 0), recordedAt: new Date() },
       });
     }
