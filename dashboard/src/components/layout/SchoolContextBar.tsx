@@ -26,6 +26,12 @@ export function SchoolContextBar() {
 
   const role = session?.user.role;
   const groupRole = isGroupRole(role);
+  // Where "All Schools (Group)" / "Back to Group" lands, per role. ADMIN has no
+  // /manager access (403) — its group home is the Admin Console.
+  const groupHome = role === 'SUPER_ADMIN' ? '/superadmin'
+    : role === 'HEAD_OF_FINANCE' ? '/finance-group'
+    : role === 'ADMIN' ? '/admin'
+    : '/manager';
   const scopedIds = session?.user.schoolIds ?? [];
   const multiSchoolHead = role === 'HEAD_OF_SCHOOL' && scopedIds.length > 1;
   const showSwitcher = groupRole || multiSchoolHead;
@@ -62,7 +68,7 @@ export function SchoolContextBar() {
             <div className="absolute left-0 top-full z-[60] mt-2 w-80 overflow-hidden rounded-2xl border border-[#d5dde6] bg-white shadow-xl">
               {groupRole && (
                 <button
-                  onClick={() => { setActiveSchool(null); setOpen(false); navigate(role === 'SUPER_ADMIN' ? '/superadmin' : role === 'HEAD_OF_FINANCE' ? '/finance-group' : '/manager/overview'); }}
+                  onClick={() => { setActiveSchool(null); setOpen(false); navigate(role === 'MANAGER' ? '/manager/overview' : groupHome); }}
                   className="flex w-full items-center gap-3 border-b border-[#eef2f6] px-4 py-3 text-left hover:bg-[#eef5f8]"
                 >
                   <Globe2 className="h-5 w-5 text-[#00334f]" />
@@ -99,7 +105,7 @@ export function SchoolContextBar() {
           <div className="flex items-center gap-2 rounded-full bg-[#d59a1b]/15 px-3 py-1.5 text-xs font-black text-[#7a5200]">
             Viewing as Group Owner
             <button
-              onClick={() => { setActiveSchool(null); navigate(role === 'SUPER_ADMIN' ? '/superadmin' : role === 'HEAD_OF_FINANCE' ? '/finance-group' : '/manager'); }}
+              onClick={() => { setActiveSchool(null); navigate(groupHome); }}
               className="flex items-center gap-1 rounded-full bg-[#00334f] px-2.5 py-0.5 text-white transition hover:bg-[#001e30]"
             >
               <Undo2 className="h-3 w-3" /> Back to Group
