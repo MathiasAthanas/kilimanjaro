@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { ChevronDown, Globe2, School as SchoolIcon, Undo2 } from 'lucide-react';
 import { useAuthStore } from '../../lib/auth/authStore';
 import { isGroupRole } from '../../lib/auth/permissions';
@@ -15,7 +15,14 @@ export function SchoolContextBar() {
   const session = useAuthStore((s) => s.session);
   const { activeSchool, setActiveSchool } = useSchoolStore();
   const navigate = useNavigate();
+  const location = useLocation();
   const [open, setOpen] = useState(false);
+
+  // Group-only areas (whole-group dashboards). Entering a school from one of
+  // these lands on the school's home; switching schools while already inside a
+  // school-scoped section (e.g. /admin/users) keeps you on that same section.
+  const GROUP_PREFIXES = ['/superadmin', '/manager', '/finance-group'];
+  const onGroupPage = GROUP_PREFIXES.some((p) => location.pathname.startsWith(p));
 
   const role = session?.user.role;
   const groupRole = isGroupRole(role);
@@ -71,7 +78,9 @@ export function SchoolContextBar() {
                   onClick={() => {
                     setActiveSchool({ id: school.id, name: school.name, code: school.code, type: school.type, gender: school.gender });
                     setOpen(false);
-                    navigate('/principal');
+                    // Only jump to the school home when coming from a group-only
+                    // page; otherwise stay on the current section for the new school.
+                    if (onGroupPage) navigate('/principal');
                   }}
                   className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-[#eef5f8]"
                 >

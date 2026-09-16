@@ -135,6 +135,52 @@ export function Td({ children, className = '' }: { children: ReactNode; classNam
   return <td className={`px-5 py-3.5 font-semibold text-slate-700 ${className}`}>{children}</td>;
 }
 
+/**
+ * Pagination footer for admin tables. `total` is the full (filtered) row count;
+ * the component renders "showing X–Y of total" plus prev/next + numbered pages.
+ */
+export function TablePagination({
+  page, pageSize, total, onPageChange,
+}: {
+  page: number; pageSize: number; total: number; onPageChange: (page: number) => void;
+}) {
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  if (total === 0) return null;
+  const from = (page - 1) * pageSize + 1;
+  const to = Math.min(page * pageSize, total);
+
+  // Compact window of page numbers around the current page.
+  const pages: number[] = [];
+  const start = Math.max(1, Math.min(page - 2, pageCount - 4));
+  const end = Math.min(pageCount, start + 4);
+  for (let p = start; p <= end; p++) pages.push(p);
+
+  const btn = 'inline-flex h-8 min-w-8 items-center justify-center rounded-lg border px-2 text-xs font-black transition disabled:cursor-not-allowed disabled:opacity-40';
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 px-1 py-1">
+      <p className="text-xs font-semibold text-slate-500">
+        Showing <span className="font-black text-slate-700">{from}–{to}</span> of{' '}
+        <span className="font-black text-slate-700">{total}</span>
+      </p>
+      <div className="flex items-center gap-1.5">
+        <button className={`${btn} border-slate-200 bg-white text-slate-600 hover:border-slate-300`} onClick={() => onPageChange(page - 1)} disabled={page <= 1}>Prev</button>
+        {start > 1 && <span className="px-1 text-xs font-black text-slate-400">…</span>}
+        {pages.map((p) => (
+          <button
+            key={p}
+            onClick={() => onPageChange(p)}
+            className={`${btn} ${p === page ? 'border-[#4338CA] bg-[#4338CA] text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'}`}
+          >
+            {p}
+          </button>
+        ))}
+        {end < pageCount && <span className="px-1 text-xs font-black text-slate-400">…</span>}
+        <button className={`${btn} border-slate-200 bg-white text-slate-600 hover:border-slate-300`} onClick={() => onPageChange(page + 1)} disabled={page >= pageCount}>Next</button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Form primitives ──────────────────────────────────────────────────────────
 
 /** Single-line text / date / number / email / tel input */

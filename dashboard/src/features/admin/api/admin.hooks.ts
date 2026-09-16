@@ -1,7 +1,36 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../lib/api/client';
 import { arrayFromApi, dedupeById, payloadOf } from '../../../lib/api/response';
+import { useSchoolStore } from '../../../lib/school/schoolStore';
 import type { AdminStatus } from './adminApi';
+
+/** Key fragment that scopes admin queries to the selected school so switching
+ *  schools refetches (and caches) per school instead of serving stale data. */
+function useActiveSchoolKey() {
+  return useSchoolStore((s) => s.activeSchool?.id ?? '__group__');
+}
+
+/**
+ * Fetch every user matching `params` for the active school by walking the
+ * server's pages. The list endpoint caps `limit` at 100, so a single request
+ * silently drops users in larger schools — we page until the reported total
+ * is collected. The X-Active-School header (added by the api client) scopes
+ * the result to the selected school.
+ */
+async function fetchAllUsers(params: Record<string, unknown> = {}): Promise<unknown[]> {
+  const raw: unknown[] = [];
+  let page = 1;
+  for (;;) {
+    const body = await api.get('/auth/users', { params: { ...params, limit: 100, page } }).then(payloadOf);
+    const items = arrayFromApi(body, ['users']);
+    raw.push(...items);
+    const total = (body as Record<string, unknown> | null)?.total ?? (body as { meta?: { total?: number } } | null)?.meta?.total;
+    if (items.length < 100 || (typeof total === 'number' && raw.length >= total)) break;
+    page += 1;
+    if (page > 200) break; // safety valve
+  }
+  return raw;
+}
 
 type AdminUserRow = {
   id: string;
@@ -250,20 +279,22 @@ export function useAdminDashboard() {
 }
 
 export function useAdminUsers() {
+  const activeSchoolKey = useActiveSchoolKey();
   return useQuery({
-    queryKey: adminKeys.users(),
-    queryFn: () => api.get('/auth/users', { params: { limit: 100 } }).then((r) => toAdminUsers(payloadOf(r))),
+    queryKey: [...adminKeys.users(), activeSchoolKey] as const,
+    queryFn: async () => toAdminUsers(await fetchAllUsers()),
     staleTime: 30_000,
   });
 }
 
 export function useTeachingStaff() {
+  const activeSchoolKey = useActiveSchoolKey();
   return useQuery({
-    queryKey: [...adminKeys.users(), 'teaching-staff'] as const,
+    queryKey: [...adminKeys.users(), 'teaching-staff', activeSchoolKey] as const,
     queryFn: async () => {
       const [teachers, hods] = await Promise.all([
-        api.get('/auth/users', { params: { role: 'TEACHER', isActive: true, limit: 100 } }).then((r) => toAdminUsers(payloadOf(r))),
-        api.get('/auth/users', { params: { role: 'HEAD_OF_DEPARTMENT', isActive: true, limit: 100 } }).then((r) => toAdminUsers(payloadOf(r))),
+        fetchAllUsers({ role: 'TEACHER', isActive: true }).then(toAdminUsers),
+        fetchAllUsers({ role: 'HEAD_OF_DEPARTMENT', isActive: true }).then(toAdminUsers),
       ]);
       const byId = new Map<string, AdminUserRow>();
       [...teachers, ...hods].forEach((user) => byId.set(user.id, user));
@@ -282,8 +313,9 @@ export function useAdminUser(id: string | undefined) {
 }
 
 export function useAdminStudents(params?: Record<string, unknown>) {
+  const activeSchoolKey = useActiveSchoolKey();
   return useQuery({
-    queryKey: adminKeys.students(params),
+    queryKey: [...adminKeys.students(params), activeSchoolKey] as const,
     queryFn: () => api.get('/students', { params }).then((r) => toAdminStudents(payloadOf(r))),
     staleTime: 30_000,
   });

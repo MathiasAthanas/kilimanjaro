@@ -94,7 +94,7 @@ import {
   AdminShell, AdminStatusIndicator, AssessmentTypeEditor, CsvImportZone,
   DangerActionDialog, FeatureToggle, Field, GradingBoundaryEditor,
   NotificationTemplateEditor,
-  SelectField, Td,
+  SelectField, TablePagination, Td,
 } from '../components/AdminConsole';
 import { assessmentWeightsTotal, roleRisk } from '../utils/adminValidation';
 import { DataError } from '../../../components/feedback/DataError';
@@ -184,6 +184,8 @@ function UsersTable() {
   const resetPwMutation = useResetUserPwMutation();
   const [pending, setPending] = useState<Record<string, string>>({});
   const [userSearch, setUserSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 20;
   const [resetResult, setResetResult] = useState<{ name: string; email: string; password: string } | null>(null);
 
   const handleToggle = (id: string, currentStatus: string) => {
@@ -223,6 +225,13 @@ function UsersTable() {
       })
     : apiUsers;
 
+  // Reset to first page whenever the filter changes or the result set shrinks
+  // below the current page (e.g. after switching schools).
+  useEffect(() => { setPage(1); }, [userSearch]);
+  const pageCount = Math.max(1, Math.ceil(visibleUsers.length / PAGE_SIZE));
+  useEffect(() => { if (page > pageCount) setPage(1); }, [page, pageCount]);
+  const pageUsers = visibleUsers.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
   if (isLoading) return <SkeletonTable cols={7} />;
   if (isError) return <DataError onRetry={refetch} />;
   if (!apiUsers.length) return <EmptyState title="No users found" description="Create the first user account to get started." />;
@@ -248,7 +257,7 @@ function UsersTable() {
         </div>
       )}
       <AdminDataTable columns={['Name', 'Email', 'Role', 'Status', 'Linked Entity', 'Last Login', 'Actions']} onSearch={setUserSearch}>
-        {visibleUsers.map((user) => (
+        {pageUsers.map((user) => (
           <tr key={user.id} className="hover:bg-slate-50">
             <Td>
               <p className="font-black text-slate-900">{user.name}</p>
@@ -286,6 +295,7 @@ function UsersTable() {
           </tr>
         ))}
       </AdminDataTable>
+      <TablePagination page={page} pageSize={PAGE_SIZE} total={visibleUsers.length} onPageChange={setPage} />
     </div>
   );
 }
