@@ -91,6 +91,7 @@ function toAdminStudents(value: unknown) {
     const s = raw as Record<string, unknown>;
     const fullName = [s.firstName, s.lastName].filter(Boolean).join(' ').trim();
     const classObj = s.class as Record<string, unknown> | undefined;
+    const schoolObj = s.school as Record<string, unknown> | undefined;
     // guardians may be a count (number) or an array — normalise to count
     const guardiansRaw = s.guardians ?? s.guardianCount ?? s.parentsCount ?? 0;
     const guardiansCount = Array.isArray(guardiansRaw) ? guardiansRaw.length : Number(guardiansRaw ?? 0);
@@ -100,6 +101,7 @@ function toAdminStudents(value: unknown) {
       registration: String(s.registrationNumber ?? s.registration ?? s.admissionNumber ?? ''),
       name: String(s.name ?? s.fullName ?? fullName ?? ''),
       className: String(classObj?.name ?? s.className ?? s.class_name ?? s.currentClass ?? ''),
+      schoolName: String(schoolObj?.name ?? s.schoolName ?? s.school_name ?? ''),
       stage: String(s.educationStage ?? s.stage ?? s.level ?? ''),
       status: String(s.status ?? (s.isActive === false ? 'INACTIVE' : 'ACTIVE')),
       guardians: guardiansCount,
@@ -309,6 +311,7 @@ export function useAdminUser(id: string | undefined) {
     queryKey: adminKeys.user(id ?? ''),
     queryFn: () => api.get(`/auth/users/${id}`).then(payloadOf),
     enabled: !!id,
+    retry: false,
   });
 }
 
@@ -317,6 +320,22 @@ export function useAdminStudents(params?: Record<string, unknown>) {
   return useQuery({
     queryKey: [...adminKeys.students(params), activeSchoolKey] as const,
     queryFn: () => api.get('/students', { params }).then((r) => toAdminStudents(payloadOf(r))),
+    staleTime: 30_000,
+  });
+}
+
+export function useAdminStudentsPage(params?: Record<string, unknown>) {
+  const activeSchoolKey = useActiveSchoolKey();
+  return useQuery({
+    queryKey: [...adminKeys.students(params), 'page', activeSchoolKey] as const,
+    queryFn: () =>
+      api.get('/students', { params }).then((r) => {
+        const payload = payloadOf(r) as Record<string, unknown>;
+        return {
+          students: toAdminStudents(payload),
+          meta: payload.meta as { page?: number; limit?: number; total?: number; totalPages?: number } | undefined,
+        };
+      }),
     staleTime: 30_000,
   });
 }
@@ -1274,9 +1293,10 @@ export function useStudentAttendance(id: string | undefined) {
   return useQuery({
     queryKey: ['admin', 'student', id, 'attendance'],
     queryFn: () => id
-      ? api.get(`/students/${id}/attendance`).then((r) => r.data?.data ?? r.data ?? null).catch(() => null)
+      ? api.get(`/students/attendance/summary/${id}`).then((r) => r.data?.data ?? r.data ?? null).catch(() => null)
       : Promise.resolve(null),
     enabled: !!id,
+    retry: false,
   });
 }
 
@@ -1284,25 +1304,45 @@ export function useStudentPerformance(id: string | undefined) {
   return useQuery({
     queryKey: ['admin', 'student', id, 'performance'],
     queryFn: () => id
-      ? api.get(`/students/${id}/performance`).then((r) => {
+      ? api.get(`/students/performance/${id}`).then((r) => {
           const d = r.data?.data ?? r.data;
-          return Array.isArray(d) ? d : [];
+          if (Array.isArray(d)) return d;
+          if (Array.isArray(d?.snapshots)) return d.snapshots;
+          if (Array.isArray(d?.trends)) return d.trends;
+          return [];
         }).catch(() => [] as unknown[])
       : Promise.resolve([] as unknown[]),
     enabled: !!id,
+    retry: false,
   });
 }
 
 export function useStudentFinance(id: string | undefined) {
   return useQuery({
     queryKey: ['admin', 'student', id, 'finance'],
-    queryFn: () => id
-      ? api.get(`/students/${id}/finance`).then((r) => {
-          const d = r.data?.data ?? r.data;
-          return Array.isArray(d) ? d : [];
-        }).catch(() => [] as unknown[])
-      : Promise.resolve([] as unknown[]),
+    queryFn: async () => {
+      if (!id) return null;
+      try {
+        const invoicesPayload = await api.get(`/finance/invoices/student/${id}`).then((r) => r.data?.data ?? r.data);
+        const invoices = Array.isArray(invoicesPayload) ? invoicesPayload : arrayFromApi(invoicesPayload, ['items', 'invoices']);
+        const balance = invoices.reduce((sum, inv) => sum + Number((inv as Record<string, unknown>).outstandingBalance ?? 0), 0);
+        const totalPaid = invoices.reduce((sum, inv) => sum + Number((inv as Record<string, unknown>).paidAmount ?? 0), 0);
+        return {
+          balance,
+          totalPaid,
+          transactions: invoices.map((inv) => ({
+            date: (inv as Record<string, unknown>).dueDate ?? (inv as Record<string, unknown>).createdAt,
+            description: (inv as Record<string, unknown>).invoiceNumber ?? 'Invoice',
+            amount: (inv as Record<string, unknown>).outstandingBalance ?? (inv as Record<string, unknown>).totalAmount ?? 0,
+            type: 'charge',
+          })),
+        };
+      } catch {
+        return null;
+      }
+    },
     enabled: !!id,
+    retry: false,
   });
 }
 

@@ -28,6 +28,24 @@ The **core of all six focus areas is implemented, tested locally, and pushed to 
 - Not-yet-exercised local tests: O-Level import, O-Level/A-Level class-page views, delete-blocked-for-guardian.
 - Backend integration test suites use old demo credentials (DB was reseeded) and need their fixtures updated to pass in this environment.
 
+## Latest Local Verification Before Production Deploy (2026-09-24)
+
+- [x] Class import template download added for the class-first importer.
+- [x] Class import commit timeout raised to 120 seconds; preview timeout raised to 30 seconds.
+- [x] Student-service RabbitMQ reconnect attempts throttled so a broker outage does not slow every imported row.
+- [x] Real Kilimanjaro Excel files parsed locally; headers match importer expectations.
+- [x] `Class 2 - 2026 - Class list(1).xlsx` imported locally into `Class 2 A`: 82/82 imported in 11.5 seconds.
+- [x] Admin dashboard student metric fixed to read `meta.total` instead of the first page of 20 rows.
+- [x] Admin dashboard user metric clarified to count all account roles, including student and parent portal accounts.
+- [x] Student profile optional sub-resource calls updated to existing backend endpoints and no longer retry 404/403 optional data.
+- [x] Dashboard TypeScript check passed.
+- [x] Dashboard production build passed.
+- [x] Student-service tests passed.
+- [ ] Production DB backup taken before deployment.
+- [ ] Production code deployment completed.
+- [ ] Production health check passed after deployment.
+- [ ] Production admin dashboard verified after deployment.
+
 ## Super Admin School Editing
 
 Issue: school names cannot be edited reliably from the super admin school management panel; editing currently returns errors.

@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import * as XLSX from 'xlsx';
-import { AlertTriangle, CheckCircle2, ChevronDown, FileSpreadsheet, Upload, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ChevronDown, Download, FileSpreadsheet, Upload, X } from 'lucide-react';
 import { api } from '../../../lib/api/client';
 import { payloadOf, arrayFromApi } from '../../../lib/api/response';
 import { useSchoolStore } from '../../../lib/school/schoolStore';
@@ -103,6 +103,31 @@ async function parseFile(file: File): Promise<{ rows: ParsedRow[]; headers: stri
   return rowsFromMatrix(matrix as unknown[][]);
 }
 
+function safeFilePart(value: string): string {
+  return value.trim().replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '').toLowerCase() || 'class';
+}
+
+function downloadClassTemplate(selectedClass: ClassRow) {
+  const stream = selectedClass.combinationCode || selectedClass.stream || '';
+  const rows = [
+    ['Admission Number', 'Name', 'Gender', 'Contacts', 'Date of Birth', 'Stream'],
+    ['001', 'Amina Juma Mwanga', 'FEMALE', '+255712345678', '2010-03-15', stream],
+  ];
+  const guide = [
+    ['Column', 'How to fill'],
+    ['Admission Number', 'Optional legacy/admission number from the school list. Leave blank if none.'],
+    ['Name', 'Required. Full student name. The last name becomes the initial password in uppercase.'],
+    ['Gender', 'MALE or FEMALE. Can be blank only when the selected school is gender-specific.'],
+    ['Contacts', 'Optional guardian/parent phone number. Include country code where possible.'],
+    ['Date of Birth', 'Optional. Use YYYY-MM-DD, for example 2010-03-15.'],
+    ['Stream', 'Optional. Use this to cross-check the selected stream/combination.'],
+  ];
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(rows), 'Students');
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(guide), 'Guide');
+  XLSX.writeFile(workbook, `${safeFilePart(selectedClass.name)}-student-import-template.xlsx`);
+}
+
 // ── Data hook: classes for the active school ────────────────────────────────────
 
 function useImportClasses() {
@@ -170,6 +195,8 @@ export function ClassImportPage() {
         classId: selectedClass.id,
         commit,
         rows: parsed.rows,
+      }, {
+        timeout: commit ? 120_000 : 30_000,
       });
       const rep = payloadOf(resp) as ImportReport;
       setReport(rep);
@@ -250,6 +277,9 @@ export function ClassImportPage() {
           <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">Step 2 · Upload class list</p>
             <p className="mt-1 text-xs font-semibold text-slate-500">Accepts .xlsx or .csv. Recognised columns: Admission Number, Name, Stream, Contacts, Gender, Date of Birth. Only Name is required.</p>
+            <Button variant="secondary" className="mt-3 rounded-xl px-4 py-2 text-sm" onClick={() => downloadClassTemplate(selectedClass)}>
+              <Download className="h-4 w-4" /> Download Template
+            </Button>
             <div
               onClick={() => fileRef.current?.click()}
               className="mt-4 flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 px-6 py-8 text-center transition hover:border-indigo-300 hover:bg-indigo-50/40"

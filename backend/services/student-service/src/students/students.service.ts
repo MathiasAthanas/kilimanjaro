@@ -96,6 +96,7 @@ export class StudentsService {
 
   private buildStudentProfileInclude(): Prisma.StudentInclude {
     return {
+      school: true,
       enrolments: {
         where: { isActive: true },
         include: {

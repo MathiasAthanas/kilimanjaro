@@ -16,6 +16,7 @@ import {
   useAdminClasses,
   useAdminReportJobs,
   useAdminStudents,
+  useAdminStudentsPage,
   useAdminSubjects,
   useAdminUsers,
   useAcademicYears,
@@ -113,12 +114,15 @@ import { SkeletonTable } from '../../../components/common/SkeletonTable';
 
 export function AdminHomePage() {
   const { data: apiServiceHealth = [] as typeof serviceHealth } = useServiceHealth() as unknown as { data: typeof serviceHealth };
-  const { data: apiUsers = [] as typeof adminUsers } = useTeachingStaff() as unknown as { data: typeof adminUsers };
-  const { data: apiStudents = [] as typeof adminStudents } = useAdminStudents() as unknown as { data: typeof adminStudents };
+  const { data: apiUsers = [] as typeof adminUsers } = useAdminUsers() as unknown as { data: typeof adminUsers };
+  const { data: studentPage } = useAdminStudentsPage({ page: 1, limit: 1, status: 'ACTIVE' }) as unknown as {
+    data?: { students: typeof adminStudents; meta?: { total?: number } };
+  };
   const { data: apiAudit = [] as typeof adminAuditEvents } = useAdminAuditEvents() as unknown as { data: typeof adminAuditEvents };
   const { data: apiLogs = [] as typeof notificationLogs } = useNotificationLogs() as unknown as { data: typeof notificationLogs };
   const { data: apiClasses = [] as typeof adminClasses } = useAdminClasses() as unknown as { data: typeof adminClasses };
 
+  const studentTotal = Number(studentPage?.meta?.total ?? studentPage?.students?.length ?? 0);
   const lockedCount = apiUsers.filter((u: { status: string }) => u.status === 'LOCKED').length;
   const failedSms = apiLogs.filter((l: { status: string; channel: string }) => l.status === 'FAILED' && l.channel === 'SMS').length;
 
@@ -126,7 +130,7 @@ export function AdminHomePage() {
     <AdminShell title="System Control Center" eyebrow="Admin operations console">
       <AdminMetricStrip items={[
         { label: 'Users',      value: String(apiUsers.length),    detail: 'All roles',            tone: 'blue'  },
-        { label: 'Students',   value: String(apiStudents.length), detail: 'Active registry',       tone: 'green' },
+        { label: 'Students',   value: String(studentTotal),       detail: 'Active registry',       tone: 'green' },
         { label: 'Locked',     value: String(lockedCount),        detail: 'Needs unlock',          tone: 'amber' },
         { label: 'Classes',    value: String(apiClasses.length),  detail: 'Active academic year',  tone: 'blue'  },
         { label: 'Audit',      value: String(apiAudit.length),    detail: 'Recent events',         tone: 'rose'  },
@@ -138,7 +142,7 @@ export function AdminHomePage() {
           <p className="text-[11px] font-black uppercase tracking-[0.28em] text-slate-400">Quick Access</p>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <AdminQuickCard title="Create User"            detail="Role-bound account with linked profile."          to="/admin/users/create"            icon="shield" />
-            <AdminQuickCard title="Enrol Student"          detail="Multi-field admission form + bulk CSV import."     to="/admin/students/enrol"                        />
+            <AdminQuickCard title="Enrol Student"          detail="Manual enrolment and class-list import."          to="/admin/students/enrol"                        />
             <AdminQuickCard title="Academic Setup"         detail="Years, terms, classes, subjects, grading."        to="/admin/academic/setup"                        />
             <AdminQuickCard title="Notification Templates" detail="Edit and preview SMS / email / push templates."   to="/admin/notifications/templates"               />
             <AdminQuickCard title="Run Engine"             detail="Performance engine thresholds and manual run."    to="/admin/performance/engine"                    />
@@ -3227,44 +3231,78 @@ export function StudentsPage({ basePath = '/admin' }: { basePath?: string } = {}
       eyebrow="Registry and lifecycle"
       subtitle={subtitle}
       action={
-        <Button className="rounded-xl bg-[#4338CA]" onClick={() => navigate(`${basePath}/students/enrol`)}>
-          <UserPlus className="h-4 w-4" /> Enrol Student
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="secondary" className="rounded-xl" onClick={() => navigate(`${basePath}/students/import`)}>
+            <Download className="h-4 w-4" /> Import Students
+          </Button>
+          <Button className="rounded-xl bg-[#4338CA]" onClick={() => navigate(`${basePath}/students/enrol`)}>
+            <UserPlus className="h-4 w-4" /> Enrol Student
+          </Button>
+        </div>
       }
     >
-      <CsvImportZone entity="student" />
       <StudentsTable basePath={basePath} />
     </AdminShell>
   );
 }
 
 function StudentsTable({ basePath = '/admin' }: { basePath?: string }) {
-  const { data: apiStudents = [] as typeof adminStudents, isLoading, isError, refetch } = useAdminStudents() as unknown as { data: typeof adminStudents; isLoading: boolean; isError: boolean; refetch: () => void };
-  if (isLoading) return <SkeletonTable cols={9} />;
+  const [page, setPage] = useState(1);
+  const limit = 20;
+  const { data, isLoading, isError, refetch } = useAdminStudentsPage({ page, limit }) as unknown as {
+    data?: { students: typeof adminStudents; meta?: { page?: number; limit?: number; total?: number; totalPages?: number } };
+    isLoading: boolean;
+    isError: boolean;
+    refetch: () => void;
+  };
+  const apiStudents = data?.students ?? [];
+  const meta = data?.meta;
+  const total = Number(meta?.total ?? apiStudents.length);
+  const totalPages = Math.max(1, Number(meta?.totalPages ?? Math.ceil(total / limit)));
+  const from = total === 0 ? 0 : (page - 1) * limit + 1;
+  const to = Math.min(total, (page - 1) * limit + apiStudents.length);
+  if (isLoading) return <SkeletonTable cols={10} />;
   if (isError) return <DataError onRetry={refetch} />;
   if (!apiStudents.length) return <EmptyState title="No students enrolled" description="Enrol students individually or import a CSV file." />;
   return (
-    <AdminDataTable columns={['Reg. No.', 'Name', 'Class', 'Stage', 'Status', 'Guardians', 'Balance', 'Risk', 'Actions']}>
-      {apiStudents.map((student) => (
-        <tr key={student.id} className="hover:bg-slate-50">
-          <Td className="font-mono text-xs text-slate-500">{student.registration}</Td>
-          <Td><p className="font-black text-slate-900">{student.name}</p></Td>
-          <Td>{student.className}</Td>
-          <Td><Badge tone={student.stage === 'Primary' ? 'emerald' : student.stage === 'A-Level' ? 'amber' : 'blue'}>{student.stage}</Badge></Td>
-          <Td><Badge tone="emerald">{student.status}</Badge></Td>
-          <Td>{student.guardians}</Td>
-          <Td className="font-mono text-xs">TZS {Number(student.balance ?? 0).toLocaleString('en-US')}</Td>
-          <Td>
-            <Badge tone={student.risk === 'CRITICAL' ? 'rose' : student.risk === 'WATCH' ? 'amber' : 'emerald'}>
-              {student.risk}
-            </Badge>
-          </Td>
-          <Td>
-            <NavLink className="text-xs font-black text-[#4338CA] hover:underline" to={`${basePath}/students/${student.id}`}>Open</NavLink>
-          </Td>
-        </tr>
-      ))}
-    </AdminDataTable>
+    <div className="space-y-3">
+      <AdminDataTable columns={['Reg. No.', 'Name', 'School', 'Class', 'Stage', 'Status', 'Guardians', 'Balance', 'Risk', 'Actions']}>
+        {apiStudents.map((student) => (
+          <tr key={student.id} className="hover:bg-slate-50">
+            <Td className="font-mono text-xs text-slate-500">{student.registration}</Td>
+            <Td><p className="font-black text-slate-900">{student.name}</p></Td>
+            <Td>{(student as any).schoolName || <span className="text-slate-400">Unassigned</span>}</Td>
+            <Td>{student.className || <span className="text-slate-400">No active class</span>}</Td>
+            <Td><Badge tone={student.stage === 'Primary' ? 'emerald' : student.stage === 'A-Level' ? 'amber' : 'blue'}>{student.stage}</Badge></Td>
+            <Td><Badge tone="emerald">{student.status}</Badge></Td>
+            <Td>{student.guardians}</Td>
+            <Td className="font-mono text-xs">TZS {Number(student.balance ?? 0).toLocaleString('en-US')}</Td>
+            <Td>
+              <Badge tone={student.risk === 'CRITICAL' ? 'rose' : student.risk === 'WATCH' ? 'amber' : 'emerald'}>
+                {student.risk}
+              </Badge>
+            </Td>
+            <Td>
+              <NavLink className="text-xs font-black text-[#4338CA] hover:underline" to={`${basePath}/students/${student.id}`}>Open</NavLink>
+            </Td>
+          </tr>
+        ))}
+      </AdminDataTable>
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
+        <p className="text-xs font-semibold text-slate-500">
+          Showing {from}-{to} of {total} students
+        </p>
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" className="rounded-lg px-3 py-1.5 text-xs" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
+            Previous
+          </Button>
+          <span className="text-xs font-black text-slate-600">Page {page} of {totalPages}</span>
+          <Button variant="secondary" className="rounded-lg px-3 py-1.5 text-xs" disabled={page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>
+            Next
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
 

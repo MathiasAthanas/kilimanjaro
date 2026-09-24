@@ -7,6 +7,8 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(RabbitMqService.name);
   private connection?: any;
   private channel?: amqplib.Channel;
+  private lastConnectAttempt = 0;
+  private readonly reconnectCooldownMs = 5000;
 
   constructor(private readonly configService: ConfigService) {}
 
@@ -15,6 +17,11 @@ export class RabbitMqService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async connect(): Promise<void> {
+    const now = Date.now();
+    if (!this.connection && now - this.lastConnectAttempt < this.reconnectCooldownMs) {
+      return;
+    }
+    this.lastConnectAttempt = now;
     const url = this.configService.get<string>('RABBITMQ_URL', 'amqp://localhost:5672');
     try {
       this.connection = await amqplib.connect(url);
