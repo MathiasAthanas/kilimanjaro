@@ -44,6 +44,10 @@ export class UpdateSchoolDto {
   name?: string;
 
   @IsOptional()
+  @IsString()
+  code?: string;
+
+  @IsOptional()
   @IsEnum(SchoolType)
   type?: SchoolType;
 

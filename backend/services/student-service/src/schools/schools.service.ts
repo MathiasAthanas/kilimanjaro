@@ -70,6 +70,7 @@ export class SchoolsService {
   async findById(id: string, user?: RequestUser) {
     const school = await this.prisma.school.findUnique({ where: { id } });
     if (!school) throw new NotFoundException('School not found');
+
     if (!schoolInScope(user, id)) throw new NotFoundException('School not found');
     return school;
   }
@@ -80,6 +81,12 @@ export class SchoolsService {
 
     // Gender narrowing guard (Doc 05 §2): warn callers when enrolled students
     // of the excluded gender exist; the UI must send acknowledgeNarrowing.
+    const code = dto.code?.trim().toUpperCase();
+    if (code && code !== school.code) {
+      const existing = await this.prisma.school.findUnique({ where: { code } });
+      if (existing && existing.id !== id) throw new ConflictException(`School code ${code} already exists`);
+    }
+
     if (dto.gender && dto.gender !== SchoolGender.BOTH && dto.gender !== school.gender) {
       const excluded = dto.gender === SchoolGender.MALE ? Gender.FEMALE : Gender.MALE;
       const affected = await this.prisma.student.count({
@@ -96,7 +103,8 @@ export class SchoolsService {
     const updated = await this.prisma.school.update({
       where: { id },
       data: {
-        name: dto.name,
+        name: dto.name?.trim(),
+        code,
         type: dto.type,
         gender: dto.gender,
         motto: dto.motto,
