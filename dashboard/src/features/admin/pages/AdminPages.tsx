@@ -43,6 +43,7 @@ import {
   useBulkPromoteMutation,
   useCreateCombinationMutation,
   useDeleteCombinationMutation,
+  useSeedPredefinedCombinationsMutation,
   useCreateSubjectMutation,
   useUpdateUserMutation,
   useRunEngineAdminMutation,
@@ -1532,6 +1533,7 @@ export function ClassesPage() {
   const createClassPathwayMutation = useCreateClassPathwayMutation();
   const createCombinationMutation = useCreateCombinationMutation();
   const deleteCombinationMutation = useDeleteCombinationMutation();
+  const seedCombinationsMutation = useSeedPredefinedCombinationsMutation();
   const [editingPathwayId, setEditingPathwayId] = useState<string | null>(null);
   const [pathwayEdits, setPathwayEdits] = useState<Record<string, { toClassId: string; transitionType: string; note: string }>>({});
   const [editingClassId, setEditingClassId] = useState<string | null>(null);
@@ -1766,12 +1768,19 @@ export function ClassesPage() {
       toast('A class with this stage, level, stream, and year already exists.', 'warning');
       return;
     }
+    const isAlevel = classForm.educationStage === 'A_LEVEL';
+    const matchedCombo = isAlevel
+      ? (apiCombinations as any[]).find((c) => String(c.code ?? '').toUpperCase() === String(classForm.stream ?? '').toUpperCase())
+      : undefined;
     createClassMutation.mutate({
       name: className,
       level: Number(classForm.level),
       stream: classForm.stream,
       educationStage: classForm.educationStage,
       curriculumCode: classForm.curriculumCode,
+      // A-Level: attach the selected subject combination to the class.
+      combinationCode: isAlevel ? String(classForm.stream ?? '').toUpperCase() : undefined,
+      combinationId: matchedCombo ? String(matchedCombo.id) : undefined,
       terminalYear,
       academicYearId,
       classTeacherId,
@@ -2166,8 +2175,30 @@ export function ClassesPage() {
 
           {/* â"€â"€ A-Level Combinations â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ */}
           <div className="rounded-[28px] border border-amber-100 bg-amber-50 p-5">
-            <p className="text-[11px] font-black uppercase tracking-[0.24em] text-amber-700">A-Level Combinations</p>
-            <p className="mt-1 text-xs font-semibold text-amber-700/70">Combinations appear in the Stream dropdown when A-Level is selected.</p>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-black uppercase tracking-[0.24em] text-amber-700">A-Level Combinations</p>
+                <p className="mt-1 text-xs font-semibold text-amber-700/70">Combinations appear in the Stream dropdown when A-Level is selected.</p>
+              </div>
+              <button
+                type="button"
+                disabled={seedCombinationsMutation.isPending}
+                onClick={() => {
+                  const academicYearId = classForm.academicYearId || String(currentYear?.id ?? '');
+                  if (!academicYearId) { toast('Select an academic year in the Class Wizard first.', 'warning'); return; }
+                  seedCombinationsMutation.mutate({ academicYearId }, {
+                    onSuccess: (res: any) => {
+                      const created = res?.created ?? 0; const skipped = res?.skipped ?? 0;
+                      toast(`Seeded ${created} predefined combination${created !== 1 ? 's' : ''}${skipped ? ` (${skipped} already existed)` : ''}.`, 'success');
+                    },
+                    onError: (e: any) => toast(e?.response?.data?.message ?? e?.message ?? 'Failed to seed combinations', 'error'),
+                  });
+                }}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-amber-600 px-3 py-2 text-xs font-black text-white transition hover:bg-amber-700 disabled:opacity-50"
+              >
+                <Plus className="h-3.5 w-3.5" /> {seedCombinationsMutation.isPending ? 'Seeding…' : 'Seed 11 predefined'}
+              </button>
+            </div>
             <div className="mt-4 space-y-3 rounded-2xl bg-white p-4 shadow-sm">
               {/* Code */}
               <div>

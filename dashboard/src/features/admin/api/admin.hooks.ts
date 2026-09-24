@@ -840,6 +840,16 @@ export function useUpdateCombinationMutation() {
   });
 }
 
+/** Seed the 11 predefined A-Level combinations for an academic year (idempotent). */
+export function useSeedPredefinedCombinationsMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { academicYearId: string; codes?: string[] }) =>
+      api.post('/academics/subject-combinations/seed-predefined', payload).then((r) => r.data?.data ?? r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: adminKeys.combinations() }),
+  });
+}
+
 export function useDeleteCombinationMutation() {
   const qc = useQueryClient();
   return useMutation({
