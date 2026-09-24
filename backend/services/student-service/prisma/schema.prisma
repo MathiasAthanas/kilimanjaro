@@ -322,7 +322,7 @@ model Class {
   pathwayTo      ClassPathway[] @relation("PathwayToClass")
   applicants     Applicant[]
 
-  @@unique([name, stream, academicYearId])
+  @@unique([schoolId, name, stream, academicYearId])
   @@index([educationStage, level, academicYearId])
   @@schema("students")
 }

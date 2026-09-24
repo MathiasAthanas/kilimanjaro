@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RequestUser } from '../common/interfaces/request-user.interface';
-import { assertSchoolInScope, schoolScopeFilter } from '../common/helpers/school-scope.helper';
+import { assertSchoolInScope, resolveWriteSchoolId, schoolScopeFilter } from '../common/helpers/school-scope.helper';
 import { CreateClassDto } from './dto/create-class.dto';
 import { CreateClassPathwayDto } from './dto/create-class-pathway.dto';
 import { CreateAcademicYearDto } from './dto/create-academic-year.dto';
@@ -32,10 +32,17 @@ export class ClassesService {
     }
   }
 
-  async createClass(dto: CreateClassDto): Promise<unknown> {
+  async createClass(dto: CreateClassDto, user?: RequestUser): Promise<unknown> {
     this.validateClassShape(dto);
+    // Every class belongs to the actor's selected/in-scope school so student
+    // imports and rosters can derive schoolId from the class reliably.
+    const schoolId = resolveWriteSchoolId(user);
+    if (!schoolId) {
+      throw new BadRequestException('Select a school before creating a class');
+    }
     return this.prisma.class.create({
       data: {
+        schoolId,
         name: dto.name,
         level: dto.level,
         stream: dto.stream,

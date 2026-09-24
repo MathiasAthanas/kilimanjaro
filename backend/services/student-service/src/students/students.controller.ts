@@ -15,6 +15,8 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { RequestUser } from '../common/interfaces/request-user.interface';
 import { CreateStudentDto } from './dto/create-student.dto';
+import { ImportStudentsDto } from './dto/import-students.dto';
+import { StudentImportService } from './import/student-import.service';
 import { ListStudentsDto } from './dto/list-students.dto';
 import { UpdateStudentDto } from './dto/update-student.dto';
 import { ChangeStatusDto } from './dto/change-status.dto';
@@ -29,6 +31,7 @@ import { AccessControlService } from '../common/helpers/access-control.service';
 export class StudentsController {
   constructor(
     private readonly studentsService: StudentsService,
+    private readonly studentImportService: StudentImportService,
     private readonly accessControl: AccessControlService,
   ) {}
 
@@ -47,6 +50,13 @@ export class StudentsController {
   @ApiResponse({ status: 201, description: 'Student enrolled successfully' })
   async create(@Body() dto: CreateStudentDto, @CurrentUser() user?: RequestUser) {
     return this.studentsService.create(dto, user?.id || 'system', user);
+  }
+
+  @Post('import')
+  @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN', 'ADMISSIONS')
+  @ApiOperation({ summary: 'Class-first bulk import (preview or commit) with validation' })
+  async import(@Body() dto: ImportStudentsDto, @CurrentUser() user?: RequestUser) {
+    return this.studentImportService.run(dto, user?.id || 'system', user);
   }
 
   @Get('stats')

@@ -20,8 +20,8 @@ export class ClassesController {
   @Post('classes')
   @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN')
   @ApiOperation({ summary: 'Create class' })
-  async createClass(@Body() dto: CreateClassDto) {
-    return this.classesService.createClass(dto);
+  async createClass(@Body() dto: CreateClassDto, @CurrentUser() user?: RequestUser) {
+    return this.classesService.createClass(dto, user);
   }
 
   @Patch('classes/:classId')
