@@ -341,6 +341,7 @@ const adminSections: SidebarSection[] = [
       { to: '/admin/users',         icon: Users,        label: 'Users',          end: true },
       { to: '/admin/users/create',  icon: UserPlus,     label: 'Register User'             },
       { to: '/admin/students',      icon: GraduationCap,label: 'Students',       end: true },
+      { to: '/admin/students/import', icon: Upload,     label: 'Import Students', end: true },
       { to: '/admin/import',        icon: Upload,       label: 'Bulk Import',    end: true },
       { to: '/admin/academic/setup',icon: BookOpen,     label: 'Academic Setup'            },
       { to: '/admin/classes',       icon: Landmark,     label: 'Classes',        end: true },

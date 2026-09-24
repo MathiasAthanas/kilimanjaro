@@ -109,6 +109,7 @@ import {
   CreateAnnouncementAdminPage,
   DepartmentsPage,
 } from '../features/admin/pages/AdminPages';
+import { ClassImportPage } from '../features/admin/pages/ClassImportPage';
 import {
   TimetableHubPage,
   VenuesPage,
@@ -531,6 +532,7 @@ export const router = createBrowserRouter([
       { path: '/admin/grading/create', element: <CreateGradingScalePage /> },
       { path: '/admin/assessment-types', element: <AssessmentTypesPage /> },
       { path: '/admin/students', element: <StudentsPage /> },
+      { path: '/admin/students/import', element: <ClassImportPage /> },
       { path: '/admin/students/enrol', element: <EnrolStudentPage /> },
       { path: '/admin/students/:id', element: <StudentAdminProfilePage /> },
       { path: '/admin/finance/fee-categories', element: <AdminFeeCategoriesPage /> },
