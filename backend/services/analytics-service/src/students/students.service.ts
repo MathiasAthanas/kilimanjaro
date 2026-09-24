@@ -211,7 +211,7 @@ export class StudentsService {
         fullName: `${student.firstName} ${student.lastName}`,
         gender: student.gender,
         dateOfBirth: student.dateOfBirth,
-        age: Math.max(0, new Date().getFullYear() - student.dateOfBirth.getFullYear()),
+        age: student.dateOfBirth ? Math.max(0, new Date().getFullYear() - student.dateOfBirth.getFullYear()) : null,
         nationality: student.nationality,
         admissionDate: student.admissionDate,
         status: student.status,

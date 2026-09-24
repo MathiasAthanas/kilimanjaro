@@ -45,8 +45,10 @@ export class CreateStudentDto {
   @IsNotEmpty()
   lastName!: string;
 
+  /// Optional for legacy imports where DOB is not yet known.
+  @IsOptional()
   @IsDateString()
-  dateOfBirth!: string;
+  dateOfBirth?: string;
 
   @IsEnum(Gender)
   gender!: Gender;
@@ -64,8 +66,14 @@ export class CreateStudentDto {
   @IsString()
   academicYearId!: string;
 
+  /// Legacy/external admission number carried from a school's class list.
+  @IsOptional()
+  @IsString()
+  legacyAdmissionNumber?: string;
+
+  @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => CreateStudentGuardianDto)
-  guardians!: CreateStudentGuardianDto[];
+  guardians?: CreateStudentGuardianDto[];
 }

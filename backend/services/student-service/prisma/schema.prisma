@@ -187,10 +187,14 @@ model Student {
   school             School?               @relation(fields: [schoolId], references: [id])
   registrationNumber String                @unique
   authUserId         String                @unique
+  /// Legacy/external admission number carried over from a school's existing
+  /// class lists. Optional; uniqueness is enforced per-school in import logic.
+  legacyAdmissionNumber String?
   firstName          String
   middleName         String?
   lastName           String
-  dateOfBirth        DateTime
+  /// Nullable so legacy imports can enrol students whose DOB is not yet known.
+  dateOfBirth        DateTime?
   gender             Gender
   nationality        String                @default("Tanzanian")
   profilePhotoUrl    String?
@@ -218,6 +222,7 @@ model Student {
   pairingsAsStudent  PeerPairing[]         @relation("PairingsStudent")
   pairingsAsPeer     PeerPairing[]         @relation("PairingsPeer")
 
+  @@index([schoolId, legacyAdmissionNumber])
   @@schema("students")
 }
 
@@ -297,6 +302,11 @@ model Class {
   stream         String?
   educationStage EducationStage @default(O_LEVEL)
   curriculumCode String?
+  /// A-Level subject combination attached to this class (e.g. HGE, PCB).
+  /// `combinationCode` is the human code; `combinationId` mirrors the
+  /// academic-service SubjectCombination id. Both null for non-combination classes.
+  combinationCode String?
+  combinationId   String?
   terminalYear   Boolean  @default(false)
   sortOrder      Int?
   academicYearId String

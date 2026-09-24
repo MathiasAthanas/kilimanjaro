@@ -147,7 +147,8 @@ export class StudentsService {
           firstName: dto.firstName,
           middleName: dto.middleName,
           lastName: dto.lastName,
-          dateOfBirth: new Date(dto.dateOfBirth),
+          legacyAdmissionNumber: dto.legacyAdmissionNumber?.trim() || null,
+          dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : null,
           gender: dto.gender,
           nationality: dto.nationality || 'Tanzanian',
           admissionDate,
@@ -165,7 +166,7 @@ export class StudentsService {
         },
       });
 
-      for (const guardian of dto.guardians) {
+      for (const guardian of dto.guardians ?? []) {
         const guardianRecord = guardian.authUserId
           ? await tx.guardian.upsert({
               where: { authUserId: guardian.authUserId },

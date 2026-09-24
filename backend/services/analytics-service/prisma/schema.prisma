@@ -281,7 +281,7 @@ model Student {
   gender             Gender
   status             StudentStatus
   admissionDate      DateTime
-  dateOfBirth        DateTime
+  dateOfBirth        DateTime?
   nationality        String
   profilePhotoUrl    String?
 
