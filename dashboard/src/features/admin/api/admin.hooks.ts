@@ -341,6 +341,43 @@ export function useUnlinkGuardianMutation() {
   });
 }
 
+const invalidateRoster = (qc: ReturnType<typeof useQueryClient>) => qc.invalidateQueries({ queryKey: ['class-students'] });
+
+/** Change a student's status (deactivate / reactivate / graduate / transfer-out). */
+export function useChangeStudentStatusMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: Record<string, unknown> }) =>
+      api.patch(`/students/${id}/status`, body).then((r) => r.data?.data ?? r.data),
+    onSuccess: () => invalidateRoster(qc),
+  });
+}
+
+/** Promote/transfer a student to another class (same or different school). */
+export function usePromoteStudentMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: Record<string, unknown> }) =>
+      api.post(`/students/${id}/promote`, body).then((r) => r.data?.data ?? r.data),
+    onSuccess: () => invalidateRoster(qc),
+  });
+}
+
+/** Edit a guardian's details / relationship / primary flag. */
+export function useUpdateGuardianMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ studentId, guardianId, body }: { studentId: string; guardianId: string; body: Record<string, unknown> }) =>
+      api.patch(`/students/${studentId}/guardians/${guardianId}`, body).then((r) => r.data?.data ?? r.data),
+    onSuccess: () => invalidateRoster(qc),
+  });
+}
+
+/** Find existing guardians by phone/email to link (siblings). */
+export function lookupGuardians(params: { phone?: string; email?: string }) {
+  return api.get('/students/guardians/lookup', { params }).then((r) => (r.data?.data ?? r.data) as any[]);
+}
+
 export function useAdminClasses() {
   return useQuery({
     queryKey: adminKeys.classes(),
@@ -1251,7 +1288,10 @@ export function useUpdateStudentMutation() {
   return useMutation({
     mutationFn: ({ id, body }: { id: string; body: Record<string, unknown> }) =>
       api.patch(`/students/${id}`, body).then((r) => r.data?.data ?? r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: adminKeys.students() }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: adminKeys.students() });
+      qc.invalidateQueries({ queryKey: ['class-students'] });
+    },
   });
 }
 

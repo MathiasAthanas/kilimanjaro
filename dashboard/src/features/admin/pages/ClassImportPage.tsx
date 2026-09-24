@@ -136,8 +136,9 @@ export function ClassImportPage() {
   const [parsed, setParsed] = useState<{ rows: ParsedRow[]; headers: string[]; unmapped: string[] } | null>(null);
   const [fileName, setFileName] = useState('');
   const [report, setReport] = useState<ImportReport | null>(null);
-  const [busy, setBusy] = useState<'idle' | 'preview' | 'commit'>('idle');
+  const [busy, setBusy] = useState<'idle' | 'preview' | 'commit' | 'enrol'>('idle');
   const [error, setError] = useState<string | null>(null);
+  const [comboEnrol, setComboEnrol] = useState<{ state: 'ok' | 'failed'; count: number; message?: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const selectedClass = useMemo(() => classes.find((c) => c.id === classId), [classes, classId]);
@@ -172,19 +173,32 @@ export function ClassImportPage() {
       });
       const rep = payloadOf(resp) as ImportReport;
       setReport(rep);
-      // A-Level: enrol imported students into the combination subjects.
+      setComboEnrol(null);
+      // A-Level: enrol imported students into the combination subjects, and
+      // report the outcome explicitly (never silently swallow a failure).
       if (commit && isALevel && selectedClass.combinationId && rep.createdStudentIds.length) {
-        try {
-          await api.post('/academics/student-subject-enrollments/bulk-combination', {
-            classId: selectedClass.id,
-            academicYearId: rep.academicYearId,
-            combinationId: selectedClass.combinationId,
-            studentIds: rep.createdStudentIds,
-          });
-        } catch { /* subject enrolment is best-effort; import already succeeded */ }
+        await enrolCombination(rep.createdStudentIds, rep.academicYearId);
       }
     } catch (e: any) {
       setError(e?.response?.data?.message ?? e?.message ?? 'Import failed');
+    } finally {
+      setBusy('idle');
+    }
+  }
+
+  async function enrolCombination(studentIds: string[], yearId: string) {
+    if (!selectedClass?.combinationId) return;
+    setBusy('enrol');
+    try {
+      await api.post('/academics/student-subject-enrollments/bulk-combination', {
+        classId: selectedClass.id,
+        academicYearId: yearId,
+        combinationId: selectedClass.combinationId,
+        studentIds,
+      });
+      setComboEnrol({ state: 'ok', count: studentIds.length });
+    } catch (e: any) {
+      setComboEnrol({ state: 'failed', count: studentIds.length, message: e?.response?.data?.message ?? e?.message ?? 'Subject enrolment failed' });
     } finally {
       setBusy('idle');
     }
@@ -293,6 +307,19 @@ export function ClassImportPage() {
             {report.committed && (
               <div className="mt-3 flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800">
                 <CheckCircle2 className="h-4 w-4" /> Imported {report.imported} of {report.total} students into {report.class.name}.
+              </div>
+            )}
+            {comboEnrol?.state === 'ok' && (
+              <div className="mt-2 flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800">
+                <CheckCircle2 className="h-4 w-4" /> Enrolled {comboEnrol.count} student{comboEnrol.count !== 1 ? 's' : ''} into the {report.class.combinationCode} combination subjects.
+              </div>
+            )}
+            {comboEnrol?.state === 'failed' && (
+              <div className="mt-2 rounded-lg bg-amber-50 px-3 py-3 text-sm font-semibold text-amber-800">
+                <div className="flex items-center gap-2"><AlertTriangle className="h-4 w-4" /> Students imported, but subject enrolment into {report.class.combinationCode} did not complete: {comboEnrol.message}</div>
+                <Button variant="secondary" className="mt-2 rounded-lg px-3 py-1.5 text-xs" disabled={busy === 'enrol'} onClick={() => enrolCombination(report.createdStudentIds, report.academicYearId)}>
+                  {busy === 'enrol' ? 'Retrying…' : 'Retry subject enrolment'}
+                </Button>
               </div>
             )}
 

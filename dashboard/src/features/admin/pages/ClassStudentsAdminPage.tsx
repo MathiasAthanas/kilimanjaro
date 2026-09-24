@@ -1,9 +1,14 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useParams, NavLink } from 'react-router-dom';
-import { Download, KeyRound, UserPlus, Users, X } from 'lucide-react';
+import { Download, KeyRound, UserPlus, X } from 'lucide-react';
 import { AdminShell } from '../components/AdminConsole';
 import { Button } from '../../../components/common/Button';
 import { toast } from '../../../lib/toast';
+import { api } from '../../../lib/api/client';
+import { payloadOf, arrayFromApi } from '../../../lib/api/response';
+import { useSchoolStore } from '../../../lib/school/schoolStore';
+import { StudentManageDrawer, type ManageStudent } from '../components/StudentManageDrawer';
 import {
   useClassStudents,
   useAddGuardianMutation,
@@ -57,6 +62,15 @@ export function ClassStudentsAdminPage() {
   const [guardianFor, setGuardianFor] = useState<ClassStudentRow | null>(null);
   const [gForm, setGForm] = useState({ firstName: '', lastName: '', phoneNumber: '', relationship: 'GUARDIAN' });
   const [resetResult, setResetResult] = useState<{ name: string; password: string } | null>(null);
+  const [manageStudent, setManageStudent] = useState<ClassStudentRow | null>(null);
+
+  // Classes in scope, for the transfer control inside the manage drawer.
+  const activeSchoolKey = useSchoolStore((s) => s.activeSchool?.id ?? '__group__');
+  const { data: allClasses = [] as any[] } = useQuery({
+    queryKey: ['import', 'classes', activeSchoolKey],
+    queryFn: () => api.get('/students/classes').then((r) => arrayFromApi(payloadOf(r), ['classes']) as any[]),
+    staleTime: 30_000,
+  });
 
   const report = data as {
     class?: { name: string; stream?: string; educationStage?: string; combinationCode?: string | null; academicYearName?: string | null };
@@ -189,7 +203,7 @@ export function ClassStudentsAdminPage() {
                     <td className="px-4 py-3"><span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-black ${STATUS_TONE[s.statusLabel] ?? 'bg-slate-100 text-slate-600'}`}>{s.statusLabel}</span></td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3 text-xs font-black">
-                        <NavLink to={`/admin/students/${s.id}`} className="text-[#4338CA] hover:underline">Open</NavLink>
+                        <button onClick={() => setManageStudent(s)} className="text-[#4338CA] hover:underline">Manage</button>
                         <button onClick={() => setGuardianFor(s)} className="text-slate-500 hover:text-slate-900">+ Guardian</button>
                         <button onClick={() => handleReset(s)} disabled={!s.authUserId || resetPw.isPending} className="text-slate-400 hover:text-slate-700 disabled:opacity-40">Reset PW</button>
                       </div>
@@ -201,6 +215,16 @@ export function ClassStudentsAdminPage() {
           </div>
         </div>
       </div>
+
+      {/* Full management drawer */}
+      {manageStudent && (
+        <StudentManageDrawer
+          student={manageStudent as unknown as ManageStudent}
+          classes={allClasses}
+          academicYearId={(report?.class as any)?.academicYearId ?? ''}
+          onClose={() => setManageStudent(null)}
+        />
+      )}
 
       {/* Reset PW result */}
       {resetResult && (
