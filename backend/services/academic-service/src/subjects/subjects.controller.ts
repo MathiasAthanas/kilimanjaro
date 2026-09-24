@@ -94,6 +94,21 @@ export class SubjectsController {
     return this.subjectsService.updateClassSubject(id, dto, user);
   }
 
+  @Get('subject-combinations/predefined')
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA)
+  getPredefinedCombinations() {
+    return this.subjectsService.getPredefinedCombinations();
+  }
+
+  @Post('subject-combinations/seed-predefined')
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA)
+  seedPredefinedCombinations(
+    @Body() dto: { academicYearId: string; codes?: string[] },
+    @CurrentUser() user?: RequestUser,
+  ) {
+    return this.subjectsService.seedPredefinedCombinations(dto, user);
+  }
+
   @Post('subject-combinations')
   @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA)
   createSubjectCombination(@Body() dto: CreateSubjectCombinationDto, @CurrentUser() user?: RequestUser) {

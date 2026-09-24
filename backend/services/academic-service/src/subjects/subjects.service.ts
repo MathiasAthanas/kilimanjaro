@@ -12,6 +12,10 @@ import { ROLES } from '../common/constants/roles';
 import { RequestUser } from '../common/interfaces/request-user.interface';
 import { StudentClientService } from '../student-client/student-client.service';
 import { resolveWriteSchoolId } from '../common/helpers/school-scope.helper';
+import {
+  GENERAL_STUDIES,
+  PREDEFINED_A_LEVEL_COMBINATIONS,
+} from './predefined-combinations';
 
 @Injectable()
 export class SubjectsService {
@@ -246,6 +250,108 @@ export class SubjectsService {
       }
       throw error;
     }
+  }
+
+  /** The predefined A-Level combination templates the admin can seed from. */
+  getPredefinedCombinations() {
+    return PREDEFINED_A_LEVEL_COMBINATIONS.map((c) => ({
+      code: c.code,
+      name: c.name,
+      principals: c.principals.map((p) => p.name),
+      compulsorySubsidiary: GENERAL_STUDIES.name,
+    }));
+  }
+
+  /**
+   * Find a subject by name (case-insensitive), then by code, else create it.
+   * Ensures a stable subject catalogue when seeding predefined combinations.
+   */
+  private async ensureSubject(name: string, preferredCode: string): Promise<{ id: string }> {
+    const byName = await this.prisma.subject.findFirst({
+      where: { name: { equals: name, mode: 'insensitive' } },
+      select: { id: true },
+    });
+    if (byName) return byName;
+    const byCode = await this.prisma.subject.findUnique({ where: { code: preferredCode }, select: { id: true } });
+    if (byCode) return byCode;
+    let code = preferredCode;
+    let n = 1;
+    // eslint-disable-next-line no-await-in-loop
+    while (await this.prisma.subject.findUnique({ where: { code }, select: { id: true } })) {
+      code = `${preferredCode}${n++}`;
+    }
+    return this.prisma.subject.create({
+      data: { name, code, educationStage: 'A_LEVEL', isCompulsory: false, isActive: true },
+      select: { id: true },
+    });
+  }
+
+  /**
+   * Seed the predefined A-Level combinations for an academic year. Idempotent:
+   * combinations that already exist (same code/year/school scope) are skipped.
+   * Group-scope actors seed group-wide combinations (schoolId = null); school
+   * actors seed within their own school.
+   */
+  async seedPredefinedCombinations(dto: { academicYearId: string; codes?: string[] }, user?: RequestUser) {
+    if (!dto.academicYearId) throw new BadRequestException('academicYearId is required');
+    const schoolId = user?.scope === 'SCHOOL' ? (user.activeSchoolId ?? user.schoolIds?.[0] ?? null) : null;
+    const wanted = dto.codes?.length
+      ? PREDEFINED_A_LEVEL_COMBINATIONS.filter((c) => dto.codes!.includes(c.code))
+      : PREDEFINED_A_LEVEL_COMBINATIONS;
+
+    const gs = await this.ensureSubject(GENERAL_STUDIES.name, GENERAL_STUDIES.code);
+    const createdCodes: string[] = [];
+    const skippedCodes: string[] = [];
+
+    for (const combo of wanted) {
+      const existing = await this.prisma.subjectCombination.findFirst({
+        where: { code: combo.code, academicYearId: dto.academicYearId, schoolId },
+        select: { id: true },
+      });
+      if (existing) { skippedCodes.push(combo.code); continue; }
+
+      const principals: Array<{ id: string }> = [];
+      for (const p of combo.principals) {
+        principals.push(await this.ensureSubject(p.name, p.code));
+      }
+      try {
+        await this.prisma.subjectCombination.create({
+          data: {
+            schoolId,
+            code: combo.code,
+            name: combo.name,
+            educationStage: 'A_LEVEL',
+            academicYearId: dto.academicYearId,
+            isActive: true,
+            subjects: {
+              create: [
+                ...principals.map((s, i) => ({
+                  subjectId: s.id,
+                  isPrincipal: true,
+                  subjectRole: 'PRINCIPAL' as const,
+                  displayOrder: i,
+                })),
+                {
+                  subjectId: gs.id,
+                  isPrincipal: false,
+                  subjectRole: 'COMPULSORY_SUBSIDIARY' as const,
+                  displayOrder: principals.length,
+                },
+              ],
+            },
+          },
+        });
+        createdCodes.push(combo.code);
+      } catch (error) {
+        if (typeof error === 'object' && error !== null && 'code' in error && (error as { code?: string }).code === 'P2002') {
+          skippedCodes.push(combo.code);
+        } else {
+          throw error;
+        }
+      }
+    }
+    await this.redis.del('subjects:all');
+    return { created: createdCodes.length, skipped: skippedCodes.length, createdCodes, skippedCodes };
   }
 
   private async assertCombinationSubjectsActive(subjectIds: string[]) {

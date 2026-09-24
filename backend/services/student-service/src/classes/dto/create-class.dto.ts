@@ -28,6 +28,15 @@ export class CreateClassDto {
   @IsString()
   curriculumCode?: string;
 
+  /** A-Level subject combination attached to this class (e.g. HGE, PCB). */
+  @IsOptional()
+  @IsString()
+  combinationCode?: string;
+
+  @IsOptional()
+  @IsString()
+  combinationId?: string;
+
   @IsOptional()
   @IsBoolean()
   terminalYear?: boolean;
