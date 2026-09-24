@@ -2,6 +2,22 @@
 
 This file tracks production issues that need to be implemented or reimplemented. Update each item as it is discussed, built, tested locally, and deployed to production.
 
+## Deployment Record (2026-09-24)
+
+- [x] Production database backup taken before deployment: `/opt/kilimanjaro/storage/backups/kilimanjaro-prod-before-05ac30e-20260924102720.dump`.
+- [x] Code pushed to `origin/main` at commit `b0741f7`.
+- [x] Backend student-service production build passed.
+- [x] Dashboard TypeScript and Vite production build passed.
+- [x] Existing production migrations verified; no new migration was required for this release.
+- [x] Live release switched to `/opt/kilimanjaro/releases/b0741f7-20260924103310`.
+- [x] All eight PM2 services restarted online under the `kilimanjaro` user.
+- [x] Nginx configuration validated and reloaded.
+- [x] `https://srms.kilimanjaroschools.site/health` passed with auth, students, academics, finance, notifications, and analytics reachable.
+- [x] Production frontend returned HTTP 200 from `https://manage.kilimanjaroschools.site`.
+- [ ] Admin login, school-scoped import, and promotion workflow still require an authenticated browser smoke test in production.
+
+Production data was not copied from the local test database. The live database currently has 5 schools, 2 classes, 1 academic year, and no students, enrolments, terms, or pathways.
+
 ## Current Focus: Universal Promotion Pathways
 
 Goal: define editable default promotion pathways that the system can apply to real classes for each school and academic year.
@@ -69,6 +85,8 @@ Goal: define editable default promotion pathways that the system can apply to re
 - [ ] Production deployment completed.
 - [ ] Production health check passes.
 
+Current implementation note: the deployed UI generates universal pathway mappings from real classes and allows saved pathways to be edited. The default rule list is still code-defined, so database-managed universal templates and production pathway application remain open until real classes exist.
+
 ## Later Production Checklist
 
 ### Schools
@@ -77,16 +95,22 @@ Goal: define editable default promotion pathways that the system can apply to re
 - [ ] Review school codes that look truncated.
 - [ ] Confirm school type and gender for every school.
 
+Current production finding: the typo remains, and several existing school codes appear truncated. Do not import classes or students until school records are confirmed.
+
 ### Academic Year And Terms
 
 - [ ] Keep `2026` as current academic year.
 - [ ] Create terms for 2026.
+
+Current production finding: `2026` is current; no terms exist yet.
 
 ### Classes And Streams
 
 - [ ] Create all classes/streams from the Excel files.
 - [ ] Attach every class to the correct school.
 - [ ] Confirm no class has a blank `schoolId`.
+
+Current production finding: the two existing Class 1 records have blank `schoolId` values and must be assigned to the correct school before use.
 
 ### Academic Setup
 
