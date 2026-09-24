@@ -238,7 +238,11 @@ export class StudentImportService {
         continue;
       }
 
-      // ── Commit: create auth account(s) then the student record ──────────────
+      // ── Commit: create auth account, then the student record ────────────────
+      // The student record write is a single DB transaction (StudentsService.create).
+      // The only cross-service step is the auth account created just before it, so
+      // if the student write fails we delete that account to avoid an orphan.
+      let studentAccountId: string | null = null;
       try {
         const studentAccount = await this.authClient.createStudentAccount({
           firstName: row.firstName,
@@ -246,9 +250,12 @@ export class StudentImportService {
           actorId,
           schoolId: klass.schoolId ?? '',
         });
+        studentAccountId = studentAccount.id;
 
         const guardians = [] as Array<{ authUserId?: string; firstName: string; lastName: string; relationship: 'GUARDIAN'; phoneNumber: string; isPrimary: boolean }>;
         if (row.guardianPhone) {
+          // Parent accounts are deduplicated/shared across siblings, so a failure
+          // here should not delete a possibly-shared parent — we leave it be.
           const parent = await this.authClient.ensureParentAccount({
             firstName: row.firstName,
             lastName: row.lastName,
@@ -283,6 +290,7 @@ export class StudentImportService {
           actorId,
           user,
         )) as { id: string; registrationNumber: string };
+        studentAccountId = null; // student persisted — account is no longer orphaned
 
         try {
           await this.authClient.setRegistrationNumber(studentAccount.id, created.registrationNumber, actorId);
@@ -294,6 +302,11 @@ export class StudentImportService {
         report.createdStudentIds.push(created.id);
         report.rows.push({ ...base, status: 'imported', studentId: created.id, registrationNumber: created.registrationNumber, messages: row.warnings });
       } catch (error) {
+        // Roll back the orphaned auth account so a failed row leaves nothing behind.
+        if (studentAccountId) {
+          try { await this.authClient.deleteAccount(studentAccountId); }
+          catch (e) { this.logger.error(`Rollback failed for orphaned account ${studentAccountId}: ${(e as Error).message}`); }
+        }
         const message = error instanceof Error ? error.message : 'Failed to import row';
         report.errors += 1;
         report.rows.push({ ...base, status: 'error', messages: [`Row ${row.line}, ${name}: ${message}`] });

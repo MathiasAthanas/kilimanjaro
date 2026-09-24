@@ -103,20 +103,58 @@ export class GuardiansService {
     });
 
     if (typeof dto.isPrimary === 'boolean') {
-      await this.prisma.studentGuardianLink.update({
-        where: {
-          studentId_guardianId: {
-            studentId,
-            guardianId,
-          },
-        },
-        data: {
-          isPrimary: dto.isPrimary,
-        },
+      await this.prisma.$transaction(async (tx) => {
+        // A student has at most one primary guardian: setting one primary clears
+        // the others so the roster's "primary" is always unambiguous.
+        if (dto.isPrimary) {
+          await tx.studentGuardianLink.updateMany({
+            where: { studentId, isActive: true, NOT: { guardianId } },
+            data: { isPrimary: false },
+          });
+        }
+        await tx.studentGuardianLink.update({
+          where: { studentId_guardianId: { studentId, guardianId } },
+          data: { isPrimary: dto.isPrimary },
+        });
       });
     }
 
     return this.listByStudent(studentId);
+  }
+
+  /**
+   * Find existing guardians by (normalised) phone or email so an admin can link
+   * an already-registered guardian to another student (sibling support).
+   */
+  async lookupByContact(query: { phone?: string; email?: string }): Promise<unknown> {
+    const digits = (query.phone ?? '').replace(/[^\d]/g, '');
+    const variants = new Set<string>();
+    if (digits) {
+      variants.add(query.phone!.trim());
+      variants.add(`+${digits}`);
+      if (digits.startsWith('255')) variants.add(`+${digits}`);
+      if (digits.startsWith('0')) variants.add(`+255${digits.slice(1)}`);
+      if (digits.length === 9) variants.add(`+255${digits}`);
+      variants.add(digits);
+    }
+    const or: Array<Record<string, unknown>> = [];
+    if (variants.size) or.push({ phoneNumber: { in: [...variants] } });
+    if (query.email?.trim()) or.push({ email: { equals: query.email.trim(), mode: 'insensitive' } });
+    if (!or.length) return [];
+    const guardians = await this.prisma.guardian.findMany({
+      where: { OR: or },
+      select: {
+        id: true, authUserId: true, firstName: true, lastName: true,
+        phoneNumber: true, email: true, relationship: true,
+        _count: { select: { studentLinks: { where: { isActive: true } } } },
+      },
+      take: 10,
+    });
+    return guardians.map((g) => ({
+      id: g.id, authUserId: g.authUserId, firstName: g.firstName, lastName: g.lastName,
+      phoneNumber: g.phoneNumber, email: g.email, relationship: g.relationship,
+      linkedStudents: g._count.studentLinks,
+    }));
   }
 
   async unlink(studentId: string, guardianId: string): Promise<{ unlinked: boolean }> {

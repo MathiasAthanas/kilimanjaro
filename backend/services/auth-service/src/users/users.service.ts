@@ -368,6 +368,21 @@ export class UsersService {
     return this.listMemberships(userId);
   }
 
+  /**
+   * Internal, unscoped hard delete for rollback of orphaned accounts. No actor
+   * checks — guarded by the internal API key at the controller. Idempotent.
+   */
+  async hardDeleteInternal(userId: string): Promise<{ deleted: boolean }> {
+    const existing = await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+    if (!existing) return { deleted: false };
+    await this.prisma.$transaction([
+      this.prisma.schoolMembership.deleteMany({ where: { authUserId: userId } }),
+      this.prisma.refreshToken.deleteMany({ where: { userId } }),
+      this.prisma.user.delete({ where: { id: userId } }),
+    ]);
+    return { deleted: true };
+  }
+
   /** All school memberships for a user (for the user detail page). */
   async listMemberships(userId: string) {
     return this.prisma.schoolMembership.findMany({

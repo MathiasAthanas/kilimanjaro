@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { IsEmail, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 import { Role } from '../../generated/prisma';
@@ -108,6 +108,15 @@ export class UsersInternalController {
   @Get('users-stats')
   async usersStats() {
     return this.usersService.stats();
+  }
+
+  /**
+   * Internal hard-delete used to roll back an orphaned account when a
+   * service-to-service flow (e.g. student import) fails after account creation.
+   */
+  @Delete('users/:userId')
+  async deleteUser(@Param('userId') userId: string) {
+    return this.usersService.hardDeleteInternal(userId);
   }
 
   @Patch('users/:userId/registration-number')

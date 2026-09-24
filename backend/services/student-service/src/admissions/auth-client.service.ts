@@ -30,7 +30,7 @@ export class AuthClientService {
     this.apiKey = this.configService.get<string>('INTERNAL_API_KEY') || '';
   }
 
-  private async request<T>(method: 'POST' | 'PATCH', path: string, body: unknown): Promise<T> {
+  private async request<T>(method: 'POST' | 'PATCH' | 'DELETE', path: string, body?: unknown): Promise<T> {
     const url = `${this.baseUrl}/api/v1${path}`;
     let response: Response;
     try {
@@ -40,7 +40,7 @@ export class AuthClientService {
           'Content-Type': 'application/json',
           'x-internal-api-key': this.apiKey,
         },
-        body: JSON.stringify(body),
+        body: body === undefined ? undefined : JSON.stringify(body),
       });
     } catch (error) {
       this.logger.error(`Auth service unreachable at ${url}: ${(error as Error).message}`);
@@ -89,5 +89,10 @@ export class AuthClientService {
       registrationNumber,
       actorId,
     });
+  }
+
+  /** Roll back an orphaned auth account when a downstream write fails. */
+  async deleteAccount(userId: string): Promise<void> {
+    await this.request<unknown>('DELETE', `/auth/internal/users/${userId}`);
   }
 }

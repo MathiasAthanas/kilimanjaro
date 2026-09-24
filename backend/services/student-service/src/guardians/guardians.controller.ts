@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { GuardiansService } from './guardians.service';
 import { CreateGuardianDto } from './dto/create-guardian.dto';
@@ -19,9 +19,16 @@ export class GuardiansController {
     private readonly accessControl: AccessControlService,
   ) {}
 
+  @Get('guardians/lookup')
+  @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN', 'ADMISSIONS')
+  @ApiOperation({ summary: 'Find existing guardians by phone/email to link' })
+  async lookup(@Query('phone') phone?: string, @Query('email') email?: string) {
+    return this.guardiansService.lookupByContact({ phone, email });
+  }
+
   @Post(':id/guardians')
   @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN', 'ADMISSIONS')
-  @ApiOperation({ summary: 'Add guardian to student' })
+  @ApiOperation({ summary: 'Add or link a guardian to a student' })
   async create(@Param('id') id: string, @Body() dto: CreateGuardianDto) {
     return this.guardiansService.addGuardian(id, dto);
   }
