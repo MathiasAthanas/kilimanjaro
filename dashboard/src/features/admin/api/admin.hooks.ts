@@ -738,6 +738,42 @@ export function useUserMemberships(userId: string | undefined) {
   });
 }
 
+/** Linked-record summary explaining why a user can/can't be deleted or moved. */
+export function useUserUsage(userId: string | undefined) {
+  return useQuery({
+    queryKey: ['user-usage', userId ?? ''],
+    queryFn: () => api.get(`/auth/users/${userId}/usage`).then(payloadOf),
+    enabled: !!userId,
+    staleTime: 15_000,
+  });
+}
+
+/** Add a school membership to a user. */
+export function useAddMembershipMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { authUserId: string; schoolId?: string; role: string }) =>
+      api.post('/auth/memberships', body).then((r) => r.data?.data ?? r.data),
+    onSuccess: (_d, v) => {
+      qc.invalidateQueries({ queryKey: ['user-memberships', v.authUserId] });
+      qc.invalidateQueries({ queryKey: adminKeys.users() });
+    },
+  });
+}
+
+/** Revoke a school membership by membership id. */
+export function useRemoveMembershipMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ membershipId }: { membershipId: string; userId?: string }) =>
+      api.delete(`/auth/memberships/${membershipId}`).then((r) => r.data?.data ?? r.data),
+    onSuccess: (_d, v) => {
+      if (v.userId) qc.invalidateQueries({ queryKey: ['user-memberships', v.userId] });
+      qc.invalidateQueries({ queryKey: adminKeys.users() });
+    },
+  });
+}
+
 /** Safe delete — server blocks with a clear message when the user has links. */
 export function useDeleteUserMutation() {
   const qc = useQueryClient();

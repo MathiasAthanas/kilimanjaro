@@ -281,7 +281,8 @@ export class UsersService {
     const base = (this.configService.get<string>('STUDENT_SERVICE_URL') || 'http://localhost:3002').replace(/\/$/, '');
     const key = this.configService.get<string>('INTERNAL_API_KEY') || '';
     try {
-      const res = await fetch(`${base}/api/v1/students/internal/auth-usage/${authUserId}`, {
+      // student-service has no global /api/v1 prefix on internal routes.
+      const res = await fetch(`${base}/students/internal/auth-usage/${authUserId}`, {
         headers: { 'x-internal-api-key': key },
       });
       if (!res.ok) return null;
@@ -381,6 +382,35 @@ export class UsersService {
       this.prisma.user.delete({ where: { id: userId } }),
     ]);
     return { deleted: true };
+  }
+
+  /**
+   * Linked-record summary for a user, so the admin UI can explain why a delete
+   * or move is restricted. Combines the auth role with student-service usage.
+   */
+  async getUserUsage(userId: string, actorRole?: string, actor?: AuthActor) {
+    const user = await this.findManageableById(userId, actorRole, actor);
+    const usage = await this.fetchStudentUsage(userId);
+    const reasons: string[] = [];
+    if (user.role === Role.STUDENT) reasons.push('Linked to a student profile — deactivate instead of deleting.');
+    if (user.role === Role.PARENT) reasons.push('Guardian account — unlink from all students first, or deactivate.');
+    if (usage?.isStudent) reasons.push('Has a student profile.');
+    if (usage?.isGuardian && usage.activeChildren > 0) reasons.push(`Guardian of ${usage.activeChildren} active student(s).`);
+    if (usage?.isClassTeacher) reasons.push(`Class teacher of ${usage.classTeacherOf} class(es) — reassign first.`);
+    const groupRole = UsersService.GROUP_ROLES.includes(user.role);
+    return {
+      role: user.role,
+      isGroupRole: groupRole,
+      isStudent: usage?.isStudent ?? user.role === Role.STUDENT,
+      isGuardian: usage?.isGuardian ?? user.role === Role.PARENT,
+      activeChildren: usage?.activeChildren ?? 0,
+      isClassTeacher: usage?.isClassTeacher ?? false,
+      classTeacherOf: usage?.classTeacherOf ?? 0,
+      canHardDelete: reasons.length === 0,
+      canMoveSchool: !groupRole && user.role !== Role.STUDENT && user.role !== Role.PARENT,
+      restrictions: reasons,
+      usageCheckAvailable: usage !== null,
+    };
   }
 
   /** All school memberships for a user (for the user detail page). */

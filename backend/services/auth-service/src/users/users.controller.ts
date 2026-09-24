@@ -165,6 +165,12 @@ export class UsersController {
     return this.usersService.listMemberships(userId);
   }
 
+  @Get(':userId/usage')
+  @Roles(Role.SYSTEM_ADMIN, Role.SUPER_ADMIN, Role.MANAGER, Role.HEAD_OF_SCHOOL)
+  async usage(@Param('userId') userId: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.usersService.getUserUsage(userId, user.role, user);
+  }
+
   @Post(':userId/move-school')
   @Roles(Role.SYSTEM_ADMIN, Role.SUPER_ADMIN)
   async moveSchool(

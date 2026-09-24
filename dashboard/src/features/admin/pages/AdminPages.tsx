@@ -33,6 +33,9 @@ import {
   useActivateUserMutation,
   useResetUserPwMutation,
   useUserMemberships,
+  useUserUsage,
+  useAddMembershipMutation,
+  useRemoveMembershipMutation,
   useMoveUserSchoolMutation,
   useDeleteUserMutation,
   useCreateUserMutation,
@@ -513,8 +516,14 @@ export function UserDetailPage() {
   const resetPwMutation = useResetUserPwMutation();
   const deleteUserMutation = useDeleteUserMutation();
   const moveSchoolMutation = useMoveUserSchoolMutation();
-  const { data: memberships = [] as any[] } = useUserMemberships(user?.id);
+  const { data: membershipsRaw } = useUserMemberships(user?.id);
+  const memberships = (membershipsRaw ?? []) as any[];
+  const { data: usageRaw } = useUserUsage(user?.id);
+  const usage = usageRaw as any;
+  const addMembership = useAddMembershipMutation();
+  const removeMembership = useRemoveMembershipMutation();
   const { data: schools = [] as any[] } = useSchools();
+  const [addSchool, setAddSchool] = React.useState('');
   const [pending, setPending] = React.useState<string | null>(null);
   const [resetResult, setResetResult] = React.useState<string | null>(null);
   const [dangerInput, setDangerInput] = React.useState('');
@@ -667,41 +676,100 @@ export function UserDetailPage() {
             )}
           </AdminFormSection>
 
+          {/* Linked records — explains why delete/move may be restricted */}
+          <AdminFormSection title="Linked Records" subtitle="What this account is connected to, and what that allows">
+            {!usage ? (
+              <p className="text-sm font-semibold text-slate-500">Loading linkage…</p>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex flex-wrap gap-2 text-xs font-bold">
+                  {usage.isStudent && <span className="rounded-lg bg-rose-100 px-2.5 py-1 text-rose-700">Student profile</span>}
+                  {usage.isGuardian && <span className="rounded-lg bg-amber-100 px-2.5 py-1 text-amber-700">Guardian of {usage.activeChildren}</span>}
+                  {usage.isClassTeacher && <span className="rounded-lg bg-amber-100 px-2.5 py-1 text-amber-700">Class teacher of {usage.classTeacherOf}</span>}
+                  {usage.isGroupRole && <span className="rounded-lg bg-indigo-100 px-2.5 py-1 text-indigo-700">Group-wide role</span>}
+                  {!usage.isStudent && !usage.isGuardian && !usage.isClassTeacher && !usage.isGroupRole && <span className="rounded-lg bg-emerald-100 px-2.5 py-1 text-emerald-700">No blocking links</span>}
+                </div>
+                <div className="flex flex-wrap gap-4 text-xs font-bold">
+                  <span className={usage.canHardDelete ? 'text-emerald-600' : 'text-rose-600'}>{usage.canHardDelete ? '✓ Can hard-delete' : '✗ Hard-delete blocked'}</span>
+                  <span className={usage.canMoveSchool ? 'text-emerald-600' : 'text-slate-500'}>{usage.canMoveSchool ? '✓ Can move school' : '✗ School move not applicable'}</span>
+                  {!usage.usageCheckAvailable && <span className="text-amber-600">⚠ student-service check unavailable</span>}
+                </div>
+                {usage.restrictions?.length > 0 && (
+                  <ul className="list-disc space-y-1 pl-5 text-xs font-semibold text-slate-600">
+                    {usage.restrictions.map((r: string, i: number) => <li key={i}>{r}</li>)}
+                  </ul>
+                )}
+              </div>
+            )}
+          </AdminFormSection>
+
           {/* School Memberships */}
-          <AdminFormSection title="School Memberships" subtitle="Which schools this user belongs to, and school transfer">
-            {activeMemberships.length === 0 ? (
-              <p className="text-sm font-semibold text-slate-500">
-                {['SUPER_ADMIN', 'SYSTEM_ADMIN', 'MANAGER', 'HEAD_OF_FINANCE', 'ADMIN'].includes(String(user.role))
-                  ? 'Group-wide role — access spans all schools (no single-school membership).'
-                  : 'No active school membership.'}
-              </p>
+          <AdminFormSection title="School Memberships" subtitle="Schools this user belongs to (add, remove, move) and history">
+            {usage?.isGroupRole && (
+              <p className="mb-3 rounded-lg bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700">Group-wide role — access spans all schools; single-school memberships are optional.</p>
+            )}
+            {memberships.length === 0 ? (
+              <p className="text-sm font-semibold text-slate-500">No school memberships on record.</p>
             ) : (
               <div className="space-y-2">
-                {activeMemberships.map((m: any) => (
-                  <div key={m.id} className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-2.5">
+                {(memberships as any[]).map((m: any) => (
+                  <div key={m.id} className={`flex items-center justify-between rounded-xl border px-4 py-2.5 ${m.isActive ? 'border-slate-200 bg-white' : 'border-slate-100 bg-slate-50'}`}>
                     <div>
-                      <p className="font-black text-slate-800">{schoolName(m.schoolId)}</p>
-                      <p className="text-[11px] font-semibold text-slate-400">{roleLabel(m.role)} · since {String(m.assignedAt ?? '').slice(0, 10)}</p>
+                      <p className={`font-black ${m.isActive ? 'text-slate-800' : 'text-slate-400'}`}>{schoolName(m.schoolId)}</p>
+                      <p className="text-[11px] font-semibold text-slate-400">
+                        {roleLabel(m.role)} · {m.isActive ? `since ${String(m.assignedAt ?? '').slice(0, 10)}` : `removed ${String(m.removedAt ?? '').slice(0, 10)}`}
+                      </p>
                     </div>
-                    <Badge tone="emerald">Active</Badge>
+                    <div className="flex items-center gap-2">
+                      <Badge tone={m.isActive ? 'emerald' : 'slate'}>{m.isActive ? 'Active' : 'Ended'}</Badge>
+                      {m.isActive && (
+                        <button
+                          onClick={() => removeMembership.mutate({ membershipId: m.id, userId: user.id }, { onSuccess: () => toast('Membership removed', 'warning'), onError: (e: any) => toast(e?.response?.data?.message ?? 'Failed to remove', 'error') })}
+                          className="rounded-lg border border-rose-200 px-2 py-1 text-[11px] font-black text-rose-600 hover:bg-rose-50"
+                        >Remove</button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
             )}
-            {!['SUPER_ADMIN', 'SYSTEM_ADMIN', 'MANAGER', 'HEAD_OF_FINANCE', 'ADMIN', 'STUDENT', 'PARENT'].includes(String(user.role)) && (
-              <div className="mt-4 flex flex-wrap items-end gap-3 rounded-xl border border-slate-100 bg-slate-50 p-4">
-                <div className="flex-1">
-                  <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">Move to school</p>
-                  <select value={moveTo} onChange={(e) => setMoveTo(e.target.value)} className="mt-2 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold outline-none focus:border-indigo-400">
-                    <option value="">— Choose destination school —</option>
-                    {(schools as any[]).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                  </select>
+
+            {/* Add membership (uses the user's existing school-role) */}
+            {!usage?.isGroupRole && !['STUDENT', 'PARENT'].includes(String(user.role)) && (() => {
+              const backendRole = activeMemberships[0]?.role ?? (memberships as any[])[0]?.role;
+              const usedSchools = new Set(activeMemberships.map((m: any) => m.schoolId));
+              const addable = (schools as any[]).filter((s) => !usedSchools.has(s.id));
+              return (
+                <div className="mt-4 space-y-3 rounded-xl border border-slate-100 bg-slate-50 p-4">
+                  <div className="flex flex-wrap items-end gap-3">
+                    <div className="flex-1">
+                      <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">Add membership</p>
+                      <select value={addSchool} onChange={(e) => setAddSchool(e.target.value)} className="mt-2 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold outline-none focus:border-indigo-400">
+                        <option value="">— Choose a school —</option>
+                        {addable.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                      </select>
+                    </div>
+                    <button
+                      disabled={!addSchool || !backendRole || addMembership.isPending}
+                      onClick={() => addMembership.mutate({ authUserId: user.id, schoolId: addSchool, role: backendRole }, { onSuccess: () => { toast('Membership added', 'success'); setAddSchool(''); }, onError: (e: any) => toast(e?.response?.data?.message ?? 'Failed to add', 'error') })}
+                      className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-black text-slate-700 transition hover:bg-slate-100 disabled:opacity-40"
+                    >{addMembership.isPending ? 'Adding…' : 'Add'}</button>
+                    <div className="flex-1">
+                      <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">Move to school</p>
+                      <select value={moveTo} onChange={(e) => setMoveTo(e.target.value)} className="mt-2 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold outline-none focus:border-indigo-400">
+                        <option value="">— Choose destination —</option>
+                        {(schools as any[]).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                      </select>
+                    </div>
+                    <button disabled={!moveTo || pending === 'move'} onClick={handleMove} className="rounded-xl bg-[#4338CA] px-4 py-2.5 text-sm font-black text-white transition hover:bg-[#3730a3] disabled:opacity-40">
+                      {pending === 'move' ? 'Moving…' : 'Move'}
+                    </button>
+                  </div>
+                  {!backendRole && <p className="text-[11px] font-semibold text-amber-600">This user has no school-role yet; use Move to place them in a school first.</p>}
+                  <p className="text-[11px] font-semibold text-slate-400">Add = keep current schools and add another (multi-school). Move = end current memberships and place in one school.</p>
                 </div>
-                <button disabled={!moveTo || pending === 'move'} onClick={handleMove} className="rounded-xl bg-[#4338CA] px-4 py-2.5 text-sm font-black text-white transition hover:bg-[#3730a3] disabled:opacity-40">
-                  {pending === 'move' ? 'Moving…' : 'Move user'}
-                </button>
-              </div>
-            )}
+              );
+            })()}
           </AdminFormSection>
         </div>
 
