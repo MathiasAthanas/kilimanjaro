@@ -691,6 +691,38 @@ export function useActivateUserMutation() {
   });
 }
 
+/** A user's school memberships (active + historical). */
+export function useUserMemberships(userId: string | undefined) {
+  return useQuery({
+    queryKey: ['user-memberships', userId ?? ''],
+    queryFn: () => api.get(`/auth/users/${userId}/memberships`).then(payloadOf),
+    enabled: !!userId,
+    staleTime: 15_000,
+  });
+}
+
+/** Safe delete — server blocks with a clear message when the user has links. */
+export function useDeleteUserMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.delete(`/auth/users/${id}`).then((r) => r.data?.data ?? r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: adminKeys.users() }),
+  });
+}
+
+/** Move a staff user to another school (deactivates old membership, adds new). */
+export function useMoveUserSchoolMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userId, toSchoolId }: { userId: string; toSchoolId: string }) =>
+      api.post(`/auth/users/${userId}/move-school`, { toSchoolId }).then((r) => r.data?.data ?? r.data),
+    onSuccess: (_d, v) => {
+      qc.invalidateQueries({ queryKey: ['user-memberships', v.userId] });
+      qc.invalidateQueries({ queryKey: adminKeys.users() });
+    },
+  });
+}
+
 export function useChangeUserRoleMutation() {
   const qc = useQueryClient();
   return useMutation({

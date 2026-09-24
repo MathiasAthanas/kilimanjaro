@@ -158,4 +158,26 @@ export class UsersController {
   async getOne(@Param('userId') userId: string, @CurrentUser() user: AuthenticatedUser) {
     return this.usersService.findManageableById(userId, user.role, user);
   }
+
+  @Get(':userId/memberships')
+  @Roles(Role.SYSTEM_ADMIN, Role.SUPER_ADMIN, Role.MANAGER, Role.HEAD_OF_SCHOOL)
+  async memberships(@Param('userId') userId: string) {
+    return this.usersService.listMemberships(userId);
+  }
+
+  @Post(':userId/move-school')
+  @Roles(Role.SYSTEM_ADMIN, Role.SUPER_ADMIN)
+  async moveSchool(
+    @Param('userId') userId: string,
+    @Body() dto: { toSchoolId: string },
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.usersService.moveUserSchool(userId, dto?.toSchoolId, user.sub, user.role, user);
+  }
+
+  @Delete(':userId')
+  @Roles(Role.SYSTEM_ADMIN, Role.SUPER_ADMIN)
+  async remove(@Param('userId') userId: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.usersService.deleteUser(userId, user.sub, user.role, user);
+  }
 }

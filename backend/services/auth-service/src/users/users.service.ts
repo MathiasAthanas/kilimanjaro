@@ -274,6 +274,108 @@ export class UsersService {
     });
   }
 
+  /** Ask student-service how an auth user is used, for safe-delete decisions. */
+  private async fetchStudentUsage(authUserId: string): Promise<{
+    isStudent: boolean; isGuardian: boolean; activeChildren: number; isClassTeacher: boolean; classTeacherOf: number;
+  } | null> {
+    const base = (this.configService.get<string>('STUDENT_SERVICE_URL') || 'http://localhost:3002').replace(/\/$/, '');
+    const key = this.configService.get<string>('INTERNAL_API_KEY') || '';
+    try {
+      const res = await fetch(`${base}/api/v1/students/internal/auth-usage/${authUserId}`, {
+        headers: { 'x-internal-api-key': key },
+      });
+      if (!res.ok) return null;
+      const body = (await res.json().catch(() => null)) as { data?: unknown } | null;
+      const data = body && typeof body === 'object' && 'data' in body ? (body as { data: unknown }).data : body;
+      return data as any;
+    } catch {
+      return null; // fail-safe handled by caller
+    }
+  }
+
+  /**
+   * Delete a user only when it is safe. Students and guardians are never hard
+   * deleted (they anchor student/guardian records) — deactivate instead. Staff
+   * who are class teachers are blocked until reassigned. Everything else is
+   * removed with its memberships, tokens and audit rows.
+   */
+  async deleteUser(userId: string, actorId: string, actorRole?: string, actor?: AuthActor): Promise<{ deleted: true }> {
+    const user = await this.findManageableById(userId, actorRole, actor);
+
+    if (user.role === Role.STUDENT) {
+      throw new ForbiddenException('This user is a student account. Deactivate it or manage it from the student profile instead of deleting.');
+    }
+    if (user.role === Role.PARENT) {
+      throw new ForbiddenException('This user is a guardian account linked to students. Unlink the guardian from all students first, or deactivate the account instead.');
+    }
+
+    const usage = await this.fetchStudentUsage(userId);
+    if (usage) {
+      if (usage.isStudent) throw new ForbiddenException('This user is linked to a student profile. Deactivate the account instead.');
+      if (usage.isGuardian && usage.activeChildren > 0) throw new ForbiddenException('This user is a guardian linked to active students. Unlink the guardian first or deactivate the account.');
+      if (usage.isClassTeacher) throw new ForbiddenException(`This teacher is assigned to ${usage.classTeacherOf} class(es). Remove the class-teacher assignment first or deactivate the account.`);
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.schoolMembership.deleteMany({ where: { authUserId: userId } }),
+      this.prisma.refreshToken.deleteMany({ where: { userId } }),
+      this.prisma.user.delete({ where: { id: userId } }),
+    ]);
+
+    await this.auditService.createLog({
+      userId: actorId,
+      action: AuditAction.USER_DEACTIVATED,
+      metadata: { targetUserId: userId, hardDeleted: true, role: user.role },
+    });
+    return { deleted: true };
+  }
+
+  /**
+   * Move a staff user from their current school(s) to another school. Students
+   * and guardians must be moved through the student-transfer flow, not here.
+   * Group-only roles cannot be pinned to a single school.
+   */
+  async moveUserSchool(userId: string, toSchoolId: string, actorId: string, actorRole?: string, actor?: AuthActor) {
+    const user = await this.findManageableById(userId, actorRole, actor);
+    if (!toSchoolId) throw new BadRequestException('A destination school is required');
+
+    if (user.role === Role.STUDENT) throw new BadRequestException('Move students using the student transfer/enrolment flow, not user membership.');
+    if (user.role === Role.PARENT) throw new BadRequestException('Guardian school access follows their linked students; move the students instead.');
+    if (UsersService.GROUP_ROLES.includes(user.role)) throw new BadRequestException(`${user.role} is a group-wide role and is not scoped to a single school.`);
+
+    // Actor scope: a school-scoped admin can only move users into their own schools.
+    if (actor?.scope === 'SCHOOL' && !(actor.schoolIds ?? []).includes(toSchoolId)) {
+      throw new ForbiddenException('You cannot move a user into a school outside your scope');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.schoolMembership.updateMany({
+        where: { authUserId: userId, role: user.role, isActive: true },
+        data: { isActive: false, removedAt: new Date() },
+      });
+      await tx.schoolMembership.upsert({
+        where: { authUserId_schoolId_role: { authUserId: userId, schoolId: toSchoolId, role: user.role } },
+        create: { authUserId: userId, schoolId: toSchoolId, role: user.role, assignedById: actorId },
+        update: { isActive: true, removedAt: null, assignedById: actorId },
+      });
+    });
+
+    await this.auditService.createLog({
+      userId: actorId,
+      action: AuditAction.USER_ROLE_CHANGED,
+      metadata: { targetUserId: userId, movedToSchool: toSchoolId, role: user.role },
+    });
+    return this.listMemberships(userId);
+  }
+
+  /** All school memberships for a user (for the user detail page). */
+  async listMemberships(userId: string) {
+    return this.prisma.schoolMembership.findMany({
+      where: { authUserId: userId },
+      orderBy: [{ isActive: 'desc' }, { assignedAt: 'desc' }],
+    });
+  }
+
   async updateRole(userId: string, role: Role, actorId: string, actorRole?: string, actor?: AuthActor): Promise<void> {
     await this.findManageableById(userId, actorRole, actor);
     this.assertCanGrantRole(role, actorRole);

@@ -32,6 +32,9 @@ import {
   useDeactivateUserMutation,
   useActivateUserMutation,
   useResetUserPwMutation,
+  useUserMemberships,
+  useMoveUserSchoolMutation,
+  useDeleteUserMutation,
   useCreateUserMutation,
   useCreateStudentMutation,
   useCreateClassMutation,
@@ -98,6 +101,7 @@ import {
   SelectField, TablePagination, Td,
 } from '../components/AdminConsole';
 import { assessmentWeightsTotal, roleRisk } from '../utils/adminValidation';
+import { useSchools } from '../../manager/api/manager.hooks';
 import { DataError } from '../../../components/feedback/DataError';
 import { EmptyState } from '../../../components/feedback/EmptyState';
 import { SkeletonTable } from '../../../components/common/SkeletonTable';
@@ -507,10 +511,16 @@ export function UserDetailPage() {
   const deactivateMutation = useDeactivateUserMutation();
   const activateMutation = useActivateUserMutation();
   const resetPwMutation = useResetUserPwMutation();
+  const deleteUserMutation = useDeleteUserMutation();
+  const moveSchoolMutation = useMoveUserSchoolMutation();
+  const { data: memberships = [] as any[] } = useUserMemberships(user?.id);
+  const { data: schools = [] as any[] } = useSchools();
   const [pending, setPending] = React.useState<string | null>(null);
   const [resetResult, setResetResult] = React.useState<string | null>(null);
   const [dangerInput, setDangerInput] = React.useState('');
   const [dangerNote, setDangerNote] = React.useState('');
+  const [deleteError, setDeleteError] = React.useState<string | null>(null);
+  const [moveTo, setMoveTo] = React.useState('');
 
   if (loading) return <AdminShell title="Loading…" eyebrow="User detail"><SkeletonTable cols={4} /></AdminShell>;
   if (!user) return <AdminShell title="Not Found" eyebrow="User detail"><EmptyState title="User not found" description="This user account does not exist." /></AdminShell>;
@@ -550,6 +560,29 @@ export function UserDetailPage() {
     });
   };
 
+  const handleDelete = () => {
+    setDeleteError(null);
+    setPending('delete');
+    deleteUserMutation.mutate(user.id, {
+      onSuccess: () => { toast('User deleted', 'warning'); navigate('/admin/users'); },
+      onError: (e: any) => {
+        setDeleteError(e?.response?.data?.message ?? e?.message ?? 'Delete blocked. Deactivate the account instead.');
+        setPending(null);
+      },
+    });
+  };
+
+  const handleMove = () => {
+    if (!moveTo) return;
+    setPending('move');
+    moveSchoolMutation.mutate({ userId: user.id, toSchoolId: moveTo }, {
+      onSuccess: () => { toast('User moved to the selected school', 'success'); setPending(null); setMoveTo(''); },
+      onError: (e: any) => { toast(e?.response?.data?.message ?? 'Failed to move user', 'error'); setPending(null); },
+    });
+  };
+
+  const schoolName = (id?: string | null) => (id ? ((schools as any[]).find((s) => s.id === id)?.name ?? id) : 'All Schools (group)');
+  const activeMemberships = (memberships as any[]).filter((m) => m.isActive);
   const isLocked = user.status === 'LOCKED';
 
   return (
@@ -633,6 +666,43 @@ export function UserDetailPage() {
               </div>
             )}
           </AdminFormSection>
+
+          {/* School Memberships */}
+          <AdminFormSection title="School Memberships" subtitle="Which schools this user belongs to, and school transfer">
+            {activeMemberships.length === 0 ? (
+              <p className="text-sm font-semibold text-slate-500">
+                {['SUPER_ADMIN', 'SYSTEM_ADMIN', 'MANAGER', 'HEAD_OF_FINANCE', 'ADMIN'].includes(String(user.role))
+                  ? 'Group-wide role — access spans all schools (no single-school membership).'
+                  : 'No active school membership.'}
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {activeMemberships.map((m: any) => (
+                  <div key={m.id} className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-2.5">
+                    <div>
+                      <p className="font-black text-slate-800">{schoolName(m.schoolId)}</p>
+                      <p className="text-[11px] font-semibold text-slate-400">{roleLabel(m.role)} · since {String(m.assignedAt ?? '').slice(0, 10)}</p>
+                    </div>
+                    <Badge tone="emerald">Active</Badge>
+                  </div>
+                ))}
+              </div>
+            )}
+            {!['SUPER_ADMIN', 'SYSTEM_ADMIN', 'MANAGER', 'HEAD_OF_FINANCE', 'ADMIN', 'STUDENT', 'PARENT'].includes(String(user.role)) && (
+              <div className="mt-4 flex flex-wrap items-end gap-3 rounded-xl border border-slate-100 bg-slate-50 p-4">
+                <div className="flex-1">
+                  <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">Move to school</p>
+                  <select value={moveTo} onChange={(e) => setMoveTo(e.target.value)} className="mt-2 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold outline-none focus:border-indigo-400">
+                    <option value="">— Choose destination school —</option>
+                    {(schools as any[]).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                </div>
+                <button disabled={!moveTo || pending === 'move'} onClick={handleMove} className="rounded-xl bg-[#4338CA] px-4 py-2.5 text-sm font-black text-white transition hover:bg-[#3730a3] disabled:opacity-40">
+                  {pending === 'move' ? 'Moving…' : 'Move user'}
+                </button>
+              </div>
+            )}
+          </AdminFormSection>
         </div>
 
         {/* Danger Zone */}
@@ -664,6 +734,20 @@ export function UserDetailPage() {
             >
               {pending === 'deactivate' ? 'Deactivating…' : 'Deactivate Account'}
             </button>
+
+            <div className="border-t border-rose-200 pt-3">
+              <p className="text-xs font-bold text-rose-700">Hard delete removes the account entirely. Blocked automatically when the user has linked students, guardians or class assignments — deactivate instead.</p>
+              <button
+                disabled={pending === 'delete'}
+                onClick={handleDelete}
+                className="mt-2 w-full rounded-xl border border-rose-300 bg-white py-2.5 text-sm font-black text-rose-700 transition hover:bg-rose-100 disabled:opacity-40"
+              >
+                {pending === 'delete' ? 'Deleting…' : 'Delete Account (if safe)'}
+              </button>
+              {deleteError && (
+                <p className="mt-2 rounded-lg bg-rose-100 px-3 py-2 text-xs font-semibold text-rose-800">{deleteError}</p>
+              )}
+            </div>
           </div>
         </div>
       </div>

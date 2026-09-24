@@ -130,6 +130,28 @@ export class InternalController {
     });
   }
 
+  @Get('auth-usage/:authUserId')
+  @ApiOperation({ summary: 'Report how an auth user is used in student data (for safe delete)' })
+  async authUsage(@Param('authUserId') authUserId: string) {
+    const [student, guardian, classTeacherCount] = await Promise.all([
+      this.prisma.student.findUnique({ where: { authUserId }, select: { id: true, registrationNumber: true } }),
+      this.prisma.guardian.findUnique({
+        where: { authUserId },
+        select: { id: true, studentLinks: { where: { isActive: true }, select: { id: true } } },
+      }),
+      this.prisma.class.count({ where: { classTeacherId: authUserId } }),
+    ]);
+    return {
+      isStudent: Boolean(student),
+      studentId: student?.id ?? null,
+      registrationNumber: student?.registrationNumber ?? null,
+      isGuardian: Boolean(guardian),
+      activeChildren: guardian?.studentLinks.length ?? 0,
+      isClassTeacher: classTeacherCount > 0,
+      classTeacherOf: classTeacherCount,
+    };
+  }
+
   @Get('guardian-for-student/:studentId')
   @ApiOperation({ summary: "Resolve a student's primary guardian for notification dispatch" })
   async guardianForStudent(@Param('studentId') studentId: string) {
