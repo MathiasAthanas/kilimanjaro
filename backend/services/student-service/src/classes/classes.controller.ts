@@ -80,9 +80,24 @@ export class ClassesController {
 
   @Get('classes/:classId/students')
   @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN', 'ACADEMIC_QA', 'FINANCE', 'HEAD_OF_DEPARTMENT', 'TEACHER', 'ADMISSIONS')
-  @ApiOperation({ summary: 'List active students in class' })
-  async classStudents(@Param('classId') classId: string) {
-    return this.classesService.classStudents(classId);
+  @ApiOperation({ summary: 'Class roster with guardian/profile/account summary' })
+  async classStudents(
+    @Param('classId') classId: string,
+    @Query('search') search?: string,
+    @Query('gender') gender?: string,
+    @Query('completeness') completeness?: string,
+    @Query('guardian') guardian?: string,
+    @Query('status') status?: string,
+    @Query('missing') missing?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @CurrentUser() user?: RequestUser,
+  ) {
+    return this.classesService.classStudents(
+      classId,
+      { search, gender, completeness, guardian, status, missing, page: page ? Number(page) : undefined, limit: limit ? Number(limit) : undefined },
+      user,
+    );
   }
 
   @Post('academic-years')

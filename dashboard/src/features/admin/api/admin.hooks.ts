@@ -321,6 +321,26 @@ export function useAdminStudents(params?: Record<string, unknown>) {
   });
 }
 
+/** Rich class roster (overview + students + guardian/profile/account summary). */
+export function useClassStudents(classId: string | undefined, filters: Record<string, unknown> = {}) {
+  const activeSchoolKey = useActiveSchoolKey();
+  return useQuery({
+    queryKey: ['class-students', classId ?? '', activeSchoolKey, filters],
+    queryFn: () => api.get(`/students/classes/${classId}/students`, { params: filters }).then(payloadOf),
+    enabled: !!classId,
+    staleTime: 15_000,
+  });
+}
+
+export function useUnlinkGuardianMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ studentId, guardianId }: { studentId: string; guardianId: string }) =>
+      api.delete(`/students/${studentId}/guardians/${guardianId}`).then((r) => r.data?.data ?? r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['class-students'] }),
+  });
+}
+
 export function useAdminClasses() {
   return useQuery({
     queryKey: adminKeys.classes(),
@@ -1208,7 +1228,10 @@ export function useAddGuardianMutation() {
   return useMutation({
     mutationFn: ({ studentId, body }: { studentId: string; body: Record<string, unknown> }) =>
       api.post(`/students/${studentId}/guardians`, body).then((r) => r.data?.data ?? r.data),
-    onSuccess: (_d, v) => qc.invalidateQueries({ queryKey: ['admin', 'student', v.studentId, 'guardians'] }),
+    onSuccess: (_d, v) => {
+      qc.invalidateQueries({ queryKey: ['admin', 'student', v.studentId, 'guardians'] });
+      qc.invalidateQueries({ queryKey: ['class-students'] });
+    },
   });
 }
 

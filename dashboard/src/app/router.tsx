@@ -110,6 +110,7 @@ import {
   DepartmentsPage,
 } from '../features/admin/pages/AdminPages';
 import { ClassImportPage } from '../features/admin/pages/ClassImportPage';
+import { ClassStudentsAdminPage } from '../features/admin/pages/ClassStudentsAdminPage';
 import {
   TimetableHubPage,
   VenuesPage,
@@ -526,6 +527,7 @@ export const router = createBrowserRouter([
       { path: '/admin/academic/promotion/cross-stage', element: <CrossStagePromotionPage /> },
       { path: '/admin/classes', element: <ClassesPage /> },
       { path: '/admin/classes/:classId', element: <AdminClassDetailPage /> },
+      { path: '/admin/classes/:classId/students', element: <ClassStudentsAdminPage /> },
       { path: '/admin/subjects', element: <SubjectsPage /> },
       { path: '/admin/subjects/:subjectId', element: <AdminSubjectDetailPage /> },
       { path: '/admin/grading', element: <GradingPage /> },

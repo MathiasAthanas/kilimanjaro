@@ -112,17 +112,150 @@ export class ClassesService {
     });
   }
 
-  async classStudents(classId: string): Promise<unknown> {
-    return this.prisma.enrolment.findMany({
+  /**
+   * Rich class roster for the Class Student Management page: per-student
+   * guardian summary, profile completeness, and login-account status, plus
+   * class-level overview aggregates. Enforces school scope, supports search,
+   * filtering and pagination.
+   */
+  async classStudents(
+    classId: string,
+    filters: {
+      search?: string;
+      gender?: string;
+      completeness?: string; // COMPLETE | INCOMPLETE
+      guardian?: string;     // WITH | WITHOUT
+      status?: string;       // ACTIVE | INACTIVE | TRANSFERRED | GRADUATED ...
+      missing?: string;      // DOB | GENDER | GUARDIAN | GUARDIAN_PHONE | LOGIN
+      page?: number;
+      limit?: number;
+    } = {},
+    user?: RequestUser,
+  ): Promise<unknown> {
+    const klass = await this.prisma.class.findUnique({
+      where: { id: classId },
+      include: { school: true, academicYear: true },
+    });
+    if (!klass) throw new NotFoundException('Class not found');
+    assertSchoolInScope(user, klass.schoolId ?? null);
+
+    const enrolments = await this.prisma.enrolment.findMany({
       where: { classId, isActive: true },
       include: {
-        student: true,
-        class: true,
+        student: { include: { parentLinks: { where: { isActive: true }, include: { guardian: true } } } },
         academicYear: true,
         term: true,
       },
       orderBy: { enrolledAt: 'asc' },
     });
+
+    const mapped = enrolments.map((e) => {
+      const s = e.student as typeof e.student & { parentLinks: Array<{ isPrimary: boolean; guardian: { id: string; firstName: string; lastName: string; phoneNumber: string; authUserId: string } }> };
+      const guardians = (s.parentLinks ?? []).map((l) => ({
+        id: l.guardian.id,
+        name: `${l.guardian.firstName} ${l.guardian.lastName}`.trim(),
+        phoneNumber: l.guardian.phoneNumber,
+        isPrimary: l.isPrimary,
+        hasLoginAccount: Boolean(l.guardian.authUserId),
+      }));
+      const primaryGuardian = guardians.find((g) => g.isPrimary) ?? guardians[0] ?? null;
+      const hasAuthAccount = Boolean(s.authUserId);
+
+      const missing: string[] = [];
+      if (!s.gender) missing.push('GENDER');
+      if (!s.dateOfBirth) missing.push('DOB');
+      if (guardians.length === 0) missing.push('GUARDIAN');
+      else if (!primaryGuardian?.phoneNumber) missing.push('GUARDIAN_PHONE');
+      if (!hasAuthAccount) missing.push('LOGIN');
+      if (!s.nationality) missing.push('NATIONALITY');
+
+      const minimumMet = Boolean(s.firstName && s.lastName && s.gender && hasAuthAccount);
+      const fullComplete = minimumMet && Boolean(s.dateOfBirth) && Boolean(s.nationality) && Boolean(s.admissionDate) && guardians.length > 0 && Boolean(primaryGuardian?.phoneNumber);
+
+      // Human status label (first blocking issue wins for the pill).
+      let label = 'Complete';
+      if (s.status && s.status !== 'ACTIVE') label = String(s.status).charAt(0) + String(s.status).slice(1).toLowerCase();
+      else if (!hasAuthAccount) label = 'No Login Account';
+      else if (!s.gender) label = 'Missing Gender';
+      else if (guardians.length === 0) label = 'No Guardian';
+      else if (!primaryGuardian?.phoneNumber) label = 'Guardian Missing Phone';
+      else if (!s.dateOfBirth) label = 'Missing DOB';
+      else if (!fullComplete) label = 'Incomplete';
+
+      return {
+        id: s.id,
+        registrationNumber: s.registrationNumber,
+        legacyAdmissionNumber: s.legacyAdmissionNumber,
+        firstName: s.firstName,
+        middleName: s.middleName,
+        lastName: s.lastName,
+        fullName: [s.firstName, s.middleName, s.lastName].filter(Boolean).join(' '),
+        gender: s.gender,
+        dateOfBirth: s.dateOfBirth,
+        nationality: s.nationality,
+        status: s.status,
+        schoolId: s.schoolId,
+        authUserId: s.authUserId,
+        hasAuthAccount,
+        guardians,
+        primaryGuardian,
+        guardianStatus: guardians.length ? (primaryGuardian?.phoneNumber ? 'ATTACHED' : 'MISSING_PHONE') : 'NONE',
+        profileComplete: fullComplete,
+        minimumMet,
+        missing,
+        statusLabel: label,
+        updatedAt: s.updatedAt,
+        stream: klass.stream,
+      };
+    });
+
+    // ── Filters / search ────────────────────────────────────────────────────
+    const search = filters.search?.trim().toLowerCase();
+    let rows = mapped.filter((r) => {
+      if (search && !(`${r.fullName} ${r.registrationNumber} ${r.legacyAdmissionNumber ?? ''}`.toLowerCase().includes(search))) return false;
+      if (filters.gender && r.gender !== filters.gender) return false;
+      if (filters.completeness === 'COMPLETE' && !r.profileComplete) return false;
+      if (filters.completeness === 'INCOMPLETE' && r.profileComplete) return false;
+      if (filters.guardian === 'WITH' && r.guardianStatus === 'NONE') return false;
+      if (filters.guardian === 'WITHOUT' && r.guardianStatus !== 'NONE') return false;
+      if (filters.status && r.status !== filters.status) return false;
+      if (filters.missing && !r.missing.includes(filters.missing)) return false;
+      return true;
+    });
+
+    // ── Overview aggregates (over the full class, pre-pagination filters) ─────
+    const overview = {
+      total: mapped.length,
+      active: mapped.filter((r) => r.status === 'ACTIVE').length,
+      inactive: mapped.filter((r) => r.status && r.status !== 'ACTIVE').length,
+      withGuardian: mapped.filter((r) => r.guardianStatus !== 'NONE').length,
+      withoutGuardian: mapped.filter((r) => r.guardianStatus === 'NONE').length,
+      completeProfiles: mapped.filter((r) => r.profileComplete).length,
+      incompleteProfiles: mapped.filter((r) => !r.profileComplete).length,
+      male: mapped.filter((r) => r.gender === 'MALE').length,
+      female: mapped.filter((r) => r.gender === 'FEMALE').length,
+      missingGender: mapped.filter((r) => !r.gender).length,
+      missingDob: mapped.filter((r) => !r.dateOfBirth).length,
+      missingContact: mapped.filter((r) => r.guardianStatus !== 'ATTACHED').length,
+      noLogin: mapped.filter((r) => !r.hasAuthAccount).length,
+    };
+
+    const total = rows.length;
+    const page = Math.max(1, Number(filters.page) || 1);
+    const limit = Math.min(200, Math.max(1, Number(filters.limit) || 50));
+    rows = rows.slice((page - 1) * limit, page * limit);
+
+    return {
+      class: {
+        id: klass.id, name: klass.name, stream: klass.stream, educationStage: klass.educationStage,
+        combinationCode: klass.combinationCode, academicYearId: klass.academicYearId,
+        academicYearName: klass.academicYear?.name ?? null,
+      },
+      school: { id: klass.schoolId, name: klass.school?.name ?? null, gender: klass.school?.gender ?? null },
+      overview,
+      students: rows,
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    };
   }
 
   async createAcademicYear(dto: CreateAcademicYearDto): Promise<unknown> {
