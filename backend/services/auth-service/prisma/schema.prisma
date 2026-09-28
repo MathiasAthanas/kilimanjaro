@@ -92,10 +92,30 @@ model User {
   passwordResetTokens  PasswordResetToken[]
   auditLogs            AuditLog[]
   schoolMemberships    SchoolMembership[]
+  deletionRequests     AccountDeletionRequest[]
 
   @@index([role, isActive])
   @@index([createdAt])
   @@map("users")
+  @@schema("auth")
+}
+
+model AccountDeletionRequest {
+  id           String   @id @default(uuid())
+  email        String
+  userId       String?
+  user         User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  reason       String?
+  status       String   @default("PENDING")
+  ipAddress    String?
+  userAgent    String?
+  createdAt    DateTime @default(now())
+  reviewedAt   DateTime?
+  reviewedById String?
+
+  @@index([email, status])
+  @@index([userId, status])
+  @@map("account_deletion_requests")
   @@schema("auth")
 }
 

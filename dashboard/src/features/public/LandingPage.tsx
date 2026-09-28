@@ -399,8 +399,8 @@ export function LandingPage() {
               <ul className="space-y-3 text-sm">
                 {[
                   ['Staff Login', '/login'],
-                  ['Help & Support', '/app/help'],
-                  ['About the Platform', '/app/about'],
+                  ['Help & Support', '/support'],
+                  ['Privacy and Legal', '/legal'],
                 ].map(([label, href]) => (
                   <li key={label}>
                     <Link to={href} className="transition hover:text-white">{label}</Link>
@@ -426,9 +426,9 @@ export function LandingPage() {
           <div className="mt-12 flex flex-col items-center justify-between gap-4 border-t border-ks-mist/10 pt-8 text-xs text-ks-mist/40 md:flex-row">
             <span>© 2026 Kilimanjaro Schools Group. All rights reserved.</span>
             <div className="flex items-center gap-4">
-              <a href="#" className="transition hover:text-ks-mist/70">Privacy Policy</a>
-              <a href="#" className="transition hover:text-ks-mist/70">Terms of Service</a>
-              <a href="#" className="transition hover:text-ks-mist/70">Security</a>
+              <Link to="/privacy-policy" className="transition hover:text-ks-mist/70">Privacy Policy</Link>
+              <Link to="/terms-of-service" className="transition hover:text-ks-mist/70">Terms of Service</Link>
+              <Link to="/account-deletion" className="transition hover:text-ks-mist/70">Delete Account</Link>
             </div>
           </div>
         </div>

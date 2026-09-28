@@ -16,6 +16,21 @@ This file tracks production issues that need to be implemented or reimplemented.
 - [x] Production frontend returned HTTP 200 from `https://manage.kilimanjaroschools.site`.
 - [ ] Admin login, school-scoped import, and promotion workflow still require an authenticated browser smoke test in production.
 
+## Production Schema Repair (2026-09-24)
+
+- [x] Root cause isolated: deployed student-service code selected fields that were absent from the live `students` schema, causing `GET /api/v1/students` and `GET /api/v1/students/classes` to return HTTP 500.
+- [x] Fresh pre-change backup created: `/opt/kilimanjaro/storage/backups/kilimanjaro-prod-before-student-schema-20260924182838.dump` (356,812 bytes).
+- [x] Applied only the required additive student-schema changes in one committed transaction:
+  - `Student.dateOfBirth` is nullable.
+  - `Student.legacyAdmissionNumber` added.
+  - `Class.combinationCode` and `Class.combinationId` added.
+  - `Student_schoolId_legacyAdmissionNumber_idx` added.
+- [x] Did not run `prisma migrate deploy`: the production Student schema predates its Prisma migration history, so deploying all historical migrations would be unsafe.
+- [x] No production records were created, changed, or deleted; no service restart was needed.
+- [x] Verified gateway health and all eight PM2 services online after the repair.
+- [x] Verified the live student service returns HTTP 200 for its paginated students and classes queries with the same fields used by the dashboard.
+- [ ] Complete an authenticated browser refresh of the Students page to confirm the user-facing list renders without a 500 response.
+
 Production data was not copied from the local test database. The live database currently has 5 schools, 2 classes, 1 academic year, and no students, enrolments, terms, or pathways.
 
 ## Current Focus: Universal Promotion Pathways

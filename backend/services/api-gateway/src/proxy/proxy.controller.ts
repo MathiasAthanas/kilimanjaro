@@ -42,6 +42,12 @@ export class ProxyController {
     return this.forwardPublic(req, res);
   }
 
+  @All(['auth/account-deletion-requests', 'api/v1/auth/account-deletion-requests'])
+  @Public()
+  async accountDeletionRequestProxy(@Req() req: Request, @Res() res: Response) {
+    return this.forwardPublic(req, res);
+  }
+
   @All('*')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()

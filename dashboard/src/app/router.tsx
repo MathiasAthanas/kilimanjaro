@@ -60,6 +60,7 @@ import { HodFundRequestsPage, HodFundRequestDetailPage } from '../features/hod/p
 import { PrincipalFundApprovalsPage } from '../features/principal/pages/PrincipalFundApprovalsPage';
 import { PrincipalFinancialStatementPage } from '../features/principal/pages/PrincipalFinancialStatementPage';
 import { LandingPage } from '../features/public/LandingPage';
+import { AccountDeletionPage, LegalLinksPage, PrivacyPolicyPage, SupportPage, TermsOfServicePage } from '../features/public/LegalPages';
 // StatusPage import removed — now using AdminSystemStatusPage for /admin/system-status
 import {
   AdminAnalyticsPage,
@@ -309,6 +310,11 @@ export const router = createBrowserRouter([
       { path: '/forgot-password', element: <ForgotPasswordPage /> },
       { path: '/reset-password', element: <ResetPasswordPage /> },
       { path: '/auth/callback', element: <AuthCallbackPage /> },
+      { path: '/privacy-policy', element: <PrivacyPolicyPage /> },
+      { path: '/terms-of-service', element: <TermsOfServicePage /> },
+      { path: '/account-deletion', element: <AccountDeletionPage /> },
+      { path: '/support', element: <SupportPage /> },
+      { path: '/legal', element: <LegalLinksPage /> },
     ],
   },
   // ── Admin-only standalone pages (auth required, no AppShell chrome) ────────

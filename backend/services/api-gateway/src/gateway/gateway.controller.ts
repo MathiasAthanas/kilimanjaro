@@ -57,6 +57,12 @@ export class AuthProxyController {
     return this.gateway.proxy(this.gateway.getServiceUrl('auth'), req.originalUrl, req.method, req.body);
   }
 
+  @All('account-deletion-requests')
+  @Public()
+  async accountDeletionRequest(@Req() req: Request) {
+    return this.gateway.proxy(this.gateway.getServiceUrl('auth'), req.originalUrl, req.method, req.body);
+  }
+
   @All('internal/*')
   @Public()
   async internal(@Req() req: Request) {

@@ -9,6 +9,7 @@ export const endpoints = {
     changePassword:  '/auth/change-password',
     resetRequest:    '/auth/password-reset/request',
     resetComplete:   '/auth/password-reset/complete',
+    accountDeletionRequest: '/auth/account-deletion-requests',
     users:           '/auth/users',
     user:            (id: string) => `/auth/users/${id}`,
     deactivateUser:  (id: string) => `/auth/users/${id}/deactivate`,

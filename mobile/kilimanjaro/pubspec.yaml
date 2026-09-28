@@ -53,9 +53,9 @@ dev_dependencies:
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: assets/images/kilimanjaro_logo_icon.png
+  image_path: assets/images/kilimanjaro_schools_play_store_512.png
   adaptive_icon_background: "#25AAE2"
-  adaptive_icon_foreground: assets/images/kilimanjaro_logo_adaptive_foreground.png
+  adaptive_icon_foreground: assets/images/kilimanjaro_schools_app_icon_source.png
   remove_alpha_ios: true
 
 flutter:

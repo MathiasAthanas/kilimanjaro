@@ -20,6 +20,7 @@ import { PasswordResetRequestDto } from './dto/password-reset-request.dto';
 import { PasswordResetCompleteDto } from './dto/password-reset-complete.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { LogoutDto } from './dto/logout.dto';
+import { AccountDeletionRequestDto } from './dto/account-deletion-request.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { InternalApiGuard } from './guards/internal-api.guard';
 import { Public } from './decorators/public.decorator';
@@ -73,6 +74,18 @@ export class AuthController {
     });
 
     return { message: 'Password reset completed successfully' };
+  }
+
+  @Public()
+  @Post('account-deletion-requests')
+  @HttpCode(HttpStatus.ACCEPTED)
+  @ApiOperation({ summary: 'Request account deletion without disclosing account existence' })
+  async requestAccountDeletion(@Body() dto: AccountDeletionRequestDto, @Req() req: Request) {
+    await this.authService.requestAccountDeletion(dto, {
+      ip: req.ip || '',
+      userAgent: String(req.headers['user-agent'] || ''),
+    });
+    return { message: 'If the request can be matched to an account, it has been recorded for verification and processing.' };
   }
 
   @UseGuards(JwtAuthGuard)

@@ -1,4 +1,4 @@
-package com.kilimanjaro.kilimanjaro
+package site.kilimanjaroschools.app
 
 import io.flutter.embedding.android.FlutterActivity
 

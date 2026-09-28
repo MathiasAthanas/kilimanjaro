@@ -18,6 +18,7 @@ import { RabbitMQService } from '../rabbitmq/rabbitmq.service';
 import { LoginDto } from './dto/login.dto';
 import { PasswordResetCompleteDto } from './dto/password-reset-complete.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { AccountDeletionRequestDto } from './dto/account-deletion-request.dto';
 
 @Injectable()
 export class AuthService {
@@ -59,6 +60,30 @@ export class AuthService {
 
   async login(dto: LoginDto, meta: { ip: string; userAgent: string }) {
     return this.doLogin(dto, meta, false);
+  }
+
+  async requestAccountDeletion(
+    dto: AccountDeletionRequestDto,
+    meta: { ip: string; userAgent: string },
+  ): Promise<void> {
+    const email = dto.email.trim().toLowerCase();
+    const user = await this.usersService.findByEmail(email);
+    const existing = await this.prisma.accountDeletionRequest.findFirst({
+      where: { email, status: 'PENDING' },
+      select: { id: true },
+    });
+
+    if (!existing) {
+      await this.prisma.accountDeletionRequest.create({
+        data: {
+          email,
+          userId: user?.id,
+          reason: dto.reason?.trim() || null,
+          ipAddress: meta.ip || null,
+          userAgent: meta.userAgent || null,
+        },
+      });
+    }
   }
 
   private async doLogin(dto: LoginDto, meta: { ip: string; userAgent: string }, localOnly: boolean) {
