@@ -1,5 +1,13 @@
 # Google Play Store Release Checklist
 
+## Deployment Record (2026-09-28)
+
+- [x] Dashboard legal pages deployed to `manage.kilimanjaroschools.site` and verified without authentication.
+- [x] Verified HTTP 200 for privacy policy, terms of service, account deletion, support, and legal hub routes.
+- [x] Applied auth migration `20260928090000_account_deletion_requests` after taking the production backup `/opt/kilimanjaro/storage/backups/kilimanjaro-prod-before-account-deletion-20260928134714.dump`.
+- [x] Verified `POST /api/v1/auth/account-deletion-requests` is reachable through the production gateway and validates invalid input without creating a request.
+- [x] All PM2 services were online after the release switch.
+
 ## Application Identity
 
 - [x] Android application ID: `site.kilimanjaroschools.app`.
@@ -21,8 +29,8 @@ These routes are public and do not require a Kilimanjaro Schools login:
 - Support: `https://manage.kilimanjaroschools.site/support`
 - Legal links hub: `https://manage.kilimanjaroschools.site/legal`
 
-- [ ] Deploy the dashboard release containing these pages.
-- [ ] Confirm every URL returns HTTP 200 in an incognito browser, without login.
+- [x] Deploy the dashboard release containing these pages.
+- [x] Confirm every URL returns HTTP 200 without login. Browser-incognito verification remains a final release check.
 - [ ] Provision and monitor `support@kilimanjaroschools.site` before publishing. The public policy and support pages use this address.
 - [ ] Add the privacy policy and account deletion URLs to the mobile application's settings/help area before release.
 
@@ -32,7 +40,7 @@ These routes are public and do not require a Kilimanjaro Schools login:
 - [x] Request API implemented at `POST /api/v1/auth/account-deletion-requests`.
 - [x] Requests are recorded without disclosing whether an email is associated with an account.
 - [x] Page explains that account credentials are deleted or deactivated after verification, while school, financial, safeguarding, legal, and audit records may need to be retained.
-- [ ] Apply the `20260928090000_account_deletion_requests` auth-service migration in the production deployment.
+- [x] Apply the `20260928090000_account_deletion_requests` auth-service migration in the production deployment.
 - [ ] Assign an operations owner to review pending requests and verify identity/authority, especially for student accounts.
 - [ ] Document the internal response and completion process, including the 30-day completion target stated on the public page.
 - [ ] Implement the same deletion request entry point inside the mobile application.
@@ -67,12 +75,12 @@ These routes are public and do not require a Kilimanjaro Schools login:
 - [ ] Build an Android App Bundle: `flutter build appbundle --release --dart-define=APP_ENV=production`.
 - [ ] Install and test the release build on physical Android devices over Wi-Fi and mobile data.
 - [ ] Test login, logout, expired-session handling, error screens, and account deletion request submission against staging before production rollout.
-- [ ] Verify API TLS, privacy URLs, support contact, and all listed links after deployment.
+- [x] Verify API TLS and privacy URLs after deployment. Confirm the support mailbox before publishing.
 - [ ] Start with Internal Testing, then Closed Testing, before Production rollout.
 
 ## Final Go/No-Go Gate
 
-- [ ] All public URLs are deployed and working.
+- [x] All public URLs are deployed and working.
 - [ ] The deletion-request migration is applied and a submitted request is visible to the operations owner.
 - [ ] The support mailbox is active.
 - [ ] Data Safety answers match the released application, SDKs, and backend behavior.
