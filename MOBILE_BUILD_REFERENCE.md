@@ -42,9 +42,9 @@ Before every upload, increment `version:` in `mobile/kilimanjaro/pubspec.yaml`. 
 Built on 2026-09-30 from the current local mobile workspace.
 
 - Package: `site.kilimanjaroschools.app`
-- Version: `1.0.0+1`
+- Version: `1.0.1+2`
 - Size: `62.9 MB`
-- SHA-256: `388CE1FB083FF443B90DBEA66F5B50E8325BA9F65D079B52E3C2C6DB85C601EA`
+- SHA-256: `5B07293EF9EDB7A061491AC51F7B13A50CB8F320148297EAF6A2A213471CF4B9`
 - Signing key: local `kilimanjaro-play-upload` upload key
 - Environment: `ENV=production`
 - API target: `https://srms.kilimanjaroschools.site`
