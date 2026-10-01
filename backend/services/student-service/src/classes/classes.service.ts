@@ -6,10 +6,14 @@ import { CreateClassDto } from './dto/create-class.dto';
 import { CreateClassPathwayDto } from './dto/create-class-pathway.dto';
 import { CreateAcademicYearDto } from './dto/create-academic-year.dto';
 import { CreateTermDto } from './dto/create-term.dto';
+import { AuthClientService } from '../admissions/auth-client.service';
 
 @Injectable()
 export class ClassesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly authClient: AuthClientService,
+  ) {}
 
   private validateClassShape(dto: { educationStage?: string | null; level: number; terminalYear?: boolean; name: string }): void {
     const stage = dto.educationStage ?? 'O_LEVEL';
@@ -96,7 +100,7 @@ export class ClassesService {
     user?: RequestUser,
   ): Promise<unknown> {
     if (filters.schoolId) assertSchoolInScope(user, filters.schoolId);
-    return this.prisma.class.findMany({
+    const classes = await this.prisma.class.findMany({
       where: {
         academicYearId: filters.academicYearId,
         level: filters.level,
@@ -109,6 +113,20 @@ export class ClassesService {
         pathwayFrom: { include: { toClass: true } },
       },
       orderBy: [{ educationStage: 'asc' }, { sortOrder: 'asc' }, { level: 'asc' }, { name: 'asc' }, { stream: 'asc' }],
+    });
+
+    const teacherIds = [...new Set(classes.map((item) => item.classTeacherId).filter((id): id is string => Boolean(id)))];
+    const teachers = await this.authClient.getUsersByIds(teacherIds);
+    const teachersById = new Map(teachers.map((teacher) => [teacher.id, teacher]));
+
+    return classes.map((item) => {
+      const teacher = item.classTeacherId ? teachersById.get(item.classTeacherId) : undefined;
+      return {
+        ...item,
+        classTeacher: teacher ?? null,
+        classTeacherName: teacher?.fullName ?? null,
+        teacherName: teacher?.fullName ?? null,
+      };
     });
   }
 

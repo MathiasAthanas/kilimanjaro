@@ -13,6 +13,14 @@ interface StudentAccountResult {
   temporaryPassword?: string;
 }
 
+interface InternalUserSummary {
+  id: string;
+  role: string;
+  firstName: string | null;
+  lastName: string | null;
+  fullName: string;
+}
+
 /**
  * Thin HTTP client for auth-service internal endpoints, authenticated with
  * the shared INTERNAL_API_KEY. Used by the admissions conversion flow so
@@ -30,7 +38,7 @@ export class AuthClientService {
     this.apiKey = this.configService.get<string>('INTERNAL_API_KEY') || '';
   }
 
-  private async request<T>(method: 'POST' | 'PATCH' | 'DELETE', path: string, body?: unknown): Promise<T> {
+  private async request<T>(method: 'GET' | 'POST' | 'PATCH' | 'DELETE', path: string, body?: unknown): Promise<T> {
     const url = `${this.baseUrl}/api/v1${path}`;
     let response: Response;
     try {
@@ -89,6 +97,17 @@ export class AuthClientService {
       registrationNumber,
       actorId,
     });
+  }
+
+  async getUsersByIds(userIds: string[]): Promise<InternalUserSummary[]> {
+    const ids = [...new Set(userIds.filter(Boolean))];
+    if (!ids.length) return [];
+
+    const result = await this.request<{ users?: InternalUserSummary[] }>(
+      'GET',
+      `/auth/internal/users-by-ids?ids=${encodeURIComponent(ids.join(','))}`,
+    );
+    return result.users ?? [];
   }
 
   /** Roll back an orphaned auth account when a downstream write fails. */
