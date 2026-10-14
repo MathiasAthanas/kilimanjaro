@@ -344,7 +344,8 @@ export class AuthService {
 
   async me(userId: string) {
     const user = await this.usersService.findById(userId);
-    return this.usersService.toSafeUser(user);
+    const { scope, schoolIds } = await this.resolveSchoolScope(user);
+    return { ...this.usersService.toSafeUser(user), scope, schoolIds };
   }
 
   async getUserForGateway(userId: string) {

@@ -18,6 +18,7 @@ const GROUP_READ = [
   'FINANCE',
   'HEAD_OF_DEPARTMENT',
   'TEACHER',
+  'PARENT',
   'ADMISSIONS',
 ] as const;
 

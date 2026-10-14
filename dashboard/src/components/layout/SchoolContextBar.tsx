@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ChevronDown, Globe2, School as SchoolIcon, Undo2 } from 'lucide-react';
 import { useAuthStore } from '../../lib/auth/authStore';
-import { isGroupRole } from '../../lib/auth/permissions';
 import { useSchoolStore } from '../../lib/school/schoolStore';
 import { useSchools } from '../../features/manager/api/manager.hooks';
 
@@ -25,7 +24,9 @@ export function SchoolContextBar() {
   const onGroupPage = GROUP_PREFIXES.some((p) => location.pathname.startsWith(p));
 
   const role = session?.user.role;
-  const groupRole = isGroupRole(role);
+  // Scope comes from the server and is authoritative. In particular, the
+  // dashboard's ADMIN label represents SYSTEM_ADMIN, which is school-scoped.
+  const groupRole = session?.user.scope === 'GROUP';
   // Where "All Schools (Group)" / "Back to Group" lands, per role. ADMIN has no
   // /manager access (403) — its group home is the Admin Console.
   const groupHome = role === 'SUPER_ADMIN' ? '/superadmin'
@@ -33,14 +34,14 @@ export function SchoolContextBar() {
     : role === 'ADMIN' ? '/admin'
     : '/manager';
   const scopedIds = session?.user.schoolIds ?? [];
-  const multiSchoolHead = role === 'HEAD_OF_SCHOOL' && scopedIds.length > 1;
-  const showSwitcher = groupRole || multiSchoolHead;
+  const multiSchoolUser = !groupRole && scopedIds.length > 1;
+  const showSwitcher = groupRole || multiSchoolUser;
 
   const { data: schools = [] } = useSchools();
   const visibleSchools = groupRole ? schools : schools.filter((s) => scopedIds.includes(s.id));
 
-  // Auto-scope single-school heads so every request carries their school
-  if (role === 'HEAD_OF_SCHOOL' && !activeSchool && visibleSchools.length === 1) {
+  // Auto-scope any single-school user so every request carries their school.
+  if (!groupRole && !activeSchool && visibleSchools.length === 1) {
     const only = visibleSchools[0];
     setActiveSchool({ id: only.id, name: only.name, code: only.code, type: only.type, gender: only.gender });
   }

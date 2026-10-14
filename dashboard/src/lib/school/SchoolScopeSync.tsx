@@ -18,8 +18,8 @@ import { queryClient } from '../query/queryClient';
  */
 export function SchoolScopeSync() {
   const schoolId = useSchoolStore((s) => s.activeSchool?.id ?? null);
-  // `undefined` = not yet initialised; skip the purge on first mount so we only
-  // react to genuine switches, never the initial hydration from localStorage.
+  // `undefined` = not yet initialised; skip the purge on first mount and only
+  // react to genuine context switches.
   const previous = useRef<string | null | undefined>(undefined);
 
   useEffect(() => {

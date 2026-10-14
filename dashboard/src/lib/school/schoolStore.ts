@@ -13,27 +13,16 @@ type SchoolState = {
   setActiveSchool: (school: ActiveSchool | null) => void;
 };
 
-const KEY = 'ks.web.active-school.v1';
-
-function load(): ActiveSchool | null {
-  try {
-    const raw = localStorage.getItem(KEY);
-    return raw ? (JSON.parse(raw) as ActiveSchool) : null;
-  } catch {
-    return null;
-  }
-}
-
 /**
  * The school the user is currently "inside". For group roles (Manager,
  * Super Admin, Head of Finances) null = All Schools; selecting a school
- * scopes every API call via the X-Active-School header.
+ * scopes every API call via the X-Active-School header. This deliberately
+ * remains in memory: persisting it across a reload or account change can
+ * silently narrow a group administrator to an old school.
  */
 export const useSchoolStore = create<SchoolState>((set) => ({
-  activeSchool: load(),
+  activeSchool: null,
   setActiveSchool: (school) => {
-    if (school) localStorage.setItem(KEY, JSON.stringify(school));
-    else localStorage.removeItem(KEY);
     set({ activeSchool: school });
   },
 }));
