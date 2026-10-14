@@ -783,11 +783,12 @@ const STAGE_LABELS: Record<string, string> = {
 };
 
 export function AssessmentTypeEditor({
-  types, onSave, loading = false, defaultStage, defaultAcademicYearId,
+  types, onSave, loading = false, disabled = false, defaultStage, defaultAcademicYearId,
 }: {
   types: Array<{ id: string; name: string; code?: string; weight: number; maxScore: number; scope: string; academicYearId?: string; educationStage?: string; classLevel?: string; subjectId?: string }>;
   onSave?: (payload: { rows: Array<{ id: string; name: string; code: string; weightPercentage: number; academicYearId: string; educationStage?: string; classLevel?: number; subjectId?: string; isActive: boolean }>; deactivateIds: string[] }) => void;
   loading?: boolean;
+  disabled?: boolean;
   defaultStage?: string;
   defaultAcademicYearId?: string;
 }) {
@@ -857,6 +858,7 @@ export function AssessmentTypeEditor({
               <td className="px-5 py-3">
                 <input
                   value={row.name}
+                  disabled={disabled}
                   onChange={(e) => update(i, 'name', e.target.value)}
                   className="h-9 w-full max-w-[180px] rounded-lg border border-slate-200 px-3 font-semibold outline-none transition focus:border-[#4338CA] focus:bg-white"
                 />
@@ -864,6 +866,7 @@ export function AssessmentTypeEditor({
               <td className="px-5 py-3">
                 <input
                   type="number" min={0} max={100} value={row.weight}
+                  disabled={disabled}
                   onChange={(e) => update(i, 'weight', Number(e.target.value))}
                   className="h-9 w-20 rounded-lg border border-slate-200 px-3 text-right font-black outline-none transition focus:border-[#4338CA] focus:bg-white"
                 />
@@ -871,6 +874,7 @@ export function AssessmentTypeEditor({
               <td className="px-5 py-3">
                 <input
                   type="number" min={0} value={row.maxScore}
+                  disabled={disabled}
                   onChange={(e) => update(i, 'maxScore', Number(e.target.value))}
                   className="h-9 w-20 rounded-lg border border-slate-200 px-3 text-right font-semibold outline-none transition focus:border-[#4338CA] focus:bg-white"
                 />
@@ -886,6 +890,7 @@ export function AssessmentTypeEditor({
                     if (!String(row.id).startsWith('new-')) setRemovedIds((prev) => [...prev, row.id]);
                     setRows((prev) => prev.filter((_, j) => j !== i));
                   }}
+                  disabled={disabled}
                   className="rounded-lg p-1.5 text-slate-400 transition hover:bg-rose-50 hover:text-rose-500"
                 >
                   <Trash2 className="h-4 w-4" />
@@ -900,6 +905,7 @@ export function AssessmentTypeEditor({
         <Button
           variant="quiet"
           className="rounded-xl py-2 text-xs"
+          disabled={disabled}
           onClick={() => setRows((prev) => [...prev, {
             id: `new-${Date.now()}`,
             name: 'New Type',
@@ -915,7 +921,7 @@ export function AssessmentTypeEditor({
         >
           <Plus className="h-3.5 w-3.5" /> Add Type
         </Button>
-        <Button disabled={!valid || !stageRows.length} loading={loading} className="ml-auto rounded-xl bg-[#4338CA]" onClick={save}>
+        <Button disabled={disabled || !valid || !stageRows.length} loading={loading} className="ml-auto rounded-xl bg-[#4338CA]" onClick={save}>
           Save Assessment Types
         </Button>
       </div>

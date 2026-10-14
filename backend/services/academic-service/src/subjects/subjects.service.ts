@@ -11,7 +11,14 @@ import { RedisService } from '../redis/redis.service';
 import { ROLES } from '../common/constants/roles';
 import { RequestUser } from '../common/interfaces/request-user.interface';
 import { StudentClientService } from '../student-client/student-client.service';
-import { resolveWriteSchoolId } from '../common/helpers/school-scope.helper';
+import {
+  assertSchoolInScope,
+  assertSchoolRecordWritable,
+  requireWriteSchoolId,
+  resolveWriteSchoolId,
+  schoolOrGlobalFilter,
+  schoolScopeFilter,
+} from '../common/helpers/school-scope.helper';
 import {
   GENERAL_STUDIES,
   PREDEFINED_A_LEVEL_COMBINATIONS,
@@ -132,6 +139,7 @@ export class SubjectsService {
     const response = await this.studentClient.get<{ id?: string; name?: string; data?: { id: string; name?: string } } | null>(
       `/students/internal/departments/by-user/${user.id}`,
       academicYearId ? { academicYearId } : undefined,
+      this.studentServiceHeaders(user),
     );
     if (!response) return null;
     return response.data ?? (response.id ? response as { id: string; name?: string } : null);
@@ -158,6 +166,8 @@ export class SubjectsService {
     return this.prisma.classSubject.create({
       data: {
         ...dto,
+        // Class-subject assignments always belong to the selected school.
+        schoolId: requireWriteSchoolId(user, 'class subject assignment'),
         educationStage: dto.educationStage ?? 'O_LEVEL',
       },
       include: { subject: true, combination: true },
@@ -187,6 +197,7 @@ export class SubjectsService {
 
     return this.prisma.classSubject.findMany({
       where: {
+        ...schoolScopeFilter(user),
         classId: filters.classId,
         academicYearId: filters.academicYearId,
         teacherId: filters.teacherId,
@@ -209,6 +220,7 @@ export class SubjectsService {
     if (!existing) {
       throw new NotFoundException('Class subject not found');
     }
+    assertSchoolInScope(user, (existing as { schoolId?: string | null }).schoolId ?? null);
     await this.assertHodSubjectScope(user, dto.subjectId ?? existing.subjectId, dto.academicYearId ?? existing.academicYearId);
 
     return this.prisma.classSubject.update({ where: { id }, data: dto, include: { subject: true, combination: true } });
@@ -220,7 +232,8 @@ export class SubjectsService {
     }
     await this.assertCombinationSubjectsActive(dto.subjects.map((s) => s.subjectId));
     this.assertALevelCombinationValid(dto.subjects);
-    const schoolId = user?.scope === 'SCHOOL' ? (user.activeSchoolId ?? user.schoolIds?.[0] ?? null) : null;
+    // Subject combinations created from the administration UI belong to the selected school.
+    const schoolId = requireWriteSchoolId(user, 'subject combination');
     try {
       return await this.prisma.subjectCombination.create({
         data: {
@@ -386,7 +399,7 @@ export class SubjectsService {
     }
   }
 
-  async updateSubjectCombination(id: string, dto: Partial<CreateSubjectCombinationDto>) {
+  async updateSubjectCombination(id: string, dto: Partial<CreateSubjectCombinationDto>, user?: RequestUser) {
     const existing = await this.prisma.subjectCombination.findUnique({
       where: { id },
       include: { subjects: true },
@@ -394,6 +407,7 @@ export class SubjectsService {
     if (!existing) {
       throw new NotFoundException('Subject combination not found');
     }
+    assertSchoolRecordWritable(user, existing.schoolId ?? null, 'subject combination');
     if (dto.educationStage && dto.educationStage !== 'A_LEVEL') {
       throw new BadRequestException('Subject combinations are only supported for A-Level');
     }
@@ -432,11 +446,12 @@ export class SubjectsService {
     });
   }
 
-  async deactivateSubjectCombination(id: string) {
+  async deactivateSubjectCombination(id: string, user?: RequestUser) {
     const existing = await this.prisma.subjectCombination.findUnique({ where: { id } });
     if (!existing) {
       throw new NotFoundException('Subject combination not found');
     }
+    assertSchoolRecordWritable(user, existing.schoolId ?? null, 'subject combination');
     return this.prisma.subjectCombination.update({
       where: { id },
       data: { isActive: false },
@@ -445,14 +460,14 @@ export class SubjectsService {
   }
 
   async listSubjectCombinations(filters: { academicYearId?: string; educationStage?: string; isActive?: string }, user?: RequestUser) {
-    const schoolId = user?.scope === 'SCHOOL' ? (user.activeSchoolId ?? user.schoolIds?.[0] ?? null) : null;
     return this.prisma.subjectCombination.findMany({
       where: {
         academicYearId: filters.academicYearId,
         educationStage: filters.educationStage as any,
         isActive: filters.isActive === undefined ? undefined : filters.isActive === 'true',
-        // Return combinations belonging to this school OR group-wide combinations (schoolId = null)
-        ...(schoolId ? { OR: [{ schoolId }, { schoolId: null }] } : {}),
+        // This school's combinations OR shared/global ones (schoolId = null); a group
+        // user with an active school gets that school's view, no selection → all.
+        ...schoolOrGlobalFilter(user),
       },
       include: { subjects: { include: { subject: true }, orderBy: { displayOrder: 'asc' } } },
       orderBy: [{ academicYearId: 'desc' }, { code: 'asc' }],

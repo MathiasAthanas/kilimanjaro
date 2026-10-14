@@ -31,8 +31,8 @@ enum Role {
 }
 
 /// Multi-school expansion: a user's access is the union of their memberships.
-/// Group roles (SUPER_ADMIN, MANAGER, HEAD_OF_FINANCE, SYSTEM_ADMIN) use
-/// schoolId = null (= all schools); school roles carry one row per school.
+/// Group roles (SUPER_ADMIN, MANAGER, HEAD_OF_FINANCE) use schoolId = null
+/// (= all schools); SYSTEM_ADMIN and other operational roles are school-scoped.
 model SchoolMembership {
   id           String    @id @default(uuid())
   authUserId   String

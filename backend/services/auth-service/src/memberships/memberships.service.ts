@@ -5,7 +5,7 @@ import { AuditService } from '../audit/audit.service';
 import { RabbitMQService } from '../rabbitmq/rabbitmq.service';
 import { UsersService } from '../users/users.service';
 
-const GROUP_ROLES: Role[] = [Role.SUPER_ADMIN, Role.SYSTEM_ADMIN, Role.MANAGER, Role.HEAD_OF_FINANCE];
+const GROUP_ROLES: Role[] = [Role.SUPER_ADMIN, Role.MANAGER, Role.HEAD_OF_FINANCE];
 
 type MembershipActor = {
   sub: string;
@@ -30,7 +30,7 @@ export class MembershipsService {
     actorRole?: string,
     actor?: MembershipActor,
   ) {
-    this.assertCanAssignRole(input.role, actorRole);
+    this.assertCanAssignRole(input.role, actorRole, actor);
     const isGroupRole = GROUP_ROLES.includes(input.role);
     const schoolId = isGroupRole ? null : input.schoolId ?? null;
     this.assertSchoolScope(schoolId, actor);
@@ -180,9 +180,12 @@ export class MembershipsService {
     return actorRole === Role.SUPER_ADMIN;
   }
 
-  private assertCanAssignRole(role: Role, actorRole?: string): void {
+  private assertCanAssignRole(role: Role, actorRole?: string, actor?: MembershipActor): void {
     if (role === Role.SUPER_ADMIN && !this.isSuperAdmin(actorRole)) {
       throw new ForbiddenException('Only super admins can assign this role');
+    }
+    if (GROUP_ROLES.includes(role) && actor?.scope !== 'GROUP') {
+      throw new ForbiddenException('Only a group-scoped account can assign a group-wide role');
     }
   }
 

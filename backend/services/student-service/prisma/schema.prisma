@@ -549,9 +549,9 @@ model PerformanceEngineConfig {
 
 model Department {
   id              String          @id @default(uuid())
-  schoolId    String?
-  name            String          @unique
-  code            String          @unique
+  schoolId        String?
+  name            String
+  code            String
   description     String?
   isSystemDefault Boolean         @default(false)
   isActive        Boolean         @default(true)
@@ -559,12 +559,15 @@ model Department {
   updatedAt       DateTime        @updatedAt
   hodAssignments  DepartmentHod[]
 
+  @@index([schoolId, name])
+  @@index([schoolId, code])
   @@schema("students")
 }
 
 model DepartmentHod {
   id             String     @id @default(uuid())
   departmentId   String
+  schoolId       String?
   userId         String
   firstName      String
   lastName       String
@@ -577,6 +580,8 @@ model DepartmentHod {
   @@unique([departmentId, userId, academicYearId])
   @@index([userId, isActive])
   @@index([departmentId, isActive])
+  @@index([schoolId, userId, isActive])
+  @@index([schoolId, departmentId, isActive])
   @@schema("students")
 }
 

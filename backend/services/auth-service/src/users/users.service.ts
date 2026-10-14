@@ -30,7 +30,6 @@ type AuthActor = {
 export class UsersService {
   private static readonly GROUP_ROLES: Role[] = [
     Role.SUPER_ADMIN,
-    Role.SYSTEM_ADMIN,
     Role.MANAGER,
     Role.HEAD_OF_FINANCE,
   ];
@@ -81,7 +80,7 @@ export class UsersService {
   }
 
   async createUser(dto: CreateUserDto, createdBy: string, actorRole?: string, actor?: AuthActor) {
-    this.assertCanGrantRole(dto.role, actorRole);
+    this.assertCanGrantRole(dto.role, actorRole, actor);
     const phoneLoginableRoles: Role[] = [Role.STUDENT, Role.PARENT];
     if (!phoneLoginableRoles.includes(dto.role) && !dto.email) {
       throw new BadRequestException('email is required for this role');
@@ -423,7 +422,7 @@ export class UsersService {
 
   async updateRole(userId: string, role: Role, actorId: string, actorRole?: string, actor?: AuthActor): Promise<void> {
     await this.findManageableById(userId, actorRole, actor);
-    this.assertCanGrantRole(role, actorRole);
+    this.assertCanGrantRole(role, actorRole, actor);
 
     await this.prisma.$transaction([
       this.prisma.user.update({ where: { id: userId }, data: { role } }),
@@ -759,9 +758,12 @@ export class UsersService {
     return actorRole === Role.SUPER_ADMIN;
   }
 
-  private assertCanGrantRole(role: Role, actorRole?: string): void {
+  private assertCanGrantRole(role: Role, actorRole?: string, actor?: AuthActor): void {
     if (role === Role.SUPER_ADMIN && !this.isSuperAdmin(actorRole)) {
       throw new ForbiddenException('Only super admins can assign this role');
+    }
+    if (UsersService.GROUP_ROLES.includes(role) && actor?.scope !== 'GROUP') {
+      throw new ForbiddenException('Only a group-scoped account can assign a group-wide role');
     }
   }
 

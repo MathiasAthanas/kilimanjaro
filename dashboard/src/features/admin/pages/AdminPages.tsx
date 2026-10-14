@@ -95,6 +95,7 @@ import {
   useRemoveHodMutation,
 } from '../api/admin.hooks';
 import { useAuthStore } from '../../../lib/auth/authStore';
+import { useSchoolStore } from '../../../lib/school/schoolStore';
 import { useFeeCategories } from '../../finance/api/finance.hooks';
 import { useAnnouncements } from '../../common/common.hooks';
 import {
@@ -3149,12 +3150,15 @@ function normaliseStage(raw: unknown): string {
 export function AssessmentTypesPage() {
   const { data: apiAssessmentTypes = [] as typeof assessmentTypes } = useAssessmentTypes() as unknown as { data: typeof assessmentTypes };
   const saveAssessmentTypesMutation = useSaveAssessmentTypesMutation();
+  const activeSchool = useSchoolStore((state) => state.activeSchool);
   const [activeStage, setActiveStage] = useState<StageKey>('O_LEVEL');
   const { data: academicYears = [] } = useAcademicYears();
   const currentYear = (academicYears as any[]).find((y: any) => y.isCurrent) ?? (academicYears as any[])[0];
   const defaultAcademicYearId = String(currentYear?.id ?? '');
 
-  const stageTypes = (apiAssessmentTypes as any[]).filter(
+  const schoolAssessmentTypes = (apiAssessmentTypes as any[]).filter((t) => !t.isGroupTemplate);
+  const groupTemplateCount = (apiAssessmentTypes as any[]).filter((t) => t.isGroupTemplate).length;
+  const stageTypes = schoolAssessmentTypes.filter(
     (t) => normaliseStage(t.educationStage ?? t.scope) === activeStage && t.isActive !== false,
   );
   const total = assessmentWeightsTotal(stageTypes.map((t) => Number(t.weight ?? 0)));
@@ -3175,13 +3179,13 @@ export function AssessmentTypesPage() {
         tone: total === 100 ? 'green' : 'rose',
       }, {
         label: 'Total Types',
-        value: String((apiAssessmentTypes as any[]).filter((t) => t.isActive !== false).length),
-        detail: 'Across all stages',
+        value: String(schoolAssessmentTypes.filter((t) => t.isActive !== false).length),
+        detail: 'Configured for this school',
         tone: 'blue',
       }]} />
       <div className="mb-4 flex flex-wrap gap-2">
         {STAGE_TABS.map((tab) => {
-          const count = (apiAssessmentTypes as any[]).filter(
+          const count = schoolAssessmentTypes.filter(
             (t) => normaliseStage(t.educationStage ?? t.scope) === tab.value && t.isActive !== false,
           ).length;
           return (
@@ -3202,10 +3206,21 @@ export function AssessmentTypesPage() {
           );
         })}
       </div>
+      {!activeSchool && (
+        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
+          Select a school in the top bar before adding or changing assessment types.
+        </div>
+      )}
+      {groupTemplateCount > 0 && (
+        <p className="mb-4 text-xs font-semibold text-slate-500">
+          {groupTemplateCount} group template{groupTemplateCount === 1 ? '' : 's'} available. Templates are read-only; this page configures the selected school's assessment types.
+        </p>
+      )}
       <AssessmentTypeEditor
         key={activeStage}
         types={stageTypes}
         loading={saveAssessmentTypesMutation.isPending}
+        disabled={!activeSchool}
         onSave={saveAssessmentTypes}
         defaultStage={activeStage}
         defaultAcademicYearId={defaultAcademicYearId}
@@ -5223,11 +5238,14 @@ export function DepartmentsPage() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
+  const activeSchool = useSchoolStore((state) => state.activeSchool);
   const selected = (depts as any[]).find((d: any) => d.id === selectedId) ?? null;
-  const { data: hods = [] } = useDepartmentHods(selectedId ?? undefined);
+  const isGroupTemplate = Boolean(selected?.isGroupTemplate);
+  const { data: hods = [] } = useDepartmentHods(selected && !isGroupTemplate ? selectedId ?? undefined : undefined);
   const hodUsers = (apiUsers as any[]).filter((u: any) => u.role === 'HEAD_OF_DEPARTMENT');
 
   const submitCreate = () => {
+    if (!activeSchool) { toast('Select a school in the top bar before creating a department', 'warning'); return; }
     if (!createForm.name.trim() || !createForm.code.trim()) { toast('Name and code are required', 'warning'); return; }
     createDeptMutation.mutate(createForm, {
       onSuccess: () => { toast('Department created', 'success'); setCreateForm({ name: '', code: '', description: '' }); },
@@ -5274,7 +5292,7 @@ export function DepartmentsPage() {
 
         {/* Left — department list + create */}
         <div className="space-y-gutter">
-          <AdminFormSection title="Create Department" subtitle="Add a new academic or administrative department.">
+          <AdminFormSection title="Create Department" subtitle={activeSchool ? `This department will belong to ${activeSchool.name}.` : 'Select a school in the top bar to create a department.'}>
             <div className="grid gap-4 md:grid-cols-3">
               <Field label="Name" value={createForm.name} onChange={(e) => setCreateForm((f) => ({ ...f, name: e.target.value }))} placeholder="e.g. Science" />
               <Field label="Code" value={createForm.code} onChange={(e) => setCreateForm((f) => ({ ...f, code: e.target.value.toUpperCase() }))} placeholder="e.g. SCI" />
@@ -5291,6 +5309,7 @@ export function DepartmentsPage() {
             <AdminDataTable columns={['Department', 'Code', 'Active HOD', 'Actions']}>
               {(depts as any[]).map((dept: any) => {
                 const isSystemDept = Boolean(dept.isSystemDefault);
+                const isTemplate = Boolean(dept.isGroupTemplate);
                 const isPendingDelete = pendingDeleteId === dept.id;
                 return (
                   <React.Fragment key={dept.id}>
@@ -5303,6 +5322,7 @@ export function DepartmentsPage() {
                           {isSystemDept && <span title="System default — cannot delete" className="text-amber-500 select-none">⚖</span>}
                           <span className="font-black text-slate-900">{dept.name}</span>
                           {isSystemDept && <Badge tone="amber">System</Badge>}
+                          {isTemplate && <Badge tone="slate">Group template</Badge>}
                         </div>
                       </Td>
                       <Td className="font-mono text-xs text-slate-500">{dept.code}</Td>
@@ -5322,18 +5342,18 @@ export function DepartmentsPage() {
                           </div>
                         ) : (
                           <div className="flex gap-1">
-                            <button onClick={() => { setSelectedId(dept.id); setEditForm({ name: dept.name, code: dept.code, description: dept.description ?? '' }); }}
+                            {!isTemplate && <button onClick={() => { setSelectedId(dept.id); setEditForm({ name: dept.name, code: dept.code, description: dept.description ?? '' }); }}
                               className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" title="Edit">
                               <Edit2 className="h-3.5 w-3.5" />
-                            </button>
-                            {!isSystemDept && (
+                            </button>}
+                            {!isSystemDept && !isTemplate && (
                               <button onClick={() => { setPendingDeleteId(dept.id); setDeleteError(null); }}
                                 className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600" title="Delete">
                                 <Trash2 className="h-3.5 w-3.5" />
                               </button>
                             )}
-                            {isSystemDept && (
-                              <span title="System default cannot be deleted" className="rounded p-1 text-slate-300 cursor-not-allowed">
+                            {(isSystemDept || isTemplate) && (
+                              <span title={isTemplate ? 'Group templates are read-only. Create a school department to configure it.' : 'System default cannot be deleted'} className="rounded p-1 text-slate-300 cursor-not-allowed">
                                 <Lock className="h-3.5 w-3.5" />
                               </span>
                             )}
@@ -5363,7 +5383,11 @@ export function DepartmentsPage() {
                 </button>
               </div>
 
-              {editForm ? (
+              {isGroupTemplate ? (
+                <div className="rounded-xl border border-indigo-100 bg-indigo-50 p-3 text-sm font-semibold text-indigo-800">
+                  This is a group template. Create a department for the selected school to edit it or assign an HOD.
+                </div>
+              ) : editForm ? (
                 <div className="space-y-3">
                   <Field label="Name" value={editForm.name} onChange={(e) => setEditForm((f) => f ? { ...f, name: e.target.value } : f)} placeholder="Department name" />
                   <Field label="Code" value={editForm.code} onChange={(e) => setEditForm((f) => f ? { ...f, code: e.target.value.toUpperCase() } : f)} placeholder="Department code" />
@@ -5379,7 +5403,7 @@ export function DepartmentsPage() {
             </div>
 
             {/* HOD Assignments */}
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
+            {!isGroupTemplate && <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
               <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">HOD Assignments</p>
               {(hods as any[]).length === 0 ? (
                 <p className="text-sm text-slate-400 italic">No HOD assigned yet.</p>
@@ -5434,7 +5458,7 @@ export function DepartmentsPage() {
                   <UserPlus className="h-4 w-4" /> Assign HOD
                 </Button>
               </div>
-            </div>
+            </div>}
           </div>
         )}
       </div>

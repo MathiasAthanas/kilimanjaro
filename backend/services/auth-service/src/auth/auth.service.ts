@@ -349,7 +349,8 @@ export class AuthService {
 
   async getUserForGateway(userId: string) {
     const user = await this.usersService.findById(userId);
-    return { id: user.id, role: user.role, isActive: user.isActive };
+    const { scope, schoolIds } = await this.resolveSchoolScope(user);
+    return { id: user.id, role: user.role, isActive: user.isActive, scope, schoolIds };
   }
 
   async getUsersByRoleInternal(rolesCsv: string) {
@@ -411,10 +412,9 @@ export class AuthService {
     return Boolean(found);
   }
 
-  /** Group roles see every school; school roles see the union of their memberships. */
+  /** Only explicitly group-wide roles see every school; SYSTEM_ADMIN is school-scoped. */
   private static readonly GROUP_ROLES: Role[] = [
     Role.SUPER_ADMIN,
-    Role.SYSTEM_ADMIN,
     Role.MANAGER,
     Role.HEAD_OF_FINANCE,
   ];

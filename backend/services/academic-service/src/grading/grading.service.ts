@@ -1,6 +1,12 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
+import { RequestUser } from '../common/interfaces/request-user.interface';
+import {
+  assertSchoolRecordWritable,
+  requireWriteSchoolId,
+  schoolOrGlobalFilter,
+} from '../common/helpers/school-scope.helper';
 import { CreateAssessmentTypeDto } from './dto/create-assessment-type.dto';
 import { CreateGradingScaleDto } from './dto/create-grading-scale.dto';
 
@@ -29,12 +35,20 @@ export class GradingService {
     }
   }
 
-  async createGradingScale(dto: CreateGradingScaleDto) {
+  private scopeCacheKey(user?: RequestUser): string {
+    if (!user) return 'internal';
+    if (user.activeSchoolId) return `school:${user.activeSchoolId}`;
+    if (user.scope === 'SCHOOL') return `schools:${(user.schoolIds ?? []).filter((id) => id !== '*').sort().join(',') || 'none'}`;
+    return 'group';
+  }
+
+  async createGradingScale(dto: CreateGradingScaleDto, user?: RequestUser) {
     this.validateBoundaries(dto.grades);
 
     const scale = await this.prisma.gradingScale.create({
       data: {
         name: dto.name,
+        schoolId: requireWriteSchoolId(user, 'grading scale'),
         academicYearId: dto.academicYearId,
         educationStage: dto.educationStage,
         classLevel: dto.classLevel,
@@ -55,9 +69,10 @@ export class GradingService {
     educationStage?: string;
     classLevel?: number;
     subjectId?: string;
-  } = {}) {
+  } = {}, user?: RequestUser) {
     return this.prisma.gradingScale.findMany({
       where: {
+        ...schoolOrGlobalFilter(user),
         academicYearId: filters.academicYearId,
         educationStage: filters.educationStage as any,
         classLevel: filters.classLevel,
@@ -68,15 +83,19 @@ export class GradingService {
     });
   }
 
-  async activateGradingScale(id: string) {
+  async activateGradingScale(id: string, user?: RequestUser) {
     const existing = await this.prisma.gradingScale.findUnique({ where: { id } });
     if (!existing) {
       throw new NotFoundException('Grading scale not found');
     }
+    assertSchoolRecordWritable(user, existing.schoolId ?? null, 'grading scale');
 
     const result = await this.prisma.$transaction(async (tx) => {
       await tx.gradingScale.updateMany({
         where: {
+          // Only deactivate sibling scales in the SAME school (or same global set),
+          // so activating one school's scale never touches another school's.
+          schoolId: existing.schoolId ?? null,
           academicYearId: existing.academicYearId,
           educationStage: existing.educationStage,
           classLevel: existing.classLevel,
@@ -97,9 +116,10 @@ export class GradingService {
     return result;
   }
 
-  async updateGradingScale(id: string, dto: { name: string; grades: Array<{ grade: string; minScore: number; maxScore: number; points: number; remark: string; isPassing: boolean }> }) {
+  async updateGradingScale(id: string, dto: { name: string; grades: Array<{ grade: string; minScore: number; maxScore: number; points: number; remark: string; isPassing: boolean }> }, user?: RequestUser) {
     const existing = await this.prisma.gradingScale.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Grading scale not found');
+    assertSchoolRecordWritable(user, existing.schoolId ?? null, 'grading scale');
 
     this.validateBoundaries(dto.grades);
 
@@ -119,9 +139,10 @@ export class GradingService {
     return updated;
   }
 
-  async deleteGradingScale(id: string): Promise<void> {
+  async deleteGradingScale(id: string, user?: RequestUser): Promise<void> {
     const existing = await this.prisma.gradingScale.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Grading scale not found');
+    assertSchoolRecordWritable(user, existing.schoolId ?? null, 'grading scale');
 
     if (existing.isActive) {
       throw new BadRequestException(
@@ -133,7 +154,8 @@ export class GradingService {
     await this.redis.delByPattern(`grading-scale:active:${existing.academicYearId}:*`);
   }
 
-  async createAssessmentType(dto: CreateAssessmentTypeDto) {
+  async createAssessmentType(dto: CreateAssessmentTypeDto, user?: RequestUser) {
+    const schoolId = requireWriteSchoolId(user, 'assessment type');
     // Serializable transaction prevents two concurrent creates from both passing
     // the weight-sum check and ending up with a total > 100%.
     const type = await this.prisma.$transaction(
@@ -141,6 +163,7 @@ export class GradingService {
         const currentTotal = await tx.assessmentType.aggregate({
           _sum: { weightPercentage: true },
           where: {
+            schoolId,
             academicYearId: dto.academicYearId,
             educationStage: dto.educationStage,
             classLevel: dto.classLevel,
@@ -152,7 +175,7 @@ export class GradingService {
         if (total > 100.001) {
           throw new BadRequestException('Assessment type weights exceed 100%');
         }
-        return tx.assessmentType.create({ data: dto });
+        return tx.assessmentType.create({ data: { ...dto, schoolId } });
       },
       { isolationLevel: 'Serializable' },
     );
@@ -160,11 +183,12 @@ export class GradingService {
     return type;
   }
 
-  async updateAssessmentType(id: string, dto: Partial<CreateAssessmentTypeDto>) {
+  async updateAssessmentType(id: string, dto: Partial<CreateAssessmentTypeDto>, user?: RequestUser) {
     const existing = await this.prisma.assessmentType.findUnique({ where: { id } });
     if (!existing) {
       throw new NotFoundException('Assessment type not found');
     }
+    assertSchoolRecordWritable(user, existing.schoolId ?? null, 'assessment type');
 
     const updated = await this.prisma.$transaction(
       async (tx) => {
@@ -172,6 +196,7 @@ export class GradingService {
           const currentTotal = await tx.assessmentType.aggregate({
             _sum: { weightPercentage: true },
             where: {
+              schoolId: existing.schoolId,
               academicYearId: dto.academicYearId ?? existing.academicYearId,
               educationStage: (dto.educationStage ?? existing.educationStage) as any,
               classLevel: dto.classLevel ?? existing.classLevel,
@@ -210,9 +235,9 @@ export class GradingService {
     educationStage?: string;
     classLevel?: number;
     subjectId?: string;
-  } = {}) {
+  } = {}, user?: RequestUser) {
     const cacheKey = filters.academicYearId
-      ? `assessment-types:${filters.academicYearId}:${filters.educationStage ?? 'ALL'}:${filters.classLevel ?? 'ALL'}:${filters.subjectId ?? 'ALL'}`
+      ? `assessment-types:${this.scopeCacheKey(user)}:${filters.academicYearId}:${filters.educationStage ?? 'ALL'}:${filters.classLevel ?? 'ALL'}:${filters.subjectId ?? 'ALL'}`
       : '';
     if (cacheKey) {
       const cached = await this.redis.get(cacheKey);
@@ -223,6 +248,7 @@ export class GradingService {
 
     const types = await this.prisma.assessmentType.findMany({
       where: {
+        ...schoolOrGlobalFilter(user),
         academicYearId: filters.academicYearId,
         educationStage: filters.educationStage as any,
         classLevel: filters.classLevel,

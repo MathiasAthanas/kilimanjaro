@@ -158,6 +158,8 @@ export function useDepartments() {
             name: String(d.name ?? ''),
             code: String(d.code ?? ''),
             description: String(d.description ?? ''),
+            schoolId: d.schoolId ? String(d.schoolId) : null,
+            isGroupTemplate: !d.schoolId,
             isSystemDefault: Boolean(d.isSystemDefault),
             isActive: Boolean(d.isActive ?? true),
             activeHodName: activeHod
@@ -578,6 +580,8 @@ export function useAssessmentTypes() {
             educationStage: String(t.educationStage ?? t.stage ?? ''),
             classLevel: t.classLevel === null || t.classLevel === undefined ? '' : String(t.classLevel),
             subjectId: String(t.subjectId ?? ''),
+            schoolId: t.schoolId ? String(t.schoolId) : null,
+            isGroupTemplate: !t.schoolId,
             isActive: Boolean(t.isActive ?? true),
             scope: String(t.scope ?? t.level ?? t.stageScope ?? t.educationStage ?? ''),
           };

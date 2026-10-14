@@ -15,8 +15,8 @@ export class GradingController {
 
   @Post('grading-scales')
   @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN)
-  createGradingScale(@Body() dto: CreateGradingScaleDto) {
-    return this.gradingService.createGradingScale(dto);
+  createGradingScale(@Body() dto: CreateGradingScaleDto, @CurrentUser() user?: RequestUser) {
+    return this.gradingService.createGradingScale(dto, user);
   }
 
   @Get('grading-scales')
@@ -28,6 +28,7 @@ export class GradingController {
     ROLES.TEACHER,
   )
   listGradingScales(
+    @CurrentUser() user?: RequestUser,
     @Query('academicYearId') academicYearId?: string,
     @Query('educationStage') educationStage?: string,
     @Query('classLevel') classLevel?: string,
@@ -38,38 +39,42 @@ export class GradingController {
       educationStage,
       classLevel: classLevel ? Number(classLevel) : undefined,
       subjectId,
-    });
+    }, user);
   }
 
   @Patch('grading-scales/:id')
   @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN)
-  updateGradingScale(@Param('id') id: string, @Body() dto: { name: string; grades: any[] }) {
-    return this.gradingService.updateGradingScale(id, dto);
+  updateGradingScale(@Param('id') id: string, @Body() dto: { name: string; grades: any[] }, @CurrentUser() user?: RequestUser) {
+    return this.gradingService.updateGradingScale(id, dto, user);
   }
 
   @Patch('grading-scales/:id/activate')
   @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN)
-  activateGradingScale(@Param('id') id: string) {
-    return this.gradingService.activateGradingScale(id);
+  activateGradingScale(@Param('id') id: string, @CurrentUser() user?: RequestUser) {
+    return this.gradingService.activateGradingScale(id, user);
   }
 
   @Delete('grading-scales/:id')
   @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN)
   @HttpCode(HttpStatus.NO_CONTENT)
-  deleteGradingScale(@Param('id') id: string) {
-    return this.gradingService.deleteGradingScale(id);
+  deleteGradingScale(@Param('id') id: string, @CurrentUser() user?: RequestUser) {
+    return this.gradingService.deleteGradingScale(id, user);
   }
 
   @Post('assessment-types')
   @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA)
-  createAssessmentType(@Body() dto: CreateAssessmentTypeDto) {
-    return this.gradingService.createAssessmentType(dto);
+  createAssessmentType(@Body() dto: CreateAssessmentTypeDto, @CurrentUser() user?: RequestUser) {
+    return this.gradingService.createAssessmentType(dto, user);
   }
 
   @Patch('assessment-types/:id')
   @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA)
-  updateAssessmentType(@Param('id') id: string, @Body() dto: Partial<CreateAssessmentTypeDto>) {
-    return this.gradingService.updateAssessmentType(id, dto);
+  updateAssessmentType(
+    @Param('id') id: string,
+    @Body() dto: Partial<CreateAssessmentTypeDto>,
+    @CurrentUser() user?: RequestUser,
+  ) {
+    return this.gradingService.updateAssessmentType(id, dto, user);
   }
 
   @Get('assessment-types')
@@ -81,6 +86,7 @@ export class GradingController {
     ROLES.TEACHER,
   )
   listAssessmentTypes(
+    @CurrentUser() user?: RequestUser,
     @Query('academicYearId') academicYearId?: string,
     @Query('educationStage') educationStage?: string,
     @Query('classLevel') classLevel?: string,
@@ -91,6 +97,6 @@ export class GradingController {
       educationStage,
       classLevel: classLevel ? Number(classLevel) : undefined,
       subjectId,
-    });
+    }, user);
   }
 }

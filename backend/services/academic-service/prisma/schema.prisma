@@ -240,6 +240,7 @@ model GradeBoundary {
 
 model AssessmentType {
   id               String          @id @default(uuid())
+  schoolId         String?
   name             String
   code             String
   weightPercentage Float
@@ -251,8 +252,8 @@ model AssessmentType {
   createdAt        DateTime        @default(now())
   assessments      Assessment[]
 
-  @@unique([code, academicYearId, educationStage, classLevel, subjectId])
-  @@index([academicYearId, educationStage, classLevel, subjectId, isActive])
+  @@index([schoolId, academicYearId, educationStage, classLevel, subjectId, isActive])
+  @@index([schoolId, code, academicYearId])
   @@schema("academics")
 }
 

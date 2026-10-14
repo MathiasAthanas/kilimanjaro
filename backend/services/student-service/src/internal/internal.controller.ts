@@ -4,6 +4,8 @@ import { InternalApiGuard } from '../common/guards/internal-api.guard';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { DepartmentsService } from '../departments/departments.service';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { RequestUser } from '../common/interfaces/request-user.interface';
 
 @ApiTags('Internal')
 @Controller('students/internal')
@@ -96,8 +98,9 @@ export class InternalController {
   async departmentByUser(
     @Param('userId') userId: string,
     @Query('academicYearId') academicYearId?: string,
+    @CurrentUser() user?: RequestUser,
   ) {
-    return this.departments.getDepartmentByUserId(userId, academicYearId);
+    return this.departments.getDepartmentByUserId(userId, academicYearId, user);
   }
 
   @Get('class/:classId/student-ids')

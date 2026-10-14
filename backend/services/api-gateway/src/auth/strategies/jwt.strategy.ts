@@ -18,6 +18,14 @@ interface AccessPayload {
   exp?: number;
 }
 
+interface GatewayUserContext {
+  id: string;
+  role: string;
+  isActive: boolean;
+  scope: 'GROUP' | 'SCHOOL';
+  schoolIds: string[];
+}
+
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
@@ -64,20 +72,27 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('Unable to validate token revocation state');
     }
 
-    const cacheKey = `gateway:user_active:${payload.sub}`;
+    // Scope is live authorization data, not a permanent JWT claim. Cache the
+    // fresh identity briefly so membership changes take effect quickly and an
+    // old group-scoped token cannot retain broader school access.
+    const cacheKey = `gateway:user_context:${payload.sub}`;
     const cached = await this.redisService.get(cacheKey);
-    if (cached === '1') {
-      return {
-        id: payload.sub,
-        role: payload.role,
-        email: payload.email ?? null,
-        jti: payload.jti,
-        scope: payload.scope ?? 'SCHOOL',
-        schoolIds: payload.schoolIds ?? [],
-      };
-    }
-    if (cached === '0') {
-      throw new UnauthorizedException('User account is inactive');
+    if (cached) {
+      try {
+        const user = JSON.parse(cached) as GatewayUserContext;
+        if (!user.isActive) throw new UnauthorizedException('User account is inactive');
+        return {
+          id: user.id,
+          role: user.role,
+          email: payload.email ?? null,
+          jti: payload.jti,
+          scope: user.scope,
+          schoolIds: user.schoolIds,
+        };
+      } catch (error) {
+        if (error instanceof UnauthorizedException) throw error;
+        await this.redisService.del(cacheKey);
+      }
     }
 
     try {
@@ -88,21 +103,21 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         }),
       );
 
-      const user = userResponse?.data?.data;
+      const user = userResponse?.data?.data as GatewayUserContext | undefined;
       const active = Boolean(user?.isActive);
-      await this.redisService.set(cacheKey, active ? '1' : '0', 60);
+      if (user) await this.redisService.set(cacheKey, JSON.stringify(user), 60);
 
       if (!active) {
         throw new UnauthorizedException('User account is inactive');
       }
 
       return {
-        id: payload.sub,
+        id: user?.id || payload.sub,
         role: user?.role || payload.role,
         email: payload.email ?? null,
         jti: payload.jti,
-        scope: payload.scope ?? 'SCHOOL',
-        schoolIds: payload.schoolIds ?? [],
+        scope: user?.scope ?? 'SCHOOL',
+        schoolIds: user?.schoolIds ?? [],
       };
     } catch (error) {
       if (error instanceof UnauthorizedException) {

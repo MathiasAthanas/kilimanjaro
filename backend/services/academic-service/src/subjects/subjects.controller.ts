@@ -117,14 +117,14 @@ export class SubjectsController {
 
   @Patch('subject-combinations/:id')
   @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA)
-  updateSubjectCombination(@Param('id') id: string, @Body() dto: Partial<CreateSubjectCombinationDto>) {
-    return this.subjectsService.updateSubjectCombination(id, dto);
+  updateSubjectCombination(@Param('id') id: string, @Body() dto: Partial<CreateSubjectCombinationDto>, @CurrentUser() user?: RequestUser) {
+    return this.subjectsService.updateSubjectCombination(id, dto, user);
   }
 
   @Delete('subject-combinations/:id')
   @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA)
-  deactivateSubjectCombination(@Param('id') id: string) {
-    return this.subjectsService.deactivateSubjectCombination(id);
+  deactivateSubjectCombination(@Param('id') id: string, @CurrentUser() user?: RequestUser) {
+    return this.subjectsService.deactivateSubjectCombination(id, user);
   }
 
   @Get('subject-combinations')
