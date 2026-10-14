@@ -27,8 +27,8 @@ export class AssessmentsController {
 
   @Post('assessments/generate')
   @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA)
-  generate(@Body() dto: GenerateAssessmentsDto) {
-    return this.assessmentsService.generateAssessments(dto);
+  generate(@Body() dto: GenerateAssessmentsDto, @CurrentUser() user?: RequestUser) {
+    return this.assessmentsService.generateAssessments(dto, user);
   }
 
   @Get('assessments')

@@ -3,7 +3,7 @@ import { ExamWindowStatus, Prisma } from '../../generated/prisma';
 import { PrismaService } from '../prisma/prisma.service';
 import { RabbitMqService } from '../rabbitmq/rabbitmq.service';
 import { RequestUser } from '../common/interfaces/request-user.interface';
-import { assertSchoolInScope, resolveWriteSchoolId, schoolScopeFilter } from '../common/helpers/school-scope.helper';
+import { assertSchoolInScope, requireWriteSchoolId, schoolScopeFilter } from '../common/helpers/school-scope.helper';
 import { ReportCardsService } from '../report-cards/report-cards.service';
 import { GradingResolverService } from './grading-resolver.service';
 import { ComposeReportCardsDto } from './dto/compose-report-cards.dto';
@@ -98,7 +98,7 @@ export class ReportCompositionService {
   }
 
   async compose(dto: ComposeReportCardsDto, user: RequestUser) {
-    const schoolId = resolveWriteSchoolId(user);
+    const schoolId = requireWriteSchoolId(user, 'report card composition');
     const { windows, weightByWindow } = await this.resolveWindows(dto, user);
     const windowIds = windows.map((w) => w.id);
 

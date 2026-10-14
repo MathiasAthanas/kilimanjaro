@@ -7,7 +7,7 @@ import { RequestUser } from '../interfaces/request-user.interface';
  */
 
 export function isGroupScope(user?: RequestUser): boolean {
-  return !user || user.scope === 'GROUP' || (user.schoolIds ?? []).includes('*');
+  return user?.scope === 'GROUP' || (user?.schoolIds ?? []).includes('*');
 }
 
 /**
@@ -30,6 +30,8 @@ export function schoolScopeFilter(user?: RequestUser): { schoolId?: { in: string
 }
 
 export function schoolInScope(user: RequestUser | undefined, schoolId: string | null | undefined): boolean {
+  if (!user) return false;
+  if (user.activeSchoolId) return user.activeSchoolId === schoolId;
   if (isGroupScope(user)) return true;
   if (!schoolId) return false;
   return (user?.schoolIds ?? []).includes(schoolId);

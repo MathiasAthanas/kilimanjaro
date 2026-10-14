@@ -179,7 +179,7 @@ export class GradingService {
       },
       { isolationLevel: 'Serializable' },
     );
-    await this.redis.delByPattern(`assessment-types:${dto.academicYearId}:*`);
+    await this.redis.delByPattern(`assessment-types:*:${dto.academicYearId}:*`);
     return type;
   }
 
@@ -226,7 +226,7 @@ export class GradingService {
       },
       { isolationLevel: 'Serializable' },
     );
-    await this.redis.delByPattern(`assessment-types:${updated.academicYearId}:*`);
+    await this.redis.delByPattern(`assessment-types:*:${updated.academicYearId}:*`);
     return updated;
   }
 

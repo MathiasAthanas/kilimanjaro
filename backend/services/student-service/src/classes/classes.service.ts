@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RequestUser } from '../common/interfaces/request-user.interface';
-import { assertSchoolInScope, resolveWriteSchoolId, schoolScopeFilter } from '../common/helpers/school-scope.helper';
+import { assertSchoolInScope, requireWriteSchoolId, schoolScopeFilter } from '../common/helpers/school-scope.helper';
 import { CreateClassDto } from './dto/create-class.dto';
 import { CreateClassPathwayDto } from './dto/create-class-pathway.dto';
 import { CreateAcademicYearDto } from './dto/create-academic-year.dto';
@@ -40,10 +40,7 @@ export class ClassesService {
     this.validateClassShape(dto);
     // Every class belongs to the actor's selected/in-scope school so student
     // imports and rosters can derive schoolId from the class reliably.
-    const schoolId = resolveWriteSchoolId(user);
-    if (!schoolId) {
-      throw new BadRequestException('Select a school before creating a class');
-    }
+    const schoolId = requireWriteSchoolId(user, 'class');
     return this.prisma.class.create({
       data: {
         schoolId,
@@ -63,11 +60,12 @@ export class ClassesService {
     });
   }
 
-  async updateClass(id: string, dto: Partial<CreateClassDto>): Promise<unknown> {
+  async updateClass(id: string, dto: Partial<CreateClassDto>, user?: RequestUser): Promise<unknown> {
     const existing = await this.prisma.class.findUnique({ where: { id } });
     if (!existing) {
       throw new NotFoundException('Class not found');
     }
+    assertSchoolInScope(user, existing.schoolId ?? null);
     const merged = {
       ...existing,
       ...dto,
@@ -293,7 +291,20 @@ export class ClassesService {
     });
   }
 
-  async createClassPathway(dto: CreateClassPathwayDto): Promise<unknown> {
+  async createClassPathway(dto: CreateClassPathwayDto, user?: RequestUser): Promise<unknown> {
+    const fromClass = await this.prisma.class.findUnique({ where: { id: dto.fromClassId }, select: { schoolId: true } });
+    if (!fromClass) throw new NotFoundException('Source class not found');
+    assertSchoolInScope(user, fromClass.schoolId ?? null);
+
+    if (dto.toClassId) {
+      const toClass = await this.prisma.class.findUnique({ where: { id: dto.toClassId }, select: { schoolId: true } });
+      if (!toClass) throw new NotFoundException('Destination class not found');
+      assertSchoolInScope(user, toClass.schoolId ?? null);
+      if (toClass.schoolId !== fromClass.schoolId) {
+        throw new BadRequestException('Promotion pathways must connect classes in the same school');
+      }
+    }
+
     return this.prisma.classPathway.upsert({
       where: {
         fromClassId_academicYearId: {
@@ -317,18 +328,19 @@ export class ClassesService {
     });
   }
 
-  async listClassPathways(filters: { academicYearId?: string; transitionType?: string }): Promise<unknown> {
+  async listClassPathways(filters: { academicYearId?: string; transitionType?: string }, user?: RequestUser): Promise<unknown> {
     return this.prisma.classPathway.findMany({
       where: {
         academicYearId: filters.academicYearId,
         transitionType: filters.transitionType as any,
+        fromClass: schoolScopeFilter(user),
       },
       include: { fromClass: true, toClass: true, academicYear: true },
       orderBy: [{ academicYear: { startDate: 'desc' } }, { fromClass: { sortOrder: 'asc' } }],
     });
   }
 
-  async resolveNextClass(fromClassId: string, academicYearId: string): Promise<unknown> {
+  async resolveNextClass(fromClassId: string, academicYearId: string, user?: RequestUser): Promise<unknown> {
     const pathway = await this.prisma.classPathway.findUnique({
       where: { fromClassId_academicYearId: { fromClassId, academicYearId } },
       include: { fromClass: true, toClass: true, academicYear: true },
@@ -336,6 +348,8 @@ export class ClassesService {
     if (!pathway) {
       throw new NotFoundException('No class pathway configured for this class and academic year');
     }
+    assertSchoolInScope(user, pathway.fromClass.schoolId ?? null);
+    if (pathway.toClass) assertSchoolInScope(user, pathway.toClass.schoolId ?? null);
     return pathway;
   }
 
@@ -376,9 +390,10 @@ export class ClassesService {
     });
   }
 
-  async deleteClass(id: string): Promise<void> {
+  async deleteClass(id: string, user?: RequestUser): Promise<void> {
     const cls = await this.prisma.class.findUnique({ where: { id } });
     if (!cls) throw new NotFoundException('Class not found');
+    assertSchoolInScope(user, cls.schoolId ?? null);
 
     const [activeEnrolments, totalEnrolments] = await Promise.all([
       this.prisma.enrolment.count({ where: { classId: id, isActive: true } }),

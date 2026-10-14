@@ -14,7 +14,7 @@ import { RequestUser } from '../common/interfaces/request-user.interface';
 import { ROLES } from '../common/constants/roles';
 import {
   assertSchoolInScope,
-  resolveWriteSchoolId,
+  requireWriteSchoolId,
   schoolScopeFilter,
 } from '../common/helpers/school-scope.helper';
 import { CreateExamWindowDto, ExamWindowFilterDto, UpdateExamWindowDto } from './dto/exam-window.dto';
@@ -108,7 +108,7 @@ export class ExamWindowsService {
   }
 
   async create(dto: CreateExamWindowDto, user: RequestUser) {
-    const schoolId = resolveWriteSchoolId(user);
+    const schoolId = requireWriteSchoolId(user, 'exam window');
 
     const examType = await this.prisma.examType.findUnique({ where: { id: dto.examTypeId } });
     if (!examType) {

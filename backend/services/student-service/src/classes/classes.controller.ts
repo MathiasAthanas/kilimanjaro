@@ -27,8 +27,8 @@ export class ClassesController {
   @Patch('classes/:classId')
   @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN')
   @ApiOperation({ summary: 'Update class setup and mixed-school stage metadata' })
-  async updateClass(@Param('classId') classId: string, @Body() dto: Partial<CreateClassDto>) {
-    return this.classesService.updateClass(classId, dto);
+  async updateClass(@Param('classId') classId: string, @Body() dto: Partial<CreateClassDto>, @CurrentUser() user?: RequestUser) {
+    return this.classesService.updateClass(classId, dto, user);
   }
 
   @Get('classes')
@@ -57,8 +57,8 @@ export class ClassesController {
   @Post('class-pathways')
   @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN')
   @ApiOperation({ summary: 'Create or update class promotion/transition pathway' })
-  async createClassPathway(@Body() dto: CreateClassPathwayDto) {
-    return this.classesService.createClassPathway(dto);
+  async createClassPathway(@Body() dto: CreateClassPathwayDto, @CurrentUser() user?: RequestUser) {
+    return this.classesService.createClassPathway(dto, user);
   }
 
   @Get('class-pathways')
@@ -67,15 +67,20 @@ export class ClassesController {
   async listClassPathways(
     @Query('academicYearId') academicYearId?: string,
     @Query('transitionType') transitionType?: string,
+    @CurrentUser() user?: RequestUser,
   ) {
-    return this.classesService.listClassPathways({ academicYearId, transitionType });
+    return this.classesService.listClassPathways({ academicYearId, transitionType }, user);
   }
 
   @Get('class-pathways/resolve')
   @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN', 'ACADEMIC_QA', 'HEAD_OF_DEPARTMENT')
   @ApiOperation({ summary: 'Resolve next class from configured pathway' })
-  async resolveNextClass(@Query('fromClassId') fromClassId: string, @Query('academicYearId') academicYearId: string) {
-    return this.classesService.resolveNextClass(fromClassId, academicYearId);
+  async resolveNextClass(
+    @Query('fromClassId') fromClassId: string,
+    @Query('academicYearId') academicYearId: string,
+    @CurrentUser() user?: RequestUser,
+  ) {
+    return this.classesService.resolveNextClass(fromClassId, academicYearId, user);
   }
 
   @Get('classes/:classId/students')
@@ -135,8 +140,8 @@ export class ClassesController {
   @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete class — blocked if any enrolments (active or historical) exist' })
-  async deleteClass(@Param('id') id: string) {
-    await this.classesService.deleteClass(id);
+  async deleteClass(@Param('id') id: string, @CurrentUser() user?: RequestUser) {
+    await this.classesService.deleteClass(id, user);
   }
 
   @Delete('academic-years/:id')

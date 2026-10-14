@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import { ApprovalAction, AssessmentStatus } from '../../generated/prisma';
 import { PrismaService } from '../prisma/prisma.service';
-import { assertSchoolInScope, resolveWriteSchoolId, schoolScopeFilter } from '../common/helpers/school-scope.helper';
+import { assertSchoolInScope, requireWriteSchoolId, resolveWriteSchoolId, schoolScopeFilter } from '../common/helpers/school-scope.helper';
 import { StudentClientService } from '../student-client/student-client.service';
 import { RedisService } from '../redis/redis.service';
 import { RabbitMqService } from '../rabbitmq/rabbitmq.service';
@@ -101,9 +101,11 @@ export class AssessmentsService {
     return assessment;
   }
 
-  async generateAssessments(dto: GenerateAssessmentsDto) {
+  async generateAssessments(dto: GenerateAssessmentsDto, user?: RequestUser) {
+    const schoolId = requireWriteSchoolId(user, 'assessments');
     const classSubjects = await this.prisma.classSubject.findMany({
       where: {
+        schoolId,
         academicYearId: dto.academicYearId,
         isActive: true,
         classId: dto.classIds?.length ? { in: dto.classIds } : undefined,
@@ -119,26 +121,31 @@ export class AssessmentsService {
         where: {
           academicYearId: dto.academicYearId,
           isActive: true,
-          OR: [
+          AND: [
+            { OR: [{ schoolId }, { schoolId: null }] },
             {
-              educationStage: classSubject.educationStage,
-              classLevel: classSubject.classLevel,
-              subjectId: classSubject.subjectId,
-            },
-            {
-              educationStage: classSubject.educationStage,
-              classLevel: classSubject.classLevel,
-              subjectId: null,
-            },
-            {
-              educationStage: classSubject.educationStage,
-              classLevel: null,
-              subjectId: null,
-            },
-            {
-              educationStage: null,
-              classLevel: null,
-              subjectId: null,
+              OR: [
+                {
+                  educationStage: classSubject.educationStage,
+                  classLevel: classSubject.classLevel,
+                  subjectId: classSubject.subjectId,
+                },
+                {
+                  educationStage: classSubject.educationStage,
+                  classLevel: classSubject.classLevel,
+                  subjectId: null,
+                },
+                {
+                  educationStage: classSubject.educationStage,
+                  classLevel: null,
+                  subjectId: null,
+                },
+                {
+                  educationStage: null,
+                  classLevel: null,
+                  subjectId: null,
+                },
+              ],
             },
           ],
         },

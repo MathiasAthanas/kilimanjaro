@@ -14,6 +14,7 @@ import { StudentClientService } from '../student-client/student-client.service';
 import {
   assertSchoolInScope,
   assertSchoolRecordWritable,
+  isGroupScope,
   requireWriteSchoolId,
   resolveWriteSchoolId,
   schoolOrGlobalFilter,
@@ -307,7 +308,9 @@ export class SubjectsService {
    */
   async seedPredefinedCombinations(dto: { academicYearId: string; codes?: string[] }, user?: RequestUser) {
     if (!dto.academicYearId) throw new BadRequestException('academicYearId is required');
-    const schoolId = user?.scope === 'SCHOOL' ? (user.activeSchoolId ?? user.schoolIds?.[0] ?? null) : null;
+    const schoolId = isGroupScope(user) && !user?.activeSchoolId
+      ? null
+      : requireWriteSchoolId(user, 'subject combination');
     const wanted = dto.codes?.length
       ? PREDEFINED_A_LEVEL_COMBINATIONS.filter((c) => dto.codes!.includes(c.code))
       : PREDEFINED_A_LEVEL_COMBINATIONS;

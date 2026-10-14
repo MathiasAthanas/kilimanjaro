@@ -3,9 +3,10 @@ import { Prisma } from '../../generated/prisma';
 import { PrismaService } from '../prisma/prisma.service';
 import { RequestUser } from '../common/interfaces/request-user.interface';
 import {
-  assertSchoolInScope,
+  assertSchoolRecordWritable,
   isGroupScope,
-  resolveWriteSchoolId,
+  requireWriteSchoolId,
+  schoolOrGlobalFilter,
   schoolScopeFilter,
 } from '../common/helpers/school-scope.helper';
 import { CreateExamTypeDto, UpdateExamTypeDto } from './dto/exam-type.dto';
@@ -30,7 +31,7 @@ export class ExamTypesService {
   }
 
   async create(dto: CreateExamTypeDto, user?: RequestUser) {
-    const schoolId = resolveWriteSchoolId(user);
+    const schoolId = requireWriteSchoolId(user, 'exam type');
 
     const existing = await this.prisma.examType.findFirst({
       where: { code: dto.code, schoolId: schoolId ?? null },
@@ -74,7 +75,7 @@ export class ExamTypesService {
     if (!type) {
       throw new NotFoundException('Exam type not found');
     }
-    assertSchoolInScope(user, type.schoolId ?? null);
+    assertSchoolRecordWritable(user, type.schoolId ?? null, 'exam type');
     return type;
   }
 
@@ -123,8 +124,9 @@ export class ExamTypesService {
    * to run more than once.
    */
   async migrateFromAssessmentTypes(user?: RequestUser) {
-    const schoolId = resolveWriteSchoolId(user);
+    const schoolId = requireWriteSchoolId(user, 'exam type');
     const legacy = await this.prisma.assessmentType.findMany({
+      where: schoolOrGlobalFilter(user),
       orderBy: { createdAt: 'asc' },
     });
 
