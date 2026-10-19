@@ -26,6 +26,7 @@ import { RolesGuard } from './common/guards/roles.guard';
 import { IdentityMiddleware } from './common/middleware/identity.middleware';
 import { AccessControlService } from './common/helpers/access-control.service';
 import { validateEnv } from './config/env.validation';
+import { AuthClientModule } from './auth-client/auth-client.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { validateEnv } from './config/env.validation';
     PrismaModule,
     RedisModule,
     RabbitMqModule,
+    AuthClientModule,
     StudentClientModule,
     HealthModule,
     SubjectsModule,

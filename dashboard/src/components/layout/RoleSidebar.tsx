@@ -345,6 +345,7 @@ const adminSections: SidebarSection[] = [
       { to: '/admin/import',        icon: Upload,       label: 'Bulk Import',    end: true },
       { to: '/admin/academic/setup',icon: BookOpen,     label: 'Academic Setup'            },
       { to: '/admin/classes',       icon: Landmark,     label: 'Classes',        end: true },
+      { to: '/admin/academic/class-subjects', icon: BookOpen, label: 'Teaching Assignments', end: true },
       { to: '/admin/subjects',      icon: Target,       label: 'Subjects',       end: true },
       { to: '/admin/departments',   icon: Building2,    label: 'Departments',    end: true },
     ],

@@ -914,7 +914,7 @@ export function AcademicSetupHubPage() {
     ['Terms',                 `/admin/academic/terms`,                  `${(apiTerms as any[]).length} term${(apiTerms as any[]).length !== 1 ? 's' : ''} configured`],
     ['Mixed School Classes',  '/admin/classes',                         'Manage classes & streams'],
     ['Stage Subjects',        '/admin/subjects',                        'Subjects by education stage'],
-    ['Class Subjects',        '/admin/academic/class-subjects',         'Per-class subject assignments'],
+    ['Teaching Assignments',  '/admin/academic/class-subjects',         'Assign class subjects to active teachers'],
     ['Grading Scales',        '/admin/grading',                        'Grade boundaries & scales'],
     ['Assessment Types',      '/admin/assessment-types',                'CAT, exam, assignment weights'],
     ['Stage Configuration',   '/admin/academic/stage-config',           'Stage rules & terminal years'],
@@ -1246,12 +1246,13 @@ export function TermsPage() {
 export function ClassSubjectsPage() {
   const { classId: routeClassId } = useParams();
   const session = useAuthStore((state) => state.session);
+  const activeSchool = useSchoolStore((state) => state.activeSchool);
   const currentUser = session?.user as any;
   const isHodUser = String(currentUser?.role ?? '').toUpperCase() === 'HOD' || String(currentUser?.role ?? '').toUpperCase() === 'HEAD_OF_DEPARTMENT';
   const { data: myDept } = useDepartmentByUser(isHodUser ? currentUser?.id : undefined);
   const { data: apiClasses = [] as typeof adminClasses } = useAdminClasses() as unknown as { data: typeof adminClasses };
   const { data: apiSubjects = [] as typeof adminSubjects } = useAdminSubjects() as unknown as { data: typeof adminSubjects };
-  const { data: apiUsers = [] as typeof adminUsers } = useAdminUsers() as unknown as { data: typeof adminUsers };
+  const { data: apiTeachingStaff = [] } = useTeachingStaff() as unknown as { data: Array<any> };
   const { data: apiYears = [] } = useAcademicYears();
   const { data: apiClassSubjects = [] } = useClassSubjects();
   const assignMutation = useAssignSubjectToClassMutation();
@@ -1262,17 +1263,19 @@ export function ClassSubjectsPage() {
   const [assignSubjectId, setAssignSubjectId] = useState('');
   const [assignTeacherId, setAssignTeacherId] = useState('');
 
-  const sortedClasses = (apiClasses as any[]).slice().sort((a: any, b: any) =>
+  const scopedClasses = activeSchool
+    ? (apiClasses as any[]).filter((klass: any) => String(klass.schoolId ?? '') === String(activeSchool.id))
+    : [];
+  const sortedClasses = scopedClasses.slice().sort((a: any, b: any) =>
     String(a.name ?? '').localeCompare(String(b.name ?? '')));
   const classOptions = sortedClasses.map((c: any) => ({
     value: String(c.id), label: `${String(c.name)}${String(c.stream ?? '').trim() ? ` — ${String(c.stream).trim()}` : ''}`,
   }));
 
-  const selectedClass = (apiClasses as any[]).find((c: any) => String(c.id) === selectedClassId);
+  const selectedClass = scopedClasses.find((c: any) => String(c.id) === selectedClassId);
   const currentYear = (apiYears as any[]).find((y: any) => y.isCurrent) ?? (apiYears as any[])[0];
   const selectedAcademicYearId = String((selectedClass as any)?.academicYearId ?? (currentYear as any)?.id ?? '');
-  const teacherOptions = (apiUsers as any[])
-    .filter((user: any) => ['TEACHER', 'HEAD_OF_DEPARTMENT', 'HOD'].includes(String(user.role)))
+  const teacherOptions = (apiTeachingStaff as any[])
     .sort((a: any, b: any) => String(a.name ?? '').localeCompare(String(b.name ?? '')))
     .map((user: any) => {
       const departmentNames = new Set<string>();
@@ -1290,6 +1293,14 @@ export function ClassSubjectsPage() {
         departments,
       };
     });
+
+  useEffect(() => {
+    if (selectedClassId && !scopedClasses.some((klass: any) => String(klass.id) === selectedClassId)) {
+      setSelectedClassId('');
+      setAssignSubjectId('');
+      setAssignTeacherId('');
+    }
+  }, [activeSchool?.id, selectedClassId, scopedClasses]);
 
   const allStageSubjects = selectedClass
     ? (apiSubjects as any[]).filter((s: any) => {
@@ -1310,7 +1321,7 @@ export function ClassSubjectsPage() {
 
   const classSubjects = activeAssignments.map((assignment: any) => {
     const subject = allStageSubjects.find((s: any) => String(s.id) === String(assignment.subjectId));
-    const teacher = (apiUsers as any[]).find((user: any) => String(user.id) === String(assignment.teacherId));
+    const teacher = (apiTeachingStaff as any[]).find((user: any) => String(user.id) === String(assignment.teacherId));
     return { ...assignment, subject, teacher };
   });
   const unassignedSubjects = allStageSubjects.filter((s: any) => !assignedIds.includes(String(s.id)));
@@ -1324,6 +1335,10 @@ export function ClassSubjectsPage() {
   };
 
   const handleAssign = () => {
+    if (!activeSchool) {
+      toast('Select the class school in the top bar before assigning a teacher.', 'warning');
+      return;
+    }
     if (!selectedClass || !selectedAcademicYearId || !assignSubjectId || !assignTeacherId) return;
     assignMutation.mutate({
       classId: selectedClassId,
@@ -1340,8 +1355,14 @@ export function ClassSubjectsPage() {
   };
 
   return (
-    <AdminShell title="Class Subjects" eyebrow="Academic Setup">
-      <AdminFormSection title="View & Manage Class Subjects" subtitle="Assign or remove subjects from a specific class.">
+    <AdminShell title="Teaching Assignments" eyebrow="Academic Setup">
+      <AdminFormSection title="Assign Subjects to Teachers" subtitle="Select a class, then assign each subject to any active teacher in the selected school. Reassign a subject at any time.">
+        {!activeSchool ? (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm font-semibold text-amber-900">
+            Select a school in the top bar to manage its teaching assignments. This keeps classes and teachers in the same school.
+          </div>
+        ) : (
+          <>
         <div className="max-w-sm">
           <SelectField
             label="Select Class"
@@ -1426,7 +1447,7 @@ export function ClassSubjectsPage() {
             {/* Assign new subject */}
             {unassignedSubjects.length > 0 && (
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-                <p className="mb-3 font-black text-slate-800">Assign Subject to Class</p>
+                <p className="mb-3 font-black text-slate-800">Assign a Teacher to a Class Subject</p>
                 <div className="flex flex-wrap items-end gap-3">
                   <div className="flex-1 min-w-[200px]">
                     <SelectField
@@ -1459,6 +1480,8 @@ export function ClassSubjectsPage() {
         )}
         {!selectedClassId && (
           <p className="mt-4 text-sm font-semibold text-slate-400">Select a class above to manage its subjects.</p>
+        )}
+          </>
         )}
       </AdminFormSection>
       <AdminFormSection title="Manage All Subjects" subtitle="To add or remove subjects globally, go to Subject Management.">

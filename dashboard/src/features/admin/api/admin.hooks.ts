@@ -400,8 +400,9 @@ export function lookupGuardians(params: { phone?: string; email?: string }) {
 }
 
 export function useAdminClasses() {
+  const activeSchoolKey = useActiveSchoolKey();
   return useQuery({
-    queryKey: adminKeys.classes(),
+    queryKey: [...adminKeys.classes(), activeSchoolKey] as const,
     queryFn: () =>
       api.get('/students/classes').then((r) =>
         arrayFromApi(payloadOf(r), ['classes']).map((raw) => {
@@ -460,8 +461,9 @@ export function useAdminSubjects() {
 }
 
 export function useClassSubjects(params?: Record<string, unknown>) {
+  const activeSchoolKey = useActiveSchoolKey();
   return useQuery({
-    queryKey: adminKeys.classSubjects(params),
+    queryKey: [...adminKeys.classSubjects(params), activeSchoolKey] as const,
     queryFn: () =>
       api.get('/academics/class-subjects', { params }).then((r) =>
         arrayFromApi(payloadOf(r), ['classSubjects', 'assignments']).map((raw) => {

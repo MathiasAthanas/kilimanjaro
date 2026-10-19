@@ -11,6 +11,7 @@ import { RedisService } from '../redis/redis.service';
 import { ROLES } from '../common/constants/roles';
 import { RequestUser } from '../common/interfaces/request-user.interface';
 import { StudentClientService } from '../student-client/student-client.service';
+import { AuthClientService } from '../auth-client/auth-client.service';
 import {
   assertSchoolInScope,
   assertSchoolRecordWritable,
@@ -31,6 +32,7 @@ export class SubjectsService {
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
     private readonly studentClient: StudentClientService,
+    private readonly authClient: AuthClientService,
   ) {}
 
   private studentServiceHeaders(user: RequestUser): Record<string, string> {
@@ -162,14 +164,121 @@ export class SubjectsService {
     }
   }
 
+  private async assertTeacherAssignment(teacherId: string, schoolId: string): Promise<void> {
+    const teacher = await this.authClient.getUserById(teacherId);
+    if (!teacher?.isActive || ![ROLES.TEACHER, ROLES.HEAD_OF_DEPARTMENT].includes(teacher.role as any)) {
+      throw new BadRequestException('Choose an active teacher or head-of-department account.');
+    }
+    if (!teacher.schoolIds.includes(schoolId)) {
+      throw new BadRequestException('The selected teacher is not an active member of this school.');
+    }
+  }
+
+  private unwrapList<T>(payload: unknown): T[] {
+    if (Array.isArray(payload)) return payload as T[];
+    if (!payload || typeof payload !== 'object') return [];
+    const root = 'data' in payload ? (payload as { data: unknown }).data : payload;
+    if (Array.isArray(root)) return root as T[];
+    if (root && typeof root === 'object') {
+      const items = (root as { items?: unknown; classes?: unknown }).items ?? (root as { classes?: unknown }).classes;
+      if (Array.isArray(items)) return items as T[];
+    }
+    return [];
+  }
+
+  private async getClassAssignmentContext(classId: string, user: RequestUser): Promise<{
+    schoolId: string;
+    academicYearId: string;
+    educationStage: string;
+    level: number | null;
+  }> {
+    const raw = await this.studentClient.get<unknown>(
+      '/students/classes',
+      undefined,
+      this.studentServiceHeaders(user),
+    );
+    const klass = this.unwrapList<Record<string, unknown>>(raw)
+      .find((item) => String(item.id ?? '') === classId);
+
+    if (!klass) throw new NotFoundException('Class not found in your current school scope');
+
+    const schoolId = String(klass.schoolId ?? '');
+    const academicYearId = String(klass.academicYearId ?? '');
+    const educationStage = String(klass.educationStage ?? '').toUpperCase();
+    const rawLevel = klass.level;
+    const level = rawLevel === null || rawLevel === undefined || rawLevel === '' ? null : Number(rawLevel);
+
+    if (!schoolId || !academicYearId || !educationStage) {
+      throw new BadRequestException('The selected class is missing required school, year, or stage information. Update the class first.');
+    }
+    if (level !== null && !Number.isFinite(level)) {
+      throw new BadRequestException('The selected class has an invalid level. Update the class first.');
+    }
+
+    resolveWriteSchoolId(user, schoolId);
+    return { schoolId, academicYearId, educationStage, level };
+  }
+
+  private async assertSubjectFitsClass(subjectId: string, educationStage: string): Promise<void> {
+    const subject = await this.prisma.subject.findUnique({
+      where: { id: subjectId },
+      select: { id: true, isActive: true, educationStage: true },
+    });
+    if (!subject) throw new NotFoundException('Subject not found');
+    if (!subject.isActive) throw new BadRequestException('The selected subject is inactive. Activate it before assigning it to a class.');
+    if (subject.educationStage && subject.educationStage !== educationStage) {
+      throw new BadRequestException('The selected subject belongs to a different education stage than this class.');
+    }
+  }
+
   async createClassSubject(dto: CreateClassSubjectDto, user?: RequestUser) {
-    await this.assertHodSubjectScope(user, dto.subjectId, dto.academicYearId);
+    if (!user) throw new ForbiddenException('School context is required');
+    const klass = await this.getClassAssignmentContext(dto.classId, user);
+    if (dto.academicYearId !== klass.academicYearId) {
+      throw new BadRequestException('The selected academic year does not match the selected class.');
+    }
+    if (dto.educationStage && dto.educationStage !== klass.educationStage) {
+      throw new BadRequestException('The selected education stage does not match the selected class.');
+    }
+    if (dto.classLevel !== undefined && dto.classLevel !== klass.level) {
+      throw new BadRequestException('The selected class level does not match the selected class.');
+    }
+
+    await this.assertHodSubjectScope(user, dto.subjectId, klass.academicYearId);
+    await this.assertSubjectFitsClass(dto.subjectId, klass.educationStage);
+    await this.assertTeacherAssignment(dto.teacherId, klass.schoolId);
+
+    const existing = await this.prisma.classSubject.findFirst({
+      where: {
+        classId: dto.classId,
+        subjectId: dto.subjectId,
+        academicYearId: klass.academicYearId,
+        combinationId: dto.combinationId ?? null,
+      },
+    });
+    const data = {
+      classId: dto.classId,
+      subjectId: dto.subjectId,
+      academicYearId: klass.academicYearId,
+      teacherId: dto.teacherId,
+      schoolId: klass.schoolId,
+      educationStage: klass.educationStage as any,
+      classLevel: klass.level,
+      combinationId: dto.combinationId ?? null,
+      isActive: dto.isActive ?? true,
+    };
+
+    if (existing) {
+      return this.prisma.classSubject.update({
+        where: { id: existing.id },
+        data,
+        include: { subject: true, combination: true },
+      });
+    }
+
     return this.prisma.classSubject.create({
       data: {
-        ...dto,
-        // Class-subject assignments always belong to the selected school.
-        schoolId: requireWriteSchoolId(user, 'class subject assignment'),
-        educationStage: dto.educationStage ?? 'O_LEVEL',
+        ...data,
       },
       include: { subject: true, combination: true },
     });
@@ -223,6 +332,11 @@ export class SubjectsService {
     }
     assertSchoolInScope(user, (existing as { schoolId?: string | null }).schoolId ?? null);
     await this.assertHodSubjectScope(user, dto.subjectId ?? existing.subjectId, dto.academicYearId ?? existing.academicYearId);
+    if (dto.teacherId !== undefined) {
+      const schoolId = (existing as { schoolId?: string | null }).schoolId;
+      if (!schoolId) throw new BadRequestException('This class-subject record has no school context. Recreate it from the selected school.');
+      await this.assertTeacherAssignment(dto.teacherId, schoolId);
+    }
 
     return this.prisma.classSubject.update({ where: { id }, data: dto, include: { subject: true, combination: true } });
   }

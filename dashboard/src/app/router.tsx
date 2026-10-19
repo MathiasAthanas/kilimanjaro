@@ -532,6 +532,7 @@ export const router = createBrowserRouter([
       { path: '/admin/academic/stage-config', element: <StageConfigPage /> },
       { path: '/admin/academic/promotion/cross-stage', element: <CrossStagePromotionPage /> },
       { path: '/admin/classes', element: <ClassesPage /> },
+      { path: '/admin/classes/:classId/subjects', element: <ClassSubjectsPage /> },
       { path: '/admin/classes/:classId', element: <AdminClassDetailPage /> },
       { path: '/admin/classes/:classId/students', element: <ClassStudentsAdminPage /> },
       { path: '/admin/subjects', element: <SubjectsPage /> },
