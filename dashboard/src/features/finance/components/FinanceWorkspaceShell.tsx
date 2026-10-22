@@ -10,11 +10,7 @@ import {
   FileText,
   Filter,
   Lock,
-  PackagePlus,
-  Plus,
-  Printer,
   QrCode,
-  School,
   Search,
   ShieldCheck,
   TrendingDown,
@@ -22,7 +18,6 @@ import {
   WalletCards,
   ChevronDown,
   ChevronUp,
-  ArrowLeftRight,
   UserCircle,
   Hash,
   Calendar,
@@ -31,7 +26,7 @@ import {
 import { AnimatePresence, motion } from 'framer-motion';
 import type { ReactNode } from 'react';
 import { useRef, useState } from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import { Badge } from '../../../components/common/Badge';
 import { Button } from '../../../components/common/Button';
 import type { Asset, AuditEntry, FinanceStatus, Invoice, Payment, PaymentMethod, Receipt } from '../types/finance.types';
@@ -41,6 +36,7 @@ import { useFileUploadMutation, validateFile } from '../../../lib/api/upload';
 import { api } from '../../../lib/api/client';
 import type { UploadedFile } from '../../../lib/api/upload';
 import { useAuthStore } from '../../../lib/auth/authStore';
+import { financeHeaderLinks } from './financeHeaderLinks';
 
 // ─── Shell ────────────────────────────────────────────────────────────────────
 
@@ -56,6 +52,8 @@ export function FinanceWorkspaceShell({
   action?: ReactNode;
 }) {
   const session = useAuthStore((state) => state.session);
+  const { pathname } = useLocation();
+  const headerLinks = financeHeaderLinks(pathname);
   const userName = session?.user?.name ?? 'Finance Officer';
   const { data: overview } = useFinanceOverview() as unknown as { data?: { today: number; outstanding: number } };
   const { data: pendingApprovals } = usePendingPaymentApprovals() as unknown as { data?: unknown[] };
@@ -74,7 +72,7 @@ export function FinanceWorkspaceShell({
               <div className="mt-1 h-full w-1 self-stretch rounded-full bg-[#00334f]" />
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#d59a1b]">{eyebrow}</p>
-                <h1 className="mt-1 font-display text-[38px] font-black leading-tight tracking-[-0.025em] text-[#00334f]">
+                <h1 className="mt-1 break-words font-display text-2xl font-black leading-tight tracking-[-0.025em] text-[#00334f] sm:text-[38px]">
                   {title}
                 </h1>
                 <p className="mt-1 text-sm font-semibold text-[#64748b]">
@@ -83,7 +81,7 @@ export function FinanceWorkspaceShell({
               </div>
             </div>
             {/* Live stats */}
-            <div className="flex shrink-0 items-start gap-2 xl:pt-1">
+            <div className="flex flex-wrap items-start gap-2 xl:pt-1">
               <HeaderStat label="Today" value={formatTZS(overview?.today ?? 0)} />
               <HeaderStat label="Outstanding" value={formatTZS(overview?.outstanding ?? 0)} danger />
               <HeaderStat label="Pending" value={`${pendingCount} approval${pendingCount === 1 ? '' : 's'}`} />
@@ -92,15 +90,17 @@ export function FinanceWorkspaceShell({
         </div>
 
         {/* Action strip */}
-        <div className="flex items-center justify-end gap-2 bg-[#f7f9fb] px-5 py-3">
-          {action ?? (
-            <NavLink to="/finance/payments/cash">
-              <Button className="rounded bg-[#00334f] py-2 text-xs hover:bg-[#001e30] hover:shadow-none">
-                <Plus className="h-3.5 w-3.5" /> Record Payment
-              </Button>
-            </NavLink>
-          )}
-        </div>
+        {(action || headerLinks.length > 0) && (
+          <div className="flex flex-wrap items-center justify-end gap-2 bg-[#f7f9fb] px-5 py-3">
+            {action ?? headerLinks.map((link) => (
+              <NavLink key={link.to} to={link.to} className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0284c7]">
+                <Button variant={link.primary ? undefined : 'secondary'} className={`rounded py-2 text-xs ${link.primary ? 'bg-[#00334f] hover:bg-[#001e30] hover:shadow-none' : ''}`}>
+                  {link.label}
+                </Button>
+              </NavLink>
+            ))}
+          </div>
+        )}
       </section>
 
       {children}

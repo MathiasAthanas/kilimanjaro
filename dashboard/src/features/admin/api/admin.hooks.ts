@@ -144,8 +144,9 @@ export const departmentKeys = {
 };
 
 export function useDepartments() {
+  const activeSchoolKey = useActiveSchoolKey();
   return useQuery({
-    queryKey: departmentKeys.list(),
+    queryKey: [...departmentKeys.list(), activeSchoolKey] as const,
     queryFn: () =>
       api.get('/students/departments').then((r) =>
         arrayFromApi(payloadOf(r), ['departments']).map((raw) => {
@@ -433,8 +434,9 @@ export function useAdminClasses() {
 }
 
 export function useAdminSubjects() {
+  const activeSchoolKey = useActiveSchoolKey();
   return useQuery({
-    queryKey: adminKeys.subjects(),
+    queryKey: [...adminKeys.subjects(), activeSchoolKey] as const,
     queryFn: () =>
       api.get('/academics/subjects').then((r) =>
         arrayFromApi(payloadOf(r), ['subjects']).map((raw) => {
@@ -718,16 +720,18 @@ export function useUpdateSystemSettingsMutation() {
 }
 
 export function useAcademicYears() {
+  const activeSchoolKey = useActiveSchoolKey();
   return useQuery({
-    queryKey: adminKeys.academicYears(),
+    queryKey: [...adminKeys.academicYears(), activeSchoolKey] as const,
     queryFn: () => api.get('/students/academic-years').then((r) => arrayFromApi(payloadOf(r), ['academicYears', 'years'])),
     staleTime: 60_000,
   });
 }
 
 export function useTerms() {
+  const activeSchoolKey = useActiveSchoolKey();
   return useQuery({
-    queryKey: adminKeys.terms(),
+    queryKey: [...adminKeys.terms(), activeSchoolKey] as const,
     queryFn: () => api.get('/students/terms').then((r) => arrayFromApi(payloadOf(r), ['terms'])),
     staleTime: 60_000,
   });

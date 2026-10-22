@@ -1,5 +1,5 @@
 import { useIsFetching } from '@tanstack/react-query';
-import { Bell, ChevronDown, HelpCircle, Menu, Search } from 'lucide-react';
+import { Bell, HelpCircle, Menu, Search } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuthStore } from '../../lib/auth/authStore';
 import { Avatar } from '../common/Avatar';
@@ -29,10 +29,9 @@ export function TopCommandBar({ onMenuToggle }: TopCommandBarProps) {
         >
           <Menu className="h-5 w-5" />
         </button>
-        <button className="hidden items-center gap-2 rounded-lg border border-ks-line bg-white px-3 py-1.5 text-sm font-bold text-ks-navy transition hover:bg-ks-paper md:flex">
-          Term 1, 2026
-          <ChevronDown className="h-3.5 w-3.5 text-ks-muted" />
-        </button>
+        <span title="Select the academic year and term within each workflow" className="hidden items-center rounded-lg border border-ks-line bg-white px-3 py-1.5 text-sm font-bold text-ks-navy md:inline-flex">
+          Term set in workspace
+        </span>
         <div className="hidden h-6 w-px bg-ks-line md:block" />
         <Link to="/app/search" className="flex min-w-0 items-center gap-3 text-sm font-bold text-ks-muted transition hover:text-ks-navy">
           <Search className="h-5 w-5" />

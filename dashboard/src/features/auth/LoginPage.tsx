@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { LockOpen, School, Shield } from 'lucide-react';
+import { LockOpen, Shield } from 'lucide-react';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Link, useNavigate } from 'react-router-dom';
@@ -11,18 +11,6 @@ import { useAuthStore } from '../../lib/auth/authStore';
 import { getDefaultRouteForRole } from '../../lib/auth/permissions';
 import { login } from './api';
 import { loginSchema, type LoginForm } from './schemas';
-
-const demo = [
-  ['Admin', 'admin@demo.kilimanjaro.test', 'Admin@Kili2026'],
-  ['AQA', 'aqa@demo.kilimanjaro.test', 'Aqa@Kili2026'],
-  ['Finance', 'finance@demo.kilimanjaro.test', 'Finance@Kili2026'],
-  ['Teacher', 't-english@demo.kilimanjaro.test', 'Teacher@Kili2026'],
-  ['HOD', 'hod-science@demo.kilimanjaro.test', 'Hod@Kili2026'],
-  ['Admissions', 'admissions@demo.kilimanjaro.test', 'Admissions@Kili2026'],
-  ['Manager', 'principal@demo.kilimanjaro.test', 'Principal@Kili2026'],
-  ['Super Admin', 'superadmin@demo.kilimanjaro.test', 'Super@Kili2026'],
-  ['Head of School', 'hos-primary@demo.kilimanjaro.test', 'Head@Kili2026'],
-];
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -37,13 +25,13 @@ export function LoginPage() {
       setSession(session, values.remember);
       navigate(getDefaultRouteForRole(session.user.role), { replace: true });
     } catch (error) {
-      setServerError(error instanceof Error ? error.message : 'Invalid credentials or account locked.');
+      const message = error instanceof Error
+        ? error.message
+        : typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string'
+          ? error.message
+          : 'Unable to sign in. Please try again.';
+      setServerError(message);
     }
-  }
-
-  function fill(email: string, password: string) {
-    form.setValue('username', email, { shouldValidate: true });
-    form.setValue('password', password, { shouldValidate: true });
   }
 
   return (
@@ -86,14 +74,6 @@ export function LoginPage() {
             <div className="h-1 w-12 rounded-full bg-ks-gold" />
           </div>
         </div>
-        {import.meta.env.DEV ? (
-          <div className="mt-6 w-full rounded-lg border border-ks-line bg-ks-mist/30 p-5">
-            <div className="mb-4 flex items-center gap-2 text-ks-navy"><School className="h-5 w-5" /><span className="text-sm font-black">Quick Fill (Dev Only)</span></div>
-            <div className="grid gap-2">
-              {demo.map(([role, email, password]) => <button key={email} className="flex justify-between rounded-lg border border-ks-line bg-white p-3 text-left hover:border-ks-blue" onClick={() => fill(email, password)}><span className="font-bold text-ks-navy">{role}</span><span className="text-xs text-ks-muted">{email}</span></button>)}
-            </div>
-          </div>
-        ) : null}
         </div>
       </section>
     </main>

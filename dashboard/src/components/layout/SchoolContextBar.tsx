@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ChevronDown, Globe2, School as SchoolIcon, Undo2 } from 'lucide-react';
 import { useAuthStore } from '../../lib/auth/authStore';
 import { useSchoolStore } from '../../lib/school/schoolStore';
 import { useSchools } from '../../features/manager/api/manager.hooks';
+import { canSelectSchool, isGroupWorkspacePath } from './schoolScope';
 
 /**
  * Global school context (Doc 03 §2): shows which school the user is inside.
@@ -20,8 +21,7 @@ export function SchoolContextBar() {
   // Group-only areas (whole-group dashboards). Entering a school from one of
   // these lands on the school's home; switching schools while already inside a
   // school-scoped section (e.g. /admin/users) keeps you on that same section.
-  const GROUP_PREFIXES = ['/superadmin', '/manager', '/finance-group'];
-  const onGroupPage = GROUP_PREFIXES.some((p) => location.pathname.startsWith(p));
+  const onGroupPage = isGroupWorkspacePath(location.pathname);
 
   const role = session?.user.role;
   // Scope comes from the server and is authoritative. In particular, the
@@ -33,42 +33,63 @@ export function SchoolContextBar() {
     : role === 'HEAD_OF_FINANCE' ? '/finance-group'
     : role === 'ADMIN' ? '/admin'
     : '/manager';
-  const scopedIds = session?.user.schoolIds ?? [];
+  const scopedIds = useMemo(() => session?.user.schoolIds ?? [], [session]);
   const multiSchoolUser = !groupRole && scopedIds.length > 1;
   const showSwitcher = groupRole || multiSchoolUser;
 
-  const { data: schools = [] } = useSchools();
-  const visibleSchools = groupRole ? schools : schools.filter((s) => scopedIds.includes(s.id));
+  const { data: schools } = useSchools();
+  const visibleSchools = useMemo(() => (schools ?? []).filter((s) => canSelectSchool(session?.user.scope, scopedIds, s.id)), [schools, session, scopedIds]);
 
-  // Auto-scope any single-school user so every request carries their school.
-  if (!groupRole && !activeSchool && visibleSchools.length === 1) {
-    const only = visibleSchools[0];
-    setActiveSchool({ id: only.id, name: only.name, code: only.code, type: only.type, gender: only.gender });
-  }
+  // Clear school scope when entering a whole-group route, but not when a user
+  // selects a school from its menu before navigation finishes.
+  useLayoutEffect(() => {
+    if (groupRole && onGroupPage && useSchoolStore.getState().activeSchool) setActiveSchool(null);
+  }, [groupRole, onGroupPage, location.pathname, setActiveSchool]);
+
+  // Keep the selector consistent with current membership and auto-scope a
+  // single-school user. This never infers access from the role label alone.
+  useEffect(() => {
+    if (!session) return;
+    if (activeSchool && !canSelectSchool(session.user.scope, scopedIds, activeSchool.id)) {
+      setActiveSchool(null);
+      return;
+    }
+    if (!groupRole && !activeSchool && visibleSchools.length === 1) {
+      const only = visibleSchools[0];
+      setActiveSchool({ id: only.id, name: only.name, code: only.code, type: only.type, gender: only.gender });
+    }
+  }, [session, onGroupPage, groupRole, activeSchool, scopedIds, visibleSchools, setActiveSchool]);
 
   if (!session || (!showSwitcher && !activeSchool)) return null;
 
   return (
-    <div className="border-b border-[#d5dde6] bg-white px-5 py-2">
+    <div id="school-context" className="border-b border-[#d5dde6] bg-white px-5 py-2">
       <div className="flex flex-wrap items-center gap-3">
-        <div className="relative">
+        <span className="text-[11px] font-black uppercase tracking-wider text-ks-muted">
+          {activeSchool ? 'Current school' : 'Current scope'}
+        </span>
+        <div className="relative min-w-0" onKeyDown={(event) => { if (event.key === 'Escape') setOpen(false); }}>
           <button
+            type="button"
             onClick={() => showSwitcher && setOpen((v) => !v)}
-            className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-black transition ${
+            aria-expanded={showSwitcher ? open : undefined}
+            aria-label={showSwitcher ? `Switch school; current selection ${activeSchool?.name ?? 'All Schools (Group)'}` : `Current school ${activeSchool?.name ?? 'All Schools (Group)'}`}
+            className={`flex max-w-[calc(100vw-2.5rem)] items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-black transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0284c7] ${
               activeSchool
                 ? 'border-[#d59a1b]/50 bg-[#fffbeb] text-[#7a5200]'
                 : 'border-[#00334f]/30 bg-[#eef5f8] text-[#00334f]'
             } ${showSwitcher ? 'hover:shadow' : 'cursor-default'}`}
           >
             {activeSchool ? <SchoolIcon className="h-4 w-4" /> : <Globe2 className="h-4 w-4" />}
-            {activeSchool ? activeSchool.name : 'All Schools (Group)'}
-            {showSwitcher && <ChevronDown className="h-3.5 w-3.5" />}
+            <span className="truncate">{activeSchool ? activeSchool.name : 'All Schools (Group)'}</span>
+            {showSwitcher && <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />}
           </button>
 
           {open && (
-            <div className="absolute left-0 top-full z-[60] mt-2 w-80 overflow-hidden rounded-2xl border border-[#d5dde6] bg-white shadow-xl">
+            <div className="absolute left-0 top-full z-[60] mt-2 max-h-[60vh] w-[min(20rem,calc(100vw-2.5rem))] overflow-y-auto rounded-2xl border border-[#d5dde6] bg-white shadow-xl" aria-label="Choose school">
               {groupRole && (
                 <button
+                  type="button"
                   onClick={() => { setActiveSchool(null); setOpen(false); navigate(role === 'MANAGER' ? '/manager/overview' : groupHome); }}
                   className="flex w-full items-center gap-3 border-b border-[#eef2f6] px-4 py-3 text-left hover:bg-[#eef5f8]"
                 >
@@ -81,13 +102,14 @@ export function SchoolContextBar() {
               )}
               {visibleSchools.map((school) => (
                 <button
+                  type="button"
                   key={school.id}
                   onClick={() => {
                     setActiveSchool({ id: school.id, name: school.name, code: school.code, type: school.type, gender: school.gender });
                     setOpen(false);
                     // Only jump to the school home when coming from a group-only
                     // page; otherwise stay on the current section for the new school.
-                    if (onGroupPage) navigate('/principal');
+                    if (onGroupPage) navigate(role === 'HEAD_OF_FINANCE' ? '/finance/invoices' : '/principal');
                   }}
                   className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-[#eef5f8]"
                 >
@@ -104,8 +126,9 @@ export function SchoolContextBar() {
 
         {groupRole && activeSchool && (
           <div className="flex items-center gap-2 rounded-full bg-[#d59a1b]/15 px-3 py-1.5 text-xs font-black text-[#7a5200]">
-            Viewing as Group Owner
+            School drill-down
             <button
+              type="button"
               onClick={() => { setActiveSchool(null); navigate(groupHome); }}
               className="flex items-center gap-1 rounded-full bg-[#00334f] px-2.5 py-0.5 text-white transition hover:bg-[#001e30]"
             >

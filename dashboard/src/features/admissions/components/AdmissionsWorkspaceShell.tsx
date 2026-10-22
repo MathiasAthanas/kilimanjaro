@@ -31,12 +31,12 @@ export function AdmissionsWorkspaceShell({
       <section className="overflow-hidden rounded-lg border border-[#d5dde6] bg-white shadow-sm">
         <div className="relative overflow-hidden border-b border-[#d5dde6]">
           <div className="absolute inset-0 bg-[linear-gradient(105deg,#f7f9fb_0%,#eef5f8_40%,#dce9f0_100%)]" />
-          <div className="relative grid gap-6 p-7 xl:grid-cols-[minmax(0,1fr)_auto]">
+          <div className="relative grid gap-6 p-5 sm:p-7 xl:grid-cols-[minmax(0,1fr)_auto]">
             <div className="flex items-start gap-4">
               <div className="mt-1 h-full w-1 self-stretch rounded-full bg-[#00334f]" />
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#d59a1b]">{eyebrow}</p>
-                <h1 className="mt-1 font-display text-[38px] font-black leading-tight tracking-[-0.025em] text-[#00334f]">
+                <h1 className="mt-1 font-display text-3xl font-black leading-tight tracking-[-0.025em] text-[#00334f] sm:text-[38px]">
                   {title}
                 </h1>
                 <p className="mt-1 text-sm font-semibold text-[#64748b]">{userName} · Admissions Office</p>

@@ -15,26 +15,32 @@ import { handlebarsIsValid, typedConfirmationIsValid } from '../utils/adminValid
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../lib/api/client';
 import { adminKeys } from '../api/admin.hooks';
+import { useAuthStore } from '../../../lib/auth/authStore';
+import { useSchoolStore } from '../../../lib/school/schoolStore';
 
 // ─── Shell ────────────────────────────────────────────────────────────────────
 
 export function AdminShell({ title, eyebrow, children, action, subtitle }: { title: string; eyebrow: string; children: ReactNode; action?: ReactNode; subtitle?: string }) {
+  const session = useAuthStore((state) => state.session);
+  const activeSchool = useSchoolStore((state) => state.activeSchool);
+  const scopeLabel = activeSchool?.name ?? (session?.user.scope === 'GROUP' ? 'All Schools' : 'School workspace');
+  const defaultSubtitle = `${session?.user.name ?? 'Staff'} · ${session?.user.email ?? 'Account'} · ${scopeLabel}`;
   return (
     <div className="space-y-gutter">
       <section className="relative overflow-hidden rounded-2xl border border-indigo-300/30 bg-[radial-gradient(circle_at_8%_18%,rgba(14,165,233,0.30),transparent_30%),radial-gradient(circle_at_88%_8%,rgba(99,102,241,0.22),transparent_32%),linear-gradient(135deg,#1E1B4B_0%,#312E81_50%,#4338CA_100%)] shadow-layer">
         <div className="pointer-events-none absolute -right-20 -top-20 h-80 w-80 rounded-full border border-white/10" />
         <div className="pointer-events-none absolute -right-8 -top-8 h-48 w-48 rounded-full border border-white/5" />
         <div className="absolute bottom-0 left-0 h-px w-full bg-gradient-to-r from-transparent via-sky-400/60 to-transparent" />
-        <div className="relative grid gap-6 p-8 xl:grid-cols-[minmax(0,1fr)_auto]">
+        <div className="relative grid gap-6 p-5 sm:p-8 xl:grid-cols-[minmax(0,1fr)_auto]">
           <div>
             <p className="text-[11px] font-black uppercase tracking-[0.32em] text-sky-300">{eyebrow}</p>
-            <h1 className="mt-2 font-display text-[44px] font-black leading-tight tracking-[-0.04em] text-white">{title}</h1>
-            <p className="mt-1.5 text-sm font-semibold text-white/60">{subtitle ?? 'System Admin · admin@ks.ac.tz · Production console'}</p>
+            <h1 className="mt-2 font-display text-3xl font-black leading-tight tracking-[-0.04em] text-white sm:text-[44px]">{title}</h1>
+            <p className="mt-1.5 text-sm font-semibold text-white/60">{subtitle ?? defaultSubtitle}</p>
           </div>
           <div className="flex shrink-0 flex-wrap items-start gap-2 xl:pt-2">
-            <AdminHeaderPill label="Env"    value="Production" color="text-sky-300" />
-            <AdminHeaderPill label="Status" value="Gateway ✓"  color="text-emerald-300" />
-            <AdminHeaderPill label="Alerts" value="2 degraded" color="text-amber-300" />
+            <AdminHeaderPill label="Env"    value={import.meta.env.PROD ? 'Production' : 'Local'} color="text-sky-300" />
+            <AdminHeaderPill label="Role" value={session?.user.role ?? 'Staff'} color="text-emerald-300" />
+            <AdminHeaderPill label="Scope" value={activeSchool?.code ?? (session?.user.scope === 'GROUP' ? 'Group' : 'School')} color="text-amber-300" />
             {action}
           </div>
         </div>
@@ -114,9 +120,17 @@ export function AdminStatusIndicator({ service, state, uptime, latency }: { serv
 
 // ─── Data table ───────────────────────────────────────────────────────────────
 
-export function AdminDataTable({ columns, children, minWidth = 980 }: { columns: string[]; children: ReactNode; minWidth?: number; onSearch?: (q: string) => void }) {
+export function AdminDataTable({ columns, children, minWidth = 980, onSearch, searchPlaceholder = 'Search by name, email or role' }: { columns: string[]; children: ReactNode; minWidth?: number; onSearch?: (q: string) => void; searchPlaceholder?: string }) {
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      {onSearch && (
+        <div className="border-b border-ks-line p-3 sm:p-4">
+          <label className="block text-xs font-black text-ks-navy" htmlFor="admin-table-search">Search this directory</label>
+          <input id="admin-table-search" type="search" onChange={(event) => onSearch(event.target.value)}
+            placeholder={searchPlaceholder}
+            className="mt-1 w-full max-w-md rounded-lg border border-ks-line bg-white px-3 py-2 text-sm text-ks-slate focus:border-ks-blue focus:outline-none focus:ring-2 focus:ring-ks-blue/20" />
+        </div>
+      )}
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm" style={{ minWidth }}>
           <thead className="sticky top-0 bg-[#1E1B4B] text-[11px] font-black uppercase tracking-widest text-white">

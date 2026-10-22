@@ -1,7 +1,7 @@
-﻿import { AlertTriangle, ArrowLeft, CheckCircle2, ChevronDown, Database, Download, Edit2, Key, Lock, Play, Plus, Shield, Trash2, Unlock, UserPlus, X } from 'lucide-react';
+﻿import { AlertTriangle, ArrowLeft, CheckCircle2, ChevronDown, Database, Download, Edit2, Key, Lock, Play, Plus, Shield, Trash2, Unlock, Upload, UserPlus, X } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from 'react';
 import { downloadReportWhenReady } from '../../operations/api/operations.hooks';
-import { NavLink, useNavigate, useParams } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { toast } from '../../../lib/toast';
 import { Badge } from '../../../components/common/Badge';
 import { Button } from '../../../components/common/Button';
@@ -173,7 +173,7 @@ export function AdminHomePage() {
 
 export function AdminUsersPage() {
   return (
-    <AdminShell title="User Management" eyebrow="Accounts, roles, security">
+    <AdminShell title="Users & Staff" eyebrow="Accounts, roles, security">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm font-semibold text-ks-muted">Manage all staff accounts, roles, and access permissions.</p>
         <NavLink
@@ -184,8 +184,12 @@ export function AdminUsersPage() {
           Register New User
         </NavLink>
       </div>
-      <CsvImportZone entity="staff user" />
       <UsersTable />
+      <section aria-label="Import staff accounts" className="space-y-2">
+        <h2 className="font-display text-lg font-black text-ks-navy">Import staff accounts</h2>
+        <p className="text-sm font-semibold text-ks-muted">Use the existing CSV workflow when registering several staff accounts.</p>
+        <CsvImportZone entity="staff user" />
+      </section>
     </AdminShell>
   );
 }
@@ -197,6 +201,7 @@ function UsersTable() {
   const resetPwMutation = useResetUserPwMutation();
   const [pending, setPending] = useState<Record<string, string>>({});
   const [userSearch, setUserSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState<'ALL' | 'TEACHING'>('ALL');
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 20;
   const [resetResult, setResetResult] = useState<{ name: string; email: string; password: string } | null>(null);
@@ -231,25 +236,36 @@ function UsersTable() {
     });
   };
 
+  const roleUsers = roleFilter === 'TEACHING'
+    ? apiUsers.filter((u) => u.role === 'TEACHER' || u.role === 'HEAD_OF_DEPARTMENT')
+    : apiUsers;
   const visibleUsers = userSearch.trim().length > 0
-    ? apiUsers.filter((u) => {
+    ? roleUsers.filter((u) => {
         const q = userSearch.toLowerCase();
         return u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q) || u.role.toLowerCase().includes(q);
       })
-    : apiUsers;
+    : roleUsers;
 
   // Reset to first page whenever the filter changes or the result set shrinks
   // below the current page (e.g. after switching schools).
-  useEffect(() => { setPage(1); }, [userSearch]);
+  useEffect(() => { setPage(1); }, [userSearch, roleFilter]);
   const pageCount = Math.max(1, Math.ceil(visibleUsers.length / PAGE_SIZE));
   useEffect(() => { if (page > pageCount) setPage(1); }, [page, pageCount]);
   const pageUsers = visibleUsers.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   if (isLoading) return <SkeletonTable cols={7} />;
   if (isError) return <DataError onRetry={refetch} />;
-  if (!apiUsers.length) return <EmptyState title="No users found" description="Create the first user account to get started." />;
+  if (!apiUsers.length) return <EmptyState title="No users found" description="Create the first user account to get started." action={{ label: 'Register User', href: '/admin/users/create' }} />;
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2" aria-label="Directory view">
+        {([['ALL', 'All users'], ['TEACHING', 'Teachers & HODs']] as const).map(([value, label]) => (
+          <button key={value} type="button" onClick={() => setRoleFilter(value)} aria-pressed={roleFilter === value}
+            className={`rounded-lg border px-3 py-2 text-xs font-black transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-ks-blue ${roleFilter === value ? 'border-ks-blue bg-ks-mist text-ks-navy' : 'border-ks-line bg-white text-ks-muted hover:text-ks-navy'}`}>
+            {label}
+          </button>
+        ))}
+      </div>
       {resetResult && (
         <div className="flex items-start gap-4 rounded-2xl border border-amber-200 bg-amber-50 p-5">
           <div className="flex-1">
@@ -270,6 +286,7 @@ function UsersTable() {
         </div>
       )}
       <AdminDataTable columns={['Name', 'Email', 'Role', 'Status', 'Linked Entity', 'Last Login', 'Actions']} onSearch={setUserSearch}>
+        {!pageUsers.length && <tr><td colSpan={7} className="px-5 py-8 text-center text-sm font-semibold text-ks-muted">No users match that search. Try a name, email, or role.</td></tr>}
         {pageUsers.map((user) => (
           <tr key={user.id} className="hover:bg-slate-50">
             <Td>
@@ -909,30 +926,60 @@ export function AcademicSetupHubPage() {
   const { data: apiPathways = [] as typeof classPathways } = useClassPathways() as unknown as { data: typeof classPathways };
   const { data: apiYears = [] } = useAcademicYears();
   const { data: apiTerms = [] } = useTerms();
-  const cards: [string, string, string][] = [
-    ['Academic Years',        `/admin/academic/years`,                  `${(apiYears as any[]).length} year${(apiYears as any[]).length !== 1 ? 's' : ''} configured`],
-    ['Terms',                 `/admin/academic/terms`,                  `${(apiTerms as any[]).length} term${(apiTerms as any[]).length !== 1 ? 's' : ''} configured`],
-    ['Mixed School Classes',  '/admin/classes',                         'Manage classes & streams'],
-    ['Stage Subjects',        '/admin/subjects',                        'Subjects by education stage'],
-    ['Teaching Assignments',  '/admin/academic/class-subjects',         'Assign class subjects to active teachers'],
-    ['Grading Scales',        '/admin/grading',                        'Grade boundaries & scales'],
-    ['Assessment Types',      '/admin/assessment-types',                'CAT, exam, assignment weights'],
-    ['Stage Configuration',   '/admin/academic/stage-config',           'Stage rules & terminal years'],
-    ['Cross-Stage Promotion', '/admin/academic/promotion/cross-stage',  'Promotion & graduation rules'],
+  const activeSchool = useSchoolStore((state) => state.activeSchool);
+  const session = useAuthStore((state) => state.session);
+  const groups: Array<{ title: string; description: string; cards: [string, string, string][] }> = [
+    { title: '1. Academic calendar', description: 'Choose the year and terms used by existing academic workflows.', cards: [
+      ['Academic Years', '/admin/academic/years', `${(apiYears as any[]).length} year${(apiYears as any[]).length !== 1 ? 's' : ''} configured`],
+      ['Terms', '/admin/academic/terms', `${(apiTerms as any[]).length} term${(apiTerms as any[]).length !== 1 ? 's' : ''} configured`],
+    ] },
+    { title: '2. Curriculum', description: 'Configure existing departments, subjects and stage rules.', cards: [
+      ['Departments', '/admin/departments', 'Departments and HOD assignments'],
+      ['Stage Subjects', '/admin/subjects', 'Subjects by education stage'],
+      ['Stage Configuration', '/admin/academic/stage-config', 'Stage rules & terminal years'],
+    ] },
+    { title: '3. Classes and teaching', description: 'Set up class structure, then connect subjects and teachers.', cards: [
+      ['Mixed School Classes', '/admin/classes', 'Manage classes & streams'],
+      ['Pathways & Combinations', '/admin/classes#manage-streams-combinations', 'Existing progression routes and A-Level combinations'],
+      ['Teaching Assignments', '/admin/academic/class-subjects', 'Assign class subjects to active teachers'],
+    ] },
+    { title: '4. Assessment and progression', description: 'Keep grading and promotion settings discoverable together.', cards: [
+      ['Grading Scales', '/admin/grading', 'Grade boundaries & scales'],
+      ['Assessment Types', '/admin/assessment-types', 'CAT, exam, assignment weights'],
+      ['Exam Types', '/exams/types', 'Existing exam type configuration'],
+      ['Cross-Stage Promotion', '/admin/academic/promotion/cross-stage', 'Promotion & graduation rules'],
+    ] },
   ];
   return (
     <AdminShell title="Academic Setup Hub" eyebrow="School academic structure">
+      {session?.user.scope === 'GROUP' && !activeSchool && (
+        <p className="rounded-xl border border-ks-line bg-ks-mist/30 p-4 text-sm font-semibold text-ks-navy">
+          Viewing all schools. For school-specific setup, <a href="#school-context" className="font-black text-ks-blue underline">choose a school above</a> first.
+        </p>
+      )}
       <AdminMetricStrip items={[
         { label: 'Primary', value: 'Class 1-6/7', detail: 'Configurable terminal year', tone: 'green' },
         { label: 'O-Level', value: 'Form 1-4', detail: 'Core secondary track', tone: 'blue' },
         { label: 'A-Level', value: 'Form 5-6', detail: 'Combination-based subjects', tone: 'amber' },
         { label: 'Pathways', value: String(apiPathways.length), detail: 'Promotion and graduation map', tone: 'rose' },
       ]} />
-      <div className="grid gap-gutter md:grid-cols-2 xl:grid-cols-4">
-        {cards.map(([title, to, detail]) => (
-          <AdminQuickCard key={title} title={title} detail={detail} to={to} />
-        ))}
-      </div>
+      {(!(apiYears as any[]).length || !(apiTerms as any[]).length) && (
+        <p className="rounded-xl border border-ks-line bg-ks-mist/30 p-4 text-sm font-semibold text-ks-navy">
+          {!(apiYears as any[]).length ? 'No academic year is configured yet. Start with Academic Years.' : 'No terms are configured yet. Continue with Terms.'}
+          {' '}You can still open every setup area below.
+        </p>
+      )}
+      {groups.map((group) => (
+        <section key={group.title} className="space-y-3" aria-label={group.title}>
+          <div>
+            <h2 className="font-display text-xl font-black text-ks-navy">{group.title}</h2>
+            <p className="text-sm font-semibold text-ks-muted">{group.description}</p>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {group.cards.map(([title, to, detail]) => <AdminQuickCard key={title} title={title} detail={detail} to={to} />)}
+          </div>
+        </section>
+      ))}
     </AdminShell>
   );
 }
@@ -1250,7 +1297,7 @@ export function ClassSubjectsPage() {
   const currentUser = session?.user as any;
   const isHodUser = String(currentUser?.role ?? '').toUpperCase() === 'HOD' || String(currentUser?.role ?? '').toUpperCase() === 'HEAD_OF_DEPARTMENT';
   const { data: myDept } = useDepartmentByUser(isHodUser ? currentUser?.id : undefined);
-  const { data: apiClasses = [] as typeof adminClasses } = useAdminClasses() as unknown as { data: typeof adminClasses };
+  const { data: apiClasses = [] as typeof adminClasses, isLoading: classesLoading } = useAdminClasses() as unknown as { data: typeof adminClasses; isLoading: boolean };
   const { data: apiSubjects = [] as typeof adminSubjects } = useAdminSubjects() as unknown as { data: typeof adminSubjects };
   const { data: apiTeachingStaff = [] } = useTeachingStaff() as unknown as { data: Array<any> };
   const { data: apiYears = [] } = useAcademicYears();
@@ -1262,6 +1309,8 @@ export function ClassSubjectsPage() {
   const [pendingUnassignId, setPendingUnassignId] = useState<string | null>(null);
   const [assignSubjectId, setAssignSubjectId] = useState('');
   const [assignTeacherId, setAssignTeacherId] = useState('');
+
+  useEffect(() => { setSelectedClassId(routeClassId ?? ''); }, [routeClassId]);
 
   const scopedClasses = activeSchool
     ? (apiClasses as any[]).filter((klass: any) => String(klass.schoolId ?? '') === String(activeSchool.id))
@@ -1295,12 +1344,13 @@ export function ClassSubjectsPage() {
     });
 
   useEffect(() => {
+    if (!activeSchool || classesLoading) return;
     if (selectedClassId && !scopedClasses.some((klass: any) => String(klass.id) === selectedClassId)) {
       setSelectedClassId('');
       setAssignSubjectId('');
       setAssignTeacherId('');
     }
-  }, [activeSchool?.id, selectedClassId, scopedClasses]);
+  }, [activeSchool, classesLoading, selectedClassId, scopedClasses]);
 
   const allStageSubjects = selectedClass
     ? (apiSubjects as any[]).filter((s: any) => {
@@ -1356,10 +1406,16 @@ export function ClassSubjectsPage() {
 
   return (
     <AdminShell title="Teaching Assignments" eyebrow="Academic Setup">
+      <div className="flex flex-wrap gap-3 text-sm font-black text-ks-blue">
+        <NavLink to={routeClassId ? `/admin/classes/${routeClassId}` : '/admin/academic/setup'} className="hover:underline">
+          ← {routeClassId ? 'Back to Class' : 'Back to Academic Setup'}
+        </NavLink>
+        <NavLink to="/admin/subjects" className="hover:underline">Subject Directory</NavLink>
+      </div>
       <AdminFormSection title="Assign Subjects to Teachers" subtitle="Select a class, then assign each subject to any active teacher in the selected school. Reassign a subject at any time.">
         {!activeSchool ? (
           <div className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm font-semibold text-amber-900">
-            Select a school in the top bar to manage its teaching assignments. This keeps classes and teachers in the same school.
+            <a href="#school-context" className="underline">Select a school above</a> to manage its teaching assignments. This keeps classes and teachers in the same school.
           </div>
         ) : (
           <>
@@ -1479,7 +1535,9 @@ export function ClassSubjectsPage() {
           </div>
         )}
         {!selectedClassId && (
-          <p className="mt-4 text-sm font-semibold text-slate-400">Select a class above to manage its subjects.</p>
+          <p className="mt-4 text-sm font-semibold text-slate-500">
+            {classOptions.length ? 'Select a class above to manage its subjects.' : <>No classes are available for this school. <NavLink to="/admin/classes" className="font-black text-ks-blue underline">Open Classes</NavLink> to create one.</>}
+          </p>
         )}
           </>
         )}
@@ -1701,7 +1759,8 @@ function isTerminalClass(stage: ClassWizardState['educationStage'], level: strin
 }
 
 export function ClassesPage() {
-  const { data: apiClasses = [] as typeof adminClasses } = useAdminClasses() as unknown as { data: typeof adminClasses };
+  const location = useLocation();
+  const { data: apiClasses = [] as typeof adminClasses, isLoading: classesLoading, isError: classesError, refetch: refetchClasses } = useAdminClasses() as unknown as { data: typeof adminClasses; isLoading: boolean; isError: boolean; refetch: () => void };
   const { data: apiPathways = [] as typeof classPathways } = useClassPathways() as unknown as { data: typeof classPathways };
   const { data: apiCombinations = [] as typeof subjectCombinations } = useSubjectCombinations() as unknown as { data: typeof subjectCombinations };
   const { data: apiSubjects = [] as typeof adminSubjects } = useAdminSubjects() as unknown as { data: typeof adminSubjects };
@@ -1720,6 +1779,13 @@ export function ClassesPage() {
   const [classEditForm, setClassEditForm] = useState<{ stream: string; capacity: string; classTeacherId: string }>({ stream: '', capacity: '', classTeacherId: '' });
   const [pendingDeleteClassId, setPendingDeleteClassId] = useState<string | null>(null);
   const [deleteClassError, setDeleteClassError] = useState<string | null>(null);
+  const [showCreateClass, setShowCreateClass] = useState(false);
+
+  useEffect(() => {
+    if (location.hash === '#manage-streams-combinations') {
+      document.getElementById('manage-streams-combinations')?.scrollIntoView({ block: 'start' });
+    }
+  }, [location.hash]);
 
   // â"€â"€ Streams (O-Level / Primary): frontend-only custom labels â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
   const [customStreams, setCustomStreams] = useState<string[]>([]);
@@ -2058,14 +2124,18 @@ export function ClassesPage() {
   }, {});
 
   return (
-    <AdminShell title="Class Management" eyebrow="Classes, rosters, assigned subjects">
+    <AdminShell title="Class Management" eyebrow="Classes, rosters, assigned subjects"
+      action={<Button className="rounded-xl bg-[#4338CA]" onClick={() => setShowCreateClass((shown) => !shown)} aria-expanded={showCreateClass}>
+        <Plus className="h-4 w-4" /> {showCreateClass ? 'Close Class Form' : 'Add Class'}
+      </Button>}>
+      <h2 className="font-display text-xl font-black text-ks-navy">Class Directory</h2>
       <AdminMetricStrip items={[
         { label: 'Pre-Primary', value: String((byStage.NURSERY ?? 0) + (byStage['Nursery'] ?? 0) + (byStage.PRE_UNIT ?? 0) + (byStage['Pre-Unit'] ?? 0)), detail: 'Nursery and Pre-Unit', tone: 'green' },
         { label: 'Primary Classes', value: String((byStage.PRIMARY ?? 0) + (byStage.Primary ?? 0)), detail: 'Class 1 to terminal primary', tone: 'green' },
         { label: 'O-Level Classes', value: String((byStage.O_LEVEL ?? 0) + (byStage['O-Level'] ?? 0)), detail: 'Form 1 to Form 4', tone: 'blue' },
         { label: 'A-Level Streams', value: String((byStage.A_LEVEL ?? 0) + (byStage['A-Level'] ?? 0)), detail: 'Form 5/6 combinations', tone: 'amber' },
       ]} />
-      <AdminFormSection
+      {showCreateClass && <AdminFormSection
         title="Class Setup Wizard"
         subtitle="Create Early Childhood, Primary, O-Level and A-Level classes for the selected academic year."
       >
@@ -2102,9 +2172,11 @@ export function ClassesPage() {
             Manage streams &amp; combinations ↓
           </button>
         </div>
-      </AdminFormSection>
+      </AdminFormSection>}
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+        {classesLoading ? <SkeletonTable cols={7} /> : classesError ? <DataError onRetry={refetchClasses} /> : (
         <AdminDataTable columns={['Class', 'Stage', 'Stream', 'Students', 'Teacher', 'Pathway', 'Actions']}>
+          {!apiClasses.length && <tr><td colSpan={7} className="px-5 py-8 text-center text-sm font-semibold text-ks-muted">No classes for this school or academic year. Use Add Class above to create one.</td></tr>}
           {apiClasses.map((item) => {
             const isEditing = editingClassId === String(item.id);
             const isDeleting = pendingDeleteClassId === String(item.id);
@@ -2146,6 +2218,8 @@ export function ClassesPage() {
                         <span className="text-slate-300">·</span>
                         <NavLink className="text-xs font-black text-emerald-600 hover:underline" to={`/admin/classes/${item.id}/students`}>Students</NavLink>
                         <span className="text-slate-300">·</span>
+                        <NavLink className="text-xs font-black text-ks-blue hover:underline" to={`/admin/classes/${item.id}/subjects`}>Subjects</NavLink>
+                        <span className="text-slate-300">·</span>
                         <button onClick={() => startClassEdit(item)} className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" title="Edit stream / capacity">
                           <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                         </button>
@@ -2186,7 +2260,7 @@ export function ClassesPage() {
               </React.Fragment>
             );
           })}
-        </AdminDataTable>
+        </AdminDataTable>)}
         <div className="space-y-4" id="manage-streams-combinations">
           {/* â"€â"€ Promotion Pathways â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ */}
           <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
@@ -2516,11 +2590,12 @@ export function ClassesPage() {
 
 export function ClassDetailPage() {
   const { classId } = useParams();
-  const { data: apiClasses = [] as typeof adminClasses, isLoading: classLoading } = useAdminClasses() as unknown as { data: typeof adminClasses; isLoading: boolean };
-  const { data: allStudents = [] as typeof adminStudents, isLoading: studentsLoading } = useAdminStudents() as unknown as { data: typeof adminStudents; isLoading: boolean };
+  const { data: apiClasses = [] as typeof adminClasses, isLoading: classLoading, isError: classError, refetch: refetchClasses } = useAdminClasses() as unknown as { data: typeof adminClasses; isLoading: boolean; isError: boolean; refetch: () => void };
+  const { data: allStudents = [] as typeof adminStudents, isLoading: studentsLoading, isError: studentsError, refetch: refetchStudents } = useAdminStudents() as unknown as { data: typeof adminStudents; isLoading: boolean; isError: boolean; refetch: () => void };
   const { data: allUsers = [] as typeof adminUsers } = useAdminUsers() as unknown as { data: typeof adminUsers };
 
   if (classLoading || studentsLoading) return <AdminShell title="Loading…" eyebrow="Class detail"><SkeletonTable cols={4} /></AdminShell>;
+  if (classError || studentsError) return <AdminShell title="Class unavailable" eyebrow="Class detail"><DataError onRetry={() => { void refetchClasses(); void refetchStudents(); }} /></AdminShell>;
   const klass = apiClasses.find((c) => c.id === classId) ?? null;
   if (!klass) return <AdminShell title="Not Found" eyebrow="Class detail"><EmptyState title="Class not found" description="This class does not exist." /></AdminShell>;
 
@@ -2560,10 +2635,16 @@ export function ClassDetailPage() {
           </div>
           <div>
             <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">Enrolled</p>
-            <p className="mt-1 font-black text-[#4338CA]">{classStudents.length}</p>
+            <p className="mt-1 font-black text-[#4338CA]">{Number(klass.students ?? classStudents.length)}</p>
           </div>
         </div>
         <div className="mt-4 flex flex-wrap gap-3">
+          <NavLink
+            to={`/admin/classes/${classId}/students`}
+            className="inline-flex items-center gap-2 rounded-xl border border-ks-line bg-white px-4 py-2.5 text-sm font-black text-ks-navy shadow-sm hover:bg-ks-paper"
+          >
+            Open Class List
+          </NavLink>
           <NavLink
             to={`/admin/classes/${classId}/subjects`}
             className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-black text-slate-700 shadow-sm hover:bg-slate-50"
@@ -2581,7 +2662,10 @@ export function ClassDetailPage() {
 
       {/* Student Roster */}
       <div className="mt-gutter">
-        <h3 className="mb-3 font-display text-lg font-black text-slate-900">Student Roster</h3>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h3 className="font-display text-lg font-black text-slate-900">Student Roster Preview</h3>
+          <NavLink to={`/admin/classes/${classId}/students`} className="text-sm font-black text-ks-blue hover:underline">Open full class list →</NavLink>
+        </div>
         {classStudents.length === 0 ? (
           <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-8 py-12 text-center">
             <p className="font-black text-slate-700">No students enrolled</p>
@@ -2631,6 +2715,7 @@ export function ClassDetailPage() {
 export function SubjectsPage() {
   const createSubjectMutation = useCreateSubjectMutation();
   const { data: deptList = [] } = useDepartments();
+  const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ name: '', code: '', stage: 'O_LEVEL', departmentId: '', department: '' });
   const set = (k: 'name' | 'code') => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((f) => ({ ...f, [k]: k === 'code' ? e.target.value.toUpperCase() : e.target.value }));
@@ -2650,14 +2735,20 @@ export function SubjectsPage() {
       onSuccess: () => {
         toast(`Subject "${form.name}" created successfully.`, 'success');
         setForm({ name: '', code: '', stage: 'O_LEVEL', departmentId: '', department: '' });
+        setShowCreate(false);
       },
       onError: (err) => toast(err instanceof Error ? err.message : 'Failed to create subject', 'error'),
     });
   };
 
   return (
-    <AdminShell title="Subject Management" eyebrow="Subjects, departments, assignments">
-      <AdminFormSection
+    <AdminShell title="Subject Management" eyebrow="Subjects, departments, assignments"
+      action={<Button className="rounded-xl bg-[#4338CA]" onClick={() => setShowCreate((shown) => !shown)} aria-expanded={showCreate}>
+        <Plus className="h-4 w-4" /> {showCreate ? 'Close Form' : 'Add Subject'}
+      </Button>}>
+      <h2 className="font-display text-xl font-black text-ks-navy">Subject Directory</h2>
+      <SubjectsTable />
+      {showCreate && <AdminFormSection
         title="Add Subject"
         subtitle="Subjects can be assigned to classes and selected into A-Level combinations."
       >
@@ -2691,8 +2782,7 @@ export function SubjectsPage() {
             ← Back to Classes &amp; Combinations
           </NavLink>
         </div>
-      </AdminFormSection>
-      <SubjectsTable />
+      </AdminFormSection>}
     </AdminShell>
   );
 }
@@ -2706,6 +2796,12 @@ function SubjectsTable() {
   const [editForm, setEditForm] = useState<{ name: string; code: string; stage: string; departmentId: string; department: string }>({ name: '', code: '', stage: '', departmentId: '', department: '' });
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const visibleSubjects = apiSubjects.filter((item) =>
+    [item.name, item.code, item.stage, item.department].some((value) =>
+      String(value ?? '').toLowerCase().includes(search.trim().toLowerCase()),
+    ),
+  );
 
   const startEdit = (item: any) => {
     setEditingId(String(item.id));
@@ -2731,11 +2827,12 @@ function SubjectsTable() {
 
   if (isLoading) return <SkeletonTable cols={8} />;
   if (isError) return <DataError onRetry={refetch} />;
-  if (!apiSubjects.length) return <EmptyState title="No subjects configured" description="Add subjects through the academic setup wizard." />;
+  if (!apiSubjects.length) return <EmptyState title="No subjects configured" description="Use Add Subject above to create the first subject." />;
 
   return (
-    <AdminDataTable columns={['Subject', 'Code', 'Stage', 'Department', 'Classes', 'Actions']}>
-      {apiSubjects.map((item) => {
+    <AdminDataTable columns={['Subject', 'Code', 'Stage', 'Department', 'Classes', 'Actions']} onSearch={setSearch} searchPlaceholder="Search subject name, code, stage or department">
+      {!visibleSubjects.length && <tr><td colSpan={6} className="px-5 py-8 text-center text-sm font-semibold text-ks-muted">No subjects match this search.</td></tr>}
+      {visibleSubjects.map((item) => {
         const isEditing = editingId === String(item.id);
         const isDeleting = pendingDeleteId === String(item.id);
         const subjectStageTone = stageTone(item.stage);
@@ -2769,6 +2866,7 @@ function SubjectsTable() {
                   </div>
                 ) : (
                   <div className="flex items-center gap-1">
+                    <NavLink to={`/admin/subjects/${item.id}`} className="rounded px-2 py-1 text-xs font-black text-ks-blue hover:underline">Open</NavLink>
                     <button onClick={() => startEdit(item)} className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" title="Edit subject">
                       <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                     </button>
@@ -2824,7 +2922,7 @@ function SubjectsTable() {
 export function SubjectDetailPage() {
   const { subjectId } = useParams();
   const navigate = useNavigate();
-  const { data: apiSubjects = [] as typeof adminSubjects, isLoading } = useAdminSubjects() as unknown as { data: typeof adminSubjects; isLoading: boolean };
+  const { data: apiSubjects = [] as typeof adminSubjects, isLoading, isError, refetch } = useAdminSubjects() as unknown as { data: typeof adminSubjects; isLoading: boolean; isError: boolean; refetch: () => void };
   const { data: apiClasses = [] as typeof adminClasses } = useAdminClasses() as unknown as { data: typeof adminClasses };
   const { data: allUsers = [] as typeof adminUsers } = useAdminUsers() as unknown as { data: typeof adminUsers };
   const updateMutation = useUpdateSubjectMutation();
@@ -2847,6 +2945,7 @@ export function SubjectDetailPage() {
   }, [subject?.id]);
 
   if (isLoading) return <AdminShell title="Loading…" eyebrow="Subject detail"><SkeletonTable cols={3} /></AdminShell>;
+  if (isError) return <AdminShell title="Subject unavailable" eyebrow="Subject detail"><DataError onRetry={refetch} /></AdminShell>;
   if (!subject) return <AdminShell title="Not Found" eyebrow="Subject detail"><EmptyState title="Subject not found" description="This subject does not exist." /></AdminShell>;
 
   const classCount = (apiClasses as any[]).filter((c: any) => {
@@ -2887,6 +2986,9 @@ export function SubjectDetailPage() {
     <AdminShell title={subject.name} eyebrow="Subject detail">
       <NavLink to="/admin/subjects" className="inline-flex items-center gap-1.5 text-sm font-black text-[#4338CA] hover:underline mb-4 block">
         <ArrowLeft className="h-4 w-4" /> Back to Subjects
+      </NavLink>
+      <NavLink to="/admin/academic/class-subjects" className="mb-4 inline-flex items-center gap-1.5 text-sm font-black text-ks-blue hover:underline">
+        View class subject and teacher assignments →
       </NavLink>
 
       {/* Metrics strip */}
@@ -3265,13 +3367,13 @@ export function StudentsPage({ basePath = '/admin' }: { basePath?: string } = {}
   const navigate = useNavigate();
   return (
     <AdminShell
-      title="Student Management"
+      title="Student Registry"
       eyebrow="Registry and lifecycle"
       subtitle={subtitle}
       action={
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="secondary" className="rounded-xl" onClick={() => navigate(`${basePath}/students/import`)}>
-            <Download className="h-4 w-4" /> Import Students
+            <Upload className="h-4 w-4" /> Import Students
           </Button>
           <Button className="rounded-xl bg-[#4338CA]" onClick={() => navigate(`${basePath}/students/enrol`)}>
             <UserPlus className="h-4 w-4" /> Enrol Student
@@ -3286,8 +3388,14 @@ export function StudentsPage({ basePath = '/admin' }: { basePath?: string } = {}
 
 function StudentsTable({ basePath = '/admin' }: { basePath?: string }) {
   const [page, setPage] = useState(1);
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  useEffect(() => {
+    const timer = window.setTimeout(() => { setDebouncedSearch(search.trim()); setPage(1); }, 300);
+    return () => window.clearTimeout(timer);
+  }, [search]);
   const limit = 20;
-  const { data, isLoading, isError, refetch } = useAdminStudentsPage({ page, limit }) as unknown as {
+  const { data, isLoading, isError, refetch } = useAdminStudentsPage({ page, limit, ...(debouncedSearch ? { search: debouncedSearch } : {}) }) as unknown as {
     data?: { students: typeof adminStudents; meta?: { page?: number; limit?: number; total?: number; totalPages?: number } };
     isLoading: boolean;
     isError: boolean;
@@ -3299,12 +3407,19 @@ function StudentsTable({ basePath = '/admin' }: { basePath?: string }) {
   const totalPages = Math.max(1, Number(meta?.totalPages ?? Math.ceil(total / limit)));
   const from = total === 0 ? 0 : (page - 1) * limit + 1;
   const to = Math.min(total, (page - 1) * limit + apiStudents.length);
-  if (isLoading) return <SkeletonTable cols={10} />;
-  if (isError) return <DataError onRetry={refetch} />;
-  if (!apiStudents.length) return <EmptyState title="No students enrolled" description="Enrol students individually or import a CSV file." />;
   return (
     <div className="space-y-3">
-      <AdminDataTable columns={['Reg. No.', 'Name', 'School', 'Class', 'Stage', 'Status', 'Guardians', 'Balance', 'Risk', 'Actions']}>
+      <label className="block max-w-lg text-xs font-black text-ks-navy" htmlFor="student-registry-search">
+        Search student name or registration number
+        <input id="student-registry-search" type="search" value={search} onChange={(event) => setSearch(event.target.value)}
+          placeholder="Find a student across the registry"
+          className="mt-1 block w-full rounded-lg border border-ks-line bg-white px-3 py-2.5 text-sm text-ks-slate focus:border-ks-blue focus:outline-none focus:ring-2 focus:ring-ks-blue/20" />
+      </label>
+      {isLoading ? <SkeletonTable cols={10} /> : isError ? <DataError onRetry={refetch} /> : !apiStudents.length ? (
+        <EmptyState title={debouncedSearch ? 'No students match' : 'No students enrolled'}
+          description={debouncedSearch ? 'Try another name or registration number.' : 'Enrol students individually or import a class list.'}
+          action={debouncedSearch ? undefined : { label: 'Enrol Student', href: `${basePath}/students/enrol` }} />
+      ) : <AdminDataTable columns={['Reg. No.', 'Name', 'School', 'Class', 'Stage', 'Status', 'Guardians', 'Balance', 'Risk', 'Actions']}>
         {apiStudents.map((student) => (
           <tr key={student.id} className="hover:bg-slate-50">
             <Td className="font-mono text-xs text-slate-500">{student.registration}</Td>
@@ -3325,8 +3440,8 @@ function StudentsTable({ basePath = '/admin' }: { basePath?: string }) {
             </Td>
           </tr>
         ))}
-      </AdminDataTable>
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
+      </AdminDataTable>}
+      {!isLoading && !isError && !!apiStudents.length && <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
         <p className="text-xs font-semibold text-slate-500">
           Showing {from}-{to} of {total} students
         </p>
@@ -3339,7 +3454,7 @@ function StudentsTable({ basePath = '/admin' }: { basePath?: string }) {
             Next
           </Button>
         </div>
-      </div>
+      </div>}
     </div>
   );
 }
@@ -3378,7 +3493,7 @@ function safeDate(value: string, fallback: string) {
   return value || fallback;
 }
 
-export function EnrolStudentPage() {
+export function EnrolStudentPage({ basePath = '/admin' }: { basePath?: string } = {}) {
   const subtitle = useConsoleSubtitle();
   const { data: enrolClasses = [] as typeof adminClasses } = useAdminClasses() as unknown as { data: typeof adminClasses };
   const { data: academicYears = [] } = useAcademicYears();
@@ -3467,6 +3582,10 @@ export function EnrolStudentPage() {
 
   return (
     <AdminShell title="Enrol Student" eyebrow="Admission workflow" subtitle={subtitle}>
+      <NavLink to={`${basePath}/students`} className="inline-flex items-center gap-1.5 text-sm font-black text-ks-blue hover:underline">
+        <ArrowLeft className="h-4 w-4" /> Back to Student Registry
+      </NavLink>
+      <p className="text-sm font-semibold text-ks-muted" aria-live="polite">Step {step + 1} of {ENROL_STEPS.length}: {ENROL_STEPS[step]}</p>
       {/* Step progress bar */}
       <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white px-6 py-4 shadow-sm">
         <div className="flex min-w-max items-center gap-0">
@@ -3699,11 +3818,21 @@ export function StudentAdminProfilePage({ basePath = '/admin' }: { basePath?: st
         { label: 'Portal', value: student.linked ? 'Linked' : 'Not linked', detail: 'Account', tone: student.linked ? 'green' : 'rose' },
       ]} />
 
+      <nav aria-label="Student profile sections" className="mt-5 flex flex-wrap gap-2">
+        {panels.map(({ key, label }) => (
+          <button key={key} type="button" onClick={() => setActivePanel(key)} aria-pressed={activePanel === key}
+            className={`rounded-lg border px-3 py-2 text-xs font-black transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-ks-blue ${activePanel === key ? 'border-ks-blue bg-ks-mist text-ks-navy' : 'border-ks-line bg-white text-ks-muted hover:text-ks-navy'}`}>
+            {label}
+          </button>
+        ))}
+      </nav>
       <div className="mt-gutter space-y-3">
         {panels.map(({ key, label }) => (
           <div key={key} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <button
+              type="button"
               onClick={() => toggle(key)}
+              aria-expanded={activePanel === key}
               className="flex w-full items-center justify-between px-6 py-4 text-left transition hover:bg-slate-50"
             >
               <span className="font-black text-slate-900">{label}</span>
@@ -4120,11 +4249,14 @@ export function PerformanceEngineAdminPage() {
 // â"€â"€â"€ Notification templates â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 export function NotificationTemplatesPage() {
-  const { data: apiTemplates = [] as typeof notificationTemplates } = useNotificationTemplates() as unknown as { data: typeof notificationTemplates };
+  const { data: apiTemplates = [] as typeof notificationTemplates, isLoading, isError, refetch } = useNotificationTemplates() as unknown as { data: typeof notificationTemplates; isLoading: boolean; isError: boolean; refetch: () => void };
   return (
     <AdminShell title="Notification Templates" eyebrow="SMS, email, push, in-app">
       <AdminDataTable columns={['Name', 'Channel', 'Event Type', 'Status', 'Last Edited', 'Editor', 'Actions']}>
-        {apiTemplates.map((tpl) => (
+        {isLoading && <tr><td colSpan={7} className="px-5 py-6 text-center text-sm text-slate-500">Loading templates…</td></tr>}
+        {isError && <tr><td colSpan={7} className="px-5 py-6 text-center text-sm text-rose-500">Failed to load templates. <button type="button" onClick={() => refetch()} className="font-black underline">Retry</button></td></tr>}
+        {!isLoading && !isError && apiTemplates.length === 0 && <tr><td colSpan={7} className="px-5 py-6 text-center text-sm text-slate-500">No notification templates are available.</td></tr>}
+        {!isLoading && !isError && apiTemplates.map((tpl) => (
           <tr key={tpl.id} className="hover:bg-slate-50">
             <Td><p className="font-black text-slate-900">{tpl.name}</p></Td>
             <Td><Badge tone="blue">{tpl.channel}</Badge></Td>
@@ -4188,18 +4320,18 @@ export function SendManualNotificationPage() {
   return (
     <AdminShell title="Send Manual Notification" eyebrow="Controlled communication">
       <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_360px]">
-        <AdminFormSection title="Message" subtitle="Audience, channel, body, and schedule">
+        <AdminFormSection title="Message" subtitle="Audience, channel, priority, and message">
           <div className="grid gap-4 md:grid-cols-2">
             <SelectField label="Audience" options={[{ value: 'all', label: 'All staff and guardians' }, { value: 'parents', label: 'Parents / guardians only' }, { value: 'teachers', label: 'Teachers only' }, { value: 'class', label: 'Specific class' }]} value={form.audience} onChange={setField('audience')} />
             <SelectField label="Channel" options={[{ value: 'SMS', label: 'SMS' }, { value: 'Email', label: 'Email' }, { value: 'Push', label: 'Push (app)' }, { value: 'All', label: 'All channels' }]} value={form.channel} onChange={setField('channel')} />
             <SelectField label="Priority" options={[{ value: 'normal', label: 'Normal' }, { value: 'high', label: 'High' }, { value: 'urgent', label: 'Urgent' }]} value={form.priority} onChange={setField('priority')} />
           </div>
-          <textarea className="mt-4 h-36 w-full rounded-xl border border-slate-200 bg-slate-50 p-4 font-semibold outline-none transition focus:border-[#4338CA] focus:bg-white" placeholder="Message body…" value={form.body} onChange={(e) => setField('body')(e.target.value)} />
+          <textarea aria-label="Message body" className="mt-4 h-36 w-full rounded-xl border border-slate-200 bg-slate-50 p-4 font-semibold outline-none transition focus:border-[#4338CA] focus:bg-white" placeholder="Message body…" value={form.body} onChange={(e) => setField('body')(e.target.value)} />
           <div className="mt-4 flex gap-3">
             <Button className="rounded-xl bg-[#4338CA]" disabled={sendMutation.isPending} onClick={handleSend}>
               {sendMutation.isPending ? 'Sending…' : 'Send Notification'}
             </Button>
-            <Button variant="secondary" className="rounded-xl" onClick={() => navigate(-1)}>Cancel</Button>
+            <Button variant="secondary" className="rounded-xl" onClick={() => navigate('/admin/notifications/templates')}>Cancel</Button>
           </div>
         </AdminFormSection>
         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6">
@@ -4215,11 +4347,14 @@ export function SendManualNotificationPage() {
 }
 
 export function NotificationLogsPage() {
-  const { data: apiLogs = [] as typeof notificationLogs } = useNotificationLogs() as unknown as { data: typeof notificationLogs };
+  const { data: apiLogs = [] as typeof notificationLogs, isLoading, isError, refetch } = useNotificationLogs() as unknown as { data: typeof notificationLogs; isLoading: boolean; isError: boolean; refetch: () => void };
   return (
     <AdminShell title="Notification Logs" eyebrow="Delivery inspection">
       <AdminDataTable columns={['Time', 'Channel', 'Recipient', 'Event', 'Status', 'Attempts', 'Provider']}>
-        {apiLogs.map((log) => (
+        {isLoading && <tr><td colSpan={7} className="px-5 py-6 text-center text-sm text-slate-500">Loading notification logs…</td></tr>}
+        {isError && <tr><td colSpan={7} className="px-5 py-6 text-center text-sm text-rose-500">Failed to load logs. <button type="button" onClick={() => refetch()} className="font-black underline">Retry</button></td></tr>}
+        {!isLoading && !isError && apiLogs.length === 0 && <tr><td colSpan={7} className="px-5 py-6 text-center text-sm text-slate-500">No notifications have been logged yet.</td></tr>}
+        {!isLoading && !isError && apiLogs.map((log) => (
           <tr key={log.id} className="hover:bg-slate-50">
             <Td className="text-xs text-slate-400">
               {log.time && !log.time.startsWith('[object')

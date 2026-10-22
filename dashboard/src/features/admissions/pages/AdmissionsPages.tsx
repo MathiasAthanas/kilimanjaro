@@ -994,7 +994,7 @@ export function AdmissionsStudentsPage() {
 }
 
 export function AdmissionsEnrolStudentPage() {
-  return <AdminEnrolStudentPage />;
+  return <AdminEnrolStudentPage basePath="/admissions" />;
 }
 
 export function AdmissionsStudentProfilePage() {

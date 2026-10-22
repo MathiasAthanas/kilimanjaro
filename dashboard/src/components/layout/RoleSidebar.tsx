@@ -9,6 +9,7 @@ import {
   Banknote,
   Boxes,
   CircleHelp,
+  ChevronDown,
   ClipboardCheck,
   Download,
   HandCoins,
@@ -37,13 +38,13 @@ import {
   WalletCards,
   X,
 } from 'lucide-react';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../lib/auth/authStore';
 import { KilimanjaroMark } from '../icons/KilimanjaroMark';
 import { NavItem } from '../navigation/NavItem';
 
-type SidebarSection = {
+export type SidebarSection = {
   title: string;
   items: Array<{ to: string; icon: LucideIcon; label: string; end?: boolean }>;
 };
@@ -227,18 +228,23 @@ const financeSections: SidebarSection[] = [
   {
     title: 'Finance Desk',
     items: [
-      { to: '/finance',                   icon: WalletCards,    label: 'Finance Home',     end: true },
-      { to: '/finance/invoices',          icon: FileText,       label: 'Invoice Ledger',   end: true },
-      { to: '/finance/invoices/generate', icon: FileSpreadsheet,label: 'Generate Invoices'           },
-      { to: '/finance/payments',          icon: Banknote,       label: 'Payment Ledger',   end: true },
+      { to: '/finance', icon: WalletCards, label: 'Finance Home', end: true },
     ],
   },
   {
-    title: 'Payments',
+    title: 'Invoices',
     items: [
+      { to: '/finance/invoices',          icon: FileText,        label: 'Invoice Ledger', end: true },
+      { to: '/finance/invoices/generate', icon: FileSpreadsheet, label: 'Generate Invoices' },
+    ],
+  },
+  {
+    title: 'Payments & Receipts',
+    items: [
+      { to: '/finance/payments',         icon: Banknote,      label: 'Payment Ledger', end: true },
       { to: '/finance/payments/cash',    icon: WalletCards,   label: 'Cash Payment'        },
       { to: '/finance/payments/bank',    icon: Landmark,      label: 'Bank Transfer'       },
-      { to: '/finance/payments/pending', icon: ClipboardCheck,label: 'Pending Approvals'   },
+      { to: '/finance/payments/pending', icon: ClipboardCheck,label: 'Pending Approval'   },
       { to: '/finance/receipts',         icon: FileText,      label: 'Receipts', end: true },
     ],
   },
@@ -260,7 +266,7 @@ const financeSections: SidebarSection[] = [
     ],
   },
   {
-    title: 'Control Room',
+    title: 'Assets & Reports',
     items: [
       { to: '/finance/assets',                icon: Landmark,     label: 'Assets Ledger',   end: true },
       { to: '/finance/reports/statement',     icon: FileText,     label: 'Financial Statement', end: true },
@@ -338,16 +344,35 @@ const adminSections: SidebarSection[] = [
     title: 'Admin Console',
     items: [
       { to: '/admin',               icon: Shield,       label: 'System Center',  end: true },
+    ],
+  },
+  {
+    title: 'Users & Staff',
+    items: [
       { to: '/admin/users',         icon: Users,        label: 'Users',          end: true },
       { to: '/admin/users/create',  icon: UserPlus,     label: 'Register User'             },
+    ],
+  },
+  {
+    title: 'Students',
+    items: [
       { to: '/admin/students',      icon: GraduationCap,label: 'Students',       end: true },
       { to: '/admin/students/import', icon: Upload,     label: 'Import Students', end: true },
       { to: '/admin/import',        icon: Upload,       label: 'Bulk Import',    end: true },
+    ],
+  },
+  {
+    title: 'Academic Structure',
+    items: [
       { to: '/admin/academic/setup',icon: BookOpen,     label: 'Academic Setup'            },
+      { to: '/admin/academic/years', icon: CalendarCheck, label: 'Academic Years', end: true },
+      { to: '/admin/academic/terms', icon: CalendarCheck, label: 'Terms', end: true },
       { to: '/admin/classes',       icon: Landmark,     label: 'Classes',        end: true },
       { to: '/admin/academic/class-subjects', icon: BookOpen, label: 'Teaching Assignments', end: true },
       { to: '/admin/subjects',      icon: Target,       label: 'Subjects',       end: true },
       { to: '/admin/departments',   icon: Building2,    label: 'Departments',    end: true },
+      { to: '/admin/academic/stage-config', icon: BookOpen, label: 'Stage Config', end: true },
+      { to: '/admin/academic/promotion/cross-stage', icon: GraduationCap, label: 'Cross-Stage Promotion', end: true },
     ],
   },
   {
@@ -465,6 +490,7 @@ const admissionsSections: SidebarSection[] = [
       { to: '/admissions/applicants', icon: Users,           label: 'Applicant Directory', end: true },
       { to: '/admissions/students',   icon: GraduationCap,   label: 'Students',           end: true },
       { to: '/admissions/students/enrol', icon: ClipboardCheck, label: 'Enrol Student',    end: true },
+      { to: '/admissions/students/import', icon: Upload, label: 'Import Students', end: true },
     ],
   },
   {
@@ -530,19 +556,28 @@ const managerSections: SidebarSection[] = [
     title: 'Setup',
     items: [
       { to: '/admin/academic/setup', icon: BookOpen,        label: 'Academic Setup'          },
+      { to: '/admin/academic/years', icon: CalendarCheck, label: 'Academic Years', end: true },
+      { to: '/admin/academic/terms', icon: CalendarCheck, label: 'Terms', end: true },
       { to: '/admin/classes',        icon: Landmark,        label: 'Classes',      end: true },
       { to: '/admin/subjects',       icon: Target,          label: 'Subjects',     end: true },
       { to: '/admin/departments',    icon: Building2,       label: 'Departments',  end: true },
+      { to: '/admin/academic/class-subjects', icon: BookOpen, label: 'Teaching Assignments', end: true },
+      { to: '/admin/academic/stage-config', icon: BookOpen, label: 'Stage Config', end: true },
+      { to: '/admin/assessment-types', icon: ClipboardCheck, label: 'Assessment Types', end: true },
       { to: '/admin/grading',        icon: FileSpreadsheet, label: 'Grading',      end: true },
       { to: '/admin/timetable',      icon: Table2,          label: 'Timetable',    end: true },
+      { to: '/admin/academic/promotion/cross-stage', icon: GraduationCap, label: 'Cross-Stage Promotion' },
+      { to: '/admin/performance/engine', icon: TrendingUp, label: 'Performance Engine' },
     ],
   },
   {
-    title: 'Communication',
+    title: 'Operations & Records',
     items: [
       { to: '/principal/announcements', icon: Megaphone, label: 'Announcements',     end: true },
       { to: '/admin/notifications/send', icon: MessageSquarePlus, label: 'Manual Notification'    },
       { to: '/admin/audit/finance',     icon: Shield,    label: 'Audit Log',         end: true },
+      { to: '/finance/store', icon: Boxes, label: 'Store & Inventory', end: true },
+      { to: '/finance/assets', icon: Landmark, label: 'Assets Ledger', end: true },
     ],
   },
 ];
@@ -557,6 +592,7 @@ const superAdminSections: SidebarSection[] = [
       { to: '/superadmin/schools/new', icon: UserPlus,  label: 'New School',   end: true },
       { to: '/manager/overview',       icon: BarChart3, label: 'Group Dashboard', end: true },
       { to: '/manager/finance',        icon: WalletCards, label: 'Group Finance', end: true },
+      { to: '/manager/schools', icon: Building2, label: 'School Scorecards', end: true },
     ],
   },
 ];
@@ -585,7 +621,7 @@ const sharedSections: SidebarSection[] = [
 
 // ─── Role resolver ────────────────────────────────────────────────────────────
 
-function getSectionsForRole(role: string | undefined): SidebarSection[] {
+export function getSectionsForRole(role: string | undefined): SidebarSection[] {
   if (role === 'TEACHER')   return [...teacherSections,   ...sharedSections];
   if (role === 'HOD')       return [...hodSections,        ...sharedSections];
   if (role === 'AQA')       return [...aqaSections,        ...sharedSections];
@@ -602,6 +638,18 @@ function getSectionsForRole(role: string | undefined): SidebarSection[] {
   return [...genericSections, ...sharedSections];
 }
 
+export function getActiveSection(sections: SidebarSection[], pathname: string): SidebarSection | undefined {
+  let best: { section: SidebarSection; length: number } | undefined;
+  for (const section of sections) {
+    for (const item of section.items) {
+      if (pathname === item.to || pathname.startsWith(`${item.to}/`)) {
+        if (!best || item.to.length > best.length) best = { section, length: item.to.length };
+      }
+    }
+  }
+  return best?.section;
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 type RoleSidebarProps = {
@@ -615,9 +663,12 @@ export function RoleSidebar({ mobileOpen, onClose }: RoleSidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const sections = getSectionsForRole(session?.user.role);
+  const activeSection = getActiveSection(sections, location.pathname);
+  const [expandedSection, setExpandedSection] = useState<string | null>(null);
 
   useEffect(() => {
     onClose();
+    setExpandedSection(null);
   }, [location.pathname, onClose]);
 
   return (
@@ -658,24 +709,30 @@ export function RoleSidebar({ mobileOpen, onClose }: RoleSidebarProps) {
 
         {/* ── Nav sections ── */}
         <nav className="custom-scrollbar flex flex-1 flex-col gap-4 overflow-y-auto px-2 pb-2">
-          {sections.map((section) => (
-            <div key={section.title}>
-              <p className="px-4 pb-1 text-[10px] font-black uppercase tracking-[0.22em] text-ks-mist/40">
-                {section.title}
-              </p>
-              <div className="flex flex-col gap-1">
-                {section.items.map((item) => (
-                  <NavItem
-                    key={item.to + item.label}
-                    to={item.to}
-                    icon={item.icon}
-                    label={item.label}
-                    end={item.end}
-                  />
-                ))}
+          {sections.map((section) => {
+            const expanded = expandedSection === section.title || (expandedSection === null && activeSection?.title === section.title);
+            const [primary, ...tasks] = section.items;
+            return (
+              <div key={section.title}>
+                <div className="flex items-center justify-between px-4 pb-1">
+                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-ks-mist/50">{section.title}</p>
+                  {tasks.length > 0 && (
+                    <button type="button" onClick={() => setExpandedSection(expanded ? '' : section.title)}
+                      aria-label={`${expanded ? 'Hide' : 'Show'} ${section.title} tasks`} aria-expanded={expanded}
+                      className="rounded p-1 text-ks-mist/70 hover:bg-ks-mist/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ks-gold">
+                      <ChevronDown className={`h-4 w-4 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+                    </button>
+                  )}
+                </div>
+                <NavItem to={primary.to} icon={primary.icon} label={primary.label} end={primary.end} />
+                {expanded && tasks.length > 0 && (
+                  <div className="ml-4 flex flex-col gap-1 border-l border-ks-mist/20 pl-2">
+                    {tasks.map((item) => <NavItem key={item.to + item.label} to={item.to} icon={item.icon} label={item.label} end={item.end} />)}
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </nav>
 
         {/* ── Footer ── */}
