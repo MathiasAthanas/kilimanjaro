@@ -509,6 +509,8 @@ export class UiController {
     let items: unknown[];
     if (resource === 'department' || resource === 'teachers') {
       items = await this.hodDepartment(resource, user, warnings);
+    } else if (resource === 'timetable') {
+      items = await this.hodTimetable(user, warnings);
     } else {
       const route = this.hodRoute(resource);
       const result = await this.ui.tryGet(route, [], user);
@@ -516,6 +518,32 @@ export class UiController {
       items = await this.shapeHodItems(resource, this.ui.asArray(result.data) as Record<string, any>[], user);
     }
     return this.ui.envelope({ resource, items, raw: items }, warnings);
+  }
+
+  /// Weekly slots for the classes and subjects of the HOD's own department.
+  private async hodTimetable(user: GatewayUser, warnings: string[]): Promise<unknown[]> {
+    const [csRes, ttRes, staff, names, labels] = await Promise.all([
+      this.ui.tryGet({ service: 'academic', path: '/academics/class-subjects' }, [], user),
+      this.ui.tryGet({ service: 'academic', path: '/academics/timetables' }, [], user),
+      this.staffDirectory(user),
+      this.subjectNames(user),
+      this.classLabels(user),
+    ]);
+    warnings.push(...this.warning(csRes), ...this.warning(ttRes));
+    const mine = new Set(
+      (this.ui.asArray(csRes.data) as Record<string, any>[]).map((cs) => `${cs.classId}:${cs.subjectId}`),
+    );
+    const order = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'];
+    return (this.ui.asArray(ttRes.data) as Record<string, any>[])
+      .filter((slot) => mine.has(`${slot.classId}:${slot.subjectId}`))
+      .sort((a, b) => order.indexOf(a.dayOfWeek) - order.indexOf(b.dayOfWeek) || String(a.startTime).localeCompare(String(b.startTime), undefined, { numeric: true }))
+      .map((slot) => ({
+        id: slot.id,
+        day: String(slot.dayOfWeek ?? '').slice(0, 3).replace(/^./, (c: string) => c.toUpperCase()).replace(/(?<=.)./g, (c: string) => c.toLowerCase()),
+        time: String(slot.startTime ?? ''),
+        title: `${names.get(String(slot.subjectId)) ?? 'Subject'} ${labels.get(String(slot.classId))?.label ?? ''}`.trim(),
+        subtitle: `${staff.get(String(slot.teacherId))?.name ?? 'Teacher'}${slot.room ? ` - ${slot.room}` : ''}`,
+      }));
   }
 
   private async staffDirectory(user: GatewayUser): Promise<Map<string, { name: string; department: string | null }>> {
@@ -679,6 +707,28 @@ export class UiController {
       discipline: { service: 'student', path: '/students/discipline', fallback: [] },
     }, user);
     return this.ui.envelope(this.withCounts(data, ['approvals', 'payments', 'discipline']), warnings);
+  }
+
+  /// Marks awaiting the principal's final approval, shaped for the mobile approvals list.
+  @Get('principal/approvals')
+  @Roles(...PRINCIPAL_ROLES)
+  async principalApprovals(@CurrentUser() user: GatewayUser): Promise<UiEnvelope> {
+    const result = await this.ui.tryGet({ service: 'academic', path: '/academics/assessments/pending-approval' }, [], user);
+    const items = await this.shapeHodItems('approvals', this.ui.asArray(result.data) as Record<string, any>[], user);
+    return this.ui.envelope({ resource: 'approvals', items }, this.warning(result));
+  }
+
+  /// Unresolved high/critical performance alerts with the student's name attached.
+  @Get('principal/at-risk')
+  @Roles(...PRINCIPAL_ROLES)
+  async principalAtRisk(@CurrentUser() user: GatewayUser): Promise<UiEnvelope> {
+    const result = await this.ui.tryGet(
+      { service: 'academic', path: '/academics/performance/alerts', params: { severity: 'HIGH,CRITICAL' } },
+      [],
+      user,
+    );
+    const items = await this.shapeHodItems('performance', this.ui.asArray(result.data) as Record<string, any>[], user);
+    return this.ui.envelope({ resource: 'at-risk', items }, this.warning(result));
   }
 
   @Get('principal/staff')
