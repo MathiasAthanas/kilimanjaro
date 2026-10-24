@@ -47,8 +47,7 @@ export class FeeStructuresController {
     @Query('educationStage') educationStage?: string,
     @CurrentUser() user?: RequestUser,
   ) {
-    const schoolId = user?.scope === 'SCHOOL' ? (user.activeSchoolId ?? user.schoolIds?.[0] ?? null) : null;
-    return this.feeStructuresService.matrix({ academicYearId, termId, educationStage, schoolId });
+    return this.feeStructuresService.matrix({ academicYearId, termId, educationStage }, user);
   }
 
   @Patch(':id')

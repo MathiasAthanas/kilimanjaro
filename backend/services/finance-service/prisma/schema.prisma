@@ -404,6 +404,7 @@ model ManualPaymentApproval {
 
 model FinancialAuditLog {
   id              String               @id @default(uuid())
+  schoolId        String?
   entityType      String
   entityId        String
   action          FinancialAuditAction
@@ -418,11 +419,13 @@ model FinancialAuditLog {
   @@index([entityId, entityType])
   @@index([performedById])
   @@index([createdAt])
+  @@index([schoolId, createdAt])
   @@schema("finance")
 }
 
 model Asset {
   id                 String         @id @default(uuid())
+  schoolId           String?
   assetNumber        String         @unique
   name               String
   description        String?
@@ -460,6 +463,7 @@ model Asset {
   @@index([status, category])
   @@index([parentAssetId])
   @@index([isGroup, status])
+  @@index([schoolId])
   @@schema("finance")
 }
 

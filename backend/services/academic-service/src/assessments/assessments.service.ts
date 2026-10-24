@@ -542,7 +542,7 @@ export class AssessmentsService {
     }));
   }
 
-  async reviewAssessment(id: string) {
+  async reviewAssessment(id: string, user?: RequestUser) {
     const assessment = await this.prisma.assessment.findUnique({
       where: { id },
       include: {
@@ -554,6 +554,8 @@ export class AssessmentsService {
     if (!assessment) {
       throw new NotFoundException('Assessment not found');
     }
+    // A reviewer only opens marks from their own school(s).
+    assertSchoolInScope(user, (assessment as { schoolId?: string | null }).schoolId ?? null);
 
     const alertsPayload = await this.studentClient.get<any>(
         '/students/performance/alerts',
@@ -581,11 +583,37 @@ export class AssessmentsService {
       }
     }
 
+    // The marks sheet with who each mark belongs to (the raw marks only carry student ids).
+    let names = new Map<string, { name: string; registrationNumber: string }>();
+    try {
+      const ids = assessment.marks.map((m) => m.studentId).join(',');
+      if (ids) {
+        const payload = this.unwrap<any>(
+          await this.studentClient.get<any>('/students/internal/by-ids', { ids }, { 'X-User-Id': 'academic-service', 'X-User-Role': ROLES.PRINCIPAL }),
+        );
+        const rows = Array.isArray(payload) ? payload : Array.isArray(payload?.data) ? payload.data : [];
+        names = new Map(rows.map((r: any) => [String(r.id), { name: String(r.name ?? ''), registrationNumber: String(r.registrationNumber ?? '') }]));
+      }
+    } catch {
+      // names are a nicety; the marks still show
+    }
+    const studentMarks = assessment.marks
+      .map((m) => ({
+        studentId: m.studentId,
+        name: names.get(m.studentId)?.name ?? '',
+        registrationNumber: names.get(m.studentId)?.registrationNumber ?? '',
+        score: m.score,
+        isAbsent: m.isAbsent,
+        note: m.note,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+
     return {
       assessment,
       statistics: this.buildStats(assessment.marks.map((m) => m.score)),
       gradeDistributionPreview: gradeDistribution,
       performanceAlerts: alerts,
+      studentMarks,
     };
   }
 

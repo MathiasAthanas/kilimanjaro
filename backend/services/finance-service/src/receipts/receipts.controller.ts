@@ -27,7 +27,7 @@ export class ReceiptsController {
   }
 
   @Get(':id/pdf')
-  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.PARENT, ROLES.STUDENT)
+  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN, ROLES.PARENT, ROLES.STUDENT)
   async pdf(@Param('id') id: string, @CurrentUser() user: RequestUser, @Res() res: Response) {
     const file = await this.receiptsService.getPdfFile(id, user);
     res.setHeader('Content-Type', 'application/pdf');

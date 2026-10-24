@@ -4,7 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { AuditService } from '../audit/audit.service';
 import { RequestUser } from '../common/interfaces/request-user.interface';
-import { schoolScopeFilter, assertSchoolInScope } from '../common/helpers/school-scope.helper';
+import { schoolScopeFilter, assertSchoolInScope, resolveRequiredWriteSchoolId } from '../common/helpers/school-scope.helper';
 import { CreateFeeStructureDto } from './dto/create-fee-structure.dto';
 import { UpdateFeeStructureDto } from './dto/update-fee-structure.dto';
 import { AssignStudentGroupDto, CreateStudentGroupDto } from './dto/student-group.dto';
@@ -29,7 +29,7 @@ export class FeeStructuresService {
       throw new BadRequestException('Provide educationStage when targeting by classLevel');
     }
 
-    const schoolId = user.activeSchoolId ?? user.schoolIds?.find((id) => id !== '*') ?? null;
+    const schoolId = resolveRequiredWriteSchoolId(user);
     const row = await this.prisma.feeStructure.create({
       data: {
         schoolId,
@@ -91,19 +91,20 @@ export class FeeStructuresService {
     });
   }
 
-  async matrix(filters: { academicYearId: string; termId?: string; educationStage?: string; schoolId?: string | null }) {
-    const scopeKey = filters.schoolId || 'group';
+  async matrix(filters: { academicYearId: string; termId?: string; educationStage?: string }, user?: RequestUser) {
+    const scope = schoolScopeFilter(user);
+    const scopeKey = scope.schoolId ? (typeof scope.schoolId === 'string' ? scope.schoolId : [...scope.schoolId.in].sort().join('+')) : 'group';
     const cacheKey = `fee-matrix:${scopeKey}:${filters.academicYearId}:${filters.termId || 'ANNUAL'}:${filters.educationStage || 'ALL'}`;
     const cached = await this.redis.get(cacheKey);
     if (cached) return cached;
 
     const rows = await this.prisma.feeStructure.findMany({
       where: {
+        ...scope,
         academicYearId: filters.academicYearId,
         termId: filters.termId,
         educationStage: filters.educationStage as any,
         isActive: true,
-        ...(filters.schoolId ? { schoolId: filters.schoolId } : {}),
       },
       include: { feeCategory: true },
       orderBy: [{ classId: 'asc' }, { feeCategory: { displayOrder: 'asc' } }],

@@ -4,7 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { NumberSequenceService } from '../common/helpers/number-sequence.service';
 import { RequestUser } from '../common/interfaces/request-user.interface';
-import { schoolScopeFilter, assertSchoolInScope } from '../common/helpers/school-scope.helper';
+import { schoolScopeFilter, assertSchoolInScope, resolveRequiredWriteSchoolId } from '../common/helpers/school-scope.helper';
 import { CreateExpenseDto } from './dto/create-expense.dto';
 import { VoidExpenseDto } from './dto/void-expense.dto';
 
@@ -20,9 +20,11 @@ export class ExpensesService {
     const amount = new Prisma.Decimal(dto.amount);
     if (amount.lessThanOrEqualTo(0)) throw new BadRequestException('Amount must be greater than zero');
 
+    const schoolId = resolveRequiredWriteSchoolId(user);
     const row = await this.prisma.expense.create({
       data: {
-        expenseNumber: await this.numberService.expenseNumber(user.activeSchoolId ?? user.schoolIds?.find((id) => id !== '*') ?? null),
+        schoolId,
+        expenseNumber: await this.numberService.expenseNumber(schoolId),
         category: dto.category as any,
         description: dto.description,
         amount,

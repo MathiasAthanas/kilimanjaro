@@ -4,9 +4,16 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { NumberSequenceService } from '../common/helpers/number-sequence.service';
 import { RequestUser } from '../common/interfaces/request-user.interface';
-// NOTE: the Asset model has no `schoolId` column — fixed assets are tracked
-// group-wide (central ownership), so no school-scope filter is applied here.
-// (If per-school assets are ever required, add `schoolId` to the Asset model.)
+import { assertSchoolInScope, resolveRequiredWriteSchoolId, schoolScopeFilter } from '../common/helpers/school-scope.helper';
+
+/**
+ * Assets belong to the school that bought them. Rows with no school (created before
+ * assets were school-aware) are shared across the group and visible to every school.
+ */
+function assetScope(user?: RequestUser): Prisma.AssetWhereInput {
+  const scope = schoolScopeFilter(user);
+  return scope.schoolId ? { OR: [scope, { schoolId: null }] } : {};
+}
 
 @Injectable()
 export class AssetsService {
@@ -55,9 +62,16 @@ export class AssetsService {
     const derivedCost = unitCost ? quantity.mul(unitCost) : undefined;
     const purchaseCost = this.decimal(dto.purchaseCost) ?? derivedCost;
     const currentValue = this.decimal(dto.currentValue) ?? purchaseCost;
+    const schoolId = resolveRequiredWriteSchoolId(user);
+    if (dto.parentAssetId) {
+      const parent = await this.prisma.asset.findUnique({ where: { id: dto.parentAssetId } });
+      if (!parent) throw new NotFoundException('Parent asset not found');
+      if (parent.schoolId) assertSchoolInScope(user, parent.schoolId);
+    }
     const row = await this.prisma.asset.create({
       data: {
-        assetNumber: await this.numberService.assetNumber(user.activeSchoolId ?? user.schoolIds?.find((id) => id !== '*') ?? null),
+        schoolId,
+        assetNumber: await this.numberService.assetNumber(schoolId),
         name: dto.name,
         isGroup: dto.isGroup === true || dto.isGroup === 'true',
         groupType: dto.groupType,
@@ -103,6 +117,7 @@ export class AssetsService {
 
     const rows = await this.prisma.asset.findMany({
       where: {
+        AND: [assetScope(user)],
         category: filters.category,
         type: filters.type,
         condition: filters.condition,
@@ -131,12 +146,13 @@ export class AssetsService {
       include: { childAssets: { orderBy: { createdAt: 'asc' } }, parentAsset: true },
     });
     if (!row) throw new NotFoundException('Asset not found');
+    if (row.schoolId) assertSchoolInScope(user, row.schoolId);
     return this.withRollup(row);
   }
 
   async update(id: string, dto: any, user: RequestUser) {
     const existing = await this.byId(id, user);
-    const { warrantyExpiry, purchaseDate, purchaseCost, currentValue, quantity, unitCost, isGroup, ...rest } = dto;
+    const { warrantyExpiry, purchaseDate, purchaseCost, currentValue, quantity, unitCost, isGroup, schoolId: _ignoredSchool, ...rest } = dto;
     const qty = this.decimal(quantity);
     const unit = this.decimal(unitCost);
     const cost = this.decimal(purchaseCost) ?? (qty && unit ? qty.mul(unit) : undefined);
@@ -195,8 +211,8 @@ export class AssetsService {
     return row;
   }
 
-  async summary(_user?: RequestUser) {
-    const scope = {};
+  async summary(user?: RequestUser) {
+    const scope = assetScope(user);
     const [totalAssets, groupedAssets, componentAssets, byCategory, byCondition, byType, sums, rootRows] = await Promise.all([
       this.prisma.asset.count({ where: { ...scope, status: { not: 'DISPOSED' } } }),
       this.prisma.asset.count({ where: { ...scope, isGroup: true, status: { not: 'DISPOSED' } } }),
@@ -235,9 +251,9 @@ export class AssetsService {
     };
   }
 
-  async fixedAssetRegister(_user?: RequestUser) {
+  async fixedAssetRegister(user?: RequestUser) {
     const rows = await this.prisma.asset.findMany({
-      where: { parentAssetId: null, status: { not: 'DISPOSED' } },
+      where: { ...assetScope(user), parentAssetId: null, status: { not: 'DISPOSED' } },
       orderBy: { name: 'asc' },
       include: { childAssets: { orderBy: { name: 'asc' } } },
     });

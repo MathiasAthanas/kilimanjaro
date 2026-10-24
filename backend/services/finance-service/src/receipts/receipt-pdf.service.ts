@@ -2,9 +2,19 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { mkdirSync, createWriteStream } from 'fs';
 import { dirname, join } from 'path';
-// pdfkit publishes a CommonJS constructor; this service's tsconfig has
-// esModuleInterop off, so the `= require` form is needed for a usable constructor.
-import PDFDocument = require('pdfkit');
+import {
+  PDF_COLORS,
+  SchoolProfile,
+  fmtDate,
+  footer,
+  keyValues,
+  letterhead,
+  lineTable,
+  money,
+  newDocument,
+  titleCase,
+  totalsBlock,
+} from '../common/pdf/pdf-layout';
 
 @Injectable()
 export class ReceiptPdfService {
@@ -20,12 +30,17 @@ export class ReceiptPdfService {
     className: string;
     academicYearId: string;
     termId: string;
+    termName?: string | null;
+    academicYearName?: string | null;
+    invoiceNumber?: string | null;
+    school?: SchoolProfile | null;
     lineItems: Array<{ feeCategoryName: string; amount: string }>;
     previousBalance: string;
     amountPaid: string;
     remainingBalance: string;
     issuedByName: string;
     issuedAt: Date;
+    voided?: boolean;
   }): Promise<string> {
     const root = this.configService.get<string>('PDF_STORAGE_PATH', './storage');
     const fileName = `receipt_${input.receiptNumber}.pdf`;
@@ -34,36 +49,43 @@ export class ReceiptPdfService {
     mkdirSync(dirname(fullPath), { recursive: true });
 
     await new Promise<void>((resolve, reject) => {
-      const doc = new PDFDocument({ size: 'A4', margin: 48 });
+      const doc = newDocument();
       const stream = createWriteStream(fullPath);
       doc.pipe(stream);
 
-      doc.fontSize(20).text('KILIMANJARO SCHOOLS', { align: 'center' });
-      doc.fontSize(13).text('OFFICIAL PAYMENT RECEIPT', { align: 'center' });
-      doc.moveDown(0.5);
-      doc.fontSize(14).text(`Receipt: ${input.receiptNumber}`, { align: 'center' });
+      let y = letterhead(doc, input.school, 'Official receipt', input.receiptNumber, {
+        text: input.voided ? 'Void' : 'Paid',
+        color: input.voided ? PDF_COLORS.SLATE : PDF_COLORS.GREEN,
+      });
 
-      doc.moveDown();
-      doc.fontSize(11).text(`Payment Date: ${input.paymentDate.toISOString()}`);
-      doc.text(`Payment Method: ${input.paymentMethod}`);
-      if (input.referenceNumber) doc.text(`Reference: ${input.referenceNumber}`);
-      doc.text(`Student: ${input.studentName} (${input.registrationNumber})`);
-      doc.text(`Class: ${input.className}`);
-      doc.text(`Academic Year: ${input.academicYearId} | Term: ${input.termId}`);
+      const term = [input.termName, input.academicYearName].filter(Boolean).join(' · ');
+      y = keyValues(
+        doc,
+        [
+          ['Received from / for', input.studentName],
+          ['Registration number', input.registrationNumber],
+          ['Class', input.className],
+          ['Term', term],
+          ['Payment date', fmtDate(input.paymentDate)],
+          ['Payment method', titleCase(input.paymentMethod)],
+          ['Reference', input.referenceNumber || '—'],
+          ['Invoice', input.invoiceNumber || '—'],
+        ],
+        y,
+      );
 
-      doc.moveDown();
-      for (const item of input.lineItems) {
-        doc.text(`${item.feeCategoryName} - ${item.amount} TZS`);
-      }
+      y = lineTable(doc, input.lineItems.map((item) => ({ label: item.feeCategoryName, amount: item.amount })), y + 8);
+      totalsBlock(
+        doc,
+        [
+          { label: 'Balance before payment', value: money(input.previousBalance) },
+          { label: 'Amount received', value: money(input.amountPaid), strong: true, color: PDF_COLORS.GREEN },
+          { label: 'Balance remaining', value: money(input.remainingBalance), color: Number(input.remainingBalance) > 0 ? PDF_COLORS.RED : PDF_COLORS.GREEN },
+        ],
+        y,
+      );
 
-      doc.moveDown();
-      doc.text(`Previous Balance: ${input.previousBalance} TZS`);
-      doc.text(`Amount Paid: ${input.amountPaid} TZS`);
-      doc.text(`Remaining Balance: ${input.remainingBalance} TZS`);
-
-      doc.moveDown();
-      doc.fontSize(9).text('This is an official receipt of Kilimanjaro Schools');
-      doc.text(`Issued by: ${input.issuedByName} on ${input.issuedAt.toISOString()}`);
+      footer(doc, `${input.school?.name ?? 'School'} · Receipt ${input.receiptNumber} · Issued ${fmtDate(input.issuedAt)} by ${input.issuedByName}`);
 
       doc.end();
       stream.on('finish', () => resolve());

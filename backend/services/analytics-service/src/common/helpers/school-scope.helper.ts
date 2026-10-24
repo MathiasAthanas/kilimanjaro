@@ -71,3 +71,15 @@ export function resolveWriteSchoolId(user: RequestUser | undefined, explicit?: s
   const ids = (user?.schoolIds ?? []).filter((id) => id !== '*');
   return ids.length === 1 ? ids[0] : null;
 }
+
+/**
+ * Every school a read may cover: the selected school, else all of a school-scoped user's schools
+ * (so someone in several schools sees all of theirs, never just the first), else null = no limit (group).
+ */
+export function resolveScopeSchoolIds(user?: RequestUser): string[] | null {
+  if (!user) return null;
+  if (user.activeSchoolId) return [user.activeSchoolId];
+  if (isGroupScope(user)) return null;
+  const ids = (user.schoolIds ?? []).filter((id) => id && id !== '*');
+  return ids.length ? ids : ['__none__'];
+}

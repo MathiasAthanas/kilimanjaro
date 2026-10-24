@@ -104,12 +104,12 @@ export class ReportsService {
         break;
       }
       case ReportType.FINANCE_COLLECTION: {
-        const data = await this.financeService.getOverview(body.academicYearId, body.termId, body.schoolId);
+        const data = await this.financeService.getOverview(body.academicYearId, body.termId, body.schoolId ? [body.schoolId] : null);
         await this.financeCollectionGenerator.generate(file, data);
         break;
       }
       case ReportType.OUTSTANDING_BALANCES: {
-        const data = await this.financeService.getOverview(body.academicYearId, body.termId, body.schoolId);
+        const data = await this.financeService.getOverview(body.academicYearId, body.termId, body.schoolId ? [body.schoolId] : null);
         await this.outstandingBalancesGenerator.generate(file, data);
         break;
       }

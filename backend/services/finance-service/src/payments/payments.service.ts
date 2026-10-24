@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from 'crypto';
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -21,6 +22,7 @@ import { RabbitMqService } from '../rabbitmq/rabbitmq.service';
 import { RequestUser } from '../common/interfaces/request-user.interface';
 import { schoolScopeFilter, assertSchoolInScope } from '../common/helpers/school-scope.helper';
 import { ReceiptsService } from '../receipts/receipts.service';
+import { StudentClientService } from '../student-client/student-client.service';
 import { CreateManualPaymentDto } from './dto/create-manual-payment.dto';
 
 @Injectable()
@@ -32,6 +34,7 @@ export class PaymentsService {
     private readonly audit: AuditService,
     private readonly rabbitMq: RabbitMqService,
     private readonly receiptsService: ReceiptsService,
+    private readonly studentClient: StudentClientService,
   ) {}
 
   private decimal(value: string | number): Prisma.Decimal {
@@ -67,8 +70,17 @@ export class PaymentsService {
       if (!invoice) throw new NotFoundException('Invoice not found');
 
       const paidAmount = invoice.paidAmount.plus(payment.amount);
-      const outstanding = invoice.totalAmount.minus(paidAmount);
+      // Money that already arrived (mobile money) can exceed what is owed; the balance floors at zero
+      // and the overpayment is flagged on the payment instead of producing a negative balance.
+      const rawOutstanding = invoice.totalAmount.minus(paidAmount);
+      const outstanding = rawOutstanding.lt(0) ? new Prisma.Decimal(0) : rawOutstanding;
       const status = this.status(invoice.totalAmount, paidAmount, invoice.dueDate);
+      if (rawOutstanding.lt(0)) {
+        await tx.payment.update({
+          where: { id: payment.id },
+          data: { notes: `${payment.notes ? `${payment.notes} ` : ''}Overpayment of ${rawOutstanding.abs().toString()} received.`.trim() },
+        });
+      }
 
       return tx.invoice.update({
         where: { id: invoice.id },
@@ -135,6 +147,7 @@ export class PaymentsService {
       data: {
         paymentNumber: await this.numberService.paymentNumber((invoice as any).schoolId ?? null),
         invoiceId: invoice.id,
+        schoolId: (invoice as any).schoolId ?? null,
         studentId: invoice.studentId,
         amount: this.decimal(input.payload.amount),
         currency: input.payload.currency || 'TZS',
@@ -165,19 +178,58 @@ export class PaymentsService {
     return { accepted: true };
   }
 
+  /** An invoice can take money while it is open; cancelled, waived or settled ones cannot. */
+  private assertPayable(invoice: { status: InvoiceStatus; invoiceNumber: string }): void {
+    const open: InvoiceStatus[] = [InvoiceStatus.ISSUED, InvoiceStatus.PARTIALLY_PAID, InvoiceStatus.OVERDUE];
+    if (!open.includes(invoice.status)) {
+      throw new BadRequestException(`Invoice ${invoice.invoiceNumber} is ${invoice.status.toLowerCase().replace('_', ' ')} and cannot take a payment`);
+    }
+  }
+
   private async createManualPayment(dto: CreateManualPaymentDto, method: PaymentMethod, user: RequestUser) {
     const invoice = await this.prisma.invoice.findUnique({ where: { id: dto.invoiceId } });
     if (!invoice) throw new NotFoundException('Invoice not found');
+    assertSchoolInScope(user, invoice.schoolId ?? null);
+    this.assertPayable(invoice);
+
+    const amount = this.decimal(dto.amount);
+    if (!amount.gt(0)) throw new BadRequestException('Payment amount must be greater than zero');
+
+    // Payments waiting for approval already earmark part of the balance.
+    const pending = await this.prisma.payment.aggregate({
+      where: { invoiceId: invoice.id, status: PaymentStatus.PENDING },
+      _sum: { amount: true },
+    });
+    const pendingAmount = pending._sum.amount ?? new Prisma.Decimal(0);
+    const available = invoice.outstandingBalance.minus(pendingAmount);
+    if (amount.gt(available)) {
+      throw new BadRequestException(
+        `Amount exceeds what can still be paid on ${invoice.invoiceNumber}: balance ${invoice.outstandingBalance.toString()}${pendingAmount.gt(0) ? `, of which ${pendingAmount.toString()} is already awaiting approval` : ''}`,
+      );
+    }
+
+    if (dto.referenceNumber?.trim()) {
+      const duplicate = await this.prisma.payment.findFirst({
+        where: {
+          referenceNumber: dto.referenceNumber.trim(),
+          method,
+          status: { in: [PaymentStatus.PENDING, PaymentStatus.CONFIRMED] },
+          ...(invoice.schoolId ? { schoolId: invoice.schoolId } : {}),
+        },
+      });
+      if (duplicate) throw new ConflictException(`Reference ${dto.referenceNumber.trim()} was already recorded (${duplicate.paymentNumber})`);
+    }
 
     const payment = await this.prisma.payment.create({
       data: {
         paymentNumber: await this.numberService.paymentNumber((invoice as any).schoolId ?? null),
         invoiceId: invoice.id,
+        schoolId: invoice.schoolId ?? null,
         studentId: invoice.studentId,
-        amount: this.decimal(dto.amount),
+        amount,
         method,
         status: PaymentStatus.PENDING,
-        referenceNumber: dto.referenceNumber,
+        referenceNumber: dto.referenceNumber?.trim() || undefined,
         payerName: dto.payerName,
         payerPhone: dto.payerPhone,
         paidAt: dto.paidAt ? new Date(dto.paidAt) : new Date(),
@@ -215,10 +267,11 @@ export class PaymentsService {
     return this.createManualPayment(dto, PaymentMethod.CASH, user);
   }
 
-  list(filters: any, user: RequestUser) {
+  async list(filters: any, user: RequestUser) {
     const page = Math.max(1, Number(filters.page || 1));
     const limit = Math.min(100, Math.max(1, Number(filters.limit || 20)));
-    return this.prisma.payment.findMany({
+    if (filters.paged) return this.listPaged(filters, user, page, limit);
+    const rows = await this.prisma.payment.findMany({
       where: {
         ...schoolScopeFilter(user),
         invoiceId: filters.invoiceId,
@@ -233,21 +286,128 @@ export class PaymentsService {
               }
             : undefined,
       },
+      include: { invoice: { select: { invoiceNumber: true } }, receipt: { select: { receiptNumber: true, isVoided: true } } },
       orderBy: { createdAt: 'desc' },
       skip: (page - 1) * limit,
       take: limit,
     });
+    const names = await this.studentClient.lookupStudents(rows.map((r) => r.studentId));
+    return rows.map((r) => ({
+      ...r,
+      invoiceNumber: r.invoice?.invoiceNumber,
+      receiptNumber: r.receipt?.receiptNumber,
+      studentName: names.get(r.studentId)?.name ?? '',
+      registrationNumber: names.get(r.studentId)?.registrationNumber ?? '',
+    }));
   }
 
-  pendingApprovals(user: RequestUser) {
-    return this.prisma.manualPaymentApproval.findMany({
+  /** One page of the payment ledger plus totals and status counts for everything that matches. */
+  private async listPaged(filters: any, user: RequestUser, page: number, limit: number) {
+    const base: Prisma.PaymentWhereInput = {
+      ...schoolScopeFilter(user),
+      invoiceId: filters.invoiceId || undefined,
+      studentId: filters.studentId || undefined,
+      method: filters.method || undefined,
+      paidAt:
+        filters.startDate || filters.endDate
+          ? { gte: filters.startDate ? new Date(filters.startDate) : undefined, lte: filters.endDate ? new Date(filters.endDate) : undefined }
+          : undefined,
+    };
+    const q = String(filters.search ?? filters.q ?? '').trim();
+    if (q) {
+      const ids = await this.studentClient.searchStudents(q);
+      base.OR = [
+        { paymentNumber: { contains: q, mode: 'insensitive' } },
+        { referenceNumber: { contains: q, mode: 'insensitive' } },
+        { payerName: { contains: q, mode: 'insensitive' } },
+        { invoice: { invoiceNumber: { contains: q, mode: 'insensitive' } } },
+        ...(ids.length ? [{ studentId: { in: ids } }] : []),
+      ];
+    }
+    const status = String(filters.status ?? '').trim().toUpperCase();
+    const where: Prisma.PaymentWhereInput = { ...base, ...(status ? { status: status as PaymentStatus } : {}) };
+
+    const [rows, total, byStatus, confirmed] = await Promise.all([
+      this.prisma.payment.findMany({
+        where,
+        include: { invoice: { select: { invoiceNumber: true } }, receipt: { select: { receiptNumber: true, isVoided: true } } },
+        orderBy: { paidAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.payment.count({ where }),
+      this.prisma.payment.groupBy({ by: ['status'], where: base, _count: { _all: true }, _sum: { amount: true } }),
+      this.prisma.payment.aggregate({ where: { ...where, status: PaymentStatus.CONFIRMED }, _sum: { amount: true }, _count: { _all: true } }),
+    ]);
+    const names = await this.studentClient.lookupStudents(rows.map((r) => r.studentId));
+    const counts: Record<string, number> = { ALL: 0 };
+    const amounts: Record<string, string> = {};
+    for (const g of byStatus) {
+      counts[g.status] = g._count._all;
+      counts.ALL += g._count._all;
+      amounts[g.status] = (g._sum.amount ?? new Prisma.Decimal(0)).toString();
+    }
+    return {
+      items: rows.map((r) => ({
+        ...r,
+        invoiceNumber: r.invoice?.invoiceNumber,
+        receiptNumber: r.receipt?.receiptNumber,
+        studentName: names.get(r.studentId)?.name ?? '',
+        registrationNumber: names.get(r.studentId)?.registrationNumber ?? '',
+      })),
+      meta: { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) },
+      totals: { confirmedAmount: (confirmed._sum.amount ?? new Prisma.Decimal(0)).toString(), confirmedCount: confirmed._count._all },
+      counts,
+      amounts,
+    };
+  }
+
+  /** One payment with the invoice, receipt and approval trail it belongs to. */
+  async byId(id: string, user: RequestUser) {
+    const payment = await this.prisma.payment.findUnique({
+      where: { id },
+      include: {
+        invoice: { select: { invoiceNumber: true, totalAmount: true, outstandingBalance: true } },
+        receipt: { select: { id: true, receiptNumber: true, isVoided: true } },
+        manualApproval: true,
+      },
+    });
+    if (!payment) throw new NotFoundException('Payment not found');
+    assertSchoolInScope(user, payment.schoolId ?? null);
+    const names = await this.studentClient.lookupStudents([payment.studentId]);
+    const student = names.get(payment.studentId);
+    const { invoice, receipt, manualApproval, ...rest } = payment;
+    return {
+      ...rest,
+      invoiceNumber: invoice?.invoiceNumber,
+      invoiceTotal: invoice?.totalAmount,
+      invoiceOutstanding: invoice?.outstandingBalance,
+      receiptId: receipt?.id ?? null,
+      receiptNumber: receipt?.receiptNumber ?? null,
+      receiptVoided: receipt?.isVoided ?? false,
+      studentName: student?.name ?? '',
+      registrationNumber: student?.registrationNumber ?? '',
+      className: student?.className ?? null,
+      approval: manualApproval,
+    };
+  }
+
+  async pendingApprovals(user: RequestUser) {
+    const rows = await this.prisma.manualPaymentApproval.findMany({
       where: {
         decision: null,
         payment: { ...schoolScopeFilter(user) },
       },
-      include: { payment: true },
+      include: { payment: { include: { invoice: { select: { invoiceNumber: true } } } } },
       orderBy: { requestedAt: 'asc' },
     });
+    const names = await this.studentClient.lookupStudents(rows.map((r) => r.payment.studentId));
+    return rows.map((r) => ({
+      ...r,
+      studentName: names.get(r.payment.studentId)?.name ?? '',
+      registrationNumber: names.get(r.payment.studentId)?.registrationNumber ?? '',
+      invoiceNumber: r.payment.invoice?.invoiceNumber,
+    }));
   }
 
   async approve(approvalId: string, user: RequestUser) {
@@ -256,6 +416,16 @@ export class PaymentsService {
     assertSchoolInScope(user, approval.payment?.schoolId ?? null);
     if (approval.decision !== null) {
       throw new BadRequestException(`Approval already ${approval.decision.toLowerCase()}`);
+    }
+
+    // The invoice may have been settled, waived or cancelled since the payment was entered.
+    const liveInvoice = await this.prisma.invoice.findUnique({ where: { id: approval.payment.invoiceId } });
+    if (!liveInvoice) throw new NotFoundException('Invoice not found');
+    this.assertPayable(liveInvoice);
+    if (approval.payment.amount.gt(liveInvoice.outstandingBalance)) {
+      throw new BadRequestException(
+        `This payment (${approval.payment.amount.toString()}) is more than the invoice still owes (${liveInvoice.outstandingBalance.toString()}). Reject it or correct the amount.`,
+      );
     }
 
     await this.prisma.manualPaymentApproval.update({
@@ -359,6 +529,10 @@ export class PaymentsService {
     const status = this.status(invoice.totalAmount, paidAmount, invoice.dueDate);
 
     await this.prisma.$transaction([
+      this.prisma.receipt.updateMany({
+        where: { paymentId: payment.id, isVoided: false },
+        data: { isVoided: true, voidReason: `Payment refunded: ${refundReason}`, voidedById: user.id, voidedAt: new Date() },
+      }),
       this.prisma.payment.update({
         where: { id: payment.id },
         data: {

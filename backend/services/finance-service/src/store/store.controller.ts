@@ -29,8 +29,8 @@ export class StoreController {
 
   @Get('items')
   @Roles(...VIEW_ROLES)
-  listItems(@Query() query: any) {
-    return this.service.listItems(query);
+  listItems(@Query() query: any, @CurrentUser() user?: RequestUser) {
+    return this.service.listItems(query, user);
   }
 
   @Post('items')
@@ -41,20 +41,20 @@ export class StoreController {
 
   @Get('summary')
   @Roles(...VIEW_ROLES)
-  summary() {
-    return this.service.summary();
+  summary(@CurrentUser() user?: RequestUser) {
+    return this.service.summary(user);
   }
 
   @Get('movements')
   @Roles(...VIEW_ROLES)
-  movements(@Query() query: any) {
-    return this.service.movements(query);
+  movements(@Query() query: any, @CurrentUser() user?: RequestUser) {
+    return this.service.movements(query, user);
   }
 
   @Get('items/:id')
   @Roles(...VIEW_ROLES)
-  itemById(@Param('id') id: string) {
-    return this.service.itemById(id);
+  itemById(@Param('id') id: string, @CurrentUser() user?: RequestUser) {
+    return this.service.itemById(id, user);
   }
 
   @Patch('items/:id')

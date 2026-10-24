@@ -6,7 +6,7 @@ import { NumberSequenceService } from '../common/helpers/number-sequence.service
 import { ROLES } from '../common/constants/roles';
 import { RequestUser } from '../common/interfaces/request-user.interface';
 import { CreateFundRequestDto } from './dto/create-fund-request.dto';
-import { schoolScopeFilter, resolveWriteSchoolId, assertSchoolInScope } from '../common/helpers/school-scope.helper';
+import { schoolScopeFilter, resolveWriteSchoolId, resolveRequiredWriteSchoolId, assertSchoolInScope } from '../common/helpers/school-scope.helper';
 import {
   ApproveFundRequestDto,
   CancelFundRequestDto,
@@ -57,7 +57,7 @@ export class FundRequestsService {
         category: dto.category as any,
         amount,
         department: dto.department,
-        schoolId: resolveWriteSchoolId(user, (dto as any).schoolId ?? null),
+        schoolId: (dto as any).schoolId ? resolveWriteSchoolId(user, (dto as any).schoolId) : resolveRequiredWriteSchoolId(user),
         neededBy: dto.neededBy ? new Date(dto.neededBy) : undefined,
         requestedById: user.id,
         requestedByName: requesterName,

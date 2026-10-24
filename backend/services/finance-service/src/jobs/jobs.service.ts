@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Cron } from '@nestjs/schedule';
 import { InvoiceStatus } from '../../generated/prisma';
@@ -7,7 +7,7 @@ import { RabbitMqService } from '../rabbitmq/rabbitmq.service';
 import { RedisService } from '../redis/redis.service';
 
 @Injectable()
-export class JobsService {
+export class JobsService implements OnApplicationBootstrap {
   private readonly logger = new Logger(JobsService.name);
 
   constructor(
@@ -17,7 +17,13 @@ export class JobsService {
     private readonly config: ConfigService,
   ) {}
 
-  @Cron('0 6 * * *')
+  /** Catch up straight away if the service was down when an invoice fell due. */
+  onApplicationBootstrap(): void {
+    void this.overdueCheck().catch((err) => this.logger.error(`Startup overdue check failed: ${err?.message ?? err}`));
+  }
+
+  // Hourly rather than daily, so a missed run never leaves overdue invoices looking current.
+  @Cron('0 * * * *')
   async overdueCheck() {
     const invoices = await this.prisma.invoice.findMany({
       where: {
@@ -27,6 +33,7 @@ export class JobsService {
     });
 
     for (const invoice of invoices) {
+      if (invoice.outstandingBalance.lte(0)) continue;
       await this.prisma.invoice.update({ where: { id: invoice.id }, data: { status: InvoiceStatus.OVERDUE } });
       const daysOverdue = Math.floor((Date.now() - invoice.dueDate.getTime()) / (24 * 60 * 60 * 1000));
       await this.rabbitMq.publish('fee.overdue', {

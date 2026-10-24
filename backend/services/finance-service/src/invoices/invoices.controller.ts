@@ -30,6 +30,9 @@ export class InvoicesController {
     ROLES.SYSTEM_ADMIN,
     ROLES.MANAGING_DIRECTOR,
     ROLES.BOARD_DIRECTOR,
+    // Parents and students get only their own invoices; the service narrows the query.
+    ROLES.PARENT,
+    ROLES.STUDENT,
   )
   list(@Query() query: any, @CurrentUser() user?: RequestUser) {
     return this.invoicesService.list(query, user!);
@@ -84,7 +87,7 @@ export class InvoicesController {
   }
 
   @Get(':id/pdf')
-  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.PARENT, ROLES.STUDENT)
+  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN, ROLES.PARENT, ROLES.STUDENT)
   async pdf(@Param('id') id: string, @CurrentUser() user: RequestUser, @Res() res: Response) {
     const file = await this.invoicesService.getPdfFile(id, user);
     res.setHeader('Content-Type', 'application/pdf');
@@ -94,7 +97,7 @@ export class InvoicesController {
 
   @Post(':id/regenerate-pdf')
   @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
-  regenerate(@Param('id') id: string) {
-    return this.invoicesService.regeneratePdf(id);
+  regenerate(@Param('id') id: string, @CurrentUser() user: RequestUser) {
+    return this.invoicesService.regeneratePdf(id, user);
   }
 }

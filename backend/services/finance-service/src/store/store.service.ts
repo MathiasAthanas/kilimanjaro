@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { NumberSequenceService } from '../common/helpers/number-sequence.service';
 import { RequestUser } from '../common/interfaces/request-user.interface';
+import { assertSchoolInScope, resolveRequiredWriteSchoolId, schoolScopeFilter } from '../common/helpers/school-scope.helper';
 import {
   AdjustStockDto,
   CreateStoreItemDto,
@@ -29,9 +30,11 @@ export class StoreService {
     const opening = this.dec(dto.openingQuantity);
     const unitCost = this.dec(dto.unitCost);
 
+    const schoolId = resolveRequiredWriteSchoolId(user);
     const item = await this.prisma.storeItem.create({
       data: {
-        itemCode: await this.numberService.storeItemCode(user.activeSchoolId ?? user.schoolIds?.find((id) => id !== '*') ?? null),
+        schoolId,
+        itemCode: await this.numberService.storeItemCode(schoolId),
         name: dto.name,
         category: dto.category as any,
         unit: dto.unit || 'unit',
@@ -47,7 +50,7 @@ export class StoreService {
     if (opening.greaterThan(0)) {
       await this.prisma.storeMovement.create({
         data: {
-          movementNumber: await this.numberService.storeMovementNumber(user.activeSchoolId ?? user.schoolIds?.find((id) => id !== '*') ?? null),
+          movementNumber: await this.numberService.storeMovementNumber(schoolId),
           storeItemId: item.id,
           type: 'RECEIPT',
           quantity: opening,
@@ -65,8 +68,9 @@ export class StoreService {
     return item;
   }
 
-  async listItems(filters: { category?: string; search?: string; active?: string; lowStock?: string }) {
+  async listItems(filters: { category?: string; search?: string; active?: string; lowStock?: string }, user?: RequestUser) {
     const where: Prisma.StoreItemWhereInput = {
+      ...schoolScopeFilter(user),
       category: filters.category as any,
       isActive: filters.active === undefined ? undefined : filters.active !== 'false',
       name: filters.search ? { contains: filters.search, mode: 'insensitive' } : undefined,
@@ -81,18 +85,18 @@ export class StoreService {
     return filters.lowStock === 'true' ? rows.filter((r) => r.lowStock) : rows;
   }
 
-  async itemById(id: string) {
+  async itemById(id: string, user?: RequestUser) {
     const item = await this.prisma.storeItem.findUnique({
       where: { id },
       include: { movements: { orderBy: { occurredAt: 'desc' }, take: 50 } },
     });
     if (!item) throw new NotFoundException('Store item not found');
+    assertSchoolInScope(user, item.schoolId ?? null);
     return item;
   }
 
   async updateItem(id: string, dto: UpdateStoreItemDto, user: RequestUser) {
-    const existing = await this.prisma.storeItem.findUnique({ where: { id } });
-    if (!existing) throw new NotFoundException('Store item not found');
+    const existing = await this.requireItem(id, user);
 
     const item = await this.prisma.storeItem.update({
       where: { id },
@@ -114,16 +118,20 @@ export class StoreService {
 
   // ── Movements ───────────────────────────────────────────────────────────────
   async receive(id: string, dto: ReceiveStockDto, user: RequestUser) {
-    const item = await this.requireItem(id);
+    const item = await this.requireItem(id, user);
     const qty = this.dec(dto.quantity);
     if (qty.lessThanOrEqualTo(0)) throw new BadRequestException('Quantity must be greater than zero');
     const unitCost = dto.unitCost !== undefined ? this.dec(dto.unitCost) : new Prisma.Decimal(item.unitCost);
-    const balanceAfter = new Prisma.Decimal(item.quantityOnHand).add(qty);
 
     const result = await this.prisma.$transaction(async (tx) => {
+      const bumped = await tx.storeItem.update({
+        where: { id },
+        data: { quantityOnHand: { increment: qty }, unitCost, updatedById: user.id },
+      });
+      const balanceAfter = bumped.quantityOnHand;
       const movement = await tx.storeMovement.create({
         data: {
-          movementNumber: await this.numberService.storeMovementNumber(user.activeSchoolId ?? user.schoolIds?.find((id) => id !== '*') ?? null),
+          movementNumber: await this.numberService.storeMovementNumber(item.schoolId ?? null),
           storeItemId: id,
           type: 'RECEIPT',
           quantity: qty,
@@ -139,11 +147,7 @@ export class StoreService {
           recordedByRole: user.role,
         },
       });
-      const updated = await tx.storeItem.update({
-        where: { id },
-        data: { quantityOnHand: balanceAfter, unitCost, updatedById: user.id },
-      });
-      return { movement, updated };
+      return { movement, updated: bumped };
     });
 
     await this.auditLog(id, FinancialAuditAction.STORE_STOCK_RECEIVED, user, item, result.movement);
@@ -151,20 +155,26 @@ export class StoreService {
   }
 
   async issue(id: string, dto: IssueStockDto, user: RequestUser) {
-    const item = await this.requireItem(id);
+    const item = await this.requireItem(id, user);
     const qty = this.dec(dto.quantity);
     if (qty.lessThanOrEqualTo(0)) throw new BadRequestException('Quantity must be greater than zero');
-    const onHand = new Prisma.Decimal(item.quantityOnHand);
-    if (qty.greaterThan(onHand)) {
-      throw new BadRequestException(`Insufficient stock: ${onHand} ${item.unit} on hand`);
-    }
-    const balanceAfter = onHand.sub(qty);
     const unitCost = new Prisma.Decimal(item.unitCost);
 
     const result = await this.prisma.$transaction(async (tx) => {
+      // Only decrement while enough stock remains, so two simultaneous issues can never overdraw the store.
+      const taken = await tx.storeItem.updateMany({
+        where: { id, quantityOnHand: { gte: qty } },
+        data: { quantityOnHand: { decrement: qty }, updatedById: user.id },
+      });
+      if (taken.count === 0) {
+        const fresh = await tx.storeItem.findUnique({ where: { id } });
+        throw new BadRequestException(`Insufficient stock: ${fresh?.quantityOnHand ?? 0} ${item.unit} on hand`);
+      }
+      const updated = await tx.storeItem.findUniqueOrThrow({ where: { id } });
+      const balanceAfter = updated.quantityOnHand;
       const movement = await tx.storeMovement.create({
         data: {
-          movementNumber: await this.numberService.storeMovementNumber(user.activeSchoolId ?? user.schoolIds?.find((id) => id !== '*') ?? null),
+          movementNumber: await this.numberService.storeMovementNumber(item.schoolId ?? null),
           storeItemId: id,
           type: 'ISSUE',
           quantity: qty,
@@ -181,10 +191,6 @@ export class StoreService {
           recordedByRole: user.role,
         },
       });
-      const updated = await tx.storeItem.update({
-        where: { id },
-        data: { quantityOnHand: balanceAfter, updatedById: user.id },
-      });
       return { movement, updated };
     });
 
@@ -193,7 +199,7 @@ export class StoreService {
   }
 
   async adjust(id: string, dto: AdjustStockDto, user: RequestUser) {
-    const item = await this.requireItem(id);
+    const item = await this.requireItem(id, user);
     const target = this.dec(dto.newQuantity);
     if (target.lessThan(0)) throw new BadRequestException('Quantity cannot be negative');
     const delta = target.sub(item.quantityOnHand);
@@ -202,7 +208,7 @@ export class StoreService {
     const result = await this.prisma.$transaction(async (tx) => {
       const movement = await tx.storeMovement.create({
         data: {
-          movementNumber: await this.numberService.storeMovementNumber(user.activeSchoolId ?? user.schoolIds?.find((id) => id !== '*') ?? null),
+          movementNumber: await this.numberService.storeMovementNumber(item.schoolId ?? null),
           storeItemId: id,
           type: 'ADJUSTMENT',
           quantity: delta,
@@ -226,10 +232,11 @@ export class StoreService {
     return result.updated;
   }
 
-  async movements(filters: { storeItemId?: string; type?: string; startDate?: string; endDate?: string; page?: number; limit?: number }) {
+  async movements(filters: { storeItemId?: string; type?: string; startDate?: string; endDate?: string; page?: number; limit?: number }, user?: RequestUser) {
     const page = Math.max(1, Number(filters.page || 1));
     const limit = Math.min(200, Math.max(1, Number(filters.limit || 50)));
     const where: Prisma.StoreMovementWhereInput = {
+      storeItem: { ...schoolScopeFilter(user) },
       storeItemId: filters.storeItemId,
       type: filters.type as any,
       occurredAt:
@@ -253,8 +260,8 @@ export class StoreService {
     return { items, meta: { page, limit, total, totalPages: Math.ceil(total / limit) } };
   }
 
-  async summary() {
-    const items = await this.prisma.storeItem.findMany({ where: { isActive: true } });
+  async summary(user?: RequestUser) {
+    const items = await this.prisma.storeItem.findMany({ where: { isActive: true, ...schoolScopeFilter(user) } });
     let totalValue = new Prisma.Decimal(0);
     let lowStock = 0;
     const byCategory: Record<string, { count: number; value: Prisma.Decimal }> = {};
@@ -275,9 +282,10 @@ export class StoreService {
     };
   }
 
-  private async requireItem(id: string) {
+  private async requireItem(id: string, user?: RequestUser) {
     const item = await this.prisma.storeItem.findUnique({ where: { id } });
     if (!item) throw new NotFoundException('Store item not found');
+    assertSchoolInScope(user, item.schoolId ?? null);
     return item;
   }
 

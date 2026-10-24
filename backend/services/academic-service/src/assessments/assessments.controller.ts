@@ -109,8 +109,8 @@ export class AssessmentsController {
 
   @Get('assessments/:id/marks/review')
   @Roles(ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA)
-  review(@Param('id') id: string) {
-    return this.assessmentsService.reviewAssessment(id);
+  review(@Param('id') id: string, @CurrentUser() user?: RequestUser) {
+    return this.assessmentsService.reviewAssessment(id, user);
   }
 
   @Patch('assessments/:id/approve')

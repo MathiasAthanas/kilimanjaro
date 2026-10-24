@@ -2,6 +2,8 @@ import { Controller, Get, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { FinancialAuditAction } from '../../generated/prisma';
 import { ROLES } from '../common/constants/roles';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { RequestUser } from '../common/interfaces/request-user.interface';
 import { Roles } from '../common/decorators/roles.decorator';
 import { AuditService } from './audit.service';
 
@@ -21,8 +23,9 @@ export class AuditController {
     @Query('endDate') endDate?: string,
     @Query('page') page?: number,
     @Query('limit') limit?: number,
+    @CurrentUser() user?: RequestUser,
   ) {
-    return this.auditService.list({
+    return this.auditService.list(user, {
       entityType,
       entityId,
       action,

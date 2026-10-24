@@ -38,8 +38,8 @@ export class ReportsController {
 
   @Get('collection-summary')
   @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN, ROLES.MANAGING_DIRECTOR, ROLES.BOARD_DIRECTOR)
-  collectionSummary(@Query('termId') termId?: string, @Query('academicYearId') academicYearId?: string, @Query('classId') classId?: string) {
-    return this.reportsService.collectionSummary({ termId, academicYearId, classId });
+  collectionSummary(@Query('termId') termId?: string, @Query('academicYearId') academicYearId?: string, @Query('classId') classId?: string, @CurrentUser() user?: RequestUser) {
+    return this.reportsService.collectionSummary({ termId, academicYearId, classId }, user);
   }
 
   @Get('outstanding-balances')
@@ -49,14 +49,21 @@ export class ReportsController {
     @Query('academicYearId') academicYearId?: string,
     @Query('classId') classId?: string,
     @Query('minAmount') minAmount?: string,
+    @CurrentUser() user?: RequestUser,
   ) {
-    return this.reportsService.outstandingBalances({ termId, academicYearId, classId, minAmount });
+    return this.reportsService.outstandingBalances({ termId, academicYearId, classId, minAmount }, user);
   }
 
   @Get('daily-collections')
   @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
-  daily(@Query('date') date?: string, @Query('startDate') startDate?: string, @Query('endDate') endDate?: string) {
-    return this.reportsService.dailyCollections({ date, startDate, endDate });
+  daily(@Query('date') date?: string, @Query('startDate') startDate?: string, @Query('endDate') endDate?: string, @CurrentUser() user?: RequestUser) {
+    return this.reportsService.dailyCollections({ date, startDate, endDate }, user);
+  }
+
+  @Get('daily-summary')
+  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
+  dailySummary(@Query('days') days?: string, @CurrentUser() user?: RequestUser) {
+    return this.reportsService.dailySummary(Number(days) || 31, user);
   }
 
   @Get('student-statement/:studentId')
@@ -67,7 +74,7 @@ export class ReportsController {
 
   @Get('fee-defaulters')
   @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
-  defaulters(@Query('termId') termId?: string, @Query('academicYearId') academicYearId?: string, @Query('daysOverdue') daysOverdue?: string) {
-    return this.reportsService.feeDefaulters({ termId, academicYearId, daysOverdue });
+  defaulters(@Query('termId') termId?: string, @Query('academicYearId') academicYearId?: string, @Query('daysOverdue') daysOverdue?: string, @CurrentUser() user?: RequestUser) {
+    return this.reportsService.feeDefaulters({ termId, academicYearId, daysOverdue }, user);
   }
 }

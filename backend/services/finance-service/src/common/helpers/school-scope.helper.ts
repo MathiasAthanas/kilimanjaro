@@ -1,4 +1,4 @@
-import { ForbiddenException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { RequestUser } from '../interfaces/request-user.interface';
 
 /**
@@ -53,4 +53,16 @@ export function resolveWriteSchoolId(user: RequestUser | undefined, explicit?: s
   if (user?.activeSchoolId) return user.activeSchoolId;
   const ids = (user?.schoolIds ?? []).filter((id) => id !== '*');
   return ids.length === 1 ? ids[0] : null;
+}
+
+/**
+ * Like resolveWriteSchoolId, but refuses to guess: someone who belongs to several schools must pick one
+ * (the school switcher) before creating school-owned records. Group-scope users may create group-level records.
+ */
+export function resolveRequiredWriteSchoolId(user: RequestUser | undefined): string | null {
+  if (user?.activeSchoolId) return resolveWriteSchoolId(user);
+  if (isGroupScope(user)) return null;
+  const ids = (user?.schoolIds ?? []).filter((id) => id && id !== '*');
+  if (ids.length === 1) return ids[0];
+  throw new BadRequestException('Select a school before creating this record');
 }

@@ -49,6 +49,12 @@ export class PaymentsController {
     return this.paymentsService.pendingApprovals(user!);
   }
 
+  @Get(':id')
+  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
+  byId(@Param('id') id: string, @CurrentUser() user?: RequestUser) {
+    return this.paymentsService.byId(id, user!);
+  }
+
   @Patch('approvals/:approvalId/approve')
   @Roles(ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
   approve(@Param('approvalId') approvalId: string, @CurrentUser() user?: RequestUser) {

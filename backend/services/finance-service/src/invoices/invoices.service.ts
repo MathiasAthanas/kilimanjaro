@@ -15,7 +15,7 @@ import { AccessControlService } from '../common/helpers/access-control.service';
 import { NumberSequenceService } from '../common/helpers/number-sequence.service';
 import { RequestUser } from '../common/interfaces/request-user.interface';
 import { PrismaService } from '../prisma/prisma.service';
-import { schoolScopeFilter, assertSchoolInScope } from '../common/helpers/school-scope.helper';
+import { schoolScopeFilter, assertSchoolInScope, schoolInScope } from '../common/helpers/school-scope.helper';
 import { RabbitMqService } from '../rabbitmq/rabbitmq.service';
 import { RedisService } from '../redis/redis.service';
 import { StudentClientService } from '../student-client/student-client.service';
@@ -73,6 +73,9 @@ export class InvoicesService {
   private async generateInvoiceForStudent(student: any, dto: GenerateInvoicesDto, actor: RequestUser) {
     const classId = student.enrolments?.[0]?.classId;
     if (!classId) return null;
+    // Invoices are stamped with the student's own school. Students outside the caller's schools are skipped.
+    const studentSchoolId: string | null = student.schoolId ?? student.enrolments?.[0]?.class?.schoolId ?? null;
+    if (!schoolInScope(actor, studentSchoolId)) return null;
     const studentClass = student.enrolments?.[0]?.class;
     const educationStage = studentClass?.educationStage ?? undefined;
     const classLevel = studentClass?.level ?? undefined;
@@ -104,13 +107,13 @@ export class InvoicesService {
     ]);
     const studentGroupCodes = groupMemberships.map((item) => item.group.code);
 
-    const schoolId = actor.activeSchoolId ?? actor.schoolIds?.find((id) => id !== '*') ?? null;
+    const schoolId = studentSchoolId;
 
     const structures = await this.prisma.feeStructure.findMany({
       where: {
         academicYearId: dto.academicYearId,
         isActive: true,
-        ...(schoolId ? { schoolId } : {}),
+        ...(schoolId ? { OR: [{ schoolId }, { schoolId: null }] } : {}),
         AND: [
           { OR: [{ termId: dto.termId }, { termId: null }] },
           {
@@ -129,10 +132,12 @@ export class InvoicesService {
     // Score specificity so that when multiple structures match the same category we keep
     // the most targeted one (classId > stage+level > stage-only > studentGroup).
     const specificity = (s: (typeof structures)[number]) => {
-      if (s.classId === classId) return 3;
-      if (s.educationStage === educationStage && s.classLevel === classLevel) return 2;
-      if (s.educationStage === educationStage && s.classLevel === null) return 1;
-      return 0;
+      // A school's own price always beats a legacy group-wide one for the same category.
+      const schoolBonus = schoolId && s.schoolId === schoolId ? 10 : 0;
+      if (s.classId === classId) return 3 + schoolBonus;
+      if (s.educationStage === educationStage && s.classLevel === classLevel) return 2 + schoolBonus;
+      if (s.educationStage === educationStage && s.classLevel === null) return 1 + schoolBonus;
+      return 0 + schoolBonus;
     };
 
     const optionalSet = new Set(assignments.map((a) => a.feeCategoryId));
@@ -194,6 +199,10 @@ export class InvoicesService {
         className: student.enrolments?.[0]?.class?.name || classId,
         termId: dto.termId,
         academicYearId: dto.academicYearId,
+        termName: (await this.studentClient.termLabels()).get(dto.termId)?.name ?? null,
+        academicYearName: (await this.studentClient.termLabels()).get(dto.termId)?.academicYearName ?? null,
+        school: await this.studentClient.schoolProfile(invoice.schoolId),
+        status: invoice.status,
         lineItems: invoice.lineItems.map((item) => ({ feeCategoryName: item.feeCategoryName, amount: item.amount.toString() })),
         totalAmount: invoice.totalAmount.toString(),
         paidAmount: invoice.paidAmount.toString(),
@@ -343,6 +352,7 @@ export class InvoicesService {
       const aggregate = await this.prisma.invoice.aggregate({
         _sum: { totalAmount: true, paidAmount: true, outstandingBalance: true },
         where: {
+          ...schoolScopeFilter(user),
           termId: filters.termId,
           academicYearId: filters.academicYearId,
           classId: filters.classId,
@@ -350,6 +360,10 @@ export class InvoicesService {
         },
       });
       return { aggregateOnly: true, ...aggregate };
+    }
+
+    if (filters.paged && !['PARENT', 'STUDENT'].includes(user.role)) {
+      return this.listPaged(filters, user, page, limit);
     }
 
     let studentFilter: string | undefined = filters.studentId;
@@ -375,7 +389,7 @@ export class InvoicesService {
         throw new ForbiddenException('Parent can only access own child invoices');
       }
 
-      return this.prisma.invoice.findMany({
+      return this.describe(await this.prisma.invoice.findMany({
         where: {
           studentId: studentFilter || { in: studentIds },
           classId: filters.classId,
@@ -387,10 +401,10 @@ export class InvoicesService {
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * limit,
         take: limit,
-      });
+      }));
     }
 
-    return this.prisma.invoice.findMany({
+    const rows = await this.prisma.invoice.findMany({
       where: {
         ...schoolScopeFilter(user),
         studentId: studentFilter,
@@ -404,6 +418,98 @@ export class InvoicesService {
       skip: (page - 1) * limit,
       take: limit,
     });
+    return this.describe(rows);
+  }
+
+  /**
+   * The ledger the web finance desk works from: one page of invoices plus the totals, status counts and
+   * filter choices for the WHOLE filtered set, so the numbers on screen never depend on which page is showing.
+   */
+  private async listPaged(filters: any, user: RequestUser, page: number, limit: number) {
+    const base: Prisma.InvoiceWhereInput = {
+      ...schoolScopeFilter(user),
+      classId: filters.classId || undefined,
+      termId: filters.termId || undefined,
+      academicYearId: filters.academicYearId || undefined,
+      studentId: filters.studentId || undefined,
+    };
+    const q = String(filters.search ?? filters.q ?? '').trim();
+    if (q) {
+      const ids = await this.studentClient.searchStudents(q);
+      base.OR = [{ invoiceNumber: { contains: q, mode: 'insensitive' } }, ...(ids.length ? [{ studentId: { in: ids } }] : [])];
+    }
+    const statuses = String(filters.status ?? '').split(',').map((v) => v.trim().toUpperCase()).filter(Boolean) as InvoiceStatus[];
+    // Cancelled invoices were never owed, so they stay out of the money unless someone asks for them.
+    const where: Prisma.InvoiceWhereInput = {
+      ...base,
+      status: statuses.length ? { in: statuses } : { not: InvoiceStatus.CANCELLED },
+    };
+
+    const [rows, total, sums, byStatus, classGroups, termGroups] = await Promise.all([
+      this.prisma.invoice.findMany({
+        where,
+        orderBy: filters.sort === 'outstanding' ? [{ outstandingBalance: 'desc' }, { invoiceNumber: 'desc' }] : [{ dueDate: 'desc' }, { invoiceNumber: 'desc' }],
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.invoice.count({ where }),
+      this.prisma.invoice.aggregate({ where, _sum: { totalAmount: true, paidAmount: true, outstandingBalance: true } }),
+      this.prisma.invoice.groupBy({ by: ['status'], where: base, _count: { _all: true } }),
+      this.prisma.invoice.groupBy({ by: ['classId'], where: { ...schoolScopeFilter(user), academicYearId: filters.academicYearId || undefined } }),
+      this.prisma.invoice.groupBy({ by: ['termId'], where: { ...schoolScopeFilter(user), academicYearId: filters.academicYearId || undefined } }),
+    ]);
+
+    const items = await this.describe(rows);
+    const labels = await this.studentClient.termLabels();
+    // Class names come from any student of that class (invoices only store the class id).
+    const sample = classGroups.length
+      ? await this.prisma.invoice.findMany({ where: { classId: { in: classGroups.map((g) => g.classId) }, ...schoolScopeFilter(user) }, distinct: ['classId'], select: { classId: true, studentId: true, schoolId: true } })
+      : [];
+    const sampleNames = await this.studentClient.lookupStudents(sample.map((r) => r.studentId));
+    const counts: Record<string, number> = {};
+    let all = 0;
+    for (const g of byStatus) {
+      counts[g.status] = g._count._all;
+      if (g.status !== InvoiceStatus.CANCELLED) all += g._count._all;
+    }
+    counts.ALL = all;
+
+    return {
+      items,
+      meta: { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) },
+      totals: {
+        totalAmount: (sums._sum.totalAmount ?? new Prisma.Decimal(0)).toString(),
+        paidAmount: (sums._sum.paidAmount ?? new Prisma.Decimal(0)).toString(),
+        outstanding: (sums._sum.outstandingBalance ?? new Prisma.Decimal(0)).toString(),
+      },
+      counts,
+      facets: {
+        classes: (
+          await Promise.all(
+            sample.map(async (r) => ({
+              id: r.classId,
+              name: sampleNames.get(r.studentId)?.className ?? r.classId,
+              schoolName: await this.studentClient.schoolName(r.schoolId),
+            })),
+          )
+        ).sort((a, b) => a.name.localeCompare(b.name) || String(a.schoolName).localeCompare(String(b.schoolName))),
+        terms: termGroups
+          .map((g) => ({ id: g.termId, name: labels.get(g.termId)?.name ?? g.termId, academicYearName: labels.get(g.termId)?.academicYearName ?? null }))
+          .sort((a, b) => a.name.localeCompare(b.name)),
+      },
+    };
+  }
+
+  /** Adds student name/class and the readable term to invoice rows. */
+  private async describe<T extends { studentId: string; termId: string }>(rows: T[]) {
+    const names = await this.studentClient.lookupStudents(rows.map((r) => r.studentId));
+    const withTerms = await this.studentClient.withTermNames(rows);
+    return withTerms.map((r) => ({
+      ...r,
+      studentName: names.get(r.studentId)?.name ?? '',
+      registrationNumber: names.get(r.studentId)?.registrationNumber ?? '',
+      className: names.get(r.studentId)?.className ?? null,
+    }));
   }
 
   async byId(id: string, user: RequestUser) {
@@ -423,7 +529,8 @@ export class InvoicesService {
       assertSchoolInScope(user, invoice.schoolId ?? null);
     }
 
-    return invoice;
+    const [described] = await this.describe([invoice]);
+    return { ...invoice, ...described, school: await this.studentClient.schoolProfile(invoice.schoolId) };
   }
 
   async byStudent(studentId: string, user: RequestUser) {
@@ -438,18 +545,46 @@ export class InvoicesService {
       await this.accessControl.assertStudentOwnsRecord(user.id, studentId);
     }
 
-    return this.prisma.invoice.findMany({
-      where: { studentId },
+    const staff = user.role !== 'PARENT' && user.role !== 'STUDENT';
+    return this.describe(await this.prisma.invoice.findMany({
+      where: { studentId, ...(staff ? schoolScopeFilter(user) : {}) },
       include: { lineItems: true, payments: true },
       orderBy: { createdAt: 'desc' },
-    });
+    }));
+  }
+
+  /** Cancelled, waived and fully settled invoices are closed to further changes. */
+  private assertOpen(invoice: { status: InvoiceStatus; invoiceNumber: string }): void {
+    const closed: InvoiceStatus[] = [InvoiceStatus.CANCELLED, InvoiceStatus.WAIVED, InvoiceStatus.PAID];
+    if (closed.includes(invoice.status)) {
+      throw new BadRequestException(`Invoice ${invoice.invoiceNumber} is ${invoice.status.toLowerCase()} and can no longer be changed`);
+    }
+  }
+
+  /** Payments still waiting for approval cannot be applied to an invoice that is being closed. */
+  private async rejectPendingPayments(invoiceId: string, reason: string, user: RequestUser): Promise<void> {
+    const pending = await this.prisma.payment.findMany({ where: { invoiceId, status: PaymentStatus.PENDING }, select: { id: true } });
+    if (!pending.length) return;
+    const ids = pending.map((p) => p.id);
+    await this.prisma.$transaction([
+      this.prisma.manualPaymentApproval.updateMany({
+        where: { paymentId: { in: ids }, decision: null },
+        data: { decision: 'REJECTED', reviewedAt: new Date(), reviewedById: user.id, rejectionReason: reason },
+      }),
+      this.prisma.payment.updateMany({
+        where: { id: { in: ids } },
+        data: { status: PaymentStatus.REJECTED, approvalStatus: 'REJECTED', rejectedAt: new Date(), rejectedById: user.id, rejectionReason: reason },
+      }),
+    ]);
   }
 
   async applyDiscount(id: string, discountAmount: string, discountReason: string, user: RequestUser) {
     const invoice = await this.byId(id, user);
+    if (!discountReason?.trim()) throw new BadRequestException('A reason is required for a discount');
+    this.assertOpen(invoice);
     const discount = this.decimal(discountAmount);
-    // Discount must not exceed unpaid balance — prevents negative outstanding.
-    const maxDiscount = invoice.totalAmount.minus(invoice.paidAmount);
+    // The discount replaces any earlier one, and can never push the balance below zero.
+    const maxDiscount = invoice.subtotal.minus(invoice.paidAmount);
     if (discount.lt(0) || discount.gt(maxDiscount)) {
       throw new BadRequestException(`Invalid discount amount — maximum allowable discount is ${maxDiscount.toString()}`);
     }
@@ -484,9 +619,12 @@ export class InvoicesService {
 
   async cancel(id: string, reason: string, user: RequestUser) {
     const invoice = await this.byId(id, user);
+    this.assertOpen(invoice);
+    if (!reason?.trim()) throw new BadRequestException('A reason is required to cancel an invoice');
     if (invoice.payments.some((p) => p.status === PaymentStatus.CONFIRMED)) {
       throw new ConflictException('Cannot cancel invoice with confirmed payment');
     }
+    await this.rejectPendingPayments(id, `Invoice cancelled: ${reason}`, user);
 
     const updated = await this.prisma.invoice.update({
       where: { id },
@@ -513,9 +651,11 @@ export class InvoicesService {
 
   async waive(id: string, reason: string, user: RequestUser) {
     const invoice = await this.byId(id, user);
-    if (([InvoiceStatus.CANCELLED, InvoiceStatus.PAID] as InvoiceStatus[]).includes(invoice.status)) {
+    if (([InvoiceStatus.CANCELLED, InvoiceStatus.PAID, InvoiceStatus.WAIVED] as InvoiceStatus[]).includes(invoice.status)) {
       throw new BadRequestException(`Cannot waive an invoice that is already ${invoice.status.toLowerCase()}`);
     }
+    if (!reason?.trim()) throw new BadRequestException('A reason is required to waive an invoice');
+    await this.rejectPendingPayments(id, `Invoice waived: ${reason}`, user);
     const updated = await this.prisma.invoice.update({
       where: { id },
       data: {
@@ -540,16 +680,14 @@ export class InvoicesService {
   }
 
   async getPdfFile(id: string, user: RequestUser) {
-    const invoice = await this.byId(id, user);
-    if (!invoice.pdfUrl) {
-      throw new NotFoundException('Invoice PDF not found');
-    }
-
+    let invoice = await this.byId(id, user);
     const root = this.configService.get<string>('PDF_STORAGE_PATH', './storage');
+    // Drawn fresh on every download so it always shows the current paid amount and status.
+    await this.regeneratePdf(id, user);
+    invoice = await this.byId(id, user);
+    if (!invoice.pdfUrl) throw new NotFoundException('Invoice PDF not found');
     const fullPath = join(root, invoice.pdfUrl);
-    if (!existsSync(fullPath)) {
-      throw new NotFoundException('Invoice PDF file missing on disk');
-    }
+    if (!existsSync(fullPath)) throw new NotFoundException('Invoice PDF could not be produced');
 
     return {
       fullPath,
@@ -557,7 +695,8 @@ export class InvoicesService {
     };
   }
 
-  async regeneratePdf(id: string) {
+  async regeneratePdf(id: string, user: RequestUser) {
+    await this.byId(id, user);
     const invoice = await this.prisma.invoice.findUnique({
       where: { id },
       include: { lineItems: true },
@@ -587,6 +726,10 @@ export class InvoicesService {
       className: student.enrolments?.[0]?.class?.name || invoice.classId,
       termId: invoice.termId,
       academicYearId: invoice.academicYearId,
+      termName: (await this.studentClient.termLabels()).get(invoice.termId)?.name ?? null,
+      academicYearName: (await this.studentClient.termLabels()).get(invoice.termId)?.academicYearName ?? null,
+      school: await this.studentClient.schoolProfile(invoice.schoolId),
+      status: invoice.status,
       lineItems: invoice.lineItems.map((item) => ({ feeCategoryName: item.feeCategoryName, amount: item.amount.toString() })),
       totalAmount: invoice.totalAmount.toString(),
       paidAmount: invoice.paidAmount.toString(),

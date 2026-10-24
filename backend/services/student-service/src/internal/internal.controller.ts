@@ -43,6 +43,44 @@ export class InternalController {
     };
   }
 
+  @Get('schools')
+  @ApiOperation({ summary: 'School id, code and name for every school (used to prefix document numbers)' })
+  async schools() {
+    return this.prisma.school.findMany({ select: { id: true, code: true, name: true, motto: true, address: true, phone: true, email: true }, orderBy: { name: 'asc' } });
+  }
+
+  @Get('terms')
+  @ApiOperation({ summary: 'Every term with its academic year (used to label invoices and receipts)' })
+  async terms() {
+    const rows = await this.prisma.term.findMany({
+      select: { id: true, name: true, startDate: true, endDate: true, isCurrent: true, academicYear: { select: { id: true, name: true } } },
+      orderBy: { startDate: 'asc' },
+    });
+    return rows.map((t) => ({ id: t.id, name: t.name, startDate: t.startDate, endDate: t.endDate, isCurrent: t.isCurrent, academicYearId: t.academicYear?.id ?? null, academicYearName: t.academicYear?.name ?? null }));
+  }
+
+  @Get('search')
+  @ApiOperation({ summary: 'Student ids whose name or registration number match the text (every word must match)' })
+  async search(@Query('q') q?: string, @Query('limit') limit?: string) {
+    const words = String(q ?? '').trim().split(/\s+/).filter(Boolean).slice(0, 4);
+    if (!words.length) return [];
+    const rows = await this.prisma.student.findMany({
+      where: {
+        AND: words.map((word) => ({
+          OR: [
+            { firstName: { contains: word, mode: 'insensitive' as const } },
+            { middleName: { contains: word, mode: 'insensitive' as const } },
+            { lastName: { contains: word, mode: 'insensitive' as const } },
+            { registrationNumber: { contains: word, mode: 'insensitive' as const } },
+          ],
+        })),
+      },
+      select: { id: true },
+      take: Math.min(500, Math.max(1, Number(limit) || 300)),
+    });
+    return rows.map((r) => r.id);
+  }
+
   @Get('by-ids')
   @ApiOperation({ summary: 'Resolve display details for a list of student ids' })
   async byIds(@Query('ids') ids?: string) {
@@ -50,11 +88,22 @@ export class InternalController {
     if (!list.length) return [];
     const students = await this.prisma.student.findMany({
       where: { id: { in: list } },
-      select: { id: true, authUserId: true, firstName: true, middleName: true, lastName: true, registrationNumber: true },
+      select: {
+        id: true,
+        authUserId: true,
+        schoolId: true,
+        firstName: true,
+        middleName: true,
+        lastName: true,
+        registrationNumber: true,
+        enrolments: { where: { isActive: true }, orderBy: { enrolledAt: 'desc' }, take: 1, select: { classId: true, class: { select: { name: true } } } },
+      },
     });
-    return students.map((s) => ({
+    return students.map(({ enrolments, ...s }) => ({
       ...s,
       name: [s.firstName, s.middleName, s.lastName].filter(Boolean).join(' '),
+      classId: enrolments[0]?.classId ?? null,
+      className: enrolments[0]?.class?.name ?? null,
     }));
   }
 

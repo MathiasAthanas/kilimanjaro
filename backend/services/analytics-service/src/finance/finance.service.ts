@@ -21,7 +21,7 @@ export class FinanceAnalyticsService {
     return rows.reduce((sum, row) => sum.plus(row), new Prisma.Decimal(0));
   }
 
-  private async invoiceAdjustments(academicYearId?: string, termId?: string, schoolId?: string | null) {
+  private async invoiceAdjustments(academicYearId?: string, termId?: string, schoolIds?: string[] | null) {
     try {
       const rows = await this.prisma.$queryRawUnsafe<Array<{ waivedAmount: number | string | null; discountedAmount: number | string | null }>>(
         `
@@ -31,11 +31,12 @@ export class FinanceAnalyticsService {
           FROM finance."Invoice"
           WHERE ($1::text IS NULL OR "academicYearId" = $1)
             AND ($2::text IS NULL OR "termId" = $2)
-            AND ($3::text IS NULL OR "schoolId" = $3)
+            AND ($3::text[] IS NULL OR "schoolId" = ANY($3))
+            AND "status" <> 'CANCELLED'
         `,
         academicYearId ?? null,
         termId ?? null,
-        schoolId ?? null,
+        schoolIds ?? null,
       );
       const row = rows[0] || { waivedAmount: 0, discountedAmount: 0 };
       return {
@@ -54,19 +55,20 @@ export class FinanceAnalyticsService {
     if (!invoiceIds.length) return [];
 
     try {
+      // Line items carry only what was billed, so what was collected is each line's share of its invoice's payments.
       const rows = await this.prisma.$queryRawUnsafe<
-        Array<{ categoryName: string; totalBilled: number | string; totalCollected: number | string; outstandingAmount: number | string }>
+        Array<{ categoryName: string; totalBilled: number | string; totalCollected: number | string }>
       >(
         `
           SELECT
-            fc."name" AS "categoryName",
-            COALESCE(SUM(ii."amount"), 0) AS "totalBilled",
-            COALESCE(SUM(ii."paidAmount"), 0) AS "totalCollected",
-            COALESCE(SUM(ii."outstandingAmount"), 0) AS "outstandingAmount"
-          FROM finance."InvoiceItem" ii
-          INNER JOIN finance."FeeCategory" fc ON fc."id" = ii."feeCategoryId"
-          WHERE ii."invoiceId" = ANY($1)
-          GROUP BY fc."name"
+            li."feeCategoryName" AS "categoryName",
+            COALESCE(SUM(li."amount"), 0) AS "totalBilled",
+            COALESCE(SUM(li."amount" * CASE WHEN i."totalAmount" > 0 THEN LEAST(i."paidAmount" / i."totalAmount", 1) ELSE 0 END), 0) AS "totalCollected"
+          FROM finance."InvoiceLineItem" li
+          INNER JOIN finance."Invoice" i ON i."id" = li."invoiceId"
+          WHERE li."invoiceId" = ANY($1)
+          GROUP BY li."feeCategoryName"
+          ORDER BY SUM(li."amount") DESC
         `,
         invoiceIds,
       );
@@ -79,34 +81,25 @@ export class FinanceAnalyticsService {
           totalBilled,
           totalCollected,
           collectionRate: totalBilled.gt(0) ? Number(totalCollected.div(totalBilled).mul(100).toFixed(2)) : 0,
-          outstandingAmount: new Prisma.Decimal(row.outstandingAmount || 0),
+          outstandingAmount: totalBilled.minus(totalCollected),
         };
       });
     } catch {
-      try {
-        const categories = await this.prisma.feeCategory.findMany({ select: { name: true } });
-        return categories.map((category) => ({
-          categoryName: category.name,
-          totalBilled: new Prisma.Decimal(0),
-          totalCollected: new Prisma.Decimal(0),
-          collectionRate: 0,
-          outstandingAmount: new Prisma.Decimal(0),
-        }));
-      } catch {
-        return [];
-      }
+      return [];
     }
   }
 
-  async getOverview(academicYearId?: string, termId?: string, schoolId?: string) {
+  async getOverview(academicYearId?: string, termId?: string, schoolIds?: string[] | null) {
     const yearId = academicYearId || (await this.currentYearId());
     const scopedTermId = termId || (await this.currentTermId(yearId));
-    const key = `analytics:finance:overview:${yearId || 'current'}:${scopedTermId || 'current'}:${schoolId || 'group'}`;
+    const scopeKey = schoolIds ? [...schoolIds].sort().join('+') : 'group';
+    const schoolFilter = schoolIds ? { schoolId: { in: schoolIds } } : {};
+    const key = `analytics:finance:overview:${yearId || 'current'}:${scopedTermId || 'current'}:${scopeKey}`;
     const cached = await this.redis.get<any>(key);
     if (cached) return cached;
 
     const invoices = await this.prisma.invoice.findMany({
-      where: { academicYearId: yearId || undefined, termId: scopedTermId || undefined, ...(schoolId ? { schoolId } : {}) },
+      where: { academicYearId: yearId || undefined, termId: scopedTermId || undefined, status: { not: 'CANCELLED' }, ...schoolFilter },
       select: {
         id: true,
         studentId: true,
@@ -122,10 +115,10 @@ export class FinanceAnalyticsService {
     const invoiceIds = invoices.map((row) => row.id);
     const [payments, classes, students, terms, adjustments, byFeeCategory] = await Promise.all([
       this.prisma.payment.findMany({ where: { invoiceId: { in: invoiceIds.length ? invoiceIds : ['__none__'] }, status: 'CONFIRMED' } }),
-      this.prisma.class.findMany({ where: { id: { in: invoices.map((row) => row.classId) } }, select: { id: true, name: true, stream: true } }),
+      this.prisma.class.findMany({ where: { id: { in: invoices.map((row) => row.classId) } }, select: { id: true, name: true, stream: true, schoolId: true } }),
       this.prisma.student.findMany({ where: { id: { in: invoices.map((row) => row.studentId) } }, select: { id: true, firstName: true, lastName: true } }),
       this.prisma.term.findMany({ where: { academicYearId: yearId || undefined }, orderBy: { name: 'asc' } }),
-      this.invoiceAdjustments(yearId, scopedTermId, schoolId),
+      this.invoiceAdjustments(yearId, scopedTermId, schoolIds),
       this.feeCategoryBreakdown(invoiceIds),
     ]);
 
@@ -133,20 +126,28 @@ export class FinanceAnalyticsService {
     const totalCollected = this.sumDecimals(invoices.map((row) => row.paidAmount));
     const totalOutstanding = this.sumDecimals(invoices.map((row) => row.outstandingBalance));
 
+    const schoolRows = await this.prisma.school.findMany({
+      where: { id: { in: [...new Set(classes.map((k) => k.schoolId).filter((v): v is string => Boolean(v)))] } },
+      select: { id: true, name: true },
+    });
+    const schoolNameById = new Map(schoolRows.map((row) => [row.id, row.name]));
+
     const byClass = classes.map((klass) => {
       const classInvoices = invoices.filter((row) => row.classId === klass.id);
       const classBilled = this.sumDecimals(classInvoices.map((row) => row.totalAmount));
       const classCollected = this.sumDecimals(classInvoices.map((row) => row.paidAmount));
       const overdueCount = classInvoices.filter((row) => row.status === 'OVERDUE').length;
       return {
+        classId: klass.id,
         className: klass.name,
+        schoolName: klass.schoolId ? schoolNameById.get(klass.schoolId) ?? null : null,
         stream: klass.stream,
         totalBilled: classBilled,
         totalCollected: classCollected,
         collectionRate: classBilled.gt(0) ? Number(classCollected.div(classBilled).mul(100).toFixed(2)) : 0,
         overdueCount,
       };
-    });
+    }).sort((a, b) => b.overdueCount - a.overdueCount || a.className.localeCompare(b.className));
 
     const paymentMethodMap = payments.reduce<Record<string, { totalAmount: Prisma.Decimal; transactionCount: number }>>((acc, row) => {
       if (!acc[row.method]) acc[row.method] = { totalAmount: new Prisma.Decimal(0), transactionCount: 0 };
@@ -165,7 +166,7 @@ export class FinanceAnalyticsService {
     const collectionTrend = await Promise.all(
       terms.slice(-6).map(async (term) => {
         const termInvoices = await this.prisma.invoice.findMany({
-          where: { termId: term.id, academicYearId: yearId || undefined, ...(schoolId ? { schoolId } : {}) },
+          where: { termId: term.id, academicYearId: yearId || undefined, status: { not: 'CANCELLED' }, ...schoolFilter },
           select: { totalAmount: true, paidAmount: true },
         });
         const billed = this.sumDecimals(termInvoices.map((row) => row.totalAmount));
@@ -254,14 +255,14 @@ export class FinanceAnalyticsService {
     return result;
   }
 
-  async getRevenueForecast(academicYearId?: string, schoolId?: string | null) {
+  async getRevenueForecast(academicYearId?: string, schoolIds?: string[] | null) {
     const yearId = academicYearId || (await this.currentYearId());
-    const key = `analytics:finance:forecast:${schoolId || 'group'}:${yearId || 'current'}`;
+    const key = `analytics:finance:forecast:${schoolIds ? [...schoolIds].sort().join('+') : 'group'}:${yearId || 'current'}`;
     const cached = await this.redis.get<any>(key);
     if (cached) return cached;
 
     const [invoices, terms] = await Promise.all([
-      this.prisma.invoice.findMany({ where: { academicYearId: yearId || undefined, ...(schoolId ? { schoolId } : {}) } }),
+      this.prisma.invoice.findMany({ where: { academicYearId: yearId || undefined, status: { not: 'CANCELLED' }, ...(schoolIds ? { schoolId: { in: schoolIds } } : {}) } }),
       this.prisma.term.findMany({ where: { academicYearId: yearId || undefined }, orderBy: { name: 'asc' } }),
     ]);
 
@@ -300,7 +301,7 @@ export class FinanceAnalyticsService {
     return result;
   }
 
-  async getAssetsSummary() {
+  async getAssetsSummary(schoolIds?: string[] | null) {
     type AssetRow = {
       id: string;
       name: string;
@@ -316,7 +317,11 @@ export class FinanceAnalyticsService {
     let assets: AssetRow[] = [];
     try {
       assets = await this.prisma.$queryRawUnsafe<AssetRow[]>(
-        'SELECT id, name, category, condition, "assetType", status, location, "purchaseCost", "currentValue" FROM finance."Asset"',
+        `SELECT id, name, category, condition, "type" AS "assetType", status, location, "purchaseCost", "currentValue"
+         FROM finance."Asset"
+         WHERE "status" <> 'DISPOSED' AND "isGroup" = false
+           AND ($1::text[] IS NULL OR "schoolId" = ANY($1) OR "schoolId" IS NULL)`,
+        schoolIds ?? null,
       );
     } catch {
       assets = [];

@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { FinancialAuditAction } from '../../generated/prisma';
 import { PrismaService } from '../prisma/prisma.service';
+import { RequestUser } from '../common/interfaces/request-user.interface';
+import { schoolScopeFilter } from '../common/helpers/school-scope.helper';
 
 @Injectable()
 export class AuditService {
@@ -17,8 +19,14 @@ export class AuditService {
     metadata?: unknown;
     ipAddress?: string;
   }): Promise<void> {
+    // The audit row belongs to the school of the record it describes.
+    const schoolOf = (v: unknown): string | null => {
+      const id = (v as { schoolId?: unknown } | null | undefined)?.schoolId;
+      return typeof id === 'string' && id ? id : null;
+    };
     await this.prisma.financialAuditLog.create({
       data: {
+        schoolId: schoolOf(entry.newValue) ?? schoolOf(entry.previousValue) ?? schoolOf(entry.metadata),
         entityType: entry.entityType,
         entityId: entry.entityId,
         action: entry.action,
@@ -32,7 +40,7 @@ export class AuditService {
     });
   }
 
-  list(filters: {
+  list(user: RequestUser | undefined, filters: {
     entityType?: string;
     entityId?: string;
     action?: FinancialAuditAction;
@@ -47,6 +55,7 @@ export class AuditService {
 
     return this.prisma.financialAuditLog.findMany({
       where: {
+        ...schoolScopeFilter(user),
         entityType: filters.entityType,
         entityId: filters.entityId,
         action: filters.action,

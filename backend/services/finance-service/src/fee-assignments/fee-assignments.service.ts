@@ -129,10 +129,17 @@ export class FeeAssignmentsService {
     });
     const schools = await this.resolveStudentSchools(assignments.map((assignment) => assignment.studentId));
     const schoolByStudent = new Map(schools.map((student) => [student.id, student.schoolId]));
-    return assignments.filter((assignment) => {
+    const visible = assignments.filter((assignment) => {
       const schoolId = schoolByStudent.get(assignment.studentId);
       return user.activeSchoolId ? schoolId === user.activeSchoolId : schoolInScope(user, schoolId);
     });
+    const names = await this.studentClient.lookupStudents(visible.map((assignment) => assignment.studentId));
+    return visible.map((assignment) => ({
+      ...assignment,
+      studentName: names.get(assignment.studentId)?.name ?? '',
+      registrationNumber: names.get(assignment.studentId)?.registrationNumber ?? '',
+      className: names.get(assignment.studentId)?.className ?? null,
+    }));
   }
 
   async remove(id: string, user: RequestUser) {
