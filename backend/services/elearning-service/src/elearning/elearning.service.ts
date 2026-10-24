@@ -11,6 +11,7 @@ import {
   Prisma,
   PublishStatus,
   QuestionType,
+  RevealPolicy,
   SubmissionStatus,
 } from '../../generated/prisma';
 import { RequestUser } from '../common/interfaces/request-user.interface';
@@ -19,6 +20,9 @@ import { RabbitMqService } from '../rabbitmq/rabbitmq.service';
 
 const LEADERSHIP = ['SYSTEM_ADMIN', 'PRINCIPAL', 'ACADEMIC_QA', 'HEAD_OF_DEPARTMENT'];
 const TEACHING_ROLES = ['TEACHER', 'HEAD_OF_DEPARTMENT'];
+const LEARNER_ROLES = ['STUDENT', 'PARENT'];
+/** Grace after a quiz timer ends before answers are rejected (network latency). */
+const QUIZ_GRACE_SECONDS = 20;
 
 @Injectable()
 export class ElearningService {
@@ -63,11 +67,18 @@ export class ElearningService {
     if (query.academicYearId) where.academicYearId = query.academicYearId;
     if (user.role === 'TEACHER') where.teacherId = user.id;
     if (user.role === 'STUDENT') where.enrollments = { some: { studentId: await this.resolveStudentId(user), status: 'ACTIVE' } };
-    return this.prisma.courseSpace.findMany({
+    if (user.role === 'PARENT') where.enrollments = { some: { studentId: { in: await this.parentChildIds(user) }, status: 'ACTIVE' } };
+    const courses = await this.prisma.courseSpace.findMany({
       where,
       include: this.courseIncludes(),
       orderBy: { updatedAt: 'desc' },
     });
+    // Leadership oversees many teachers, so show whose course each one is.
+    if (LEADERSHIP.includes(user.role) || user.role === 'SYSTEM_ADMIN') {
+      const names = await this.authNames(user, courses.map((c) => c.teacherId));
+      return courses.map((c) => ({ ...c, teacherName: names.get(c.teacherId) ?? '' }));
+    }
+    return courses;
   }
 
   async createCourse(user: RequestUser, body: Record<string, unknown>) {
@@ -479,8 +490,11 @@ export class ElearningService {
     const course = await this.getCourse(user, courseId);
     if (!['TEACHER', 'HEAD_OF_DEPARTMENT', 'SYSTEM_ADMIN'].includes(user.role)) throw new ForbiddenException('Forbidden');
     const enrollments = await this.prisma.courseEnrollment.findMany({ where: { courseSpaceId: courseId }, orderBy: { enrolledAt: 'desc' } });
+    const names = await this.studentNames(user, enrollments.map((e) => e.studentId));
     return Promise.all(enrollments.map(async (enrollment) => ({
       ...enrollment,
+      studentName: names.get(enrollment.studentId)?.name ?? '',
+      registrationNumber: names.get(enrollment.studentId)?.registrationNumber ?? '',
       progress: await this.progressForStudent(courseId, enrollment.studentId),
       courseTeacherId: course.teacherId,
     })));
@@ -520,7 +534,12 @@ export class ElearningService {
 
   async listLessons(user: RequestUser, courseId: string) {
     await this.getCourse(user, courseId);
-    const lessons = await this.prisma.lesson.findMany({ where: { courseSpaceId: courseId }, include: { materials: true }, orderBy: { orderIndex: 'asc' } });
+    const learner = this.isLearner(user);
+    const lessons = await this.prisma.lesson.findMany({
+      where: { courseSpaceId: courseId, status: learner ? 'PUBLISHED' : { not: 'ARCHIVED' } },
+      include: { materials: { where: learner ? { status: 'PUBLISHED' } : { status: { not: 'ARCHIVED' } }, orderBy: { orderIndex: 'asc' } } },
+      orderBy: { orderIndex: 'asc' },
+    });
     return this.toResponseValue(lessons);
   }
 
@@ -550,7 +569,11 @@ export class ElearningService {
 
   async publishLesson(user: RequestUser, courseId: string, id: string) {
     await this.assertCourseOwnerFromCourseId(user, courseId);
-    return this.prisma.lesson.update({ where: { id }, data: { status: 'PUBLISHED', publishedAt: new Date() } });
+    const lesson = await this.prisma.lesson.update({ where: { id }, data: { status: 'PUBLISHED', publishedAt: new Date() } });
+    // Publishing a lesson releases the materials prepared for it.
+    await this.prisma.material.updateMany({ where: { lessonId: id, status: 'DRAFT' }, data: { status: 'PUBLISHED', publishedAt: new Date() } });
+    await this.audit(user, 'LESSON_PUBLISHED', 'Lesson', id, lesson);
+    return lesson;
   }
 
   async archiveLesson(user: RequestUser, courseId: string, id: string) {
@@ -567,28 +590,45 @@ export class ElearningService {
 
   async listMaterials(user: RequestUser, courseId: string, lessonId: string) {
     await this.getCourse(user, courseId);
-    const materials = await this.prisma.material.findMany({ where: { courseSpaceId: courseId, lessonId }, orderBy: { orderIndex: 'asc' } });
+    const learner = this.isLearner(user);
+    const materials = await this.prisma.material.findMany({
+      where: { courseSpaceId: courseId, lessonId, status: learner ? 'PUBLISHED' : { not: 'ARCHIVED' } },
+      orderBy: { orderIndex: 'asc' },
+    });
     return this.toResponseValue(materials);
   }
 
   async createMaterial(user: RequestUser, courseId: string, lessonId: string, body: Record<string, unknown>) {
     await this.assertCourseOwnerFromCourseId(user, courseId);
+    const lesson = await this.prisma.lesson.findUnique({ where: { id: lessonId } });
+    if (!lesson || lesson.courseSpaceId !== courseId) throw new NotFoundException('Lesson not found in this course');
+    const type = this.enumValue(MaterialType, body.type, 'NOTE');
+    const text = this.optionalString(body.body)?.trim();
+    const url = this.optionalString(body.externalUrl)?.trim();
+    const fileKey = this.optionalString(body.fileKey);
+    if (type === 'NOTE' && !text) throw new BadRequestException('A note needs some text');
+    if (['LINK', 'VIDEO'].includes(type) && !url && !fileKey) throw new BadRequestException(`A ${type.toLowerCase()} material needs a link or an uploaded file`);
+    if (['PDF', 'SLIDE', 'IMAGE', 'FILE'].includes(type) && !fileKey && !url) throw new BadRequestException(`A ${type.toLowerCase()} material needs an uploaded file or link`);
+    if (url && !/^https?:\/\//i.test(url)) throw new BadRequestException('Links must start with http:// or https://');
+    // Materials added to a lesson that is already live are live too, unless the teacher says otherwise.
+    const requested = body.status === undefined ? (lesson.status === 'PUBLISHED' ? 'PUBLISHED' : 'DRAFT') : body.status;
+    const status = this.enumValue(PublishStatus, requested, 'DRAFT');
     const material = await this.prisma.material.create({
       data: {
         courseSpaceId: courseId,
         lessonId,
         title: this.required(body.title, 'title'),
-        type: this.enumValue(MaterialType, body.type, 'NOTE'),
-        body: this.optionalString(body.body),
-        externalUrl: this.optionalString(body.externalUrl),
-        fileKey: this.optionalString(body.fileKey),
+        type,
+        body: text,
+        externalUrl: url,
+        fileKey,
         fileOriginalName: this.optionalString(body.fileOriginalName),
         fileMimeType: this.optionalString(body.fileMimeType),
         fileSizeBytes: body.fileSizeBytes == null ? undefined : BigInt(Number(body.fileSizeBytes)),
         orderIndex: this.optionalNumber(body.orderIndex) ?? await this.prisma.material.count({ where: { lessonId } }),
         downloadable: body.downloadable !== false,
-        status: this.enumValue(PublishStatus, body.status, 'DRAFT'),
-        publishedAt: String(body.status || '').toUpperCase() === 'PUBLISHED' ? new Date() : undefined,
+        status,
+        publishedAt: status === 'PUBLISHED' ? new Date() : undefined,
       },
     });
     await this.audit(user, 'MATERIAL_CREATED', 'Material', material.id, material);
@@ -615,15 +655,17 @@ export class ElearningService {
   async viewMaterial(user: RequestUser, id: string) {
     this.assertRole(user, ['STUDENT', 'SYSTEM_ADMIN']);
     const material = await this.prisma.material.findUnique({ where: { id } });
-    if (!material) throw new NotFoundException('Material not found');
+    if (!material || (user.role === 'STUDENT' && material.status !== 'PUBLISHED')) throw new NotFoundException('Material not found');
     const studentId = await this.resolveStudentId(user);
     await this.assertStudentEnrollment(material.courseSpaceId, studentId);
+    const already = await this.prisma.materialProgress.findUnique({ where: { materialId_studentId: { materialId: id, studentId } } });
     const progress = await this.prisma.materialProgress.upsert({
       where: { materialId_studentId: { materialId: id, studentId } },
       update: { viewedAt: new Date(), completedAt: new Date() },
       create: { materialId: id, courseSpaceId: material.courseSpaceId, studentId, viewedAt: new Date(), completedAt: new Date() },
     });
-    await this.prisma.material.update({ where: { id }, data: { viewCount: { increment: 1 } } });
+    // Count unique readers, not every re-open.
+    if (!already?.viewedAt) await this.prisma.material.update({ where: { id }, data: { viewCount: { increment: 1 } } });
     await this.touchEnrollment(material.courseSpaceId, studentId);
     return progress;
   }
@@ -642,6 +684,37 @@ export class ElearningService {
     }
     const fileUrl = material.externalUrl ?? (material.fileKey ? this.fileKeyToUrl(material.fileKey) : null);
     return this.toResponseValue({ material, download: { url: fileUrl, expiresAt: new Date(Date.now() + 600_000).toISOString() } });
+  }
+
+  /** Stored files are private to the people who may see the record they belong to. */
+  async assertFileAccess(user: RequestUser, domain: string, filename: string): Promise<void> {
+    if (user.role === 'SYSTEM_ADMIN') return;
+    const fileKey = `${domain}/${decodeURIComponent(filename)}`;
+    if (domain === 'submissions') {
+      const submission = await this.prisma.submission.findFirst({ where: { fileKey }, include: { assignment: { include: { courseSpace: true } } } });
+      if (!submission) {
+        // An upload that is not attached to a submission yet is only visible to whoever sent it.
+        if (decodeURIComponent(filename).includes(`-${user.id.slice(0, 8)}-`)) return;
+        throw new ForbiddenException('Forbidden');
+      }
+      if (user.role === 'STUDENT') {
+        if (submission.studentId !== await this.resolveStudentId(user)) throw new ForbiddenException('Forbidden');
+        return;
+      }
+      if (LEADERSHIP.includes(user.role)) return;
+      if (user.role === 'TEACHER' && submission.assignment.courseSpace.teacherId === user.id) return;
+      if (user.role === 'PARENT' && (await this.parentChildIds(user)).includes(submission.studentId)) return;
+      throw new ForbiddenException('Forbidden');
+    }
+    const material = await this.prisma.material.findFirst({ where: { fileKey }, include: { courseSpace: true } });
+    if (material) {
+      await this.assertCourseAccess(user, material.courseSpaceId, material.courseSpace.teacherId);
+      // Learners only reach files that are live.
+      if (this.isLearner(user) && material.status !== 'PUBLISHED') throw new ForbiddenException('Forbidden');
+      return;
+    }
+    if (decodeURIComponent(filename).includes(`-${user.id.slice(0, 8)}-`)) return;
+    if (!TEACHING_ROLES.includes(user.role) && !LEADERSHIP.includes(user.role)) throw new ForbiddenException('Forbidden');
   }
 
   async readStorageFile(domain: string, filename: string): Promise<{ stream: ReturnType<typeof createReadStream>; filename: string; mimeType: string }> {
@@ -692,14 +765,28 @@ export class ElearningService {
 
   async listAssignments(user: RequestUser, courseId: string) {
     await this.getCourse(user, courseId);
-    return this.prisma.assignment.findMany({ where: { courseSpaceId: courseId }, include: { submissions: true }, orderBy: { dueAt: 'asc' } });
+    if (this.isLearner(user)) {
+      const studentId = user.role === 'STUDENT' ? await this.resolveStudentId(user) : undefined;
+      return this.toResponseValue(await this.prisma.assignment.findMany({
+        where: { courseSpaceId: courseId, status: { in: ['PUBLISHED', 'CLOSED'] } },
+        // A learner only ever sees their own submission, never classmates'.
+        include: { submissions: studentId ? { where: { studentId } } : false },
+        orderBy: { dueAt: 'asc' },
+      }));
+    }
+    return this.toResponseValue(await this.prisma.assignment.findMany({ where: { courseSpaceId: courseId }, include: { submissions: true }, orderBy: { dueAt: 'asc' } }));
   }
 
   async getAssignment(user: RequestUser, courseId: string, id: string) {
     await this.getCourse(user, courseId);
-    const assignment = await this.prisma.assignment.findUnique({ where: { id }, include: { submissions: true } });
-    if (!assignment) throw new NotFoundException('Assignment not found');
-    return assignment;
+    const learner = this.isLearner(user);
+    const studentId = learner && user.role === 'STUDENT' ? await this.resolveStudentId(user) : undefined;
+    const assignment = await this.prisma.assignment.findUnique({
+      where: { id },
+      include: { submissions: learner ? (studentId ? { where: { studentId } } : false) : true },
+    });
+    if (!assignment || assignment.courseSpaceId !== courseId || (learner && assignment.status === 'DRAFT')) throw new NotFoundException('Assignment not found');
+    return this.toResponseValue(assignment);
   }
 
   async updateAssignment(user: RequestUser, courseId: string, id: string, body: Record<string, unknown>) {
@@ -732,7 +819,13 @@ export class ElearningService {
 
   async assignmentSubmissions(user: RequestUser, courseId: string, assignmentId: string) {
     await this.assertCourseOwnerFromCourseId(user, courseId);
-    return this.prisma.submission.findMany({ where: { assignmentId }, orderBy: { updatedAt: 'desc' } });
+    const rows = await this.prisma.submission.findMany({ where: { assignmentId }, orderBy: { updatedAt: 'desc' } });
+    const names = await this.studentNames(user, rows.map((r) => r.studentId));
+    return this.toResponseValue(rows.map((r) => ({
+      ...r,
+      studentName: names.get(r.studentId)?.name ?? '',
+      registrationNumber: names.get(r.studentId)?.registrationNumber ?? '',
+    })));
   }
 
   async assignmentSummary(user: RequestUser, courseId: string, assignmentId: string) {
@@ -754,68 +847,90 @@ export class ElearningService {
         orderBy: { enrolledAt: 'asc' },
       }),
       this.prisma.submission.findMany({
-        where: { assignmentId, status: { in: ['SUBMITTED', 'GRADED'] } },
+        where: { assignmentId, status: { in: ['SUBMITTED', 'GRADED', 'RETURNED'] } },
         select: { studentId: true },
       }),
     ]);
     const submitted = new Set(submissions.map((item) => item.studentId));
-    return enrollments
-      .filter((item) => !submitted.has(item.studentId))
-      .map((item) => ({
-        studentId: item.studentId,
-        enrolledAt: item.enrolledAt,
-        lastActivityAt: item.lastActivityAt,
-        status: 'MISSING',
-      }));
+    const missing = enrollments.filter((item) => !submitted.has(item.studentId));
+    const names = await this.studentNames(user, missing.map((m) => m.studentId));
+    return missing.map((item) => ({
+      studentId: item.studentId,
+      studentName: names.get(item.studentId)?.name ?? '',
+      registrationNumber: names.get(item.studentId)?.registrationNumber ?? '',
+      enrolledAt: item.enrolledAt,
+      lastActivityAt: item.lastActivityAt,
+      status: 'MISSING',
+    }));
   }
 
   async mySubmission(user: RequestUser, assignmentId: string) {
     this.assertRole(user, ['STUDENT', 'SYSTEM_ADMIN']);
-    return this.prisma.submission.findUnique({ where: { assignmentId_studentId: { assignmentId, studentId: await this.resolveStudentId(user) } } });
+    return this.toResponseValue(await this.prisma.submission.findUnique({ where: { assignmentId_studentId: { assignmentId, studentId: await this.resolveStudentId(user) } } }));
   }
 
   async upsertSubmission(user: RequestUser, assignmentId: string, body: Record<string, unknown>) {
     this.assertRole(user, ['STUDENT', 'SYSTEM_ADMIN']);
     const assignment = await this.prisma.assignment.findUnique({ where: { id: assignmentId } });
-    if (!assignment) throw new NotFoundException('Assignment not found');
+    if (!assignment || assignment.status === 'DRAFT') throw new NotFoundException('Assignment not found');
     const studentId = await this.resolveStudentId(user);
     await this.assertStudentEnrollment(assignment.courseSpaceId, studentId);
+    if (assignment.status === 'CLOSED') throw new BadRequestException('This assignment is closed and no longer accepts work');
+
+    const existing = await this.prisma.submission.findUnique({ where: { assignmentId_studentId: { assignmentId, studentId } } });
+    if (existing?.status === 'GRADED') throw new BadRequestException('This work has already been graded. Ask your teacher to return it if you need to change it');
+
     const shouldSubmit = body.submit === true || String(body.status || '').toUpperCase() === 'SUBMITTED';
-    const isLate = Boolean(assignment.dueAt && new Date() > assignment.dueAt);
+    const text = this.optionalString(body.textContent);
+    const fileKey = this.optionalString(body.fileKey);
+    const hasText = !!(text ?? existing?.textContent ?? '').trim();
+    const hasFile = !!(fileKey ?? existing?.fileKey);
+    const now = new Date();
+    const pastDue = Boolean(assignment.dueAt && now > assignment.dueAt);
+    if (shouldSubmit) {
+      if (pastDue && !assignment.allowLateSubmission) throw new BadRequestException('The deadline has passed and late submissions are not accepted');
+      if (assignment.type === 'TEXT' && !hasText) throw new BadRequestException('Write your answer before submitting');
+      if (assignment.type === 'FILE_UPLOAD' && !hasFile) throw new BadRequestException('Attach your file before submitting');
+      if (assignment.type === 'BOTH' && !hasText && !hasFile) throw new BadRequestException('Add your answer or attach a file before submitting');
+    }
+    // Saving a draft never demotes work that is already handed in.
+    const keepsStatus = !shouldSubmit && existing && existing.status === 'SUBMITTED';
+    const status = shouldSubmit ? 'SUBMITTED' : keepsStatus ? 'SUBMITTED' : 'DRAFT';
+    const fileData = {
+      fileKey,
+      fileOriginalName: this.optionalString(body.fileOriginalName),
+      fileMimeType: this.optionalString(body.fileMimeType),
+      fileSizeBytes: body.fileSizeBytes == null ? undefined : BigInt(Number(body.fileSizeBytes)),
+    };
     const submission = await this.prisma.submission.upsert({
       where: { assignmentId_studentId: { assignmentId, studentId } },
       update: {
-        textContent: this.optionalString(body.textContent),
-        fileKey: this.optionalString(body.fileKey),
-        fileOriginalName: this.optionalString(body.fileOriginalName),
-        fileMimeType: this.optionalString(body.fileMimeType),
-        fileSizeBytes: body.fileSizeBytes == null ? undefined : BigInt(Number(body.fileSizeBytes)),
-        status: shouldSubmit ? 'SUBMITTED' : 'DRAFT',
-        submittedAt: shouldSubmit ? new Date() : undefined,
-        isLate,
+        textContent: text,
+        ...fileData,
+        status,
+        submittedAt: shouldSubmit ? now : undefined,
+        isLate: shouldSubmit ? pastDue : undefined,
       },
       create: {
         assignmentId,
         studentId,
         courseSpaceId: assignment.courseSpaceId,
-        textContent: this.optionalString(body.textContent),
-        fileKey: this.optionalString(body.fileKey),
-        fileOriginalName: this.optionalString(body.fileOriginalName),
-        fileMimeType: this.optionalString(body.fileMimeType),
-        fileSizeBytes: body.fileSizeBytes == null ? undefined : BigInt(Number(body.fileSizeBytes)),
-        status: shouldSubmit ? 'SUBMITTED' : 'DRAFT',
-        submittedAt: shouldSubmit ? new Date() : undefined,
-        isLate,
+        textContent: text,
+        ...fileData,
+        status,
+        submittedAt: shouldSubmit ? now : undefined,
+        isLate: shouldSubmit ? pastDue : false,
       },
     });
     await this.touchEnrollment(assignment.courseSpaceId, studentId);
     await this.audit(user, shouldSubmit ? 'ASSIGNMENT_SUBMITTED' : 'SUBMISSION_SAVED', 'Submission', submission.id, submission);
-    return submission;
+    return this.toResponseValue(submission);
   }
 
   async submitSubmission(user: RequestUser, assignmentId: string, id: string) {
-    await this.mySubmission(user, assignmentId);
-    return this.prisma.submission.update({ where: { id }, data: { status: 'SUBMITTED', submittedAt: new Date() } });
+    const mine = await this.mySubmission(user, assignmentId);
+    if (!mine || mine.id !== id) throw new NotFoundException('Submission not found');
+    return this.upsertSubmission(user, assignmentId, { submit: true });
   }
 
   async getSubmission(user: RequestUser, id: string) {
@@ -829,9 +944,13 @@ export class ElearningService {
   async gradeSubmission(user: RequestUser, id: string, body: Record<string, unknown>) {
     const submission = await this.getSubmission(user, id);
     if (user.role === 'TEACHER') this.assertTeacherOwner(user, submission.assignment.courseSpace.teacherId);
+    if (submission.status === 'DRAFT') throw new BadRequestException('The student has not handed this work in yet');
+    const max = Number(body.maxScore ?? submission.assignment.maxScore ?? 100);
     let rawScore = this.decimal(body.score);
+    if (rawScore === undefined || Number.isNaN(rawScore)) throw new BadRequestException('score is required');
+    if (rawScore < 0 || rawScore > max) throw new BadRequestException(`score must be between 0 and ${max}`);
     const penaltyPct = Number(submission.assignment.latePenaltyPercent ?? 0);
-    if (rawScore != null && submission.isLate && penaltyPct > 0) {
+    if (submission.isLate && penaltyPct > 0) {
       const deduction = (Number(rawScore) * penaltyPct) / 100;
       rawScore = this.decimal(Math.max(0, Number(rawScore) - deduction).toFixed(2));
     }
@@ -840,7 +959,7 @@ export class ElearningService {
       data: {
         status: 'GRADED',
         score: rawScore,
-        maxScore: this.decimal(body.maxScore) ?? submission.assignment.maxScore,
+        maxScore: max,
         feedback: this.optionalString(body.feedback),
         gradedAt: new Date(),
         gradedBy: user.id,
@@ -857,23 +976,40 @@ export class ElearningService {
       feedback: graded.feedback,
       teacherId: user.id,
     });
-    return graded;
+    return this.toResponseValue(graded);
   }
 
   async returnSubmission(user: RequestUser, id: string, body: Record<string, unknown>) {
-    await this.getSubmission(user, id);
-    return this.prisma.submission.update({ where: { id }, data: { status: 'RETURNED', feedback: this.optionalString(body.feedback) } });
+    const submission = await this.getSubmission(user, id);
+    if (user.role === 'TEACHER') this.assertTeacherOwner(user, submission.assignment.courseSpace.teacherId);
+    if (submission.status === 'DRAFT') throw new BadRequestException('Nothing to return: the student has not handed this work in');
+    // Returning reopens the work for correction: the old grade no longer stands.
+    const returned = await this.prisma.submission.update({
+      where: { id },
+      data: { status: 'RETURNED', feedback: this.optionalString(body.feedback), score: null, gradedAt: null, gradedBy: null },
+    });
+    await this.audit(user, 'SUBMISSION_RETURNED', 'Submission', id, returned);
+    return this.toResponseValue(returned);
   }
 
   async mySubmissions(user: RequestUser, courseId: string) {
     this.assertRole(user, ['STUDENT', 'SYSTEM_ADMIN']);
-    return this.prisma.submission.findMany({ where: { courseSpaceId: courseId, studentId: await this.resolveStudentId(user) }, include: { assignment: true } });
+    return this.toResponseValue(await this.prisma.submission.findMany({ where: { courseSpaceId: courseId, studentId: await this.resolveStudentId(user) }, include: { assignment: true } }));
   }
 
   async listQuizzes(user: RequestUser, courseId: string) {
     await this.getCourse(user, courseId);
+    const learner = this.isLearner(user);
     const studentId = user.role === 'STUDENT' ? await this.resolveStudentId(user) : undefined;
-    return this.prisma.quiz.findMany({ where: { courseSpaceId: courseId }, include: { questions: { include: { options: true } }, attempts: studentId ? { where: { studentId } } : true } });
+    const quizzes = await this.prisma.quiz.findMany({
+      where: { courseSpaceId: courseId, ...(learner ? { status: { in: ['PUBLISHED', 'CLOSED'] } } : { status: { not: 'ARCHIVED' } }) },
+      include: {
+        questions: { include: { options: true }, orderBy: { orderIndex: 'asc' } },
+        attempts: learner ? (studentId ? { where: { studentId } } : false) : true,
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+    return this.toResponseValue(learner ? quizzes.map((q) => this.sanitizeQuizForLearner(q)) : quizzes);
   }
 
   async createQuiz(user: RequestUser, courseId: string, body: Record<string, unknown>) {
@@ -887,6 +1023,9 @@ export class ElearningService {
         timeLimitMinutes: this.optionalNumber(body.timeLimitMinutes),
         maxAttempts: this.optionalNumber(body.maxAttempts) ?? 1,
         passingScore: this.decimal(body.passingScore),
+        showCorrectAfter: this.enumValue(RevealPolicy, body.showCorrectAfter, 'AFTER_CLOSE'),
+        shuffleQuestions: body.shuffleQuestions === undefined ? undefined : Boolean(body.shuffleQuestions),
+        shuffleOptions: body.shuffleOptions === undefined ? undefined : Boolean(body.shuffleOptions),
       },
     });
     await this.audit(user, 'QUIZ_CREATED', 'Quiz', quiz.id, quiz);
@@ -895,22 +1034,29 @@ export class ElearningService {
 
   async getQuiz(user: RequestUser, courseId: string, id: string) {
     await this.getCourse(user, courseId);
-    const quiz = await this.prisma.quiz.findUnique({ where: { id }, include: { questions: { include: { options: true } } } });
-    if (!quiz) throw new NotFoundException('Quiz not found');
-    if (user.role === 'STUDENT') {
-      return { ...quiz, questions: quiz.questions.map((q) => ({ ...q, correctAnswer: undefined, options: q.options.map((o) => ({ ...o, isCorrect: undefined })) })) };
+    const quiz = await this.prisma.quiz.findUnique({ where: { id }, include: { questions: { include: { options: true }, orderBy: { orderIndex: 'asc' } } } });
+    if (!quiz || quiz.courseSpaceId !== courseId) throw new NotFoundException('Quiz not found');
+    if (this.isLearner(user)) {
+      if (quiz.status === 'DRAFT') throw new NotFoundException('Quiz not found');
+      return this.toResponseValue(this.sanitizeQuizForLearner(quiz));
     }
-    return quiz;
+    return this.toResponseValue(quiz);
   }
 
   async updateQuiz(user: RequestUser, courseId: string, id: string, body: Record<string, unknown>) {
     await this.assertCourseOwnerFromCourseId(user, courseId);
-    return this.prisma.quiz.update({ where: { id }, data: this.clean(body, ['title', 'instructions', 'timeLimitMinutes', 'maxAttempts', 'passingScore', 'status']) });
+    const data: Record<string, unknown> = this.clean(body, ['title', 'instructions', 'timeLimitMinutes', 'maxAttempts', 'passingScore', 'status', 'shuffleQuestions', 'shuffleOptions']);
+    if (body.showCorrectAfter !== undefined) data.showCorrectAfter = this.enumValue(RevealPolicy, body.showCorrectAfter, 'AFTER_CLOSE');
+    return this.prisma.quiz.update({ where: { id }, data });
   }
 
   async publishQuiz(user: RequestUser, courseId: string, id: string) {
     await this.assertCourseOwnerFromCourseId(user, courseId);
-    const quiz = await this.prisma.quiz.update({ where: { id }, data: { status: 'PUBLISHED', publishedAt: new Date() } });
+    const existing = await this.prisma.quiz.findUnique({ where: { id }, include: { questions: { include: { options: true } } } });
+    if (!existing || existing.courseSpaceId !== courseId) throw new NotFoundException('Quiz not found');
+    if (!existing.questions.length) throw new BadRequestException('Add at least one question before publishing');
+    for (const [index, q] of existing.questions.entries()) this.assertQuestionComplete(q, index + 1);
+    const quiz = await this.prisma.quiz.update({ where: { id }, data: { status: 'PUBLISHED', publishedAt: new Date(), closedAt: null } });
     await this.audit(user, 'QUIZ_PUBLISHED', 'Quiz', id, quiz);
     const enrollments = await this.prisma.courseEnrollment.findMany({ where: { courseSpaceId: courseId, status: EnrollmentStatus.ACTIVE }, select: { studentId: true } });
     await this.rabbitmq.publish('quiz.published', {
@@ -920,7 +1066,7 @@ export class ElearningService {
       teacherId: user.id,
       studentIds: enrollments.map((e) => e.studentId),
     });
-    return quiz;
+    return this.toResponseValue(quiz);
   }
 
   async closeQuiz(user: RequestUser, courseId: string, id: string) {
@@ -930,40 +1076,61 @@ export class ElearningService {
 
   async quizResults(user: RequestUser, courseId: string, id: string) {
     await this.getCourse(user, courseId);
-    return this.prisma.quizAttempt.findMany({ where: { quizId: id }, include: { answers: true }, orderBy: { submittedAt: 'desc' } });
+    const attempts = await this.prisma.quizAttempt.findMany({ where: { quizId: id }, include: { answers: true }, orderBy: { submittedAt: 'desc' } });
+    const names = await this.studentNames(user, attempts.map((a) => a.studentId));
+    const questions = await this.prisma.quizQuestion.findMany({ where: { quizId: id } });
+    return this.toResponseValue(attempts.map((a) => ({
+      ...a,
+      score: a.totalScore,
+      studentName: names.get(a.studentId)?.name ?? '',
+      registrationNumber: names.get(a.studentId)?.registrationNumber ?? '',
+      answers: this.describeAnswers(questions, a.answers, true),
+      // Written answers the teacher has not marked yet.
+      manualMarksPending: a.status === 'IN_PROGRESS' ? 0 : a.answers.filter((ans) => {
+        const q = questions.find((item) => item.id === ans.questionId);
+        return q?.type === 'SHORT_ANSWER' && (ans.textAnswer ?? '').trim() && ans.scoreAwarded == null;
+      }).length,
+    })));
   }
 
   async addQuestion(user: RequestUser, quizId: string, body: Record<string, unknown>) {
     const quiz = await this.prisma.quiz.findUnique({ where: { id: quizId } });
     if (!quiz) throw new NotFoundException('Quiz not found');
     await this.assertCourseOwnerFromCourseId(user, quiz.courseSpaceId);
+    await this.assertQuizEditable(quizId);
+    const type = this.enumValue(QuestionType, body.type, 'MULTIPLE_CHOICE');
+    const options = Array.isArray(body.options)
+      ? body.options.map((option, index) => ({
+        text: String((option as Record<string, unknown>).text || '').trim(),
+        isCorrect: Boolean((option as Record<string, unknown>).isCorrect),
+        orderIndex: Number((option as Record<string, unknown>).orderIndex ?? index),
+      })).filter((option) => option.text)
+      : [];
+    const correctAnswer = type === 'TRUE_FALSE' ? String(body.correctAnswer ?? '').toLowerCase() || undefined : this.optionalString(body.correctAnswer);
+    const draft = { type, options, correctAnswer, points: this.decimal(body.points) ?? 1 };
+    this.assertQuestionComplete(draft, (await this.prisma.quizQuestion.count({ where: { quizId } })) + 1);
     const question = await this.prisma.quizQuestion.create({
       data: {
         quizId,
-        type: this.enumValue(QuestionType, body.type, 'MULTIPLE_CHOICE'),
+        type,
         prompt: this.required(body.prompt, 'prompt'),
-        points: this.decimal(body.points) ?? 1,
+        points: draft.points,
         orderIndex: this.optionalNumber(body.orderIndex) ?? await this.prisma.quizQuestion.count({ where: { quizId } }),
         explanation: this.optionalString(body.explanation),
-        correctAnswer: this.optionalString(body.correctAnswer),
-        options: Array.isArray(body.options) ? {
-          create: body.options.map((option, index) => ({
-            text: String((option as Record<string, unknown>).text || ''),
-            isCorrect: Boolean((option as Record<string, unknown>).isCorrect),
-            orderIndex: Number((option as Record<string, unknown>).orderIndex ?? index),
-          })),
-        } : undefined,
+        correctAnswer: type === 'MULTIPLE_CHOICE' ? undefined : correctAnswer,
+        options: type === 'MULTIPLE_CHOICE' ? { create: options } : undefined,
       },
       include: { options: true },
     });
     await this.recalculateQuizPoints(quizId);
-    return question;
+    return this.toResponseValue(question);
   }
 
   async updateQuestion(user: RequestUser, quizId: string, questionId: string, body: Record<string, unknown>) {
     const quiz = await this.prisma.quiz.findUnique({ where: { id: quizId } });
     if (!quiz) throw new NotFoundException('Quiz not found');
     await this.assertCourseOwnerFromCourseId(user, quiz.courseSpaceId);
+    await this.assertQuizEditable(quizId);
     const updated = await this.prisma.quizQuestion.update({ where: { id: questionId }, data: this.clean(body, ['type', 'prompt', 'points', 'orderIndex', 'explanation', 'correctAnswer']) });
     await this.recalculateQuizPoints(quizId);
     return updated;
@@ -973,6 +1140,7 @@ export class ElearningService {
     const quiz = await this.prisma.quiz.findUnique({ where: { id: quizId } });
     if (!quiz) throw new NotFoundException('Quiz not found');
     await this.assertCourseOwnerFromCourseId(user, quiz.courseSpaceId);
+    await this.assertQuizEditable(quizId);
     await this.prisma.quizQuestion.delete({ where: { id: questionId } });
     await this.recalculateQuizPoints(quizId);
     return { deleted: true };
@@ -990,97 +1158,111 @@ export class ElearningService {
   async startAttempt(user: RequestUser, quizId: string) {
     this.assertRole(user, ['STUDENT', 'SYSTEM_ADMIN']);
     const quiz = await this.prisma.quiz.findUnique({ where: { id: quizId }, include: { questions: true } });
-    if (!quiz) throw new NotFoundException('Quiz not found');
+    if (!quiz || quiz.status === 'DRAFT') throw new NotFoundException('Quiz not found');
     const studentId = await this.resolveStudentId(user);
     await this.assertStudentEnrollment(quiz.courseSpaceId, studentId);
-    const count = await this.prisma.quizAttempt.count({ where: { quizId, studentId } });
-    if (count >= quiz.maxAttempts) throw new BadRequestException('Maximum attempts reached');
-    return this.prisma.quizAttempt.create({ data: { quizId, studentId, courseSpaceId: quiz.courseSpaceId, attemptNumber: count + 1 } });
+    if (quiz.status === 'CLOSED') throw new BadRequestException('This quiz is closed');
+    if (!quiz.questions.length) throw new BadRequestException('This quiz has no questions yet');
+
+    const unfinished = await this.prisma.quizAttempt.findFirst({ where: { quizId, studentId, status: 'IN_PROGRESS' }, include: { answers: true } });
+    if (unfinished) {
+      if (this.attemptExpired(unfinished.startedAt, quiz.timeLimitMinutes)) {
+        await this.finishAttempt(unfinished.id);
+      } else {
+        return this.toResponseValue({ ...unfinished, expiresAt: this.attemptDeadline(unfinished.startedAt, quiz.timeLimitMinutes) });
+      }
+    }
+    const used = await this.prisma.quizAttempt.count({ where: { quizId, studentId } });
+    if (used >= quiz.maxAttempts) throw new BadRequestException('You have used all attempts for this quiz');
+    const attempt = await this.prisma.quizAttempt.create({ data: { quizId, studentId, courseSpaceId: quiz.courseSpaceId, attemptNumber: used + 1 }, include: { answers: true } });
+    await this.touchEnrollment(quiz.courseSpaceId, studentId);
+    return this.toResponseValue({ ...attempt, expiresAt: this.attemptDeadline(attempt.startedAt, quiz.timeLimitMinutes) });
   }
 
   async activeAttempt(user: RequestUser, quizId: string) {
-    const attempt = await this.prisma.quizAttempt.findFirst({ where: { quizId, studentId: await this.resolveStudentId(user), status: 'IN_PROGRESS' }, include: { answers: true } });
+    const attempt = await this.prisma.quizAttempt.findFirst({ where: { quizId, studentId: await this.resolveStudentId(user), status: 'IN_PROGRESS' }, include: { answers: true, quiz: true } });
     if (!attempt) throw new NotFoundException('No active attempt');
-    return attempt;
+    if (this.attemptExpired(attempt.startedAt, attempt.quiz.timeLimitMinutes)) {
+      await this.finishAttempt(attempt.id);
+      throw new NotFoundException('No active attempt');
+    }
+    const { quiz, ...rest } = attempt;
+    return this.toResponseValue({ ...rest, expiresAt: this.attemptDeadline(attempt.startedAt, quiz.timeLimitMinutes) });
   }
 
   async saveAnswer(user: RequestUser, attemptId: string, body: Record<string, unknown>) {
-    const attempt = await this.getAttempt(user, attemptId);
-    if (attempt.status !== 'IN_PROGRESS') throw new BadRequestException('Attempt is already submitted');
-    return this.prisma.quizAnswer.upsert({
-      where: { attemptId_questionId: { attemptId, questionId: this.required(body.questionId, 'questionId') } },
-      update: { selectedOptionId: this.optionalString(body.selectedOptionId), textAnswer: this.optionalString(body.textAnswer), answeredAt: new Date() },
-      create: { attemptId, questionId: this.required(body.questionId, 'questionId'), selectedOptionId: this.optionalString(body.selectedOptionId), textAnswer: this.optionalString(body.textAnswer) },
-    });
+    const attempt = await this.loadAttempt(user, attemptId);
+    if (attempt.status !== 'IN_PROGRESS') throw new BadRequestException('This attempt is already submitted');
+    if (this.attemptExpired(attempt.startedAt, attempt.quiz.timeLimitMinutes)) {
+      await this.finishAttempt(attemptId);
+      throw new BadRequestException('Time is up. Your answers so far were submitted');
+    }
+    const questionId = this.required(body.questionId, 'questionId');
+    const question = await this.prisma.quizQuestion.findUnique({ where: { id: questionId }, include: { options: true } });
+    if (!question || question.quizId !== attempt.quizId) throw new BadRequestException('That question is not part of this quiz');
+    const selectedOptionId = this.optionalString(body.selectedOptionId);
+    const textAnswer = this.optionalString(body.textAnswer);
+    if (question.type === 'MULTIPLE_CHOICE' && selectedOptionId && !question.options.some((o) => o.id === selectedOptionId)) {
+      throw new BadRequestException('That option does not belong to this question');
+    }
+    if (question.type === 'TRUE_FALSE' && textAnswer !== undefined && !['true', 'false'].includes(textAnswer.toLowerCase())) {
+      throw new BadRequestException('Answer true or false');
+    }
+    return this.toResponseValue(await this.prisma.quizAnswer.upsert({
+      where: { attemptId_questionId: { attemptId, questionId } },
+      update: { selectedOptionId, textAnswer, answeredAt: new Date() },
+      create: { attemptId, questionId, selectedOptionId, textAnswer },
+    }));
   }
 
   async submitAttempt(user: RequestUser, attemptId: string) {
-    const attempt = await this.getAttempt(user, attemptId);
-    const questions = await this.prisma.quizQuestion.findMany({ where: { quizId: attempt.quizId }, include: { options: true } });
-    const answers = await this.prisma.quizAnswer.findMany({ where: { attemptId } });
-    let totalScore = 0;
-    let maxScore = 0;
-    for (const question of questions) {
-      const points = Number(question.points);
-      maxScore += points;
-      const answer = answers.find((item) => item.questionId === question.id);
-      let isCorrect: boolean | null = null;
-      if (answer && question.type !== 'SHORT_ANSWER') {
-        isCorrect = question.type === 'TRUE_FALSE'
-          ? String(answer.textAnswer).toLowerCase() === String(question.correctAnswer).toLowerCase()
-          : question.options.some((option) => option.id === answer.selectedOptionId && option.isCorrect);
-        if (isCorrect) totalScore += points;
-        await this.prisma.quizAnswer.update({ where: { id: answer.id }, data: { isCorrect, scoreAwarded: isCorrect ? points : 0 } });
-      }
+    const attempt = await this.loadAttempt(user, attemptId);
+    // Submitting twice (retries, double taps) returns the finished result instead of re-grading.
+    if (attempt.status !== 'IN_PROGRESS') return this.attemptResultFor(user, attempt.id);
+    await this.finishAttempt(attemptId);
+    return this.attemptResultFor(user, attemptId);
+  }
+
+  async getAttempt(user: RequestUser, attemptId: string) {
+    const attempt = await this.loadAttempt(user, attemptId);
+    if (user.role === 'TEACHER' || user.role === 'HEAD_OF_DEPARTMENT') await this.assertCourseOwnerFromCourseId(user, attempt.courseSpaceId);
+    return this.attemptResultFor(user, attemptId);
+  }
+
+  async myAttempts(user: RequestUser, quizId: string) {
+    const attempts = await this.prisma.quizAttempt.findMany({ where: { quizId, studentId: await this.resolveStudentId(user) }, orderBy: { attemptNumber: 'asc' }, select: { id: true } });
+    return Promise.all(attempts.map((a) => this.attemptResultFor(user, a.id)));
+  }
+
+  async gradeShortAnswer(user: RequestUser, attemptId: string, body: Record<string, unknown>) {
+    const attempt = await this.loadAttempt(user, attemptId);
+    await this.assertCourseOwnerFromCourseId(user, attempt.courseSpaceId);
+    if (attempt.status === 'IN_PROGRESS') throw new BadRequestException('The student is still taking this quiz');
+    const questionId = this.required(body.questionId, 'questionId');
+    const question = await this.prisma.quizQuestion.findUnique({ where: { id: questionId } });
+    if (!question || question.quizId !== attempt.quizId || question.type !== 'SHORT_ANSWER') throw new BadRequestException('Only short-answer questions are graded by hand');
+    const awarded = this.decimal(body.scoreAwarded);
+    if (awarded === undefined || Number.isNaN(awarded) || awarded < 0 || awarded > Number(question.points)) {
+      throw new BadRequestException(`scoreAwarded must be between 0 and ${Number(question.points)}`);
     }
-    const percentScore = maxScore ? (totalScore / maxScore) * 100 : 0;
-    const now = new Date();
-    const timeTakenSeconds = Math.round((now.getTime() - attempt.startedAt.getTime()) / 1000);
-    const result = await this.prisma.quizAttempt.update({
-      where: { id: attemptId },
-      data: {
-        status: 'AUTO_GRADED',
-        submittedAt: now,
-        timeTakenSeconds,
-        totalScore,
-        maxScore,
-        percentScore,
-        isPassed: attempt.quiz.passingScore == null ? null : percentScore >= Number(attempt.quiz.passingScore),
-      },
-      include: { answers: true },
+    await this.prisma.quizAnswer.upsert({
+      where: { attemptId_questionId: { attemptId, questionId } },
+      update: { scoreAwarded: awarded, isCorrect: awarded > 0 },
+      create: { attemptId, questionId, scoreAwarded: awarded, isCorrect: awarded > 0 },
     });
+    await this.recomputeAttemptTotals(attemptId);
+    const result = await this.attemptResultFor(user, attemptId);
     await this.rabbitmq.publish('quiz.result', {
       attemptId,
       studentId: attempt.studentId,
       quizId: attempt.quizId,
       courseId: attempt.courseSpaceId,
-      totalScore,
-      maxScore,
-      percentScore,
+      totalScore: result.totalScore,
+      maxScore: result.maxScore,
+      percentScore: result.percentScore,
       isPassed: result.isPassed,
     });
     return result;
-  }
-
-  async getAttempt(user: RequestUser, attemptId: string) {
-    const attempt = await this.prisma.quizAttempt.findUnique({ where: { id: attemptId }, include: { quiz: true, answers: true } });
-    if (!attempt) throw new NotFoundException('Attempt not found');
-    if (user.role === 'STUDENT' && attempt.studentId !== await this.resolveStudentId(user)) throw new ForbiddenException('Forbidden');
-    return attempt;
-  }
-
-  async myAttempts(user: RequestUser, quizId: string) {
-    return this.prisma.quizAttempt.findMany({ where: { quizId, studentId: await this.resolveStudentId(user) }, include: { answers: true } });
-  }
-
-  async gradeShortAnswer(user: RequestUser, attemptId: string, body: Record<string, unknown>) {
-    const attempt = await this.getAttempt(user, attemptId);
-    await this.assertCourseOwnerFromCourseId(user, attempt.courseSpaceId);
-    const questionId = this.required(body.questionId, 'questionId');
-    return this.prisma.quizAnswer.update({
-      where: { attemptId_questionId: { attemptId, questionId } },
-      data: { scoreAwarded: this.decimal(body.scoreAwarded), isCorrect: Number(body.scoreAwarded || 0) > 0 },
-    });
   }
 
   async myProgress(user: RequestUser, courseId: string) {
@@ -1088,26 +1270,34 @@ export class ElearningService {
   }
 
   async progressForStudent(courseId: string, studentId: string) {
+    const live = { in: ['PUBLISHED'] as PublishStatus[] };
     const [lessons, materials, viewed, assignments, submissions, quizzes, attempts] = await Promise.all([
-      this.prisma.lesson.count({ where: { courseSpaceId: courseId, status: { not: 'ARCHIVED' } } }),
-      this.prisma.material.count({ where: { courseSpaceId: courseId, status: { not: 'ARCHIVED' } } }),
-      this.prisma.materialProgress.count({ where: { courseSpaceId: courseId, studentId, viewedAt: { not: null } } }),
+      this.prisma.lesson.count({ where: { courseSpaceId: courseId, status: 'PUBLISHED' } }),
+      this.prisma.material.count({ where: { courseSpaceId: courseId, status: live } }),
+      this.prisma.materialProgress.count({ where: { courseSpaceId: courseId, studentId, viewedAt: { not: null }, material: { status: live } } }),
       this.prisma.assignment.count({ where: { courseSpaceId: courseId, status: { in: ['PUBLISHED', 'CLOSED'] } } }),
-      this.prisma.submission.count({ where: { courseSpaceId: courseId, studentId, status: { in: ['SUBMITTED', 'GRADED'] } } }),
+      this.prisma.submission.count({ where: { courseSpaceId: courseId, studentId, status: { in: ['SUBMITTED', 'GRADED', 'RETURNED'] } } }),
       this.prisma.quiz.count({ where: { courseSpaceId: courseId, status: { in: ['PUBLISHED', 'CLOSED'] } } }),
-      this.prisma.quizAttempt.count({ where: { courseSpaceId: courseId, studentId, status: { in: ['SUBMITTED', 'AUTO_GRADED', 'MANUALLY_GRADED'] } } }),
+      this.prisma.quizAttempt.groupBy({ by: ['quizId'], where: { courseSpaceId: courseId, studentId, status: { in: ['SUBMITTED', 'AUTO_GRADED', 'MANUALLY_GRADED'] } } }).then((rows) => rows.length),
     ]);
-    const materialCompletion = materials ? Math.round((viewed / materials) * 100) : 0;
-    const assignmentCompletion = assignments ? Math.round((submissions / assignments) * 100) : 0;
-    const quizCompletion = quizzes ? Math.round((attempts / quizzes) * 100) : 0;
-    const completionPercent = Math.round((materialCompletion + assignmentCompletion + quizCompletion) / 3);
+    // Only count the parts of a course that actually exist, so a course with no quizzes is not capped at 66%.
+    const parts: number[] = [];
+    if (materials) parts.push(Math.min(100, Math.round((viewed / materials) * 100)));
+    if (assignments) parts.push(Math.min(100, Math.round((submissions / assignments) * 100)));
+    if (quizzes) parts.push(Math.min(100, Math.round((attempts / quizzes) * 100)));
+    const completionPercent = parts.length ? Math.round(parts.reduce((a, b) => a + b, 0) / parts.length) : 0;
     return { courseId, studentId, lessons, materials, viewed, assignments, submissions, quizzes, attempts, completionPercent };
   }
 
   async allProgress(user: RequestUser, courseId: string) {
     await this.getCourse(user, courseId);
     const enrollments = await this.prisma.courseEnrollment.findMany({ where: { courseSpaceId: courseId } });
-    return Promise.all(enrollments.map((item) => this.progressForStudent(courseId, item.studentId)));
+    const names = await this.studentNames(user, enrollments.map((e) => e.studentId));
+    return Promise.all(enrollments.map(async (item) => ({
+      ...(await this.progressForStudent(courseId, item.studentId)),
+      studentName: names.get(item.studentId)?.name ?? '',
+      registrationNumber: names.get(item.studentId)?.registrationNumber ?? '',
+    })));
   }
 
   async lessonProgress(user: RequestUser, lessonId: string) {
@@ -1119,20 +1309,38 @@ export class ElearningService {
 
   async listAnnouncements(user: RequestUser, courseId: string) {
     await this.getCourse(user, courseId);
-    return this.prisma.courseAnnouncement.findMany({ where: { courseSpaceId: courseId }, orderBy: [{ isPinned: 'desc' }, { createdAt: 'desc' }] });
+    return this.prisma.courseAnnouncement.findMany({
+      where: { courseSpaceId: courseId, ...(this.isLearner(user) ? { status: 'PUBLISHED' } : {}) },
+      orderBy: [{ isPinned: 'desc' }, { createdAt: 'desc' }],
+    });
   }
 
   async createAnnouncement(user: RequestUser, courseId: string, body: Record<string, unknown>) {
     await this.assertCourseOwnerFromCourseId(user, courseId);
-    return this.prisma.courseAnnouncement.create({
+    const draft = String(body.status || '').toUpperCase() === 'DRAFT';
+    const announcement = await this.prisma.courseAnnouncement.create({
       data: {
         courseSpaceId: courseId,
         title: this.required(body.title, 'title'),
         body: this.required(body.body, 'body'),
         audience: this.optionalString(body.audience) || 'ALL',
         createdBy: user.id,
+        status: draft ? 'DRAFT' : 'PUBLISHED',
+        publishedAt: draft ? undefined : new Date(),
+        isPinned: body.isPinned === true,
       },
     });
+    if (!draft) {
+      const enrollments = await this.prisma.courseEnrollment.findMany({ where: { courseSpaceId: courseId, status: EnrollmentStatus.ACTIVE }, select: { studentId: true } });
+      await this.rabbitmq.publish('announcement.published', {
+        announcementId: announcement.id,
+        courseId,
+        title: announcement.title,
+        teacherId: user.id,
+        studentIds: enrollments.map((e) => e.studentId),
+      });
+    }
+    return announcement;
   }
 
   async updateAnnouncement(user: RequestUser, courseId: string, id: string, body: Record<string, unknown>) {
@@ -1167,7 +1375,13 @@ export class ElearningService {
 
   async listDiscussions(user: RequestUser, courseId: string) {
     await this.getCourse(user, courseId);
-    return this.prisma.discussionThread.findMany({ where: { courseSpaceId: courseId, deletedAt: null }, include: { replies: true }, orderBy: [{ isPinned: 'desc' }, { updatedAt: 'desc' }] });
+    const threads = await this.prisma.discussionThread.findMany({ where: { courseSpaceId: courseId, deletedAt: null }, include: { replies: true }, orderBy: [{ isPinned: 'desc' }, { updatedAt: 'desc' }] });
+    const names = await this.authNames(user, threads.flatMap((t) => [t.authorId, ...t.replies.map((r) => r.authorId)]));
+    return this.toResponseValue(threads.map((t) => ({
+      ...t,
+      authorName: names.get(t.authorId) ?? '',
+      replies: t.replies.map((r) => ({ ...r, authorName: names.get(r.authorId) ?? '' })),
+    })));
   }
 
   async createDiscussion(user: RequestUser, courseId: string, body: Record<string, unknown>) {
@@ -1176,10 +1390,15 @@ export class ElearningService {
   }
 
   async getDiscussion(user: RequestUser, threadId: string) {
-    const thread = await this.prisma.discussionThread.findUnique({ where: { id: threadId }, include: { replies: true } });
-    if (!thread) throw new NotFoundException('Discussion not found');
+    const thread = await this.prisma.discussionThread.findUnique({ where: { id: threadId }, include: { replies: { orderBy: { createdAt: 'asc' } } } });
+    if (!thread || thread.deletedAt) throw new NotFoundException('Discussion not found');
     await this.getCourse(user, thread.courseSpaceId);
-    return thread;
+    const names = await this.authNames(user, [thread.authorId, ...thread.replies.map((r) => r.authorId)]);
+    return this.toResponseValue({
+      ...thread,
+      authorName: names.get(thread.authorId) ?? '',
+      replies: thread.replies.map((r) => ({ ...r, authorName: names.get(r.authorId) ?? '' })),
+    });
   }
 
   async addReply(user: RequestUser, threadId: string, body: Record<string, unknown>) {
@@ -1380,27 +1599,137 @@ export class ElearningService {
 
   async studentSummary(user: RequestUser) {
     const studentId = await this.resolveStudentId(user);
-    const courses = await this.prisma.courseEnrollment.findMany({ where: { studentId, status: EnrollmentStatus.ACTIVE }, include: { courseSpace: true } });
+    const courses = await this.prisma.courseEnrollment.findMany({
+      where: { studentId, status: EnrollmentStatus.ACTIVE },
+      include: { courseSpace: { include: { lessons: { where: { status: 'PUBLISHED' }, select: { id: true } } } } },
+    });
     const courseIds = courses.map((c) => c.courseSpaceId);
     const [pendingAssignments, availableQuizzes, unviewedMaterials] = await Promise.all([
-      this.prisma.assignment.count({ where: { courseSpaceId: { in: courseIds }, status: 'PUBLISHED', submissions: { none: { studentId, status: { in: ['SUBMITTED', 'GRADED'] } } } } }),
+      // Work still owed: nothing handed in yet, or returned for correction.
+      this.prisma.assignment.count({ where: { courseSpaceId: { in: courseIds }, status: 'PUBLISHED', OR: [{ submissions: { none: { studentId } } }, { submissions: { some: { studentId, status: { in: ['DRAFT', 'RETURNED'] } } } }] } }),
       this.prisma.quiz.count({ where: { courseSpaceId: { in: courseIds }, status: 'PUBLISHED', attempts: { none: { studentId } } } }),
-      this.prisma.material.count({ where: { courseSpaceId: { in: courseIds }, status: 'PUBLISHED', progress: { none: { studentId, viewedAt: { not: null } } } } }),
+      this.prisma.material.count({ where: { courseSpaceId: { in: courseIds }, status: 'PUBLISHED', lesson: { status: 'PUBLISHED' }, progress: { none: { studentId, viewedAt: { not: null } } } } }),
     ]);
-    return { courses, pendingAssignments, availableQuizzes, unviewedMaterials };
+    return this.toResponseValue({ courses, pendingAssignments, availableQuizzes, unviewedMaterials });
   }
 
-  async parentSummary(childId: string) {
+  /** Everything a student still has to do, soonest deadline first. */
+  async studentTasks(user: RequestUser) {
+    const studentId = await this.resolveStudentId(user);
+    return this.learningTasksFor(studentId);
+  }
+
+  private async learningTasksFor(studentId: string) {
+    const enrollments = await this.prisma.courseEnrollment.findMany({ where: { studentId, status: EnrollmentStatus.ACTIVE }, include: { courseSpace: true } });
+    const courseById = new Map(enrollments.map((e) => [e.courseSpaceId, e.courseSpace]));
+    const courseIds = [...courseById.keys()];
+    const now = Date.now();
+    const [assignments, quizzes, graded] = await Promise.all([
+      this.prisma.assignment.findMany({
+        where: { courseSpaceId: { in: courseIds }, status: { in: ['PUBLISHED', 'CLOSED'] } },
+        include: { submissions: { where: { studentId } } },
+        orderBy: { dueAt: 'asc' },
+      }),
+      this.prisma.quiz.findMany({
+        where: { courseSpaceId: { in: courseIds }, status: 'PUBLISHED' },
+        include: { attempts: { where: { studentId }, select: { id: true, status: true, percentScore: true } } },
+      }),
+      this.prisma.submission.findMany({ where: { studentId, status: 'GRADED', courseSpaceId: { in: courseIds } }, include: { assignment: { select: { title: true } } }, orderBy: { gradedAt: 'desc' }, take: 5 }),
+    ]);
+    const label = (courseId: string) => {
+      const c = courseById.get(courseId);
+      return c ? `${c.subjectName} · ${c.className}` : '';
+    };
+    const todoAssignments = assignments
+      .map((a) => {
+        const sub = a.submissions[0];
+        const state = !sub ? 'NOT_STARTED' : sub.status;
+        const overdue = !!a.dueAt && a.dueAt.getTime() < now && ['NOT_STARTED', 'DRAFT', 'RETURNED'].includes(state);
+        return {
+          id: a.id,
+          courseId: a.courseSpaceId,
+          courseName: label(a.courseSpaceId),
+          title: a.title,
+          dueAt: a.dueAt,
+          maxScore: a.maxScore,
+          status: state,
+          overdue,
+          closed: a.status === 'CLOSED',
+        };
+      })
+      .filter((a) => !a.closed && ['NOT_STARTED', 'DRAFT', 'RETURNED'].includes(a.status));
+    const todoQuizzes = quizzes
+      .map((q) => {
+        const finished = q.attempts.filter((a) => a.status !== 'IN_PROGRESS').length;
+        const inProgress = q.attempts.some((a) => a.status === 'IN_PROGRESS');
+        return {
+          id: q.id,
+          courseId: q.courseSpaceId,
+          courseName: label(q.courseSpaceId),
+          title: q.title,
+          attemptsUsed: finished,
+          maxAttempts: q.maxAttempts,
+          timeLimitMinutes: q.timeLimitMinutes,
+          inProgress,
+        };
+      })
+      .filter((q) => q.inProgress || q.attemptsUsed < q.maxAttempts);
+    return this.toResponseValue({
+      assignments: todoAssignments,
+      quizzes: todoQuizzes,
+      recentGrades: graded.map((g) => ({ submissionId: g.id, title: g.assignment.title, courseName: label(g.courseSpaceId), score: g.score, maxScore: g.maxScore, feedback: g.feedback, gradedAt: g.gradedAt })),
+    });
+  }
+
+  async assignmentById(user: RequestUser, id: string) {
+    const assignment = await this.prisma.assignment.findUnique({ where: { id }, select: { courseSpaceId: true } });
+    if (!assignment) throw new NotFoundException('Assignment not found');
+    return this.getAssignment(user, assignment.courseSpaceId, id);
+  }
+
+  async quizById(user: RequestUser, id: string) {
+    const quiz = await this.prisma.quiz.findUnique({ where: { id }, select: { courseSpaceId: true } });
+    if (!quiz) throw new NotFoundException('Quiz not found');
+    const detail = await this.getQuiz(user, quiz.courseSpaceId, id) as Record<string, unknown>;
+    if (!this.isLearner(user)) return detail;
+    // Learners also get their own attempt history so the lobby can show attempts left and best score.
+    const studentId = user.role === 'STUDENT' ? await this.resolveStudentId(user) : undefined;
+    const attempts = studentId
+      ? await this.prisma.quizAttempt.findMany({ where: { quizId: id, studentId }, orderBy: { attemptNumber: 'asc' }, select: { id: true, attemptNumber: true, status: true, startedAt: true, submittedAt: true, totalScore: true, maxScore: true, percentScore: true, isPassed: true } })
+      : [];
+    return this.toResponseValue({ ...detail, attempts });
+  }
+
+  async parentSummary(user: RequestUser, childId: string) {
+    await this.assertParentOwnsChild(user, childId);
     const enrollments = await this.prisma.courseEnrollment.findMany({ where: { studentId: childId, status: EnrollmentStatus.ACTIVE }, include: { courseSpace: true } });
     const courseIds = enrollments.map((e) => e.courseSpaceId);
     const progresses = await Promise.all(courseIds.map((courseId) => this.progressForStudent(courseId, childId)));
     const overallCompletion = progresses.length ? Math.round(progresses.reduce((sum, p) => sum + p.completionPercent, 0) / progresses.length) : 0;
-    const [pendingAssignments, availableQuizzes, unviewedMaterials] = await Promise.all([
-      this.prisma.assignment.count({ where: { courseSpaceId: { in: courseIds }, status: 'PUBLISHED', submissions: { none: { studentId: childId, status: { in: ['SUBMITTED', 'GRADED'] } } } } }),
-      this.prisma.quiz.count({ where: { courseSpaceId: { in: courseIds }, status: 'PUBLISHED', attempts: { none: { studentId: childId } } } }),
-      this.prisma.material.count({ where: { courseSpaceId: { in: courseIds }, status: 'PUBLISHED', progress: { none: { studentId: childId, viewedAt: { not: null } } } } }),
-    ]);
-    return { childId, enrollments, progresses, overallCompletion, pendingAssignments, availableQuizzes, unviewedMaterials };
+    const tasks = await this.learningTasksFor(childId);
+    return this.toResponseValue({
+      childId,
+      enrollments,
+      progresses,
+      overallCompletion,
+      pendingAssignments: tasks.assignments.length,
+      availableQuizzes: tasks.quizzes.length,
+      unviewedMaterials: await this.prisma.material.count({ where: { courseSpaceId: { in: courseIds }, status: 'PUBLISHED', lesson: { status: 'PUBLISHED' }, progress: { none: { studentId: childId, viewedAt: { not: null } } } } }),
+      overdueAssignments: tasks.assignments.filter((a: { overdue: boolean }) => a.overdue).length,
+      tasks,
+    });
+  }
+
+  async parentMissingWork(user: RequestUser, childId: string) {
+    await this.assertParentOwnsChild(user, childId);
+    const tasks = await this.learningTasksFor(childId);
+    return { childId, assignments: tasks.assignments, quizzes: tasks.quizzes };
+  }
+
+  private async assertParentOwnsChild(user: RequestUser, childId: string): Promise<void> {
+    if (user.role === 'SYSTEM_ADMIN') return;
+    const children = await this.parentChildIds(user);
+    if (!children.includes(childId)) throw new ForbiddenException('You can only view your own children');
   }
 
   async internalStudentCourses(studentId: string) {
@@ -1428,14 +1757,17 @@ export class ElearningService {
     const fileName = this.required(body.fileName, 'fileName').replace(/[^\w.\- ]+/g, '_');
     const mimeType = this.optionalString(body.mimeType) || 'application/octet-stream';
     const base64 = this.required(body.contentBase64, 'contentBase64');
-    const domain = this.optionalString(body.domain) || 'materials';
+    // Only known folders are allowed (a free-form value could escape the storage directory),
+    // and learners can only ever write into the submissions folder.
+    const requestedDomain = this.optionalString(body.domain) || 'materials';
+    const domain = user.role === 'STUDENT' ? 'submissions' : ['materials', 'submissions', 'assignments'].includes(requestedDomain) ? requestedDomain : 'materials';
     const maxUploadBytes = Number(this.config.get<string>('ELEARNING_MAX_UPLOAD_MB', '50')) * 1024 * 1024;
     const fileBuffer = Buffer.from(base64, 'base64');
     if (fileBuffer.byteLength > maxUploadBytes) {
       throw new BadRequestException(`Upload exceeds ${(maxUploadBytes / (1024 * 1024)).toFixed(0)} MB limit`);
     }
     const storageRoot = normalize(this.config.get<string>('ELEARNING_STORAGE_DIR', './storage/elearning'));
-    const relativeKey = `${domain}/${Date.now()}-${fileName}`;
+    const relativeKey = `${domain}/${Date.now()}-${user.id.slice(0, 8)}-${fileName}`;
     const absolutePath = join(storageRoot, relativeKey);
     await mkdir(join(storageRoot, domain), { recursive: true });
     await writeFile(absolutePath, fileBuffer);
@@ -1680,7 +2012,14 @@ export class ElearningService {
       await this.assertStudentEnrollment(courseId, await this.resolveStudentId(user));
       return;
     }
-    if (user.role === 'PARENT') return;
+    if (user.role === 'PARENT') {
+      const children = await this.parentChildIds(user);
+      const enrolled = children.length
+        ? await this.prisma.courseEnrollment.count({ where: { courseSpaceId: courseId, studentId: { in: children }, status: 'ACTIVE' } })
+        : 0;
+      if (!enrolled) throw new ForbiddenException('None of your children are enrolled in this course');
+      return;
+    }
     throw new ForbiddenException('Forbidden');
   }
 
@@ -1744,6 +2083,215 @@ export class ElearningService {
     return JSON.parse(JSON.stringify(value, (_key, current) => (
       typeof current === 'bigint' ? current.toString() : current
     ))) as Prisma.InputJsonValue;
+  }
+
+
+  private isLearner(user: RequestUser): boolean {
+    return LEARNER_ROLES.includes(user.role);
+  }
+
+  /** Hides answer keys from learners. */
+  private sanitizeQuizForLearner<T extends { questions?: Array<Record<string, any>> }>(quiz: T): T {
+    if (!quiz.questions) return quiz;
+    return {
+      ...quiz,
+      questions: quiz.questions.map((q) => ({
+        ...q,
+        correctAnswer: undefined,
+        explanation: undefined,
+        options: (q.options ?? []).map((o: Record<string, unknown>) => ({ ...o, isCorrect: undefined })),
+      })),
+    };
+  }
+
+  /** Student ids of the children linked to a parent account. */
+  private async parentChildIds(user: RequestUser): Promise<string[]> {
+    const payload = await this.studentGet(user, `/students/internal/guardian-by-auth/${user.id}`).catch(() => []);
+    return this.arrayPayload(payload, ['children', 'items', 'students'])
+      .map((child) => this.stringFrom(child.id ?? child.studentId))
+      .filter(Boolean);
+  }
+
+  /** Display names for student ids (student-service) keyed by student id. */
+  private async studentNames(user: RequestUser, studentIds: string[]): Promise<Map<string, { name: string; registrationNumber: string }>> {
+    const map = new Map<string, { name: string; registrationNumber: string }>();
+    const ids = [...new Set(studentIds.filter(Boolean))];
+    if (!ids.length) return map;
+    const payload = await this.studentGet(user, '/students/internal/by-ids', { ids: ids.join(',') }).catch(() => []);
+    for (const item of this.arrayPayload(payload, ['students', 'items'])) {
+      map.set(this.stringFrom(item.id), {
+        name: this.stringFrom(item.name) || `${this.stringFrom(item.firstName)} ${this.stringFrom(item.lastName)}`.trim(),
+        registrationNumber: this.stringFrom(item.registrationNumber),
+      });
+    }
+    return map;
+  }
+
+  /** Display names for auth user ids (teachers, parents, students) keyed by auth id. */
+  private async authNames(user: RequestUser, authIds: string[]): Promise<Map<string, string>> {
+    const map = new Map<string, string>();
+    const ids = [...new Set(authIds.filter(Boolean))];
+    if (!ids.length) return map;
+    const payload = await this.serviceGet(user, this.config.get<string>('AUTH_SERVICE_URL', 'http://localhost:3001'), '/api/v1/auth/internal/users-by-ids', { ids: ids.join(',') }).catch(() => null);
+    const unwrapped = this.unwrapPayload(payload) as { users?: Array<Record<string, unknown>> } | null;
+    for (const u of unwrapped?.users ?? []) {
+      map.set(this.stringFrom(u.id), `${this.stringFrom(u.firstName)} ${this.stringFrom(u.lastName)}`.trim());
+    }
+    return map;
+  }
+
+
+  private async assertQuizEditable(quizId: string): Promise<void> {
+    const attempts = await this.prisma.quizAttempt.count({ where: { quizId } });
+    if (attempts) throw new BadRequestException('Students have already attempted this quiz, so its questions can no longer be changed');
+  }
+
+  private attemptDeadline(startedAt: Date, timeLimitMinutes: number | null | undefined): string | null {
+    if (!timeLimitMinutes) return null;
+    return new Date(startedAt.getTime() + timeLimitMinutes * 60_000).toISOString();
+  }
+
+  private attemptExpired(startedAt: Date, timeLimitMinutes: number | null | undefined): boolean {
+    if (!timeLimitMinutes) return false;
+    return Date.now() > startedAt.getTime() + timeLimitMinutes * 60_000 + QUIZ_GRACE_SECONDS * 1000;
+  }
+
+  private assertQuestionComplete(q: { type: string; options?: Array<{ text?: string; isCorrect?: boolean }>; correctAnswer?: string | null }, position: number): void {
+    const label = `Question ${position}`;
+    if (q.type === 'MULTIPLE_CHOICE') {
+      const options = (q.options ?? []).filter((o) => String(o.text ?? '').trim());
+      if (options.length < 2) throw new BadRequestException(`${label}: add at least two options`);
+      const correct = options.filter((o) => o.isCorrect).length;
+      if (correct !== 1) throw new BadRequestException(`${label}: mark exactly one option as correct`);
+    }
+    if (q.type === 'TRUE_FALSE' && !['true', 'false'].includes(String(q.correctAnswer ?? '').toLowerCase())) {
+      throw new BadRequestException(`${label}: choose whether the statement is true or false`);
+    }
+  }
+
+  private async loadAttempt(user: RequestUser, attemptId: string) {
+    const attempt = await this.prisma.quizAttempt.findUnique({ where: { id: attemptId }, include: { quiz: true } });
+    if (!attempt) throw new NotFoundException('Attempt not found');
+    if (user.role === 'STUDENT' && attempt.studentId !== await this.resolveStudentId(user)) throw new ForbiddenException('Forbidden');
+    return attempt;
+  }
+
+  /** Grades what can be graded automatically and closes the attempt. */
+  private async finishAttempt(attemptId: string): Promise<void> {
+    const attempt = await this.prisma.quizAttempt.findUnique({ where: { id: attemptId }, include: { quiz: true } });
+    if (!attempt || attempt.status !== 'IN_PROGRESS') return;
+    const questions = await this.prisma.quizQuestion.findMany({ where: { quizId: attempt.quizId }, include: { options: true } });
+    const answers = await this.prisma.quizAnswer.findMany({ where: { attemptId } });
+    for (const question of questions) {
+      if (question.type === 'SHORT_ANSWER') continue;
+      const answer = answers.find((item) => item.questionId === question.id);
+      if (!answer) continue;
+      const points = Number(question.points);
+      const isCorrect = question.type === 'TRUE_FALSE'
+        ? String(answer.textAnswer ?? '').toLowerCase() === String(question.correctAnswer ?? '').toLowerCase()
+        : question.options.some((option) => option.id === answer.selectedOptionId && option.isCorrect);
+      await this.prisma.quizAnswer.update({ where: { id: answer.id }, data: { isCorrect, scoreAwarded: isCorrect ? points : 0 } });
+    }
+    const now = new Date();
+    const needsManual = questions.some((q) => q.type === 'SHORT_ANSWER' && answers.some((a) => a.questionId === q.id && (a.textAnswer ?? '').trim()));
+    await this.prisma.quizAttempt.update({
+      where: { id: attemptId },
+      data: {
+        status: needsManual ? 'SUBMITTED' : 'AUTO_GRADED',
+        submittedAt: now,
+        timeTakenSeconds: Math.round((now.getTime() - attempt.startedAt.getTime()) / 1000),
+      },
+    });
+    await this.recomputeAttemptTotals(attemptId);
+    const done = await this.prisma.quizAttempt.findUnique({ where: { id: attemptId } });
+    await this.rabbitmq.publish('quiz.result', {
+      attemptId,
+      studentId: attempt.studentId,
+      quizId: attempt.quizId,
+      courseId: attempt.courseSpaceId,
+      totalScore: done?.totalScore,
+      maxScore: done?.maxScore,
+      percentScore: done?.percentScore,
+      isPassed: done?.isPassed,
+    });
+  }
+
+  /** Recomputes totals from the stored per-answer scores; flips to MANUALLY_GRADED once every written answer has a mark. */
+  private async recomputeAttemptTotals(attemptId: string): Promise<void> {
+    const attempt = await this.prisma.quizAttempt.findUnique({ where: { id: attemptId }, include: { quiz: true } });
+    if (!attempt) return;
+    const questions = await this.prisma.quizQuestion.findMany({ where: { quizId: attempt.quizId } });
+    const answers = await this.prisma.quizAnswer.findMany({ where: { attemptId } });
+    const maxScore = questions.reduce((sum, q) => sum + Number(q.points), 0);
+    const totalScore = answers.reduce((sum, a) => sum + Number(a.scoreAwarded ?? 0), 0);
+    const percentScore = maxScore ? (totalScore / maxScore) * 100 : 0;
+    const pendingManual = questions.some((q) => q.type === 'SHORT_ANSWER' && answers.some((a) => a.questionId === q.id && (a.textAnswer ?? '').trim() && a.scoreAwarded == null));
+    const hasManual = questions.some((q) => q.type === 'SHORT_ANSWER' && answers.some((a) => a.questionId === q.id && (a.textAnswer ?? '').trim()));
+    const status: AttemptStatus = attempt.status === 'IN_PROGRESS'
+      ? 'IN_PROGRESS'
+      : pendingManual ? 'SUBMITTED' : hasManual ? 'MANUALLY_GRADED' : 'AUTO_GRADED';
+    await this.prisma.quizAttempt.update({
+      where: { id: attemptId },
+      data: {
+        totalScore,
+        maxScore,
+        percentScore,
+        status,
+        isPassed: attempt.quiz.passingScore == null || pendingManual ? null : percentScore >= Number(attempt.quiz.passingScore),
+      },
+    });
+  }
+
+  /** Attempt with answers; learners only see the answer key when the quiz allows it. */
+  private async attemptResultFor(user: RequestUser, attemptId: string) {
+    const attempt = await this.prisma.quizAttempt.findUnique({ where: { id: attemptId }, include: { quiz: true, answers: true } });
+    if (!attempt) throw new NotFoundException('Attempt not found');
+    const policy = attempt.quiz.showCorrectAfter;
+    const reveal = !this.isLearner(user)
+      || (attempt.status !== 'IN_PROGRESS' && (policy === 'IMMEDIATELY' || (policy === 'AFTER_CLOSE' && attempt.quiz.status === 'CLOSED')));
+    const { quiz, answers, ...rest } = attempt;
+    const allQuestions = await this.prisma.quizQuestion.findMany({ where: { quizId: attempt.quizId }, include: { options: true }, orderBy: { orderIndex: 'asc' } });
+    const base = {
+      ...rest,
+      score: rest.totalScore,
+      reveal,
+      expiresAt: attempt.status === 'IN_PROGRESS' ? this.attemptDeadline(attempt.startedAt, quiz.timeLimitMinutes) : null,
+      passingScore: quiz.passingScore,
+    };
+    if (reveal) {
+      const questions = allQuestions;
+      return this.toResponseValue({
+        ...base,
+        answers: this.describeAnswers(allQuestions, answers, true),
+        review: questions.map((q) => ({
+          questionId: q.id,
+          prompt: q.prompt,
+          type: q.type,
+          points: q.points,
+          explanation: q.explanation,
+          correctAnswer: q.type === 'MULTIPLE_CHOICE' ? q.options.find((o) => o.isCorrect)?.text : q.correctAnswer,
+          correctOptionId: q.options.find((o) => o.isCorrect)?.id,
+        })),
+      });
+    }
+    // Scores stay visible; per-question correctness does not.
+    return this.toResponseValue({
+      ...base,
+      answers: this.describeAnswers(allQuestions, answers, attempt.status === 'IN_PROGRESS'),
+    });
+  }
+
+  /** Adds the question text, type and marks to each answer so clients need no second lookup. */
+  private describeAnswers(
+    questions: Array<{ id: string; prompt: string; type: string; points: unknown }>,
+    answers: Array<{ questionId: string; scoreAwarded?: unknown; isCorrect?: boolean | null } & Record<string, unknown>>,
+    withMarks: boolean,
+  ) {
+    return answers.map((a) => {
+      const q = questions.find((item) => item.id === a.questionId);
+      const marked = withMarks ? { score: a.scoreAwarded == null ? undefined : Number(a.scoreAwarded) } : { isCorrect: undefined, scoreAwarded: undefined };
+      return { ...a, ...marked, prompt: q?.prompt, questionType: q?.type, maxScore: q ? Number(q.points) : undefined };
+    });
   }
 
   private toResponseValue<T>(value: T): T {

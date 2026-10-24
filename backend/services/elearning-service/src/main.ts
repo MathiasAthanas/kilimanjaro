@@ -8,6 +8,11 @@ import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 
+// Prisma returns BigInt for byte sizes; JSON cannot serialise it natively.
+(BigInt.prototype as unknown as { toJSON: () => number }).toJSON = function () {
+  return Number(this);
+};
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const config = app.get(ConfigService);

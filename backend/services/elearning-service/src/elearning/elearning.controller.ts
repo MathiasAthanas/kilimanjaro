@@ -282,13 +282,14 @@ export class ElearningController {
 
   @Get('files/:domain/:filename')
   @Roles(...ALL)
-  @Header('Cache-Control', 'max-age=86400')
+  @Header('Cache-Control', 'private, max-age=3600')
   async serveFile(
-    @CurrentUser() _user: RequestUser,
+    @CurrentUser() user: RequestUser,
     @Param('domain') domain: string,
     @Param('filename') filename: string,
     @Res({ passthrough: true }) res: Response,
   ): Promise<StreamableFile> {
+    await this.service.assertFileAccess(user, domain, filename);
     const { stream, filename: name, mimeType } = await this.service.readStorageFile(domain, decodeURIComponent(filename));
     res.setHeader('Content-Type', mimeType);
     res.setHeader('Content-Disposition', `inline; filename="${name}"`);
@@ -616,25 +617,37 @@ export class ElearningController {
   @Get('student/tasks')
   @Roles('STUDENT', 'SYSTEM_ADMIN')
   studentTasks(@CurrentUser() user: RequestUser) {
-    return this.service.studentSummary(user);
+    return this.service.studentTasks(user);
+  }
+
+  @Get('assignments/:assignmentId')
+  @Roles(...ALL)
+  assignmentById(@CurrentUser() user: RequestUser, @Param('assignmentId') assignmentId: string) {
+    return this.service.assignmentById(user, assignmentId);
+  }
+
+  @Get('quizzes/:quizId')
+  @Roles(...ALL)
+  quizById(@CurrentUser() user: RequestUser, @Param('quizId') quizId: string) {
+    return this.service.quizById(user, quizId);
   }
 
   @Get('analytics/parent/:childId/summary')
   @Roles('PARENT', 'SYSTEM_ADMIN')
-  parentSummary(@Param('childId') childId: string) {
-    return this.service.parentSummary(childId);
+  parentSummary(@CurrentUser() user: RequestUser, @Param('childId') childId: string) {
+    return this.service.parentSummary(user, childId);
   }
 
   @Get('parent/:childId/learning-summary')
   @Roles('PARENT', 'SYSTEM_ADMIN')
-  parentLearningSummary(@Param('childId') childId: string) {
-    return this.service.parentSummary(childId);
+  parentLearningSummary(@CurrentUser() user: RequestUser, @Param('childId') childId: string) {
+    return this.service.parentSummary(user, childId);
   }
 
   @Get('parent/:childId/missing-work')
   @Roles('PARENT', 'SYSTEM_ADMIN')
-  parentMissingWork(@Param('childId') childId: string) {
-    return this.service.parentSummary(childId);
+  parentMissingWork(@CurrentUser() user: RequestUser, @Param('childId') childId: string) {
+    return this.service.parentMissingWork(user, childId);
   }
 
   @UseGuards(InternalApiGuard)

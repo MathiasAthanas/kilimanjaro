@@ -43,6 +43,21 @@ export class InternalController {
     };
   }
 
+  @Get('by-ids')
+  @ApiOperation({ summary: 'Resolve display details for a list of student ids' })
+  async byIds(@Query('ids') ids?: string) {
+    const list = String(ids ?? '').split(',').map((id) => id.trim()).filter(Boolean).slice(0, 500);
+    if (!list.length) return [];
+    const students = await this.prisma.student.findMany({
+      where: { id: { in: list } },
+      select: { id: true, authUserId: true, firstName: true, middleName: true, lastName: true, registrationNumber: true },
+    });
+    return students.map((s) => ({
+      ...s,
+      name: [s.firstName, s.middleName, s.lastName].filter(Boolean).join(' '),
+    }));
+  }
+
   @Get('guardian-by-auth/:authUserId')
   @ApiOperation({ summary: 'List a guardian\'s children (by guardian auth user id)' })
   async guardianByAuth(@Param('authUserId') authUserId: string) {
