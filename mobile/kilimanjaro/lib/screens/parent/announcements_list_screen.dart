@@ -80,24 +80,6 @@ class ParentAnnouncementsListScreen extends ConsumerWidget {
                     onTap: () =>
                         context.push('/parent/announcements/${item.id}'),
                   ),
-                  if (item.id == 'ann-science-exhibition')
-                    const Positioned(
-                      right: 28,
-                      top: 20,
-                      child: _ChildTagChip(
-                        label: "Amina's class",
-                        color: AppColors.skyBlue500,
-                      ),
-                    ),
-                  if (item.id == 'ann-jabir-parents-meeting')
-                    const Positioned(
-                      right: 28,
-                      top: 20,
-                      child: _ChildTagChip(
-                        label: "Jabir's class",
-                        color: AppColors.accentIndigo,
-                      ),
-                    ),
                 ],
               ),
             ),
@@ -126,32 +108,6 @@ class _FilterChip extends StatelessWidget {
         label: Text(label),
         selected: active,
         onSelected: (_) => onTap(),
-      ),
-    );
-  }
-}
-
-class _ChildTagChip extends StatelessWidget {
-  const _ChildTagChip({required this.label, required this.color});
-
-  final String label;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        label,
-        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-          color: color,
-          fontSize: 10,
-          fontWeight: FontWeight.w800,
-        ),
       ),
     );
   }

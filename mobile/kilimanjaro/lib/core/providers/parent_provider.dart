@@ -11,10 +11,8 @@ import '../../models/receipt_model.dart';
 import '../../models/report_card_model.dart';
 import '../../models/subject_result_model.dart';
 import '../../models/term_result_model.dart';
-import '../config/app_config.dart';
 import '../services/api/api_parent_data_service.dart';
 import '../services/interfaces/parent_service_interface.dart';
-import '../services/mock/mock_parent_data_service.dart';
 import 'auth_provider.dart';
 
 class ParentPaymentEntry {
@@ -30,7 +28,6 @@ class ParentPaymentEntry {
 }
 
 final parentServiceProvider = Provider<IParentService>((ref) {
-  if (AppConfig.useMockData) return MockParentDataService();
   return ApiParentDataService(ref.watch(secureStorageProvider));
 });
 
@@ -48,14 +45,12 @@ final activeParentChildIdProvider = StateProvider<String>((ref) {
 final resolvedActiveChildIdProvider = Provider<String>((ref) {
   final explicit = ref.watch(activeParentChildIdProvider);
   if (explicit.isNotEmpty) return explicit;
-  if (AppConfig.useMockData) return MockParentDataService.aminaId;
   return ref.watch(parentChildrenProvider).valueOrNull?.firstOrNull?.id ?? '';
 });
 
 final activeParentChildProvider = FutureProvider<ChildSummary?>((ref) async {
   final childId = ref.watch(resolvedActiveChildIdProvider);
   if (childId.isEmpty) return null;
-  await Future<void>.delayed(const Duration(milliseconds: 500));
   return ref.watch(parentServiceProvider).getChild(childId);
 });
 
@@ -67,7 +62,6 @@ final parentTermsProvider =
 final activeParentTermsProvider = FutureProvider<List<TermResultModel>>((ref) async {
   final childId = ref.watch(resolvedActiveChildIdProvider);
   if (childId.isEmpty) return [];
-  await Future<void>.delayed(const Duration(milliseconds: 500));
   return ref.watch(parentServiceProvider).getTerms(childId);
 });
 
@@ -102,7 +96,6 @@ final parentAttendanceProvider =
 final activeParentAttendanceProvider = FutureProvider<List<AttendanceRecordModel>>((ref) async {
   final childId = ref.watch(resolvedActiveChildIdProvider);
   if (childId.isEmpty) return [];
-  await Future<void>.delayed(const Duration(milliseconds: 500));
   return ref.watch(parentServiceProvider).getAttendanceRecords(childId);
 });
 
@@ -114,7 +107,6 @@ final parentAlertsProvider =
 final activeParentAlertsProvider = FutureProvider<List<PerformanceAlertModel>>((ref) async {
   final childId = ref.watch(resolvedActiveChildIdProvider);
   if (childId.isEmpty) return [];
-  await Future<void>.delayed(const Duration(milliseconds: 500));
   return ref.watch(parentServiceProvider).getAlerts(childId);
 });
 
@@ -122,53 +114,64 @@ final activeParentSnapshotsProvider =
     FutureProvider<List<PerformanceSnapshotModel>>((ref) async {
   final childId = ref.watch(resolvedActiveChildIdProvider);
   if (childId.isEmpty) return [];
-  await Future<void>.delayed(const Duration(milliseconds: 500));
   return ref.watch(parentServiceProvider).getPerformanceSnapshots(childId);
 });
 
-final activeParentInvoiceProvider = FutureProvider<InvoiceModel>((ref) async {
+/// Every invoice of one child (newest first) with line items and payments.
+final parentInvoicesProvider = FutureProvider.family<List<InvoiceModel>, String>((ref, childId) async {
+  if (childId.isEmpty) return const [];
+  return ref.watch(parentServiceProvider).getInvoices(childId);
+});
+
+final activeParentInvoicesProvider = FutureProvider<List<InvoiceModel>>((ref) async {
   final childId = ref.watch(resolvedActiveChildIdProvider);
-  await Future<void>.delayed(const Duration(milliseconds: 500));
-  return ref.watch(parentServiceProvider).getCurrentInvoice(childId);
+  if (childId.isEmpty) return const [];
+  return ref.watch(parentInvoicesProvider(childId).future);
+});
+
+/// The invoice to show first for the selected child; null when the child has not been billed yet.
+final activeParentInvoiceProvider = FutureProvider<InvoiceModel?>((ref) async {
+  final all = await ref.watch(activeParentInvoicesProvider.future);
+  return currentInvoiceOf(all);
+});
+
+/// Every open invoice across all children (no line items): the source of every family total.
+final parentAllInvoicesProvider = FutureProvider<List<InvoiceModel>>((ref) async {
+  return ref.watch(parentServiceProvider).getAllInvoices();
+});
+
+/// What is still owed per child id, from the invoices themselves so it always agrees with them.
+final parentOutstandingByChildProvider = FutureProvider<Map<String, double>>((ref) async {
+  final invoices = await ref.watch(parentAllInvoicesProvider.future);
+  final totals = <String, double>{};
+  for (final i in invoices.where((i) => i.isOpen)) {
+    totals[i.studentId] = (totals[i.studentId] ?? 0) + i.outstandingAmount;
+  }
+  return totals;
 });
 
 final parentCombinedOutstandingProvider = FutureProvider<double>((ref) async {
-  return ref.watch(parentServiceProvider).getCombinedOutstanding();
+  final byChild = await ref.watch(parentOutstandingByChildProvider.future);
+  return byChild.values.fold<double>(0, (a, b) => a + b);
 });
 
+/// Receipts that still stand, each tied to its child by student id (never by name).
 final parentReceiptsProvider = FutureProvider<List<ParentPaymentEntry>>((ref) async {
   final receipts = await ref.watch(parentServiceProvider).getReceipts();
   final children = await ref.watch(parentChildrenProvider.future);
-
-  if (AppConfig.useMockData) {
-    final amina = children.where((c) => c.id == MockParentDataService.aminaId).firstOrNull;
-    final jabir = children.where((c) => c.id == MockParentDataService.jabirId).firstOrNull;
-    final byInvoice = <String, ChildSummary>{
-      if (amina != null) 'INV-2026-T1-00142': amina,
-      if (amina != null) 'INV-2025-T2-00142': amina,
-      if (amina != null) 'INV-2025-T1-00142': amina,
-      if (jabir != null) 'INV-2026-T1-00089': jabir,
-    };
-    return receipts
-        .map((r) {
-          final child = byInvoice[r.invoiceId];
-          if (child == null) return null;
-          return ParentPaymentEntry(receipt: r, childId: child.id, childName: child.name);
-        })
-        .whereType<ParentPaymentEntry>()
-        .toList();
-  }
-
-  // Real mode: match receipt to child by student name (receipt.issuedBy = studentName)
-  final byName = <String, ChildSummary>{for (final c in children) c.name: c};
-  return receipts.map((r) {
-    final child = byName[r.issuedBy];
-    return ParentPaymentEntry(
-      receipt: r,
-      childId: child?.id ?? '',
-      childName: child?.name ?? r.issuedBy,
-    );
-  }).toList();
+  final byId = <String, ChildSummary>{for (final c in children) c.id: c};
+  return receipts
+      .where((r) => !r.isVoided)
+      .map((r) {
+        final child = byId[r.studentId];
+        return ParentPaymentEntry(
+          receipt: r,
+          childId: r.studentId,
+          childName: child?.name ?? r.studentName,
+        );
+      })
+      .toList()
+    ..sort((a, b) => b.receipt.date.compareTo(a.receipt.date));
 });
 
 final parentAnnouncementsProvider = FutureProvider<List<AnnouncementModel>>((ref) async {
@@ -189,7 +192,6 @@ final filteredParentAnnouncementsProvider = Provider<List<AnnouncementModel>>((r
 final parentReportCardsProvider = FutureProvider<List<ReportCardModel>>((ref) async {
   final childId = ref.watch(resolvedActiveChildIdProvider);
   if (childId.isEmpty) return [];
-  await Future<void>.delayed(const Duration(milliseconds: 500));
   final terms = await ref.watch(parentServiceProvider).getTerms(childId);
   final service = ref.watch(parentServiceProvider);
   final cards = await Future.wait(
@@ -202,7 +204,6 @@ final parentReportCardByIdProvider =
     FutureProvider.family<ReportCardModel?, String>((ref, termId) async {
   final childId = ref.watch(resolvedActiveChildIdProvider);
   if (childId.isEmpty) return null;
-  await Future<void>.delayed(const Duration(milliseconds: 500));
   return ref.watch(parentServiceProvider).getReportCard(childId, termId);
 });
 
@@ -210,7 +211,6 @@ final parentTermByIdProvider =
     FutureProvider.family<TermResultModel?, String>((ref, termId) async {
   final childId = ref.watch(resolvedActiveChildIdProvider);
   if (childId.isEmpty) return null;
-  await Future<void>.delayed(const Duration(milliseconds: 500));
   return ref.watch(parentServiceProvider).getTerm(childId, termId);
 });
 
@@ -228,13 +228,11 @@ final parentPerformanceTrendProvider =
     FutureProvider.family<PerformanceTrendModel?, String>((ref, subjectId) async {
   final childId = ref.watch(resolvedActiveChildIdProvider);
   if (childId.isEmpty) return null;
-  await Future<void>.delayed(const Duration(milliseconds: 500));
   return ref.watch(parentServiceProvider).getPerformanceTrend(childId, subjectId);
 });
 
 final parentContactSchoolProvider = FutureProvider<ContactSchoolModel>((ref) async {
   final childId = ref.watch(resolvedActiveChildIdProvider);
-  await Future<void>.delayed(const Duration(milliseconds: 500));
   return ref.watch(parentServiceProvider).getContactSchool(childId);
 });
 

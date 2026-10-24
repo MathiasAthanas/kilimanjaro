@@ -5,7 +5,8 @@ import 'package:go_router/go_router.dart';
 import '../../core/providers/parent_provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../models/performance_snapshot_model.dart';
-import '../../widgets/charts/ks_line_chart.dart';
+import '../../models/term_result_model.dart';
+import '../../widgets/charts/ks_term_trend.dart';
 import '../../widgets/charts/ks_sparkline.dart';
 import '../../widgets/common/ks_app_bar.dart';
 import '../../widgets/common/ks_empty_state.dart';
@@ -57,21 +58,10 @@ class PerformanceTrendsScreen extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const KSLineChart(
-                      dataPoints: [
-                        ChartPoint(x: 0, y: 70.6),
-                        ChartPoint(x: 1, y: 74.5),
-                        ChartPoint(x: 2, y: 79.3),
-                      ],
-                      labels: ['T1', 'T2', 'T1'],
-                      lineColor: AppColors.skyBlue500,
-                      height: 180,
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      'Steadily improving since joining in 2024',
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
+                    Consumer(builder: (context, ref, _) {
+                      final terms = ref.watch(activeParentTermsProvider).valueOrNull ?? const <TermResultModel>[];
+                      return KSTermTrend(terms: terms, name: child?.firstName ?? 'Overall');
+                    }),
                     const SizedBox(height: 14),
                     Wrap(
                       spacing: 8,

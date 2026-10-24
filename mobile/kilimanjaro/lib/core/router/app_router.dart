@@ -64,7 +64,7 @@ import '../../screens/admissions/admissions_screens.dart';
 import '../../screens/staff/staff_overview_screen.dart';
 import '../../screens/principal/principal_screens.dart';
 import '../../screens/utility/force_update_screen.dart';
-import '../../screens/utility/shell_demo_screen.dart';
+import '../../screens/utility/not_available_screen.dart';
 import '../../widgets/shell/app_shell.dart';
 import 'shell_route_specs.dart';
 import 'transitions.dart';
@@ -406,7 +406,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       path: path,
       pageBuilder: (context, state) => NoTransitionPage(
         key: state.pageKey,
-        child: ShellDemoScreen(role: role, title: title, subtitle: subtitle),
+        child: NotAvailableScreen(role: role, title: title, subtitle: subtitle),
       ),
     );
   }
@@ -433,7 +433,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               return page(const hod_screens.HodTeacherListScreen(), state);
             }
             return page(
-              ShellDemoScreen(
+              NotAvailableScreen(
                 role: role,
                 title: titleForSegment(slug),
                 subtitle: 'Teacher directory prepared for $prefix role flow.',
@@ -445,7 +445,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               return page(const hod_screens.DepartmentOverviewScreen(), state);
             }
             return page(
-              ShellDemoScreen(
+              NotAvailableScreen(
                 role: role,
                 title: titleForSegment(slug),
                 subtitle: 'Subject analytics prepared for $prefix role flow.',
@@ -457,7 +457,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               return page(const hod_screens.HodInterventionsScreen(), state);
             }
             return page(
-              ShellDemoScreen(
+              NotAvailableScreen(
                 role: role,
                 title: titleForSegment(slug),
                 subtitle:
@@ -479,7 +479,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               );
             }
             return page(
-              ShellDemoScreen(
+              NotAvailableScreen(
                 role: role,
                 title: titleForSegment(slug),
                 subtitle: 'Course spaces prepared for $prefix role flow.',
@@ -575,7 +575,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             return page(const SearchScreen(), state);
           default:
             return page(
-              ShellDemoScreen(
+              NotAvailableScreen(
                 role: role,
                 title: titleForSegment(slug),
                 subtitle: 'Drawer destination prepared for $prefix role flow.',
@@ -1335,9 +1335,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     ],
     errorPageBuilder: (context, state) => AppTransitions.utility(
       key: state.pageKey,
-      child: const ShellDemoScreen(
+      child: const NotAvailableScreen(
         role: UserRole.student,
-        title: 'Route Not Found',
+        title: 'Page not found',
         subtitle: 'The requested destination could not be resolved.',
       ),
     ),

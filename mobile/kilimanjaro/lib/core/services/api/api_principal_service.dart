@@ -101,6 +101,10 @@ class PrincipalPayment {
     required this.reference,
     required this.requestedAt,
     this.notes,
+    this.studentName = '',
+    this.registrationNumber = '',
+    this.invoiceNumber = '',
+    this.paymentNumber = '',
   });
 
   final String approvalId;
@@ -109,6 +113,10 @@ class PrincipalPayment {
   final String reference;
   final DateTime? requestedAt;
   final String? notes;
+  final String studentName;
+  final String registrationNumber;
+  final String invoiceNumber;
+  final String paymentNumber;
 
   factory PrincipalPayment.fromJson(Map<String, dynamic> json) {
     final payment = json['payment'] is Map ? Map<String, dynamic>.from(json['payment'] as Map) : const <String, dynamic>{};
@@ -119,7 +127,11 @@ class PrincipalPayment {
       method: payment['method'] as String? ?? '',
       reference: payment['referenceNumber'] as String? ?? payment['reference'] as String? ?? '',
       requestedAt: requested != null ? DateTime.tryParse(requested) : null,
-      notes: json['notes'] as String?,
+      notes: (json['notes'] as String?) ?? (payment['notes'] as String?),
+      studentName: json['studentName'] as String? ?? '',
+      registrationNumber: json['registrationNumber'] as String? ?? '',
+      invoiceNumber: json['invoiceNumber'] as String? ?? '',
+      paymentNumber: payment['paymentNumber'] as String? ?? '',
     );
   }
 }

@@ -1454,7 +1454,6 @@ class _CreateAnnouncementScreenState
     };
     try {
       final service = ref.read(teacherServiceProvider);
-      if (service == null) throw Exception('Sign in to publish.');
       await service.createAnnouncement(data);
       if (!mounted) return;
       ref.read(snackbarProvider.notifier).show('Announcement published.');
@@ -1621,7 +1620,6 @@ class _CreateInterventionScreenState
     };
     try {
       final service = ref.read(teacherServiceProvider);
-      if (service == null) throw Exception('Sign in to save.');
       await service.createIntervention(data);
       if (!mounted) return;
       ref.read(snackbarProvider.notifier).show('Intervention logged.');

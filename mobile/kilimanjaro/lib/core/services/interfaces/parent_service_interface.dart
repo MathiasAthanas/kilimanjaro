@@ -19,12 +19,15 @@ abstract class IParentService {
   Future<List<PerformanceAlertModel>> getAlerts(String childId);
   Future<List<PerformanceSnapshotModel>> getPerformanceSnapshots(String childId);
   Future<PerformanceTrendModel?> getPerformanceTrend(String childId, String subjectId);
-  Future<InvoiceModel> getCurrentInvoice(String childId);
+  /// Every invoice for one child, newest first, with line items and payments.
+  Future<List<InvoiceModel>> getInvoices(String childId);
+
+  /// Invoices for all of the parent's children (no line items), used for family totals.
+  Future<List<InvoiceModel>> getAllInvoices();
   Future<InvoiceModel?> getInvoiceById(String invoiceId);
   Future<ReceiptModel?> getReceipt(String receiptId);
   Future<List<ReceiptModel>> getReceipts();
   Future<List<AnnouncementModel>> getAnnouncements();
   Future<ContactSchoolModel> getContactSchool(String childId);
-  Future<double> getCombinedOutstanding();
   Future<Map<String, double>> getClassAverages(String childId, String termId);
 }

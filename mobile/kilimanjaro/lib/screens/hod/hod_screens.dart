@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/providers/hod_extra_provider.dart';
 import '../../core/providers/hod_provider.dart';
+import '../../core/network/api_failure.dart';
 import '../../core/providers/snackbar_provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../models/hod_models.dart';
@@ -187,7 +188,7 @@ class MarksReviewApprovalScreen extends ConsumerWidget {
     if (item == null) {
       return const Scaffold(body: KSEmptyState(title: 'Assessment not found'));
     }
-    final rows = _sampleRowsFor(item);
+    final marksAsync = ref.watch(hodAssessmentMarksProvider(assessmentId));
     return Scaffold(
       appBar: KSAppBar(
         title: '${item.classLabel} ${item.assessmentType}',
@@ -208,8 +209,28 @@ class MarksReviewApprovalScreen extends ConsumerWidget {
                     'The class average is below threshold. Confirm outliers before approval.',
               ),
             ),
-          const HodSectionTitle(title: 'Sample Mark Rows'),
-          ...rows.map((row) => _MarkRow(row: row, maxScore: item.maxScore)),
+          const HodSectionTitle(title: 'Marks sheet'),
+          marksAsync.when(
+            loading: () => const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator())),
+            error: (e, _) => HodCard(
+              child: _IconTextRow(
+                icon: Icons.error_outline_rounded,
+                color: AppColors.accentRose,
+                title: 'Could not load the marks',
+                subtitle: ApiFailure.from(e).message,
+              ),
+            ),
+            data: (rows) => rows.isEmpty
+                ? HodCard(
+                    child: _IconTextRow(
+                      icon: Icons.info_outline_rounded,
+                      color: AppColors.skyBlue600,
+                      title: 'No marks entered',
+                      subtitle: 'The teacher has not recorded any marks on this assessment.',
+                    ),
+                  )
+                : Column(children: [for (final row in rows) _MarkRow(row: row, maxScore: item.maxScore)]),
+          ),
           _ApprovalActions(item: item),
         ],
       ),
@@ -724,56 +745,53 @@ class _DepartmentPairingsScreenState
   }
 }
 
-class HodStudentPerformanceScreen extends StatelessWidget {
+class HodStudentPerformanceScreen extends ConsumerWidget {
   const HodStudentPerformanceScreen({super.key, required this.studentId});
 
   final String studentId;
 
   @override
-  Widget build(BuildContext context) {
-    final name = studentId == 'jabir'
-        ? 'Jabir Hassan'
-        : studentId == 'amina'
-        ? 'Amina Baraka Juma'
-        : 'Student Profile';
+  Widget build(BuildContext context, WidgetRef ref) {
+    // What the department knows about this learner: the open performance alerts raised for them.
+    final alerts = ref.watch(hodAlertsProvider).where((a) => a.studentId == studentId).toList();
     return Scaffold(
       appBar: KSAppBar(
-        title: name,
-        subtitle: 'Science performance profile prepared for HOD follow-up.',
+        title: alerts.isEmpty ? 'Learner alerts' : alerts.first.title,
+        subtitle: alerts.isEmpty
+            ? 'Performance alerts raised for this learner.'
+            : '${alerts.first.classLabel} · ${alerts.length} open alert${alerts.length == 1 ? '' : 's'}',
         variant: KSAppBarVariant.hero,
         actions: [
-          const _HeroCount(label: 'Risk', count: 3),
           IconButton(
-            onPressed: () => context.push(
-              '/teacher/interventions/create?studentId=$studentId',
-            ),
+            tooltip: 'Plan an intervention',
+            onPressed: () => context.push('/teacher/interventions/create?studentId=$studentId'),
             icon: const Icon(Icons.edit_note_rounded),
           ),
         ],
       ),
       body: HodSurface(
-        children: const [
-          HodCard(
-            child: _IconTextRow(
-              icon: Icons.psychology_alt_rounded,
-              color: AppColors.accentAmber,
-              title: 'Intervention recommended',
-              subtitle:
-                  'Assign structured revision and monitor the next two assessments.',
-            ),
-          ),
-          _StudentSubjectRow(
-            subject: 'Biology',
-            score: 48,
-            trend: 'Down 8 pts',
-          ),
-          _StudentSubjectRow(
-            subject: 'Chemistry',
-            score: 42,
-            trend: 'Down 14 pts',
-          ),
-          _StudentSubjectRow(subject: 'Physics', score: 56, trend: 'Stable'),
-        ],
+        children: alerts.isEmpty
+            ? [
+                HodCard(
+                  child: _IconTextRow(
+                    icon: Icons.verified_rounded,
+                    color: AppColors.accentEmerald,
+                    title: 'No open alerts',
+                    subtitle: 'There are no unresolved performance alerts for this learner.',
+                  ),
+                ),
+              ]
+            : [
+                for (final alert in alerts)
+                  HodCard(
+                    child: _IconTextRow(
+                      icon: Icons.psychology_alt_rounded,
+                      color: _severityColor(alert.severity),
+                      title: '${alert.subject} · ${alert.severity.name.toUpperCase()}',
+                      subtitle: alert.message,
+                    ),
+                  ),
+              ],
       ),
     );
   }
@@ -1731,12 +1749,16 @@ class _AlertCard extends ConsumerWidget {
       ),
     );
     if (confirmed != true || !context.mounted) return;
-    await Future<void>.delayed(const Duration(milliseconds: 600));
-    if (!context.mounted) return;
-    ref.read(hodAlertsControllerProvider.notifier).escalate(alert.id);
-    ref
-        .read(snackbarProvider.notifier)
-        .show('${alert.subject} alert escalated to Principal.');
+    try {
+      await ref.read(hodAlertsControllerProvider.notifier).escalate(alert.id);
+      ref
+          .read(snackbarProvider.notifier)
+          .show('${alert.subject} alert escalated to Principal.');
+    } catch (e) {
+      ref
+          .read(snackbarProvider.notifier)
+          .show(ApiFailure.from(e).message, isError: true);
+    }
   }
 }
 
@@ -2022,7 +2044,7 @@ class _ClassAnalyticsRow extends StatelessWidget {
 class _MarkRow extends StatelessWidget {
   const _MarkRow({required this.row, required this.maxScore});
 
-  final _SampleMark row;
+  final HodMarkRow row;
   final double maxScore;
 
   @override
@@ -2042,14 +2064,15 @@ class _MarkRow extends StatelessWidget {
                   row.name,
                   style: const TextStyle(fontWeight: FontWeight.w900),
                 ),
-                Text(row.regNo),
+                Text(row.registrationNumber),
               ],
             ),
           ),
           HodPill(
-            label:
-                '${row.score.toStringAsFixed(0)}/${maxScore.toStringAsFixed(0)}',
-            color: color,
+            label: row.isAbsent
+                ? 'ABSENT'
+                : '${row.score.toStringAsFixed(0)}/${maxScore.toStringAsFixed(0)}',
+            color: row.isAbsent ? AppColors.textMuted : color,
           ),
         ],
       ),
@@ -2057,47 +2080,6 @@ class _MarkRow extends StatelessWidget {
   }
 }
 
-class _StudentSubjectRow extends StatelessWidget {
-  const _StudentSubjectRow({
-    required this.subject,
-    required this.score,
-    required this.trend,
-  });
-
-  final String subject;
-  final double score;
-  final String trend;
-
-  @override
-  Widget build(BuildContext context) {
-    return HodCard(
-      child: Row(
-        children: [
-          _IconBadge(icon: Icons.science_rounded, color: _scoreColor(score)),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  subject,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                Text(trend),
-              ],
-            ),
-          ),
-          HodPill(
-            label: '${score.toStringAsFixed(0)}%',
-            color: _scoreColor(score),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 class _TimelineRow extends StatelessWidget {
   const _TimelineRow({
@@ -2296,24 +2278,6 @@ class _HeroCount extends StatelessWidget {
       ),
     );
   }
-}
-
-class _SampleMark {
-  const _SampleMark(this.name, this.regNo, this.score);
-  final String name;
-  final String regNo;
-  final double score;
-}
-
-List<_SampleMark> _sampleRowsFor(HodApproval item) {
-  final max = item.maxScore;
-  return [
-    _SampleMark('Amina Baraka Juma', 'KS/F3/021', max * 0.82),
-    _SampleMark('Jabir Hassan', 'KS/F3/029', max * 0.46),
-    _SampleMark('Neema Ally', 'KS/F3/017', max * 0.74),
-    _SampleMark('Brian Mwita', 'KS/F3/005', max * 0.58),
-    _SampleMark('Zawadi Paul', 'KS/F3/041', max * 0.91),
-  ];
 }
 
 Color _scoreColor(double score) {

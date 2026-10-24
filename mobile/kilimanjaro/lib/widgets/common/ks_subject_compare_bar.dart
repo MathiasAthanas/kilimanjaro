@@ -8,7 +8,7 @@ class KSSubjectCompareBar extends StatefulWidget {
     super.key,
     required this.subjectName,
     required this.studentScore,
-    required this.classAverage,
+    this.classAverage,
     required this.grade,
     required this.isPassing,
     this.onTap,
@@ -16,7 +16,8 @@ class KSSubjectCompareBar extends StatefulWidget {
 
   final String subjectName;
   final double studentScore;
-  final double classAverage;
+  /// Null when the school does not publish a class average; the class bar and legend are then left out.
+  final double? classAverage;
   final String grade;
   final bool isPassing;
   final VoidCallback? onTap;
@@ -56,7 +57,7 @@ class _KSSubjectCompareBarState extends State<KSSubjectCompareBar>
     final trackColor = isDark ? AppColors.darkCard : AppColors.offWhite;
     final studentColor = !widget.isPassing
         ? AppColors.accentRose
-        : widget.studentScore > widget.classAverage
+        : (widget.classAverage == null || widget.studentScore > widget.classAverage!)
             ? AppColors.accentEmerald
             : AppColors.accentAmber;
 
@@ -98,11 +99,12 @@ class _KSSubjectCompareBarState extends State<KSSubjectCompareBar>
                           borderRadius: BorderRadius.circular(4),
                         ),
                       ),
+                      if (widget.classAverage != null)
                       AnimatedBuilder(
                         animation: _classController,
                         builder: (context, child) => Container(
                           width: constraints.maxWidth *
-                              (widget.classAverage / 100) *
+                              (widget.classAverage! / 100) *
                               _classController.value,
                           decoration: BoxDecoration(
                             color: isDark ? const Color(0xFF1A3A5C) : AppColors.skyBlue200,
@@ -135,9 +137,10 @@ class _KSSubjectCompareBarState extends State<KSSubjectCompareBar>
               runSpacing: 6,
               children: [
                 _LegendDot(color: studentColor, label: '${widget.studentScore.toStringAsFixed(0)}% You'),
+                if (widget.classAverage != null)
                 _LegendDot(
                   color: isDark ? const Color(0xFF1A3A5C) : AppColors.skyBlue200,
-                  label: '${widget.classAverage.toStringAsFixed(0)}% Class Avg',
+                  label: '${widget.classAverage!.toStringAsFixed(0)}% Class Avg',
                 ),
               ],
             ),

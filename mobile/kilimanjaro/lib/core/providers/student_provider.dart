@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/announcement_model.dart';
 import '../../models/attendance_record_model.dart';
 import '../../models/invoice_model.dart';
-import '../../models/payment_model.dart';
 import '../../models/peer_pairing_model.dart';
 import '../../models/performance_snapshot_model.dart';
 import '../../models/performance_trend_model.dart';
@@ -11,14 +10,11 @@ import '../../models/receipt_model.dart';
 import '../../models/report_card_model.dart';
 import '../../models/subject_result_model.dart';
 import '../../models/term_result_model.dart';
-import '../config/app_config.dart';
 import '../services/api/api_student_data_service.dart';
 import '../services/interfaces/student_service_interface.dart';
-import '../services/mock/mock_student_data_service.dart';
 import 'auth_provider.dart';
 
 final studentServiceProvider = Provider<IStudentService>((ref) {
-  if (AppConfig.useMockData) return MockStudentDataService();
   return ApiStudentDataService(ref.watch(secureStorageProvider));
 });
 
@@ -90,12 +86,25 @@ final performanceSnapshotsProvider = FutureProvider<List<PerformanceSnapshotMode
   return ref.watch(studentServiceProvider).getPerformanceSnapshots();
 });
 
-final currentInvoiceProvider = FutureProvider<InvoiceModel>((ref) async {
-  return ref.watch(studentServiceProvider).getCurrentInvoice();
+/// Every invoice the student has ever been billed, newest first.
+final studentInvoicesProvider = FutureProvider<List<InvoiceModel>>((ref) async {
+  return ref.watch(studentServiceProvider).getInvoices();
 });
 
-final studentPaymentsProvider = FutureProvider<List<PaymentModel>>((ref) async {
-  return ref.watch(studentServiceProvider).getPayments();
+/// The invoice to show first (null when the student has not been billed yet).
+final currentInvoiceProvider = FutureProvider<InvoiceModel?>((ref) async {
+  final all = await ref.watch(studentInvoicesProvider.future);
+  return currentInvoiceOf(all);
+});
+
+final studentInvoiceByIdProvider = FutureProvider.family<InvoiceModel?, String>((ref, id) async {
+  return ref.watch(studentServiceProvider).getInvoiceById(id);
+});
+
+/// Receipts that still stand (a refunded payment's receipt is voided and hidden here).
+final studentReceiptsProvider = FutureProvider<List<ReceiptModel>>((ref) async {
+  final all = await ref.watch(studentServiceProvider).getReceipts();
+  return all.where((r) => !r.isVoided).toList()..sort((a, b) => b.date.compareTo(a.date));
 });
 
 final announcementsProvider = FutureProvider<List<AnnouncementModel>>((ref) async {

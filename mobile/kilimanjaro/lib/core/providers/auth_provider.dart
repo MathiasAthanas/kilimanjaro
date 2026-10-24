@@ -3,10 +3,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../models/auth_result.dart';
 import '../../models/auth_user.dart';
-import '../config/app_config.dart';
 import '../services/api/api_auth_service.dart';
 import '../services/interfaces/auth_service_interface.dart';
-import '../services/mock/mock_auth_service.dart';
 
 final secureStorageProvider = Provider<FlutterSecureStorage>((ref) {
   // Every API service and cached read is built on top of this provider, so
@@ -24,7 +22,6 @@ final sessionEpochProvider = StateProvider<int>((ref) => 0);
 
 final authServiceProvider = Provider<IAuthService>((ref) {
   final storage = ref.watch(secureStorageProvider);
-  if (AppConfig.useMockData) return MockAuthService(storage);
   return ApiAuthService(storage);
 });
 

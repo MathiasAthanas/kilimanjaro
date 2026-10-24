@@ -54,7 +54,7 @@ class StudentHomeScreen extends ConsumerWidget {
           SliverToBoxAdapter(
             child: StudentHeroHeader(
               kicker: 'STUDENT PORTAL',
-              title: 'Hello, ${user?.name.split(' ').first ?? 'Amina'}',
+              title: user == null ? 'Hello' : 'Hello, ${user.name.split(' ').first}',
               subtitle:
                   'Your academic, attendance, finance, and school updates in one focused view.',
               trailing: IconButton.filledTonal(

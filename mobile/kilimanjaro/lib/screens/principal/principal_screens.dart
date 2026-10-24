@@ -371,6 +371,19 @@ class PrincipalApprovalsScreen extends ConsumerWidget {
 
 // ─── Finance ─────────────────────────────────────────────────────────────────
 
+String _methodLabel(String raw) {
+  if (raw.isEmpty) return '';
+  final words = raw.replaceAll('_', ' ').toLowerCase().split(' ');
+  return words.map((w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}').join(' ');
+}
+
+String _waiting(DateTime since) {
+  final d = DateTime.now().difference(since);
+  if (d.inMinutes < 60) return d.inMinutes <= 1 ? 'just now' : '${d.inMinutes} min';
+  if (d.inHours < 24) return '${d.inHours} h';
+  return '${d.inDays} d ${d.inHours % 24} h';
+}
+
 class PrincipalFinanceScreen extends ConsumerWidget {
   const PrincipalFinanceScreen({super.key});
 
@@ -440,12 +453,36 @@ class PrincipalFinanceScreen extends ConsumerWidget {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text('TZS ${p.amount.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
-                                  const SizedBox(height: 4),
+                                  Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(p.studentName.isEmpty ? 'Payment' : p.studentName, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+                                            if (p.registrationNumber.isNotEmpty)
+                                              Text(p.registrationNumber, style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
+                                          ],
+                                        ),
+                                      ),
+                                      Text(_tzs(p.amount), style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 6),
                                   Text(
-                                    [p.method, if (p.reference.isNotEmpty) 'Ref ${p.reference}'].where((e) => e.isNotEmpty).join(' · '),
+                                    [
+                                      if (p.invoiceNumber.isNotEmpty) 'Invoice ${p.invoiceNumber}',
+                                      _methodLabel(p.method),
+                                      if (p.reference.isNotEmpty) 'Ref ${p.reference}',
+                                    ].where((e) => e.isNotEmpty).join(' · '),
                                     style: const TextStyle(color: AppColors.textSecondary),
                                   ),
+                                  if (p.requestedAt != null)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 2),
+                                      child: Text('Waiting ${_waiting(p.requestedAt!)}', style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
+                                    ),
                                   if (p.notes != null && p.notes!.isNotEmpty)
                                     Padding(
                                       padding: const EdgeInsets.only(top: 2),
@@ -468,7 +505,7 @@ class PrincipalFinanceScreen extends ConsumerWidget {
                                       Expanded(
                                         child: FilledButton(
                                           onPressed: () async {
-                                            final ok = await _confirm(context, 'Approve payment?', 'TZS ${p.amount.toStringAsFixed(0)} will be applied to the invoice.');
+                                            final ok = await _confirm(context, 'Approve payment?', '${_tzs(p.amount)} for ${p.studentName.isEmpty ? 'this invoice' : p.studentName} will be applied to the invoice and a receipt issued.');
                                             if (!ok) return;
                                             await run(() => service.approvePayment(p.approvalId), 'Payment approved.');
                                           },

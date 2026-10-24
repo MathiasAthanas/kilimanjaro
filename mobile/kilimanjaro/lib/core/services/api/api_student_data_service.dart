@@ -4,7 +4,6 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../../models/announcement_model.dart';
 import '../../../models/attendance_record_model.dart';
 import '../../../models/invoice_model.dart';
-import '../../../models/payment_model.dart';
 import '../../../models/peer_pairing_model.dart';
 import '../../../models/performance_snapshot_model.dart';
 import '../../../models/performance_trend_model.dart';
@@ -234,32 +233,28 @@ class ApiStudentDataService implements IStudentService {
   // ─── Finance ──────────────────────────────────────────────────────────────
 
   @override
-  Future<InvoiceModel> getCurrentInvoice() async {
-    final opts = await _auth();
-    final resp = await _dio.get<Map<String, dynamic>>(
-      '/mobile/student/finance',
-      options: opts,
-    );
-    final data = resp.data!;
-    final invoices = data['invoices'] as List<dynamic>? ?? [];
-    if (invoices.isEmpty) throw Exception('No invoice found');
-
-    // Return first non-paid invoice, or most recent
-    final list = invoices.cast<Map<String, dynamic>>();
-    final current = list.where((i) => i['status'] != 'PAID').firstOrNull ?? list.first;
-    return InvoiceModel.fromJson(current);
+  Future<List<InvoiceModel>> getInvoices() async {
+    final list = await _getList('/finance/invoices', params: {'limit': 100});
+    return list.whereType<Map>().map((i) => InvoiceModel.fromJson(Map<String, dynamic>.from(i))).toList()
+      ..sort((a, b) => b.issueDate.compareTo(a.issueDate));
   }
 
   @override
-  Future<List<PaymentModel>> getPayments() async {
+  Future<InvoiceModel?> getInvoiceById(String invoiceId) async {
     final opts = await _auth();
-    final resp = await _dio.get<Map<String, dynamic>>(
-      '/mobile/student/finance',
-      options: opts,
-    );
-    final data = resp.data!;
-    final payments = data['payments'] as List<dynamic>? ?? [];
-    return payments.cast<Map<String, dynamic>>().map(PaymentModel.fromJson).toList();
+    try {
+      final resp = await _dio.get<Map<String, dynamic>>('/finance/invoices/$invoiceId', options: opts);
+      return InvoiceModel.fromJson(resp.data!);
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) return null;
+      throw ApiFailure.fromDio(e);
+    }
+  }
+
+  @override
+  Future<List<ReceiptModel>> getReceipts() async {
+    final list = await _getList('/finance/receipts', params: {'limit': 100});
+    return list.whereType<Map>().map((r) => ReceiptModel.fromJson(Map<String, dynamic>.from(r))).toList();
   }
 
   @override

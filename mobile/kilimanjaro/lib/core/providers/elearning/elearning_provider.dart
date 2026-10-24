@@ -1,15 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../models/elearning_models.dart';
-import '../../config/app_config.dart';
 import '../../services/api/elearning_api_service.dart';
-import '../../services/api/elearning_mock_service.dart';
 import '../auth_provider.dart';
 
 // ─── Service provider ────────────────────────────────────────────────────────
 
 final elearningApiServiceProvider = Provider<ElearningApiService>((ref) {
-  if (AppConfig.useMockElearning) return ElearningMockService();
   return ElearningApiService(ref.watch(secureStorageProvider));
 });
 

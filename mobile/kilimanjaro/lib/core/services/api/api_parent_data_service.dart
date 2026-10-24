@@ -238,12 +238,16 @@ class ApiParentDataService implements IParentService {
   // ─── Finance ──────────────────────────────────────────────────────────────
 
   @override
-  Future<InvoiceModel> getCurrentInvoice(String childId) async {
+  Future<List<InvoiceModel>> getInvoices(String childId) async {
     final list = await _getList('/finance/invoices/student/$childId');
-    if (list.isEmpty) throw Exception('No invoice found for child $childId');
-    final invoices = list.cast<Map<String, dynamic>>();
-    final current = invoices.where((i) => i['status'] != 'PAID').firstOrNull ?? invoices.first;
-    return InvoiceModel.fromJson(current);
+    return list.whereType<Map>().map((i) => InvoiceModel.fromJson(Map<String, dynamic>.from(i))).toList()
+      ..sort((a, b) => b.issueDate.compareTo(a.issueDate));
+  }
+
+  @override
+  Future<List<InvoiceModel>> getAllInvoices() async {
+    final list = await _getList('/finance/invoices', params: {'limit': 100});
+    return list.whereType<Map>().map((i) => InvoiceModel.fromJson(Map<String, dynamic>.from(i))).toList();
   }
 
   @override
@@ -262,14 +266,8 @@ class ApiParentDataService implements IParentService {
 
   @override
   Future<List<ReceiptModel>> getReceipts() async {
-    final list = await _getList('/finance/receipts');
-    return list.cast<Map<String, dynamic>>().map(ReceiptModel.fromJson).toList();
-  }
-
-  @override
-  Future<double> getCombinedOutstanding() async {
-    final children = await getChildren();
-    return children.fold<double>(0.0, (sum, c) => sum + c.outstandingBalance);
+    final list = await _getList('/finance/receipts', params: {'limit': 100});
+    return list.whereType<Map>().map((r) => ReceiptModel.fromJson(Map<String, dynamic>.from(r))).toList();
   }
 
   @override

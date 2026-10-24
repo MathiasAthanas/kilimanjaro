@@ -4,6 +4,7 @@ import '../../../models/hod_models.dart';
 abstract interface class IHodService {
   Future<List<HodApproval>> getPendingApprovals();
   Future<List<HodApproval>> getApprovalHistory();
+  Future<List<HodMarkRow>> getAssessmentMarks(String assessmentId);
   Future<void> approveAssessment(String assessmentId);
   Future<void> rejectAssessment(String assessmentId, String reason);
   Future<List<HodSubjectAnalytics>> getDepartmentSubjects();

@@ -5,14 +5,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/auth_user.dart';
 import '../../models/notification_model.dart';
 import '../../models/notification_preference_model.dart';
-import '../config/app_config.dart';
 import '../services/api/api_notification_service.dart';
 import '../services/interfaces/notification_service_interface.dart';
-import '../services/mock/mock_notification_service.dart';
 import 'auth_provider.dart';
 
 final notificationServiceProvider = Provider<INotificationService>((ref) {
-  if (AppConfig.useMockData) return MockNotificationService();
   return ApiNotificationService(ref.watch(secureStorageProvider));
 });
 

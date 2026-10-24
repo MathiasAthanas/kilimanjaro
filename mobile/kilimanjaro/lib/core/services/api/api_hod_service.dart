@@ -122,6 +122,28 @@ class ApiHodService implements IHodService {
   }
 
   @override
+  Future<List<HodMarkRow>> getAssessmentMarks(String assessmentId) async {
+    final opts = await _auth();
+    try {
+      final resp = await _dio.get<dynamic>('/academics/assessments/$assessmentId/marks/review', options: opts);
+      final data = resp.data;
+      final rows = data is Map ? data['studentMarks'] : null;
+      return (rows is List ? rows : const [])
+          .whereType<Map>()
+          .map((m) => HodMarkRow(
+                name: (m['name'] as String?)?.trim().isNotEmpty == true ? m['name'] as String : 'Student',
+                registrationNumber: m['registrationNumber'] as String? ?? '',
+                score: numOf(m['score'])?.toDouble() ?? 0.0,
+                isAbsent: m['isAbsent'] == true,
+                note: m['note'] as String?,
+              ))
+          .toList();
+    } on DioException catch (e) {
+      throw ApiFailure.fromDio(e);
+    }
+  }
+
+  @override
   Future<void> approveAssessment(String assessmentId) async {
     final opts = await _auth();
     await _dio.patch<void>('/academics/assessments/$assessmentId/approve', options: opts);

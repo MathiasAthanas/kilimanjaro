@@ -12,6 +12,7 @@ class TermResultModel {
     required this.rank,
     required this.totalStudents,
     required this.isCurrent,
+    this.startDate,
   });
 
   final String id;
@@ -23,6 +24,7 @@ class TermResultModel {
   final int rank;
   final int totalStudents;
   final bool isCurrent;
+  final DateTime? startDate;
 
   /// Construct from backend data assembled by the API service.
   /// [term] is a Term object from /students/terms (with academicYear included).
@@ -64,6 +66,7 @@ class TermResultModel {
       rank: rank,
       totalStudents: totalStudents,
       isCurrent: term['isCurrent'] as bool? ?? false,
+      startDate: DateTime.tryParse(term['startDate'] as String? ?? ''),
     );
   }
 

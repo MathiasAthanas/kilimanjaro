@@ -200,3 +200,20 @@ class HodIntervention {
     );
   }
 }
+
+/// One student's mark on an assessment waiting for review.
+class HodMarkRow {
+  const HodMarkRow({
+    required this.name,
+    required this.registrationNumber,
+    required this.score,
+    required this.isAbsent,
+    this.note,
+  });
+
+  final String name;
+  final String registrationNumber;
+  final double score;
+  final bool isAbsent;
+  final String? note;
+}

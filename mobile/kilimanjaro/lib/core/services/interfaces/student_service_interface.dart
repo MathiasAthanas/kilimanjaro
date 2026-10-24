@@ -1,7 +1,6 @@
 import '../../../models/announcement_model.dart';
 import '../../../models/attendance_record_model.dart';
 import '../../../models/invoice_model.dart';
-import '../../../models/payment_model.dart';
 import '../../../models/peer_pairing_model.dart';
 import '../../../models/performance_snapshot_model.dart';
 import '../../../models/performance_trend_model.dart';
@@ -18,8 +17,9 @@ abstract interface class IStudentService {
   Future<List<PerformanceSnapshotModel>> getPerformanceSnapshots();
   Future<PerformanceTrendModel?> getPerformanceTrend(String subjectId);
   Future<PeerPairingModel?> getPeerPairing(String subjectId);
-  Future<InvoiceModel> getCurrentInvoice();
-  Future<List<PaymentModel>> getPayments();
+  Future<List<InvoiceModel>> getInvoices();
+  Future<InvoiceModel?> getInvoiceById(String invoiceId);
+  Future<List<ReceiptModel>> getReceipts();
   Future<ReceiptModel?> getReceipt(String receiptId);
   Future<List<AnnouncementModel>> getAnnouncements();
 }

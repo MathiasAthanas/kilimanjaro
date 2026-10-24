@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
-import '../../core/providers/notification_provider.dart';
 import '../../core/providers/student_provider.dart';
-import '../../core/theme/app_colors.dart';
 import '../../widgets/common/ks_empty_state.dart';
+import '../../widgets/common/ks_error_view.dart';
 import '../../widgets/common/ks_shimmer_list.dart';
+import '../../widgets/finance/finance_ui.dart';
 import '../../widgets/student/student_surface.dart';
-import 'student_formatters.dart';
+
+Widget _card({required Widget child, VoidCallback? onTap}) => StudentSurface(onTap: onTap, padding: const EdgeInsets.all(16), children: [child]);
 
 class InvoiceDetailScreen extends ConsumerWidget {
   const InvoiceDetailScreen({super.key, required this.invoiceId});
@@ -16,300 +18,57 @@ class InvoiceDetailScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final invoiceAsync = ref.watch(currentInvoiceProvider);
-    final paymentsAsync = ref.watch(studentPaymentsProvider);
-    final user = ref.watch(currentUserProvider).valueOrNull;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final paperColor = isDark
-        ? AppColors.darkSurface.withValues(alpha: 0.96)
-        : const Color(0xFFFDF8ED);
-    final paperInner = isDark
-        ? AppColors.darkCard.withValues(alpha: 0.78)
-        : Colors.white.withValues(alpha: 0.8);
+    final invoiceAsync = ref.watch(studentInvoiceByIdProvider(invoiceId));
 
     return Scaffold(
       body: invoiceAsync.when(
-        data: (invoice) => paymentsAsync.when(
-          data: (payments) => CustomScrollView(
-            slivers: [
-              SliverToBoxAdapter(
-                child: StudentHeroHeader(
-                  kicker: 'INVOICE DETAILS',
-                  title: formatTzs(invoice.outstandingAmount),
-                  subtitle: 'Outstanding balance for ${invoice.title}.',
-                  trailing: IconButton.filledTonal(
-                    onPressed: () => Navigator.of(context).maybePop(),
-                    icon: const Icon(Icons.arrow_back_rounded),
+        loading: () => const Padding(padding: EdgeInsets.fromLTRB(16, 80, 16, 16), child: KSShimmerList(itemCount: 5)),
+        error: (e, _) => Padding(padding: const EdgeInsets.only(top: 80), child: KSErrorView(error: e, onRetry: () => ref.invalidate(studentInvoiceByIdProvider(invoiceId)))),
+        data: (invoice) {
+          if (invoice == null) return const Center(child: KSEmptyState(title: 'Invoice not found'));
+          return RefreshIndicator(
+            onRefresh: () async {
+              ref.invalidate(studentInvoiceByIdProvider(invoiceId));
+              await ref.read(studentInvoiceByIdProvider(invoiceId).future).catchError((_) => null);
+            },
+            child: CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
+                SliverToBoxAdapter(
+                  child: StudentHeroHeader(
+                    kicker: 'INVOICE',
+                    title: tzs(invoice.isCancelled || invoice.isWaived ? 0 : invoice.outstandingAmount),
+                    subtitle: invoice.heading,
+                    trailing: IconButton.filledTonal(
+                      onPressed: () => Navigator.of(context).maybePop(),
+                      icon: const Icon(Icons.arrow_back_rounded),
+                    ),
                   ),
                 ),
-              ),
-              SliverPadding(
-                padding: const EdgeInsets.all(16),
-                sliver: SliverList.list(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: paperColor,
-                        borderRadius: BorderRadius.circular(26),
-                        border: Border.all(color: AppColors.skyBlue200),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppColors.skyBlue900.withValues(alpha: 0.08),
-                            blurRadius: 24,
-                            offset: const Offset(0, 12),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              const Icon(
-                                Icons.description_rounded,
-                                size: 32,
-                                color: AppColors.skyBlue600,
-                              ),
-                              const SizedBox(width: 12),
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'SCHOOL FEE INVOICE',
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.titleMedium,
-                                  ),
-                                  Text(invoice.title),
-                                ],
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                          Wrap(
-                            spacing: 12,
-                            runSpacing: 12,
-                            children: [
-                              _Cell(
-                                label: 'Student',
-                                value: user?.name ?? '-',
-                                backgroundColor: paperInner,
-                              ),
-                              _Cell(
-                                label: 'Reg. No.',
-                                value: user?.registrationNumber ?? '-',
-                                backgroundColor: paperInner,
-                              ),
-                              _Cell(
-                                label: 'Paid so far',
-                                value: formatTzs(invoice.paidAmount),
-                                backgroundColor: paperInner,
-                              ),
-                              _Cell(
-                                label: 'Issue Date',
-                                value: formatLongDate(invoice.issueDate),
-                                backgroundColor: paperInner,
-                              ),
-                              _Cell(
-                                label: 'Due Date',
-                                value: formatLongDate(invoice.dueDate),
-                                backgroundColor: paperInner,
-                              ),
-                              _Cell(
-                                label: 'Status',
-                                value: invoice.status,
-                                backgroundColor: paperInner,
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 20),
-                          Text(
-                            'Line Items',
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
-                          const SizedBox(height: 12),
-                          Table(
-                            border: TableBorder.all(color: AppColors.border),
-                            columnWidths: const {
-                              0: FlexColumnWidth(2.2),
-                              1: FlexColumnWidth(1.4),
-                              2: FlexColumnWidth(1.6),
-                            },
-                            children: [
-                              const TableRow(
-                                decoration: BoxDecoration(
-                                  color: AppColors.skyBlue700,
-                                ),
-                                children: [
-                                  Padding(
-                                    padding: EdgeInsets.all(10),
-                                    child: Text(
-                                      'Fee Type',
-                                      style: TextStyle(color: AppColors.white),
-                                    ),
-                                  ),
-                                  Padding(
-                                    padding: EdgeInsets.all(10),
-                                    child: Text(
-                                      'Amount',
-                                      style: TextStyle(color: AppColors.white),
-                                    ),
-                                  ),
-                                  Padding(
-                                    padding: EdgeInsets.all(10),
-                                    child: Text(
-                                      'Status',
-                                      style: TextStyle(color: AppColors.white),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              ...invoice.items.map(
-                                (item) => TableRow(
-                                  children: [
-                                    Padding(
-                                      padding: const EdgeInsets.all(10),
-                                      child: Text(item.label),
-                                    ),
-                                    Padding(
-                                      padding: const EdgeInsets.all(10),
-                                      child: Text(formatTzs(item.amount)),
-                                    ),
-                                    Padding(
-                                      padding: const EdgeInsets.all(10),
-                                      child: Text(item.status),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 20),
-                          Text(
-                            'Payment Summary',
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
-                          const SizedBox(height: 12),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _Summary(
-                                  label: 'Invoiced',
-                                  value: formatTzs(invoice.totalAmount),
-                                ),
-                              ),
-                              Expanded(
-                                child: _Summary(
-                                  label: 'Paid',
-                                  value: formatTzs(invoice.paidAmount),
-                                  color: AppColors.accentEmerald,
-                                ),
-                              ),
-                              Expanded(
-                                child: _Summary(
-                                  label: 'Outstanding',
-                                  value: formatTzs(invoice.outstandingAmount),
-                                  color: AppColors.accentAmber,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 20),
-                          Text(
-                            'Payment History',
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
-                          const SizedBox(height: 8),
-                          ...payments
-                              .where((item) => item.invoiceId == invoiceId)
-                              .map(
-                                (item) => ListTile(
-                                  contentPadding: EdgeInsets.zero,
-                                  title: Text(item.id),
-                                  subtitle: Text(
-                                    '${item.method} / ${formatShortDate(item.date)}',
-                                  ),
-                                  trailing: Text(formatTzs(item.amount)),
-                                ),
-                              ),
-                        ],
-                      ),
+                SliverPadding(
+                  padding: const EdgeInsets.all(16),
+                  sliver: SliverList.list(children: [
+                    InvoiceHeadline(invoice: invoice, card: _card),
+                    const SizedBox(height: 12),
+                    InvoiceBreakdown(invoice: invoice, card: _card),
+                    const SizedBox(height: 12),
+                    InvoicePaymentsList(invoice: invoice, card: _card, onReceipt: (id) => context.push('/student/finance/receipt/$id')),
+                    const SizedBox(height: 12),
+                    HowToPayCard(invoice: invoice, card: _card),
+                    const SizedBox(height: 12),
+                    PdfButton(
+                      path: '/finance/invoices/${invoice.id}/pdf',
+                      fileName: '${invoice.invoiceNumber.isEmpty ? 'invoice' : invoice.invoiceNumber}.pdf',
+                      label: 'Download invoice (PDF)',
                     ),
-                  ],
+                    const SizedBox(height: 100),
+                  ]),
                 ),
-              ),
-            ],
-          ),
-          loading: () => const Padding(padding: EdgeInsets.all(16), child: KSShimmerList(itemCount: 5)),
-          error: (error, stack) => const KSEmptyState(
-            title: 'Something went wrong',
-            subtitle: 'We couldn\'t load your data. Pull down to refresh.',
-          ),
-        ),
-        loading: () => const Padding(padding: EdgeInsets.all(16), child: KSShimmerList(itemCount: 5)),
-        error: (error, stack) => const KSEmptyState(
-          title: 'Something went wrong',
-          subtitle: 'We couldn\'t load your data. Pull down to refresh.',
-        ),
+              ],
+            ),
+          );
+        },
       ),
-    );
-  }
-}
-
-class _Cell extends StatelessWidget {
-  const _Cell({
-    required this.label,
-    required this.value,
-    required this.backgroundColor,
-  });
-
-  final String label;
-  final String value;
-  final Color backgroundColor;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 150,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: backgroundColor,
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: Theme.of(context).textTheme.bodySmall),
-          const SizedBox(height: 4),
-          Text(value, style: Theme.of(context).textTheme.titleMedium),
-        ],
-      ),
-    );
-  }
-}
-
-class _Summary extends StatelessWidget {
-  const _Summary({required this.label, required this.value, this.color});
-
-  final String label;
-  final String value;
-  final Color? color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(label, style: Theme.of(context).textTheme.bodySmall),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          textAlign: TextAlign.center,
-          style: Theme.of(
-            context,
-          ).textTheme.titleMedium?.copyWith(color: color),
-        ),
-      ],
     );
   }
 }
