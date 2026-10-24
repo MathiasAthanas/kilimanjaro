@@ -15,8 +15,10 @@ interface ClassRow {
   name: string;
   stream?: string | null;
   educationStage?: string;
+  level?: number | string;
   schoolId?: string | null;
   academicYearId?: string;
+  academicYear?: { year?: number | string; name?: string } | string;
   combinationCode?: string | null;
   combinationId?: string | null;
 }
@@ -107,6 +109,16 @@ function safeFilePart(value: string): string {
   return value.trim().replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '').toLowerCase() || 'class';
 }
 
+function classGroupName(klass: ClassRow): string {
+  const name = String(klass.name ?? '').trim();
+  const suffix = [klass.combinationCode, klass.stream]
+    .map((value) => String(value ?? '').trim())
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length)
+    .find((value) => name.toLowerCase().endsWith(` ${value.toLowerCase()}`));
+  return suffix ? name.slice(0, -(suffix.length + 1)).trim() : name;
+}
+
 function downloadClassTemplate(selectedClass: ClassRow) {
   const stream = selectedClass.combinationCode || selectedClass.stream || '';
   const rows = [
@@ -158,6 +170,7 @@ export function ClassImportPage() {
   const { data: classes = [], isLoading } = useImportClasses();
   const activeSchool = useSchoolStore((s) => s.activeSchool);
   const [classId, setClassId] = useState('');
+  const [classGroupKey, setClassGroupKey] = useState('');
   const [parsed, setParsed] = useState<{ rows: ParsedRow[]; headers: string[]; unmapped: string[] } | null>(null);
   const [fileName, setFileName] = useState('');
   const [report, setReport] = useState<ImportReport | null>(null);
@@ -166,6 +179,34 @@ export function ClassImportPage() {
   const [comboEnrol, setComboEnrol] = useState<{ state: 'ok' | 'failed'; count: number; message?: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  const classGroups = useMemo(() => {
+    const groups = new Map<string, ClassRow[]>();
+    classes.forEach((klass) => {
+      const year = typeof klass.academicYear === 'object'
+        ? String(klass.academicYear?.year ?? klass.academicYear?.name ?? '')
+        : String(klass.academicYear ?? '');
+      const yearKey = klass.academicYearId || year;
+      const key = JSON.stringify([klass.schoolId ?? '', klass.educationStage ?? '', yearKey, classGroupName(klass)]);
+      groups.set(key, [...(groups.get(key) ?? []), klass]);
+    });
+    return Array.from(groups, ([key, rows]) => {
+      const first = rows[0];
+      const year = typeof first.academicYear === 'object'
+        ? String(first.academicYear?.year ?? first.academicYear?.name ?? '')
+        : String(first.academicYear ?? '');
+      const stageCode = String(first.educationStage ?? '').toUpperCase();
+      const stage = ({
+        NURSERY: 'Nursery',
+        PRE_UNIT: 'Pre-Unit',
+        PRIMARY: 'Primary',
+        O_LEVEL: 'O-Level',
+        A_LEVEL: 'A-Level',
+      } as Record<string, string>)[stageCode] ?? stageCode.replaceAll('_', ' ');
+      return { key, rows, label: [classGroupName(first), stage, year].filter(Boolean).join(' · ') };
+    }).sort((a, b) => a.label.localeCompare(b.label));
+  }, [classes]);
+  const selectedClassGroup = classGroups.find((group) => group.key === classGroupKey);
+  const streamClasses = selectedClassGroup?.rows ?? [];
   const selectedClass = useMemo(() => classes.find((c) => c.id === classId), [classes, classId]);
   const isALevel = selectedClass?.educationStage === 'A_LEVEL';
 
@@ -242,20 +283,47 @@ export function ClassImportPage() {
               Tip: select a school in the top bar to narrow the class list to that school.
             </p>
           )}
-          <div className="relative mt-3 max-w-xl">
-            <select
-              value={classId}
-              onChange={(e) => { setClassId(e.target.value); setReport(null); }}
-              className="w-full appearance-none rounded-xl border border-slate-300 bg-white px-4 py-2.5 pr-9 text-sm font-semibold text-slate-800 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-200"
-            >
-              <option value="">{isLoading ? 'Loading classes…' : '— Choose a class —'}</option>
-              {classes.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}{c.stream ? ` · ${c.stream}` : ''} ({String(c.educationStage ?? '').replace('_', '-')})
-                </option>
-              ))}
-            </select>
-            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <div className="mt-3 grid max-w-3xl gap-3 sm:grid-cols-2">
+            <div className="relative">
+              <label htmlFor="import-class-group" className="mb-1.5 block text-xs font-black text-slate-600">Class / level</label>
+              <select
+                id="import-class-group"
+                value={classGroupKey}
+                onChange={(e) => {
+                  const groupKey = e.target.value;
+                  const group = classGroups.find((item) => item.key === groupKey);
+                  setClassGroupKey(groupKey);
+                  setClassId(group?.rows.length === 1 ? group.rows[0].id : '');
+                  setReport(null);
+                  setComboEnrol(null);
+                }}
+                className="w-full appearance-none rounded-xl border border-slate-300 bg-white px-4 py-2.5 pr-9 text-sm font-semibold text-slate-800 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+              >
+                <option value="">{isLoading ? 'Loading classes…' : '— Choose class / level —'}</option>
+                {classGroups.map((group) => <option key={group.key} value={group.key}>{group.label}</option>)}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-3 top-[2.55rem] h-4 w-4 -translate-y-1/2 text-slate-400" />
+            </div>
+            {selectedClassGroup && (
+              <div className="relative">
+                <label htmlFor="import-class-stream" className="mb-1.5 block text-xs font-black text-slate-600">Stream</label>
+                <select
+                  id="import-class-stream"
+                  value={classId}
+                  onChange={(e) => { setClassId(e.target.value); setReport(null); setComboEnrol(null); }}
+                  className="w-full appearance-none rounded-xl border border-slate-300 bg-white px-4 py-2.5 pr-9 text-sm font-semibold text-slate-800 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                >
+                  <option value="">— Choose stream —</option>
+                  {streamClasses.map((klass) => (
+                    <option key={klass.id} value={klass.id}>
+                      {klass.stream || klass.combinationCode || 'Single class'}
+                      {klass.combinationCode && klass.stream && klass.combinationCode !== klass.stream ? ` · ${klass.combinationCode}` : ''}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-3 top-[2.55rem] h-4 w-4 -translate-y-1/2 text-slate-400" />
+              </div>
+            )}
           </div>
           {selectedClass && (
             <div className="mt-4 flex flex-wrap gap-2 text-xs font-bold">

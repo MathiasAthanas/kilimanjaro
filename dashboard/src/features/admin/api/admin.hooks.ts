@@ -90,7 +90,11 @@ function toAdminStudents(value: unknown) {
   return arrayFromApi(value, ['students']).map((raw) => {
     const s = raw as Record<string, unknown>;
     const fullName = [s.firstName, s.lastName].filter(Boolean).join(' ').trim();
-    const classObj = s.class as Record<string, unknown> | undefined;
+    const enrolments = arrayFromApi(s.enrolments).map((item) => item as Record<string, unknown>);
+    const activeEnrolment = enrolments.find((item) => item.isActive !== false) ?? enrolments[0];
+    const classObj = (activeEnrolment?.class ?? s.class) as Record<string, unknown> | undefined;
+    const academicYear = activeEnrolment?.academicYear as Record<string, unknown> | undefined;
+    const term = activeEnrolment?.term as Record<string, unknown> | undefined;
     const schoolObj = s.school as Record<string, unknown> | undefined;
     // guardians may be a count (number) or an array — normalise to count
     const guardiansRaw = s.guardians ?? s.guardianCount ?? s.parentsCount ?? 0;
@@ -101,6 +105,17 @@ function toAdminStudents(value: unknown) {
       registration: String(s.registrationNumber ?? s.registration ?? s.admissionNumber ?? ''),
       name: String(s.name ?? s.fullName ?? fullName ?? ''),
       className: String(classObj?.name ?? s.className ?? s.class_name ?? s.currentClass ?? ''),
+      activeClassDetails: classObj ? {
+        id: String(classObj.id ?? ''),
+        name: String(classObj.name ?? ''),
+        level: classObj.level,
+        stream: String(classObj.stream ?? ''),
+        combinationCode: String(classObj.combinationCode ?? ''),
+        educationStage: String(classObj.educationStage ?? ''),
+        academicYear: String(academicYear?.year ?? academicYear?.name ?? ''),
+        term: String(term?.name ?? ''),
+        enrolledAt: String(activeEnrolment?.enrolledAt ?? ''),
+      } : null,
       schoolName: String(schoolObj?.name ?? s.schoolName ?? s.school_name ?? ''),
       stage: String(s.educationStage ?? s.stage ?? s.level ?? ''),
       status: String(s.status ?? (s.isActive === false ? 'INACTIVE' : 'ACTIVE')),
@@ -345,6 +360,21 @@ export function useAdminStudents(params?: Record<string, unknown>) {
   return useQuery({
     queryKey: [...adminKeys.students(params), activeSchoolKey] as const,
     queryFn: () => api.get('/students', { params }).then((r) => toAdminStudents(payloadOf(r))),
+    staleTime: 30_000,
+  });
+}
+
+/** Fetch a single student profile so deep links do not depend on list pagination. */
+export function useAdminStudent(id: string | undefined) {
+  const activeSchoolKey = useActiveSchoolKey();
+  return useQuery({
+    queryKey: [...adminKeys.students({ id }), 'profile', activeSchoolKey] as const,
+    queryFn: async () => {
+      const payload = await api.get(`/students/${id}`).then(payloadOf);
+      return toAdminStudents([payload])[0] ?? null;
+    },
+    enabled: !!id,
+    retry: false,
     staleTime: 30_000,
   });
 }

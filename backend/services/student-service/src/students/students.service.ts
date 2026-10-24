@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   Logger,
   NotFoundException,
@@ -126,6 +127,41 @@ export class StudentsService {
       // The class owns the student. Never trust a client-supplied class id
       // unless it belongs to the actor's selected/in-scope school.
       resolveWriteSchoolId(user, classExists.schoolId);
+
+      // Guard the identity key inside the transaction. The advisory lock keeps
+      // two near-simultaneous submits for the same student from both passing
+      // the duplicate lookup before either transaction commits.
+      if (dto.dateOfBirth) {
+        const normalized = (value: string | null | undefined) =>
+          (value ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+        const firstName = normalized(dto.firstName);
+        const middleName = normalized(dto.middleName);
+        const lastName = normalized(dto.lastName);
+        const birthDate = new Date(dto.dateOfBirth);
+        const identityKey = [classExists.schoolId ?? '', firstName, middleName, lastName, birthDate.toISOString().slice(0, 10)].join('|');
+
+        // Cast PostgreSQL's `void` lock result to text because Prisma's raw
+        // query decoder cannot deserialize a void column.
+        await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${identityKey}, 0))::text AS lock_result`;
+
+        const duplicates = await tx.$queryRaw<Array<{ id: string; registrationNumber: string }>>`
+          SELECT id, "registrationNumber"
+          FROM students."Student"
+          WHERE "schoolId" IS NOT DISTINCT FROM ${classExists.schoolId}
+            AND "dateOfBirth"::date = ${birthDate}::date
+            AND lower(regexp_replace(btrim(coalesce("firstName", '')), '[[:space:]]+', ' ', 'g')) = ${firstName}
+            AND lower(regexp_replace(btrim(coalesce("middleName", '')), '[[:space:]]+', ' ', 'g')) = ${middleName}
+            AND lower(regexp_replace(btrim(coalesce("lastName", '')), '[[:space:]]+', ' ', 'g')) = ${lastName}
+          ORDER BY "createdAt" ASC
+          LIMIT 1
+        `;
+
+        if (duplicates.length > 0) {
+          throw new ConflictException(
+            `A student with these name and date of birth details already exists in this school (${duplicates[0].registrationNumber}). Open the existing student record instead of enrolling again.`,
+          );
+        }
+      }
 
       const academicYear = await tx.academicYear.findUnique({ where: { id: dto.academicYearId } });
       if (!academicYear) {

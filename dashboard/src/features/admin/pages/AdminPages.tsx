@@ -14,6 +14,7 @@ import {
 import {
   useAdminAuditEvents,
   useAdminClasses,
+  useAdminStudent,
   useAdminReportJobs,
   useAdminStudents,
   useAdminStudentsPage,
@@ -3501,11 +3502,13 @@ function safeDate(value: string, fallback: string) {
   return value || fallback;
 }
 
-export function EnrolStudentPage({ basePath: _basePath = '/admin' }: { basePath?: string } = {}) {
+export function EnrolStudentPage({ basePath = '/admin' }: { basePath?: string } = {}) {
+  const navigate = useNavigate();
   const subtitle = useConsoleSubtitle();
   const { data: enrolClasses = [] as typeof adminClasses } = useAdminClasses() as unknown as { data: typeof adminClasses };
   const { data: academicYears = [] } = useAcademicYears();
   const createStudentMutation = useCreateStudentMutation();
+  const submissionStarted = React.useRef(false);
   const [step, setStep] = useState(0);
   const today = new Date().toISOString().slice(0, 10);
   const defaultClassId = String(enrolClasses[0]?.id ?? '');
@@ -3530,7 +3533,6 @@ export function EnrolStudentPage({ basePath: _basePath = '/admin' }: { basePath?
   });
   const activeClassId = form.classId || defaultClassId;
   const activeYearId = form.academicYearId || defaultYearId;
-  const selectedClass = enrolClasses.find((item: any) => item.id === activeClassId) ?? enrolClasses[0];
 
   const setEnrolField = (key: keyof EnrolFormState) => (event: React.ChangeEvent<HTMLInputElement>) =>
     setForm((current) => ({ ...current, [key]: event.target.value }));
@@ -3540,6 +3542,7 @@ export function EnrolStudentPage({ basePath: _basePath = '/admin' }: { basePath?
   const next = () => setStep((s) => Math.min(ENROL_STEPS.length - 1, s + 1));
 
   const submitStudent = () => {
+    if (submissionStarted.current || createStudentMutation.isPending) return;
     if (!form.firstName.trim() || !form.lastName.trim()) {
       toast('Student first and last name are required', 'warning');
       setStep(0);
@@ -3561,6 +3564,7 @@ export function EnrolStudentPage({ basePath: _basePath = '/admin' }: { basePath?
       return;
     }
 
+    submissionStarted.current = true;
     createStudentMutation.mutate({
       authUserId: `pending-student-${Date.now()}`,
       firstName: form.firstName.trim(),
@@ -3583,8 +3587,20 @@ export function EnrolStudentPage({ basePath: _basePath = '/admin' }: { basePath?
     }, {
       onSuccess: (student: any) => {
         toast(`Student enrolled: ${student?.registrationNumber ?? 'record created'}`, 'success');
+        if (student?.id) navigate(`${basePath}/students/${student.id}`, { replace: true });
+        else navigate(`${basePath}/students`, { replace: true });
       },
-      onError: (error) => toast(error instanceof Error ? error.message : 'Failed to enrol student', 'error'),
+      onError: (error) => {
+        submissionStarted.current = false;
+        const apiError = error as { status?: number; message?: string };
+        const message = apiError.message ?? (error instanceof Error ? error.message : 'Failed to enrol student');
+        if (apiError.status === 409) {
+          toast(message, 'warning');
+          navigate(`${basePath}/students`, { replace: true });
+          return;
+        }
+        toast(message, 'error');
+      },
     });
   };
 
@@ -3640,10 +3656,6 @@ export function EnrolStudentPage({ basePath: _basePath = '/admin' }: { basePath?
               { value: 'commercial',  label: 'Commercial' },
             ]} />
             <Field label="Previous School"  placeholder="e.g. Moshi Primary School" />
-            <SelectField label="Entry Level" options={[
-              { value: 'form1', label: 'Form 1 (Standard intake)' },
-              { value: 'form3', label: 'Form 3 (Transfer)'        },
-            ]} />
           </div>
         </AdminFormSection>
       )}
@@ -3658,7 +3670,6 @@ export function EnrolStudentPage({ basePath: _basePath = '/admin' }: { basePath?
               onChange={setEnrolValue('academicYearId')}
               options={(academicYears as any[]).map((year) => ({ value: String(year.id), label: String(year.name ?? year.year ?? year.id) }))}
             />
-            <Field label="Resolved Level" value={String((selectedClass as any)?.level ?? (selectedClass as any)?.name ?? 'Select class')} readOnly />
             <SelectField
               key={`class-${activeClassId}`}
               label="Class Section"
@@ -3731,7 +3742,7 @@ export function EnrolStudentPage({ basePath: _basePath = '/admin' }: { basePath?
         {step < ENROL_STEPS.length - 1 ? (
           <Button className="rounded-xl bg-[#4338CA]" onClick={next}>Next</Button>
         ) : (
-          <Button className="rounded-xl bg-[#4338CA]" loading={createStudentMutation.isPending} onClick={submitStudent}>
+          <Button className="rounded-xl bg-[#4338CA]" loading={createStudentMutation.isPending} disabled={submissionStarted.current} onClick={submitStudent}>
             <UserPlus className="h-4 w-4" /> Submit Enrolment
           </Button>
         )}
@@ -3745,7 +3756,7 @@ export function EnrolStudentPage({ basePath: _basePath = '/admin' }: { basePath?
 export function StudentAdminProfilePage({ basePath = '/admin' }: { basePath?: string } = {}) {
   const { id } = useParams();
   const subtitle = useConsoleSubtitle();
-  const { data: apiStudents = [] as typeof adminStudents, isLoading } = useAdminStudents() as unknown as { data: typeof adminStudents; isLoading: boolean };
+  const { data: student, isLoading } = useAdminStudent(id) as unknown as { data: (typeof adminStudents)[number] & { activeClassDetails?: any } | null; isLoading: boolean };
   const { data: guardians = [] } = useStudentGuardians(id) as unknown as { data: any[] };
   const { data: attendance = null } = useStudentAttendance(id) as unknown as { data: any };
   const { data: performance = [] } = useStudentPerformance(id) as unknown as { data: any[] };
@@ -3759,8 +3770,6 @@ export function StudentAdminProfilePage({ basePath = '/admin' }: { basePath?: st
   const [activePanel, setActivePanel] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ name: '', className: '', admissionNumber: '' });
   const [guardianForm, setGuardianForm] = useState({ name: '', phone: '', relationship: 'Parent' });
-
-  const student = apiStudents.find((s) => s.id === id) ?? null;
 
   React.useEffect(() => {
     if (student) {
@@ -3821,6 +3830,39 @@ export function StudentAdminProfilePage({ basePath = '/admin' }: { basePath?: st
         { label: 'Risk', value: String(student.risk ?? 'LOW'), detail: 'Academic risk band', tone: student.risk === 'CRITICAL' ? 'rose' : 'amber' },
         { label: 'Portal', value: student.linked ? 'Linked' : 'Not linked', detail: 'Account', tone: student.linked ? 'green' : 'rose' },
       ]} />
+
+      <section className="mt-gutter rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="student-class-heading">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">Current enrolment</p>
+            <h2 id="student-class-heading" className="mt-1 font-display text-lg font-black text-ks-navy">Class details</h2>
+          </div>
+          {student.activeClassDetails?.name ? (
+            <Badge tone="blue">Active class</Badge>
+          ) : (
+            <Badge tone="amber">No active class</Badge>
+          )}
+        </div>
+        {student.activeClassDetails?.name ? (
+          <dl className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {[
+              ['Class', student.activeClassDetails.name],
+              ['Level', student.activeClassDetails.level != null ? `Level ${student.activeClassDetails.level}` : '—'],
+              ['Stage', student.activeClassDetails.educationStage || '—'],
+              ['Stream / Combination', [student.activeClassDetails.stream, student.activeClassDetails.combinationCode].filter(Boolean).join(' / ') || '—'],
+              ['Academic year', student.activeClassDetails.academicYear || '—'],
+              ['Term', student.activeClassDetails.term || '—'],
+            ].map(([label, value]) => (
+              <div key={label}>
+                <dt className="text-[10px] font-black uppercase tracking-widest text-slate-400">{label}</dt>
+                <dd className="mt-1 text-sm font-bold text-slate-800">{value}</dd>
+              </div>
+            ))}
+          </dl>
+        ) : (
+          <p className="mt-3 text-sm font-semibold text-slate-500">There is no active class enrolment recorded for this student.</p>
+        )}
+      </section>
 
       <div className="mt-gutter space-y-3">
         {panels.map(({ key, label }) => (
