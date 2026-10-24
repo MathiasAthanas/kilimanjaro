@@ -23,10 +23,13 @@ class ElearningCourseModel {
     required this.lessons,
     required this.createdAt,
     required this.updatedAt,
+    this.teacherName = '',
   });
 
   final String id;
   final String classSubjectId;
+  /// Filled in for leadership views (HOD, principal) only.
+  final String teacherName;
   final String teacherId;
   final String termId;
   final String academicYearId;
@@ -72,6 +75,7 @@ class ElearningCourseModel {
             DateTime.now(),
         updatedAt: DateTime.tryParse(json['updatedAt'] as String? ?? '') ??
             DateTime.now(),
+        teacherName: json['teacherName'] as String? ?? '',
       );
 
   bool get isActive => status == 'ACTIVE';
@@ -226,6 +230,9 @@ class ElearningAssignmentModel {
     required this.status,
     this.publishedAt,
     this.closedAt,
+    this.mySubmission,
+    this.submissionCount = 0,
+    this.toGradeCount = 0,
   });
 
   final String id;
@@ -233,6 +240,11 @@ class ElearningAssignmentModel {
   final String? lessonId;
   final String title;
   final String instructions;
+  /// The signed-in learner's own submission, when the API included it.
+  final ElearningSubmissionModel? mySubmission;
+  /// Staff view: handed-in work and how much of it still needs marking.
+  final int submissionCount;
+  final int toGradeCount;
   final String type; // FILE_UPLOAD | TEXT | BOTH
   final double? maxScore;
   final DateTime? dueAt;
@@ -263,7 +275,29 @@ class ElearningAssignmentModel {
         closedAt: json['closedAt'] != null
             ? DateTime.tryParse(json['closedAt'] as String)
             : null,
+        mySubmission: _firstSubmission(json['submissions']),
+        submissionCount: _countSubmissions(json['submissions'], (_) => true),
+        toGradeCount: _countSubmissions(
+            json['submissions'], (st) => st == 'SUBMITTED'),
       );
+
+  static int _countSubmissions(dynamic raw, bool Function(String) test) {
+    if (raw is! List) return 0;
+    var n = 0;
+    for (final item in raw) {
+      if (item is Map) {
+        final st = item['status'] as String? ?? '';
+        if (st != 'DRAFT' && test(st)) n++;
+      }
+    }
+    return n;
+  }
+
+  static ElearningSubmissionModel? _firstSubmission(dynamic raw) {
+    if (raw is! List || raw.isEmpty || raw.first is! Map) return null;
+    return ElearningSubmissionModel.fromJson(
+        Map<String, dynamic>.from(raw.first as Map));
+  }
 
   bool get isPublished => status == 'PUBLISHED';
   bool get isClosed => status == 'CLOSED';
@@ -271,6 +305,23 @@ class ElearningAssignmentModel {
   bool get isOverdue {
     if (dueAt == null) return false;
     return DateTime.now().isAfter(dueAt!);
+  }
+
+  /// Short label for list rows: what the learner should do or has done.
+  String get stateLabel {
+    final s = mySubmission;
+    if (s != null) {
+      if (s.isGraded) {
+        return s.score != null && s.maxScore != null
+            ? '${s.score!.toStringAsFixed(s.score! % 1 == 0 ? 0 : 1)}/${s.maxScore!.toStringAsFixed(0)}'
+            : 'Graded';
+      }
+      if (s.status == 'RETURNED') return 'Returned';
+      if (s.status == 'SUBMITTED') return 'Handed in';
+      if (s.status == 'DRAFT') return isOverdue ? 'Overdue' : 'Draft';
+    }
+    if (isClosed) return 'Closed';
+    return isOverdue ? 'Overdue' : 'To do';
   }
 }
 
@@ -358,6 +409,8 @@ class ElearningQuizModel {
     this.closedAt,
     required this.totalPoints,
     required this.questions,
+    this.showCorrectAfter = 'AFTER_CLOSE',
+    this.attempts = const [],
   });
 
   final String id;
@@ -366,6 +419,10 @@ class ElearningQuizModel {
   final String title;
   final String? instructions;
   final int? timeLimitMinutes;
+  /// IMMEDIATELY | AFTER_CLOSE | NEVER — when learners may see the answer key.
+  final String showCorrectAfter;
+  /// The signed-in learner's own attempts (empty for staff).
+  final List<ElearningQuizAttemptModel> attempts;
   final int maxAttempts;
   final double? passingScore;
   final String status;
@@ -396,10 +453,37 @@ class ElearningQuizModel {
             .map((q) => ElearningQuizQuestionModel.fromJson(
                 q as Map<String, dynamic>))
             .toList(),
+        showCorrectAfter: json['showCorrectAfter'] as String? ?? 'AFTER_CLOSE',
+        attempts: (json['attempts'] as List<dynamic>? ?? [])
+            .map((a) => ElearningQuizAttemptModel.fromJson(
+                a as Map<String, dynamic>))
+            .toList(),
       );
 
   bool get isPublished => status == 'PUBLISHED';
+  bool get isClosed => status == 'CLOSED';
   int get questionCount => questions.length;
+
+  List<ElearningQuizAttemptModel> get finishedAttempts =>
+      attempts.where((a) => !a.isInProgress).toList();
+  ElearningQuizAttemptModel? get inProgressAttempt {
+    for (final a in attempts) {
+      if (a.isInProgress) return a;
+    }
+    return null;
+  }
+
+  int get attemptsLeft => (maxAttempts - finishedAttempts.length).clamp(0, maxAttempts);
+
+  /// Best percentage across finished attempts, if any has been scored.
+  double? get bestPercent {
+    double? best;
+    for (final a in finishedAttempts) {
+      final p = a.percentScore;
+      if (p != null && (best == null || p > best)) best = p;
+    }
+    return best;
+  }
 }
 
 class ElearningQuizQuestionModel {
@@ -448,12 +532,15 @@ class ElearningQuizOptionModel {
     required this.questionId,
     required this.text,
     required this.orderIndex,
+    this.isCorrect,
   });
 
   final String id;
   final String questionId;
   final String text;
   final int orderIndex;
+  /// Only present for staff; learners never receive the answer key.
+  final bool? isCorrect;
 
   factory ElearningQuizOptionModel.fromJson(Map<String, dynamic> json) =>
       ElearningQuizOptionModel(
@@ -461,6 +548,7 @@ class ElearningQuizOptionModel {
         questionId: json['questionId'] as String? ?? '',
         text: json['text'] as String? ?? '',
         orderIndex: numOf(json['orderIndex'])?.toInt() ?? 0,
+        isCorrect: json['isCorrect'] as bool?,
       );
 }
 
@@ -479,6 +567,10 @@ class ElearningQuizAttemptModel {
     this.percentScore,
     this.isPassed,
     required this.answers,
+    this.expiresAt,
+    this.reveal = false,
+    this.passingScore,
+    this.review = const [],
   });
 
   final String id;
@@ -494,6 +586,12 @@ class ElearningQuizAttemptModel {
   final double? percentScore;
   final bool? isPassed;
   final List<ElearningQuizAnswerModel> answers;
+  /// Server-side deadline for timed quizzes (null when untimed or finished).
+  final DateTime? expiresAt;
+  /// True when the answer key may be shown to this learner.
+  final bool reveal;
+  final double? passingScore;
+  final List<ElearningQuizReviewItem> review;
 
   factory ElearningQuizAttemptModel.fromJson(Map<String, dynamic> json) =>
       ElearningQuizAttemptModel(
@@ -516,13 +614,57 @@ class ElearningQuizAttemptModel {
             .map((a) => ElearningQuizAnswerModel.fromJson(
                 a as Map<String, dynamic>))
             .toList(),
+        expiresAt: json['expiresAt'] != null
+            ? DateTime.tryParse(json['expiresAt'] as String)
+            : null,
+        reveal: json['reveal'] as bool? ?? false,
+        passingScore: numOf(json['passingScore'])?.toDouble(),
+        review: (json['review'] as List<dynamic>? ?? [])
+            .map((r) => ElearningQuizReviewItem.fromJson(
+                r as Map<String, dynamic>))
+            .toList(),
       );
+
+  /// A written answer exists that the teacher has not marked yet.
+  bool get awaitingManualGrade => status == 'SUBMITTED';
 
   bool get isInProgress => status == 'IN_PROGRESS';
   bool get isCompleted =>
       status == 'SUBMITTED' ||
       status == 'AUTO_GRADED' ||
       status == 'MANUALLY_GRADED';
+}
+
+/// One row of the answer key returned with a finished attempt when it may be revealed.
+class ElearningQuizReviewItem {
+  const ElearningQuizReviewItem({
+    required this.questionId,
+    required this.prompt,
+    required this.type,
+    required this.points,
+    this.explanation,
+    this.correctAnswer,
+    this.correctOptionId,
+  });
+
+  final String questionId;
+  final String prompt;
+  final String type;
+  final double points;
+  final String? explanation;
+  final String? correctAnswer;
+  final String? correctOptionId;
+
+  factory ElearningQuizReviewItem.fromJson(Map<String, dynamic> json) =>
+      ElearningQuizReviewItem(
+        questionId: json['questionId'] as String? ?? '',
+        prompt: json['prompt'] as String? ?? '',
+        type: json['type'] as String? ?? 'MULTIPLE_CHOICE',
+        points: numOf(json['points'])?.toDouble() ?? 1,
+        explanation: json['explanation'] as String?,
+        correctAnswer: json['correctAnswer'] as String?,
+        correctOptionId: json['correctOptionId'] as String?,
+      );
 }
 
 class ElearningQuizAnswerModel {
@@ -672,6 +814,7 @@ class ElearningDiscussionModel {
     required this.isPinned,
     required this.createdAt,
     required this.replies,
+    this.authorName = '',
   });
 
   final String id;
@@ -686,6 +829,7 @@ class ElearningDiscussionModel {
   final bool isPinned;
   final DateTime createdAt;
   final List<ElearningReplyModel> replies;
+  final String authorName;
 
   factory ElearningDiscussionModel.fromJson(Map<String, dynamic> json) =>
       ElearningDiscussionModel(
@@ -705,6 +849,7 @@ class ElearningDiscussionModel {
             .map((r) =>
                 ElearningReplyModel.fromJson(r as Map<String, dynamic>))
             .toList(),
+        authorName: json['authorName'] as String? ?? '',
       );
 }
 
@@ -716,6 +861,7 @@ class ElearningReplyModel {
     required this.authorId,
     required this.authorRole,
     required this.createdAt,
+    this.authorName = '',
   });
 
   final String id;
@@ -724,6 +870,7 @@ class ElearningReplyModel {
   final String authorId;
   final String authorRole;
   final DateTime createdAt;
+  final String authorName;
 
   factory ElearningReplyModel.fromJson(Map<String, dynamic> json) =>
       ElearningReplyModel(
@@ -734,5 +881,6 @@ class ElearningReplyModel {
         authorRole: json['authorRole'] as String? ?? 'STUDENT',
         createdAt:
             DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
+        authorName: json['authorName'] as String? ?? '',
       );
 }

@@ -65,6 +65,7 @@ final drawerSectionsByRole = <UserRole, List<DrawerSection>>{
       _item('Teachers', 'teacher.svg', route: '/shell/hod/teachers'),
       _item('Subject Analytics', 'analytics.svg', route: '/shell/hod/subject-analytics'),
       _item('Interventions', 'interventions.svg', route: '/shell/hod/interventions'),
+      _item('E-Learning', 'book-open.svg', route: '/shell/hod/courses'),
       _item('Timetable', 'timetable.svg', route: '/shell/hod/timetable'),
     ], title: 'Management'),
     _section([

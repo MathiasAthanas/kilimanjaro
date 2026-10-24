@@ -885,6 +885,15 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         ),
       ),
       GoRoute(
+        path: '/student/learn/courses/:courseId/discussions',
+        pageBuilder: (context, state) => AppTransitions.utility(
+          key: state.pageKey,
+          child: student_elearning.StudentCourseDiscussionsScreen(
+            courseId: state.pathParameters['courseId'] ?? '',
+          ),
+        ),
+      ),
+      GoRoute(
         path: '/student/learn/discussions/:threadId',
         pageBuilder: (context, state) => AppTransitions.utility(
           key: state.pageKey,
@@ -993,24 +1002,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           key: state.pageKey,
           child: parent_elearning.ParentCourseViewScreen(
             courseId: state.pathParameters['courseId'] ?? '',
-          ),
-        ),
-      ),
-      GoRoute(
-        path: '/parent/learning/assignments/:assignmentId',
-        pageBuilder: (context, state) => AppTransitions.utility(
-          key: state.pageKey,
-          child: parent_elearning.ParentAssignmentViewScreen(
-            assignmentId: state.pathParameters['assignmentId'] ?? '',
-          ),
-        ),
-      ),
-      GoRoute(
-        path: '/parent/learning/quizzes/:quizId',
-        pageBuilder: (context, state) => AppTransitions.utility(
-          key: state.pageKey,
-          child: parent_elearning.ParentQuizScoreScreen(
-            quizId: state.pathParameters['quizId'] ?? '',
           ),
         ),
       ),
@@ -1175,7 +1166,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/teacher/courses/:courseId/lesson/:lessonId/material/new',
         pageBuilder: (context, state) => AppTransitions.utility(
           key: state.pageKey,
-          child: const teacher_elearning.TeacherAddMaterialScreen(),
+          child: teacher_elearning.TeacherAddMaterialScreen(
+            courseId: state.pathParameters['courseId'] ?? '',
+            lessonId: state.pathParameters['lessonId'] ?? '',
+          ),
         ),
       ),
       GoRoute(
@@ -1203,6 +1197,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         pageBuilder: (context, state) => AppTransitions.utility(
           key: state.pageKey,
           child: teacher_elearning.TeacherGradeSubmissionScreen(
+            courseId: state.pathParameters['courseId'] ?? '',
+            assignmentId: state.pathParameters['assignmentId'] ?? '',
             submissionId: state.pathParameters['submissionId'] ?? '',
           ),
         ),
@@ -1221,14 +1217,29 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/teacher/courses/:courseId/quizzes/:quizId/builder',
         pageBuilder: (context, state) => AppTransitions.utility(
           key: state.pageKey,
-          child: const teacher_elearning.TeacherQuizBuilderScreen(),
+          child: teacher_elearning.TeacherQuizBuilderScreen(
+            courseId: state.pathParameters['courseId'] ?? '',
+            quizId: state.pathParameters['quizId'] ?? '',
+          ),
+        ),
+      ),
+      GoRoute(
+        path: '/teacher/courses/:courseId/quizzes/:quizId/results',
+        pageBuilder: (context, state) => AppTransitions.utility(
+          key: state.pageKey,
+          child: teacher_elearning.TeacherQuizResultsScreen(
+            courseId: state.pathParameters['courseId'] ?? '',
+            quizId: state.pathParameters['quizId'] ?? '',
+          ),
         ),
       ),
       GoRoute(
         path: '/teacher/courses/:courseId/engagement',
         pageBuilder: (context, state) => AppTransitions.utility(
           key: state.pageKey,
-          child: const teacher_elearning.TeacherCourseEngagementScreen(),
+          child: teacher_elearning.TeacherCourseEngagementScreen(
+            courseId: state.pathParameters['courseId'] ?? '',
+          ),
         ),
       ),
       GoRoute(

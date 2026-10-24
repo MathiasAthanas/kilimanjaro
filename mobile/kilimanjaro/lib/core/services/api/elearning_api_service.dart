@@ -110,6 +110,13 @@ class ElearningApiService {
         resp.data as Map<String, dynamic>);
   }
 
+  /// Fetch an assignment directly by its ID (no courseId needed).
+  Future<ElearningAssignmentModel> getAssignmentById(String assignmentId) async {
+    final opts = await _authOptions();
+    final resp = await _dio.get<dynamic>('/assignments/$assignmentId', options: opts);
+    return ElearningAssignmentModel.fromJson(resp.data as Map<String, dynamic>);
+  }
+
   Future<ElearningSubmissionModel?> mySubmission(String assignmentId) async {
     final opts = await _authOptions();
     try {
@@ -290,6 +297,17 @@ class ElearningApiService {
         .toList();
   }
 
+  Future<ElearningDiscussionModel> createDiscussion(
+      String courseId, String title, String body) async {
+    final opts = await _authOptions();
+    final resp = await _dio.post<dynamic>(
+      '/courses/$courseId/discussions',
+      data: {'title': title, 'body': body},
+      options: opts,
+    );
+    return ElearningDiscussionModel.fromJson(resp.data as Map<String, dynamic>);
+  }
+
   Future<ElearningDiscussionModel> getDiscussion(String threadId) async {
     final opts = await _authOptions();
     final resp =
@@ -308,6 +326,108 @@ class ElearningApiService {
     );
     return ElearningReplyModel.fromJson(resp.data as Map<String, dynamic>);
   }
+
+  // ─── Teaching (staff) ───────────────────────────────────────────────────
+
+  Future<dynamic> _send(String method, String path, [Object? body]) async {
+    final opts = await _authOptions();
+    final resp = await _dio.request<dynamic>(
+      path,
+      data: body,
+      options: opts.copyWith(method: method),
+    );
+    return resp.data;
+  }
+
+  Map<String, dynamic> _map(dynamic v) =>
+      v is Map ? Map<String, dynamic>.from(v) : <String, dynamic>{};
+
+  List<Map<String, dynamic>> _maps(dynamic v) => v is List
+      ? v.whereType<Map>().map((m) => Map<String, dynamic>.from(m)).toList()
+      : <Map<String, dynamic>>[];
+
+  Future<Map<String, dynamic>> reviewDesk() async =>
+      _map(await _send('GET', '/teacher/review-desk'));
+
+  Future<Map<String, dynamic>> parentLearningSummary(String childId) async =>
+      _map(await _send('GET', '/parent/$childId/learning-summary'));
+
+  Future<void> publishCourse(String courseId) async =>
+      _send('PATCH', '/courses/$courseId/publish');
+
+  Future<Map<String, dynamic>> createLesson(
+          String courseId, Map<String, dynamic> body) async =>
+      _map(await _send('POST', '/courses/$courseId/lessons', body));
+
+  Future<void> publishLesson(String courseId, String lessonId) async =>
+      _send('PATCH', '/courses/$courseId/lessons/$lessonId/publish');
+
+  Future<Map<String, dynamic>> createMaterial(
+          String courseId, String lessonId, Map<String, dynamic> body) async =>
+      _map(await _send(
+          'POST', '/courses/$courseId/lessons/$lessonId/materials', body));
+
+  Future<Map<String, dynamic>> createAssignment(
+          String courseId, Map<String, dynamic> body) async =>
+      _map(await _send('POST', '/courses/$courseId/assignments', body));
+
+  Future<void> publishAssignment(String courseId, String id) async =>
+      _send('PATCH', '/courses/$courseId/assignments/$id/publish');
+
+  Future<void> closeAssignment(String courseId, String id) async =>
+      _send('PATCH', '/courses/$courseId/assignments/$id/close');
+
+  Future<List<Map<String, dynamic>>> assignmentSubmissions(
+          String courseId, String id) async =>
+      _maps(await _send('GET', '/courses/$courseId/assignments/$id/submissions'));
+
+  Future<List<Map<String, dynamic>>> missingSubmissions(
+          String courseId, String id) async =>
+      _maps(await _send(
+          'GET', '/courses/$courseId/assignments/$id/submissions/missing'));
+
+  Future<Map<String, dynamic>> submissionDownload(String submissionId) async =>
+      _map(await _send('GET', '/submissions/$submissionId/download'));
+
+  Future<Map<String, dynamic>> gradeSubmission(
+          String submissionId, Map<String, dynamic> body) async =>
+      _map(await _send('PATCH', '/submissions/$submissionId/grade', body));
+
+  Future<Map<String, dynamic>> returnSubmission(
+          String submissionId, Map<String, dynamic> body) async =>
+      _map(await _send('PATCH', '/submissions/$submissionId/return', body));
+
+  Future<Map<String, dynamic>> createQuiz(
+          String courseId, Map<String, dynamic> body) async =>
+      _map(await _send('POST', '/courses/$courseId/quizzes', body));
+
+  Future<Map<String, dynamic>> addQuestion(
+          String quizId, Map<String, dynamic> body) async =>
+      _map(await _send('POST', '/quizzes/$quizId/questions', body));
+
+  Future<void> deleteQuestion(String quizId, String questionId) async =>
+      _send('DELETE', '/quizzes/$quizId/questions/$questionId');
+
+  Future<void> publishQuiz(String courseId, String quizId) async =>
+      _send('PATCH', '/courses/$courseId/quizzes/$quizId/publish');
+
+  Future<void> closeQuiz(String courseId, String quizId) async =>
+      _send('PATCH', '/courses/$courseId/quizzes/$quizId/close');
+
+  Future<List<Map<String, dynamic>>> quizResults(
+          String courseId, String quizId) async =>
+      _maps(await _send('GET', '/courses/$courseId/quizzes/$quizId/results'));
+
+  Future<Map<String, dynamic>> gradeShortAnswer(
+          String attemptId, Map<String, dynamic> body) async =>
+      _map(await _send('PATCH', '/attempts/$attemptId/grade-short-answer', body));
+
+  Future<List<Map<String, dynamic>>> courseRoster(String courseId) async =>
+      _maps(await _send('GET', '/courses/$courseId/students'));
+
+  Future<Map<String, dynamic>> createAnnouncement(
+          String courseId, Map<String, dynamic> body) async =>
+      _map(await _send('POST', '/courses/$courseId/announcements', body));
 
   // ─── File upload ─────────────────────────────────────────────────────────
 

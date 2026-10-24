@@ -28,14 +28,14 @@ final activeCourseCountProvider = Provider<int>((ref) {
 // ─── Single course ───────────────────────────────────────────────────────────
 
 final elearningCourseProvider =
-    FutureProvider.family<ElearningCourseModel, String>((ref, courseId) async {
+    FutureProvider.autoDispose.family<ElearningCourseModel, String>((ref, courseId) async {
   return ref.watch(elearningApiServiceProvider).getCourse(courseId);
 });
 
 // ─── Lessons ─────────────────────────────────────────────────────────────────
 
 final elearningLessonsProvider =
-    FutureProvider.family<List<ElearningLessonModel>, String>(
+    FutureProvider.autoDispose.family<List<ElearningLessonModel>, String>(
         (ref, courseId) async {
   return ref.watch(elearningApiServiceProvider).listLessons(courseId);
 });
@@ -45,7 +45,7 @@ final elearningLessonsProvider =
 typedef _LessonKey = ({String courseId, String lessonId});
 
 final elearningMaterialsProvider =
-    FutureProvider.family<List<ElearningMaterialModel>, _LessonKey>(
+    FutureProvider.autoDispose.family<List<ElearningMaterialModel>, _LessonKey>(
         (ref, key) async {
   return ref
       .watch(elearningApiServiceProvider)
@@ -55,9 +55,15 @@ final elearningMaterialsProvider =
 // ─── Assignments ─────────────────────────────────────────────────────────────
 
 final elearningAssignmentsProvider =
-    FutureProvider.family<List<ElearningAssignmentModel>, String>(
+    FutureProvider.autoDispose.family<List<ElearningAssignmentModel>, String>(
         (ref, courseId) async {
   return ref.watch(elearningApiServiceProvider).listAssignments(courseId);
+});
+
+final elearningAssignmentByIdProvider =
+    FutureProvider.autoDispose.family<ElearningAssignmentModel, String>(
+        (ref, assignmentId) async {
+  return ref.watch(elearningApiServiceProvider).getAssignmentById(assignmentId);
 });
 
 final mySubmissionProvider =
@@ -75,28 +81,28 @@ final mySubmissionsProvider =
 // ─── Quizzes ─────────────────────────────────────────────────────────────────
 
 final elearningQuizzesProvider =
-    FutureProvider.family<List<ElearningQuizModel>, String>(
+    FutureProvider.autoDispose.family<List<ElearningQuizModel>, String>(
         (ref, courseId) async {
   return ref.watch(elearningApiServiceProvider).listQuizzes(courseId);
 });
 
 /// Fetch a quiz by ID only — used by the quiz attempt screen.
 final elearningQuizByIdProvider =
-    FutureProvider.family<ElearningQuizModel, String>((ref, quizId) async {
+    FutureProvider.autoDispose.family<ElearningQuizModel, String>((ref, quizId) async {
   return ref.watch(elearningApiServiceProvider).getQuizById(quizId);
 });
 
 typedef _QuizKey = ({String courseId, String quizId});
 
 final elearningQuizProvider =
-    FutureProvider.family<ElearningQuizModel, _QuizKey>((ref, key) async {
+    FutureProvider.autoDispose.family<ElearningQuizModel, _QuizKey>((ref, key) async {
   return ref
       .watch(elearningApiServiceProvider)
       .getQuiz(key.courseId, key.quizId);
 });
 
 final myAttemptsProvider =
-    FutureProvider.family<List<ElearningQuizAttemptModel>, String>(
+    FutureProvider.autoDispose.family<List<ElearningQuizAttemptModel>, String>(
         (ref, quizId) async {
   return ref.watch(elearningApiServiceProvider).myAttempts(quizId);
 });
