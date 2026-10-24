@@ -77,21 +77,6 @@ Future<void> _loadEnvironment() async {
 /// Debug-only: surfaces provider failures (parse errors, failed loads) that the
 /// UI otherwise collapses into a generic "something went wrong" state.
 class _DebugProviderObserver extends ProviderObserver {
-  int _updates = 0;
-
-  @override
-  void didUpdateProvider(
-    ProviderBase<Object?> provider,
-    Object? previousValue,
-    Object? newValue,
-    ProviderContainer container,
-  ) {
-    _updates++;
-    if (_updates % 25 == 0) {
-      debugPrint('[DBG] provider updates: $_updates last=${provider.name ?? provider.runtimeType}');
-    }
-  }
-
   @override
   void providerDidFail(
     ProviderBase<Object?> provider,

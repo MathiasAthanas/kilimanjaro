@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/announcement_model.dart';
@@ -36,9 +35,7 @@ final parentServiceProvider = Provider<IParentService>((ref) {
 });
 
 final parentChildrenProvider = FutureProvider<List<ChildSummary>>((ref) async {
-  final kids = await ref.watch(parentServiceProvider).getChildren();
-  debugPrint('[DBG] children loaded: ${kids.length}');
-  return kids;
+  return ref.watch(parentServiceProvider).getChildren();
 });
 
 // Explicitly selected child — set by the child switcher screen
@@ -57,7 +54,6 @@ final resolvedActiveChildIdProvider = Provider<String>((ref) {
 
 final activeParentChildProvider = FutureProvider<ChildSummary?>((ref) async {
   final childId = ref.watch(resolvedActiveChildIdProvider);
-  debugPrint('[DBG] active child id: "$childId"');
   if (childId.isEmpty) return null;
   await Future<void>.delayed(const Duration(milliseconds: 500));
   return ref.watch(parentServiceProvider).getChild(childId);

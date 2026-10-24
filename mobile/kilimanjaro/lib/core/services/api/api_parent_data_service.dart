@@ -211,23 +211,28 @@ class ApiParentDataService implements IParentService {
   Future<List<PerformanceSnapshotModel>> getPerformanceSnapshots(String childId) async {
     final profile = await _getChildProfile(childId);
     if (profile == null) return [];
-    final snapshots = profile['snapshots'] as List<dynamic>? ?? profile['latestSnapshots'] as List<dynamic>? ?? [];
+    final snapshots = profile['snapshots'] as List<dynamic>? ??
+        profile['latestSnapshots'] as List<dynamic>? ??
+        profile['trends'] as List<dynamic>? ??
+        [];
     return snapshots.cast<Map<String, dynamic>>().map(PerformanceSnapshotModel.fromJson).toList();
   }
 
   @override
   Future<PerformanceTrendModel?> getPerformanceTrend(String childId, String subjectId) async {
-    final opts = await _auth();
-    try {
-      final resp = await _dio.get<Map<String, dynamic>>(
-        '/students/performance/$childId/subject/$subjectId',
-        options: opts,
-      );
-      return PerformanceTrendModel.fromJson(resp.data!);
-    } on DioException catch (e) {
-      if (e.response?.statusCode == 404) return null;
-      throw ApiFailure.fromDio(e);
-    }
+    final profile = await _getChildProfile(childId);
+    if (profile == null) return null;
+    final trends = profile['trends'] as List<dynamic>? ?? [];
+    final match = trends.whereType<Map<String, dynamic>>().where((t) => t['subjectId'] == subjectId).firstOrNull;
+    // The backend returns the per-term scores separately, keyed by subject.
+    final chart = profile['chartData'];
+    final points = chart is Map ? chart[subjectId] : null;
+    if (match == null && points == null) return null;
+    return PerformanceTrendModel.fromJson({
+      ...?match,
+      'subjectId': subjectId,
+      if (points != null) 'points': points,
+    });
   }
 
   // ─── Finance ──────────────────────────────────────────────────────────────

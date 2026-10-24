@@ -81,7 +81,7 @@ class InvoiceDetailScreen extends ConsumerWidget {
                                       context,
                                     ).textTheme.titleMedium,
                                   ),
-                                  Text(invoice.id),
+                                  Text(invoice.title),
                                 ],
                               ),
                             ],
@@ -102,8 +102,8 @@ class InvoiceDetailScreen extends ConsumerWidget {
                                 backgroundColor: paperInner,
                               ),
                               _Cell(
-                                label: 'Invoice',
-                                value: invoice.title,
+                                label: 'Paid so far',
+                                value: formatTzs(invoice.paidAmount),
                                 backgroundColor: paperInner,
                               ),
                               _Cell(

@@ -14,6 +14,8 @@ class KSRankBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // No ranking yet (e.g. trend rows carry none): show nothing rather than "0th of 0".
+    if (rank <= 0 || total <= 0) return const SizedBox.shrink();
     final medalColor = rank <= 3 ? AppColors.accentAmber : AppColors.skyBlue500;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(

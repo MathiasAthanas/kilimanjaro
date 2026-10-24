@@ -188,7 +188,10 @@ class ApiStudentDataService implements IStudentService {
   Future<List<PerformanceSnapshotModel>> getPerformanceSnapshots() async {
     final profile = await _getStudentPerformanceProfile();
     if (profile == null) return [];
-    final snapshots = profile['snapshots'] as List<dynamic>? ?? profile['latestSnapshots'] as List<dynamic>? ?? [];
+    final snapshots = profile['snapshots'] as List<dynamic>? ??
+        profile['latestSnapshots'] as List<dynamic>? ??
+        profile['trends'] as List<dynamic>? ??
+        [];
     return snapshots
         .cast<Map<String, dynamic>>()
         .map(PerformanceSnapshotModel.fromJson)
@@ -203,8 +206,15 @@ class ApiStudentDataService implements IStudentService {
     final match = trends.cast<Map<String, dynamic>>()
         .where((t) => t['subjectId'] == subjectId)
         .firstOrNull;
-    if (match == null) return null;
-    return PerformanceTrendModel.fromJson(match);
+    // The backend returns the per-term scores separately, keyed by subject.
+    final chart = profile['chartData'];
+    final points = chart is Map ? chart[subjectId] : null;
+    if (match == null && points == null) return null;
+    return PerformanceTrendModel.fromJson({
+      ...?match,
+      'subjectId': subjectId,
+      if (points != null) 'points': points,
+    });
   }
 
   // ─── Peer Pairing ─────────────────────────────────────────────────────────
