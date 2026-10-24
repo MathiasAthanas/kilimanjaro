@@ -1392,9 +1392,13 @@ class TeacherAnnouncementsListScreen extends ConsumerWidget {
       body: TeacherSurface(
         children: items.map((a) => _TeacherAnnouncementCard(item: a)).toList(),
       ),
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: Padding(
+        // Clear the floating bottom navigation bar.
+        padding: const EdgeInsets.only(bottom: 92),
+        child: FloatingActionButton(
         onPressed: () => context.push('/teacher/announcements/create'),
         child: const Icon(Icons.add_rounded),
+      ),
       ),
     );
   }

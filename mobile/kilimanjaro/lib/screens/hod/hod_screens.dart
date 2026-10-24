@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/providers/hod_extra_provider.dart';
 import '../../core/providers/hod_provider.dart';
 import '../../core/providers/snackbar_provider.dart';
 import '../../core/theme/app_colors.dart';
@@ -285,7 +286,7 @@ class DepartmentOverviewScreen extends ConsumerWidget {
         subjects.length;
     return Scaffold(
       appBar: const KSAppBar(
-        title: 'Science Department',
+        title: 'My Department',
         subtitle: 'Subject outcomes, coverage pace, and class-level comparison.',
         showBack: false,
         variant: KSAppBarVariant.hero,
@@ -412,14 +413,6 @@ class HodTeacherListScreen extends ConsumerWidget {
       ),
       body: HodSurface(
         children: [
-          HodInsightCard(
-            title: 'Amina Rashidi needs support',
-            subtitle:
-                'Chemistry has the lowest department average and highest at-risk count. Prioritize coaching before the next midterm.',
-            icon: Icons.psychology_rounded,
-            color: AppColors.accentRose,
-            onTap: () => context.push('/hod/teachers/amina'),
-          ),
           ...teachers.map(
             (teacher) => _TeacherCard(
               teacher: teacher,
@@ -868,89 +861,134 @@ class _HodInterventionsScreenState
             ...visible.map((item) => _InterventionCard(item: item)),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: Padding(
+        // Clear the floating bottom navigation bar.
+        padding: const EdgeInsets.only(bottom: 92),
+        child: FloatingActionButton(
         onPressed: () => context.push('/teacher/interventions/create'),
         child: const Icon(Icons.add_rounded),
       ),
+      ),
     );
   }
 }
 
-class HodAnnouncementsScreen extends StatelessWidget {
+class HodAnnouncementsScreen extends ConsumerWidget {
   const HodAnnouncementsScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final announcementsAsync = ref.watch(hodAnnouncementsProvider);
     return Scaffold(
       appBar: const KSAppBar(
         title: 'Department Notices',
-        subtitle: 'Science department communication for teachers and classes.',
+        subtitle: 'School and department communication for teachers and classes.',
         variant: KSAppBarVariant.hero,
       ),
-      body: HodSurface(
-        children: const [
-          _AnnouncementCard(
-            title: 'Science Practical Schedule',
-            audience: 'Teachers',
-            message:
-                'All Form 3 practical records must be updated before Friday inspection.',
-            date: 'Today, 9:30 AM',
-          ),
-          _AnnouncementCard(
-            title: 'Assessment Moderation',
-            audience: 'Science Department',
-            message:
-                'Submit CAT 2 moderation samples before marks approval starts.',
-            date: 'Yesterday',
-          ),
-        ],
+      body: RefreshIndicator(
+        onRefresh: () async => ref.invalidate(hodAnnouncementsProvider),
+        child: HodSurface(
+          children: [
+            announcementsAsync.when(
+              loading: () => const Padding(
+                padding: EdgeInsets.symmetric(vertical: 40),
+                child: Center(child: CircularProgressIndicator()),
+              ),
+              error: (e, _) => const KSEmptyState(
+                title: 'Could not load announcements',
+                subtitle: 'Check your connection and pull to refresh.',
+              ),
+              data: (items) => items.isEmpty
+                  ? const KSEmptyState(
+                      title: 'No announcements yet',
+                      subtitle: 'Use Compose to notify teachers and classes.',
+                    )
+                  : Column(
+                      children: [
+                        for (final item in items)
+                          _AnnouncementCard(
+                            title: item.title,
+                            audience: item.authorRole.isEmpty ? 'School' : item.authorRole.replaceAll('_', ' '),
+                            message: item.body,
+                            date:
+                                '${item.publishedAt.day}/${item.publishedAt.month}/${item.publishedAt.year}',
+                          ),
+                      ],
+                    ),
+            ),
+          ],
+        ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: Padding(
+        // Clear the floating bottom navigation bar.
+        padding: const EdgeInsets.only(bottom: 92),
+        child: FloatingActionButton.extended(
         // Opens the shared announcement composer, which persists to
         // POST /notifications/announcements (backend authorizes by HOD role).
-        onPressed: () => context.push('/hod/announcements/create'),
+        onPressed: () async {
+          await context.push('/hod/announcements/create');
+          ref.invalidate(hodAnnouncementsProvider);
+        },
         icon: const Icon(Icons.campaign_rounded),
         label: const Text('Compose'),
+      ),
       ),
     );
   }
 }
 
-class HodTimetableScreen extends StatelessWidget {
+class HodTimetableScreen extends ConsumerWidget {
   const HodTimetableScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return const Scaffold(
-      appBar: KSAppBar(
-        title: 'Science Timetable',
-        subtitle: 'Department periods, practical slots, and coverage checks.',
+  Widget build(BuildContext context, WidgetRef ref) {
+    final slotsAsync = ref.watch(hodTimetableProvider);
+    const palette = [
+      AppColors.skyBlue600,
+      AppColors.accentTeal,
+      AppColors.accentAmber,
+      AppColors.accentIndigo,
+      AppColors.accentEmerald,
+    ];
+    return Scaffold(
+      appBar: const KSAppBar(
+        title: 'Department Timetable',
+        subtitle: 'Department periods and teaching cover for the week.',
         variant: KSAppBarVariant.hero,
       ),
-      body: HodSurface(
-        children: [
-          _TimelineRow(
-            day: 'Mon',
-            time: '08:00',
-            title: 'Biology Form 2A',
-            subtitle: 'Grace Ndosi - Lab 1',
-            color: AppColors.skyBlue600,
-          ),
-          _TimelineRow(
-            day: 'Wed',
-            time: '10:20',
-            title: 'Chemistry Form 3B',
-            subtitle: 'Amina Rashidi - Practical prep',
-            color: AppColors.accentTeal,
-          ),
-          _TimelineRow(
-            day: 'Fri',
-            time: '12:10',
-            title: 'Physics Form 4A',
-            subtitle: 'Peter Kimani - Lab 2',
-            color: AppColors.accentAmber,
-          ),
-        ],
+      body: RefreshIndicator(
+        onRefresh: () async => ref.invalidate(hodTimetableProvider),
+        child: HodSurface(
+          children: [
+            slotsAsync.when(
+              loading: () => const Padding(
+                padding: EdgeInsets.symmetric(vertical: 40),
+                child: Center(child: CircularProgressIndicator()),
+              ),
+              error: (e, _) => const KSEmptyState(
+                title: 'Could not load the timetable',
+                subtitle: 'Check your connection and pull to refresh.',
+              ),
+              data: (slots) => slots.isEmpty
+                  ? const KSEmptyState(
+                      title: 'No timetable slots',
+                      subtitle: 'Generate class timetables on the web dashboard.',
+                    )
+                  : Column(
+                      children: [
+                        for (var i = 0; i < slots.length; i++)
+                          _TimelineRow(
+                            day: slots[i].day,
+                            time: slots[i].time,
+                            title: slots[i].title,
+                            subtitle: slots[i].subtitle,
+                            color: palette[i % palette.length],
+                          ),
+                      ],
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }
