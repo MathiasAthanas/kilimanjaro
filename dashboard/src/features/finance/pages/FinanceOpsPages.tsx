@@ -481,9 +481,7 @@ async function rptHeader(doc: JsPDFDoc, logo: string | null, title: string, subt
   }
   const tx = M + 30;
   doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(...RPT_WHITE); doc.text('Kilimanjaro Schools', tx, 15);
-  doc.setFont('helvetica', 'italic'); doc.setFontSize(7.5); doc.setTextColor(...RPT_GOLD); doc.text('Excellence in Education Since 2003', tx, 20);
   doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.setTextColor(200, 220, 230);
-  doc.text('P.O. Box 4502, Moshi, Kilimanjaro, Tanzania  ·  Tel: +255 754 000 000', tx, 25);
   doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.setTextColor(160, 200, 220);
   doc.text('STORE & INVENTORY', PW - M, 13, { align: 'right' });
   doc.setFont('helvetica', 'bold'); doc.setFontSize(14); doc.setTextColor(...RPT_WHITE); doc.text(title, PW - M, 22, { align: 'right' });

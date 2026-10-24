@@ -40,8 +40,6 @@ import {
   ClipboardCheck,
   Eye,
   Timer,
-  UploadCloud,
-  Paperclip,
   Printer,
   RefreshCw,
   Lock,
@@ -76,9 +74,12 @@ import {
   useFeeCategories,
   useFeeStructures,
   useInvoice as useInvoiceById,
-  useInvoices,
+  useInvoiceLedger,
+  usePaymentLedger,
+  useReceiptLedger,
   usePendingPaymentApprovals,
   usePayments,
+  usePayment,
   useReceipts,
   useReceipt as useReceiptById,
   useStudentGroups,
@@ -100,6 +101,7 @@ import {
   useDisposeAssetMutation,
   useRefundPaymentMutation,
   useGenerateInvoicesMutation,
+  useInvoiceJob,
   useStudentInvoices,
   useStudentStatement,
   useCashPaymentMutation,
@@ -118,14 +120,13 @@ import {
   DenseBarChart,
   FeeMatrixGrid,
   FinanceBreadcrumb,
-  FinanceFilters,
   FinanceMetricStrip,
   FinanceStatusBadge,
+  statusRail,
   FinanceTable,
   FinanceWorkspaceShell,
   InvoiceTable,
   MiniColumnChart,
-  PaymentForm,
   PaymentTable,
   ReadOnlyApprovalNotice,
   ReceiptList,
@@ -136,7 +137,10 @@ import {
   downloadInvoicePdf,
   getLogoBase64,
 } from '../components/FinanceWorkspaceShell';
-import { formatDate, formatTZS, overdueInvoices, parseTZSInput, isOverpayment, duplicateReferenceWarning } from '../utils/money';
+import { EXPORTS, exportFinanceCsv } from '../utils/exportCsv';
+import type { ExportKey } from '../utils/exportCsv';
+import { LedgerPager, LedgerSearch, LedgerTabs, selectClass, useDebounced } from '../components/LedgerControls';
+import { formatDate, formatTZS, overdueInvoices, parseTZSInput, isOverpayment } from '../utils/money';
 import { useFileUploadMutation, validateFile } from '../../../lib/api/upload';
 import type { UploadedFile } from '../../../lib/api/upload';
 import { useAuthStore } from '../../../lib/auth/authStore';
@@ -149,14 +153,23 @@ import { SkeletonCards } from '../../../components/common/SkeletonCards';
 // Zero-value overview — shown when API hasn't returned data yet (no fake numbers)
 const EMPTY_OVERVIEW: typeof financeOverview = { totalInvoiced: 0, totalCollected: 0, outstanding: 0, collectionRate: 0, today: 0, overdueInvoices: 0 };
 
+type StageLabel = 'Nursery' | 'Pre-Unit' | 'Primary' | 'O-Level' | 'A-Level';
+const STAGE_LABELS: StageLabel[] = ['Nursery', 'Pre-Unit', 'Primary', 'O-Level', 'A-Level'];
+/** Maps the API's education stage (any case, _ or -) to the label used on screen. */
+function stageLabel(raw: string | undefined | null): StageLabel | null {
+  const key = String(raw ?? '').toUpperCase().replace(/[^A-Z]/g, '');
+  return ({ NURSERY: 'Nursery', PREUNIT: 'Pre-Unit', PRIMARY: 'Primary', OLEVEL: 'O-Level', ALEVEL: 'A-Level' } as Record<string, StageLabel>)[key] ?? null;
+}
+
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 
 export function FinanceHomePage() {
   const navigate = useNavigate();
 
   const { data: apiOverview = EMPTY_OVERVIEW } = useFinanceOverview() as unknown as { data: typeof financeOverview };
-  const { data: apiPayments = [] as typeof payments } = usePayments() as unknown as { data: typeof payments };
-  const { data: apiInvoices = [] as typeof invoices } = useInvoices() as unknown as { data: typeof invoices };
+  // Only what the desk shows: the eight latest confirmed payments, the five biggest overdue debts and (while typing) matching students.
+  const { data: recentLedger } = usePaymentLedger({ page: 1, limit: 8, status: 'CONFIRMED' });
+  const { data: overdueLedger } = useInvoiceLedger({ page: 1, limit: 5, status: 'OVERDUE', sort: 'outstanding' });
   const { data: pendingApprovals = [] } = usePendingPaymentApprovals() as unknown as { data: unknown[] };
   const { data: fundSummary } = useFundRequestSummary() as unknown as { data?: { pendingForward: number; pendingApproval: number; approvedAwaitingDisbursement: number } };
   const { data: storeSummary } = useStoreSummary() as unknown as { data?: { lowStockCount: number; totalStockValue: number } };
@@ -167,7 +180,9 @@ export function FinanceHomePage() {
   const [studentSearch, setStudentSearch] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
 
-  const overdue = overdueInvoices(apiInvoices);
+  const overdue = overdueLedger?.items ?? [];
+  const overdueCount = overdueLedger?.meta.total ?? 0;
+  const overdueAmount = overdueLedger?.totals.outstanding ?? 0;
   const base = apiOverview.totalInvoiced || 1;
   const collectedPct = Math.min(100, Math.round((apiOverview.totalCollected / base) * 100));
   const pendingCount = Array.isArray(pendingApprovals) ? pendingApprovals.length : 0;
@@ -175,27 +190,23 @@ export function FinanceHomePage() {
   const lowStockCount = storeSummary?.lowStockCount ?? 0;
 
   // Student search: filter invoices by student name
-  const studentMatches = studentSearch.trim().length >= 2
-    ? Array.from(
-        new Map(
-          apiInvoices
-            .filter((inv) => inv.student.toLowerCase().includes(studentSearch.toLowerCase()) || inv.registration?.toLowerCase().includes(studentSearch.toLowerCase()))
-            .map((inv) => [inv.studentId ?? inv.student, inv]),
-        ).values(),
-      ).slice(0, 6)
+  const debouncedStudent = useDebounced(studentSearch.trim());
+  const { data: studentLedger } = useInvoiceLedger({ page: 1, limit: 30, search: debouncedStudent }, { enabled: debouncedStudent.length >= 2 });
+  const studentMatches = debouncedStudent.length >= 2 && studentSearch.trim().length >= 2
+    ? Array.from(new Map((studentLedger?.items ?? []).map((inv) => [inv.studentId ?? inv.student, inv])).values()).slice(0, 6)
     : [];
 
   // Collection by method
   const byMethod = (collectionData?.byPaymentMethod ?? []);
   const totalMethodAmount = byMethod.reduce((s, m) => s + m.amount, 0) || 1;
-  const methodColors: Record<string, string> = { CASH: 'bg-[#00334f]', BANK: 'bg-[#10b981]', MOBILE_MONEY: 'bg-[#d59a1b]' };
-  const methodLabels: Record<string, string> = { CASH: 'Cash', BANK: 'Bank Transfer', MOBILE_MONEY: 'Mobile Money' };
+  const methodColors: Record<string, string> = { CASH: 'bg-[#00334f]', BANK_TRANSFER: 'bg-[#10b981]', BANK: 'bg-[#10b981]', MOBILE_MONEY: 'bg-[#d59a1b]' };
+  const methodLabels: Record<string, string> = { CASH: 'Cash', BANK_TRANSFER: 'Bank Transfer', BANK: 'Bank Transfer', MOBILE_MONEY: 'Mobile Money', SCHOLARSHIP: 'Scholarship', WAIVER: 'Waiver', OTHER: 'Other' };
 
   // Recent payments — last 8, most recent first
-  const recentPayments = [...apiPayments].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 8);
+  const recentPayments = recentLedger?.items ?? [];
 
   // Top overdue — biggest outstanding first
-  const topOverdue = [...overdue].sort((a, b) => b.outstanding - a.outstanding).slice(0, 5);
+  const topOverdue = overdue;
 
   // Fund requests needing FO action
   const foFundRequests = fundRequests.filter((f) => f.status === 'SUBMITTED' || f.status === 'APPROVED').slice(0, 4);
@@ -215,12 +226,12 @@ export function FinanceHomePage() {
             valueTone: pendingCount > 0 ? 'text-[#d59a1b]' : 'text-[#00334f]',
           },
           {
-            icon: AlertTriangle, label: 'Overdue Invoices', count: overdue.length,
-            detail: overdue.length > 0 ? `${formatTZS(overdue.reduce((s, i) => s + i.outstanding, 0))} total` : 'No overdue invoices',
+            icon: AlertTriangle, label: 'Overdue Invoices', count: overdueCount,
+            detail: overdueCount > 0 ? `${formatTZS(overdueAmount)} total` : 'No overdue invoices',
             to: '/finance/reports/fee-defaulters',
-            tone: overdue.length > 0 ? 'border-red-200 bg-red-50' : 'border-[#d5dde6] bg-white',
-            iconTone: overdue.length > 0 ? 'bg-red-500 text-white' : 'bg-[#f7f9fb] text-[#64748b]',
-            valueTone: overdue.length > 0 ? 'text-red-600' : 'text-[#00334f]',
+            tone: overdueCount > 0 ? 'border-red-200 bg-red-50' : 'border-[#d5dde6] bg-white',
+            iconTone: overdueCount > 0 ? 'bg-red-500 text-white' : 'bg-[#f7f9fb] text-[#64748b]',
+            valueTone: overdueCount > 0 ? 'text-red-600' : 'text-[#00334f]',
           },
           {
             icon: Briefcase, label: 'Fund Requests', count: foActionCount,
@@ -399,8 +410,8 @@ export function FinanceHomePage() {
             ) : (
               <div className="divide-y divide-[#d5dde6]">
                 {recentPayments.map((p) => {
-                  const methodIcon = p.method === 'CASH' ? '💵' : p.method === 'BANK' ? '🏦' : '📱';
-                  const statusColor = p.status === 'APPROVED' ? 'text-[#10b981]' : p.status === 'REJECTED' ? 'text-red-500' : 'text-[#d59a1b]';
+                  const methodIcon = p.method === 'CASH' ? '💵' : p.method === 'BANK' || p.method === 'BANK_TRANSFER' ? '🏦' : p.method === 'MOBILE_MONEY' ? '📱' : '🧾';
+                  const statusColor = p.status === 'CONFIRMED' || p.status === 'APPROVED' ? 'text-[#10b981]' : p.status === 'REJECTED' ? 'text-red-500' : 'text-[#d59a1b]';
                   return (
                     <NavLink key={p.id} to={`/finance/payments/${p.id}`} className="flex items-center gap-3 px-5 py-3 hover:bg-[#f7f9fb] transition">
                       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#f7f9fb] text-base">{methodIcon}</div>
@@ -427,8 +438,8 @@ export function FinanceHomePage() {
               <div className="flex items-center gap-2">
                 <AlertTriangle className="h-4 w-4 text-red-500" />
                 <h2 className="font-display text-base font-black text-[#00334f]">Overdue Invoices</h2>
-                {overdue.length > 0 && (
-                  <span className="rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-black text-white">{overdue.length}</span>
+                {overdueCount > 0 && (
+                  <span className="rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-black text-white">{overdueCount}</span>
                 )}
               </div>
               <NavLink to="/finance/reports/fee-defaulters" className="flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-red-500 hover:underline">
@@ -461,9 +472,9 @@ export function FinanceHomePage() {
                     </NavLink>
                   );
                 })}
-                {overdue.length > 5 && (
+                {overdueCount > 5 && (
                   <NavLink to="/finance/reports/fee-defaulters" className="flex items-center justify-center gap-1.5 py-3 text-xs font-black text-red-500 hover:bg-red-50">
-                    +{overdue.length - 5} more overdue students <ArrowRight className="h-3.5 w-3.5" />
+                    +{overdueCount - 5} more overdue invoices <ArrowRight className="h-3.5 w-3.5" />
                   </NavLink>
                 )}
               </div>
@@ -577,206 +588,122 @@ export function FinanceHomePage() {
 
 // ─── Invoice pages ────────────────────────────────────────────────────────────
 
-const INV_PAGE_SIZE = 20;
-type InvStatusTab = 'ALL' | 'OVERDUE' | 'PARTIAL' | 'PAID' | 'VOID';
+const INV_PAGE_SIZE = 25;
+type LedgerInvoice = {
+  id: string; number: string; studentId?: string; student: string; registration?: string; className?: string; term?: string;
+  total: number; paid: number; outstanding: number; status: string; dueDate: string;
+};
 
-function InvoiceLedgerTable({ rows }: { rows: (typeof invoices) }) {
+// Which backend statuses each tab asks for
+const INV_TABS: { key: string; label: string; statuses?: string }[] = [
+  { key: 'ALL', label: 'All' },
+  { key: 'ISSUED', label: 'Unpaid', statuses: 'ISSUED' },
+  { key: 'PARTIALLY_PAID', label: 'Part paid', statuses: 'PARTIALLY_PAID' },
+  { key: 'OVERDUE', label: 'Overdue', statuses: 'OVERDUE' },
+  { key: 'PAID', label: 'Paid', statuses: 'PAID' },
+  { key: 'CANCELLED', label: 'Cancelled', statuses: 'CANCELLED,WAIVED' },
+];
+
+function InvoiceLedgerTable({ rows }: { rows: LedgerInvoice[] }) {
   return (
     <FinanceTable columns={['Invoice #', 'Student', 'Class', 'Term', 'Total', 'Paid', 'Outstanding', 'Status', 'Due Date', '']}>
-      {rows.map((inv) => {
-        const railColor =
-          inv.status === 'PAID'    ? '#10b981' :
-          inv.status === 'OVERDUE' ? '#e11d48' :
-          inv.status === 'PARTIAL' ? '#d59a1b' :
-          inv.status === 'VOID' || inv.status === 'CANCELLED' ? '#94a3b8' : '#64748b';
-        return (
-          <tr key={inv.id} className="group bg-white transition even:bg-[#f7f9fb] hover:bg-[#eef5f8]" style={{ borderLeft: `3px solid ${railColor}` }}>
-            <Td>
-              <NavLink className="font-black text-[#00334f] hover:underline" to={`/finance/invoices/${inv.id}`}>
-                {inv.number}
-              </NavLink>
-            </Td>
-            <Td>
-              <NavLink className="font-black text-[#0f172a] hover:text-[#00334f] hover:underline" to={`/finance/students/${inv.studentId ?? inv.id}`}>
-                {inv.student}
-              </NavLink>
-              <div className="text-[11px] text-[#64748b]">{inv.registration}</div>
-            </Td>
-            <Td>{inv.className}</Td>
-            <Td>{inv.term}</Td>
-            <Td amount><AmountDisplay amount={inv.total} /></Td>
-            <Td amount><AmountDisplay amount={inv.paid} tone="paid" /></Td>
-            <Td amount><AmountDisplay amount={inv.outstanding} tone={inv.status === 'OVERDUE' ? 'overdue' : 'outstanding'} /></Td>
-            <Td><FinanceStatusBadge status={inv.status} /></Td>
-            <Td>{formatDate(inv.dueDate)}</Td>
-            <Td>
-              <NavLink className="text-xs font-black text-[#00334f] opacity-0 transition group-hover:opacity-100 hover:underline" to={`/finance/invoices/${inv.id}`}>
-                Inspect →
-              </NavLink>
-            </Td>
-          </tr>
-        );
-      })}
+      {rows.map((inv) => (
+        <tr key={inv.id} className="group bg-white transition even:bg-[#f7f9fb] hover:bg-[#eef5f8]" style={{ borderLeft: `3px solid ${statusRail(inv.status)}` }}>
+          <Td>
+            <NavLink className="font-black text-[#00334f] hover:underline" to={`/finance/invoices/${inv.id}`}>{inv.number}</NavLink>
+          </Td>
+          <Td>
+            <NavLink className="font-black text-[#0f172a] hover:text-[#00334f] hover:underline" to={`/finance/students/${inv.studentId ?? inv.id}`}>
+              {inv.student || 'Unknown student'}
+            </NavLink>
+            <div className="text-[11px] text-[#64748b]">{inv.registration}</div>
+          </Td>
+          <Td>{inv.className || '—'}</Td>
+          <Td>{inv.term || '—'}</Td>
+          <Td amount><AmountDisplay amount={inv.total} /></Td>
+          <Td amount><AmountDisplay amount={inv.paid} tone="paid" /></Td>
+          <Td amount><AmountDisplay amount={inv.outstanding} tone={inv.status === 'OVERDUE' ? 'overdue' : 'outstanding'} /></Td>
+          <Td><FinanceStatusBadge status={inv.status} /></Td>
+          <Td>{formatDate(inv.dueDate)}</Td>
+          <Td>
+            <NavLink className="text-xs font-black text-[#00334f] opacity-0 transition group-hover:opacity-100 hover:underline" to={`/finance/invoices/${inv.id}`}>Inspect →</NavLink>
+          </Td>
+        </tr>
+      ))}
     </FinanceTable>
   );
 }
 
 export function InvoiceListPage() {
-  const { data: apiInvoices = [] as typeof invoices, isLoading, isError, refetch } = useInvoices() as unknown as { data: typeof invoices; isLoading: boolean; isError: boolean; refetch: () => void };
   const [search, setSearch] = useState('');
-  const [statusTab, setStatusTab] = useState<InvStatusTab>('ALL');
+  const [statusTab, setStatusTab] = useState('ALL');
   const [classFilter, setClassFilter] = useState('');
   const [termFilter, setTermFilter] = useState('');
-  const [page, setPage] = useState(0);
+  const [page, setPage] = useState(1);
+  const q = useDebounced(search.trim());
 
-  const classes = useMemo(() => Array.from(new Set(apiInvoices.map((i) => i.className))).filter(Boolean).sort(), [apiInvoices]);
-  const terms = useMemo(() => Array.from(new Set(apiInvoices.map((i) => i.term))).filter(Boolean).sort(), [apiInvoices]);
+  const { data, isLoading, isError, isFetching, refetch } = useInvoiceLedger({
+    page,
+    limit: INV_PAGE_SIZE,
+    search: q || undefined,
+    status: INV_TABS.find((t) => t.key === statusTab)?.statuses,
+    classId: classFilter || undefined,
+    termId: termFilter || undefined,
+  });
+  const counts = data?.counts ?? {};
+  const totals = data?.totals ?? { total: 0, paid: 0, outstanding: 0 };
+  const rate = totals.total > 0 ? Math.round((totals.paid / totals.total) * 100) : 0;
+  const filtered = Boolean(q || classFilter || termFilter || statusTab !== 'ALL');
+  const overdue = counts.OVERDUE ?? 0;
+  const changed = (set: (v: string) => void) => (v: string) => { set(v); setPage(1); };
 
-  const counts = useMemo(() => ({
-    ALL:     apiInvoices.length,
-    OVERDUE: apiInvoices.filter((i) => i.status === 'OVERDUE').length,
-    PARTIAL: apiInvoices.filter((i) => i.status === 'PARTIAL').length,
-    PAID:    apiInvoices.filter((i) => i.status === 'PAID').length,
-    VOID:    apiInvoices.filter((i) => i.status === 'VOID' || i.status === 'CANCELLED').length,
-  }), [apiInvoices]);
-
-  const visible = useMemo(() => {
-    let r = apiInvoices;
-    if (statusTab !== 'ALL') r = r.filter((i) => i.status === statusTab || (statusTab === 'VOID' && i.status === 'CANCELLED'));
-    if (classFilter) r = r.filter((i) => i.className === classFilter);
-    if (termFilter) r = r.filter((i) => i.term === termFilter);
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      r = r.filter((i) =>
-        i.number.toLowerCase().includes(q) ||
-        i.student.toLowerCase().includes(q) ||
-        (i.registration ?? '').toLowerCase().includes(q),
-      );
-    }
-    return r;
-  }, [apiInvoices, statusTab, classFilter, termFilter, search]);
-
-  const totalPages = Math.ceil(visible.length / INV_PAGE_SIZE);
-  const pageInvoices = visible.slice(page * INV_PAGE_SIZE, (page + 1) * INV_PAGE_SIZE);
-
-  const totalAmount = visible.reduce((s, i) => s + i.total, 0);
-  const totalPaid = visible.reduce((s, i) => s + i.paid, 0);
-  const totalOutstanding = visible.reduce((s, i) => s + i.outstanding, 0);
-
-  const INV_TABS: { key: InvStatusTab; label: string }[] = [
-    { key: 'ALL',     label: 'All'     },
-    { key: 'OVERDUE', label: 'Overdue' },
-    { key: 'PARTIAL', label: 'Partial' },
-    { key: 'PAID',    label: 'Paid'    },
-    { key: 'VOID',    label: 'Void'    },
-  ];
+  const tabs = INV_TABS.map((t) => ({
+    key: t.key,
+    label: t.label,
+    count: t.key === 'CANCELLED' ? (counts.CANCELLED ?? 0) + (counts.WAIVED ?? 0) : (counts[t.key] ?? 0),
+  }));
 
   return (
     <FinanceWorkspaceShell title="Invoice Ledger" eyebrow="Find, filter, inspect every invoice">
       <FinanceBreadcrumb crumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Invoices' }]} />
 
       <FinanceMetricStrip items={[
-        { label: 'Total Invoiced', value: formatTZS(totalAmount), detail: `${visible.length} invoices`, tone: 'navy' },
-        {
-          label: 'Collected',
-          value: formatTZS(totalPaid),
-          detail: totalAmount > 0 ? `${Math.round((totalPaid / totalAmount) * 100)}% collection rate` : '—',
-          tone: 'green',
-          progress: totalAmount > 0 ? Math.round((totalPaid / totalAmount) * 100) : 0,
-        },
-        { label: 'Outstanding', value: formatTZS(totalOutstanding), detail: `${counts.OVERDUE} overdue`, tone: counts.OVERDUE > 0 ? 'red' : 'gold' },
-        { label: 'Overdue', value: String(counts.OVERDUE), detail: 'require immediate action', tone: 'red' },
+        { label: filtered ? 'Invoiced (filtered)' : 'Total Invoiced', value: formatTZS(totals.total), detail: `${data?.meta.total ?? 0} invoices`, tone: 'navy' },
+        { label: 'Collected', value: formatTZS(totals.paid), detail: totals.total > 0 ? `${rate}% collection rate` : '—', tone: 'green', progress: rate },
+        { label: 'Outstanding', value: formatTZS(totals.outstanding), detail: `${overdue} overdue`, tone: overdue > 0 ? 'red' : 'gold' },
+        { label: 'Overdue', value: String(overdue), detail: overdue > 0 ? 'need follow-up' : 'nothing overdue', tone: overdue > 0 ? 'red' : 'green' },
       ]} />
 
       <div className="flex flex-wrap items-center gap-3">
-        <div className="relative min-w-[280px] flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#64748b]" />
-          <input
-            value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(0); }}
-            placeholder="Search student name, invoice #, or registration…"
-            className="h-10 w-full rounded-lg border border-[#d5dde6] bg-white pl-9 pr-4 text-sm font-semibold placeholder:text-[#94a3b8] outline-none focus:border-[#00334f] focus:ring-2 focus:ring-[#00334f]/10"
-          />
-        </div>
-        <select value={classFilter} onChange={(e) => { setClassFilter(e.target.value); setPage(0); }} className="h-10 rounded-lg border border-[#d5dde6] bg-white px-3 text-sm font-semibold text-[#0f172a] outline-none focus:border-[#00334f]">
-          <option value="">All Classes</option>
-          {classes.map((c) => <option key={c} value={c}>{c}</option>)}
+        <LedgerSearch value={search} onChange={changed(setSearch)} placeholder="Search student name, invoice # or registration…" />
+        <select value={classFilter} onChange={(e) => changed(setClassFilter)(e.target.value)} className={selectClass} aria-label="Class">
+          <option value="">All classes</option>
+          {(data?.facets.classes ?? []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
-        <select value={termFilter} onChange={(e) => { setTermFilter(e.target.value); setPage(0); }} className="h-10 rounded-lg border border-[#d5dde6] bg-white px-3 text-sm font-semibold text-[#0f172a] outline-none focus:border-[#00334f]">
-          <option value="">All Terms</option>
-          {terms.map((t) => <option key={t} value={t}>{t}</option>)}
+        <select value={termFilter} onChange={(e) => changed(setTermFilter)(e.target.value)} className={selectClass} aria-label="Term">
+          <option value="">All terms</option>
+          {(data?.facets.terms ?? []).map((t) => <option key={t.id} value={t.id}>{t.academicYearName ? `${t.name} · ${t.academicYearName}` : t.name}</option>)}
         </select>
-        <NavLink
-          to="/finance/invoices/generate"
-          className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#00334f] px-4 text-sm font-black text-white transition-colors hover:bg-[#001e30]"
-        >
+        <NavLink to="/finance/invoices/generate" className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#00334f] px-4 text-sm font-black text-white transition-colors hover:bg-[#001e30]">
           <Plus className="h-4 w-4" /> Generate
         </NavLink>
       </div>
 
-      <div className="flex gap-1 border-b border-[#d5dde6]">
-        {INV_TABS.map(({ key, label }) => (
-          <button
-            key={key}
-            onClick={() => { setStatusTab(key); setPage(0); }}
-            className={`relative px-4 py-2.5 text-sm font-black transition-colors ${statusTab === key ? 'text-[#00334f]' : 'text-[#64748b] hover:text-[#0f172a]'}`}
-          >
-            {label}
-            <span className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-black ${statusTab === key ? 'bg-[#00334f] text-white' : 'bg-[#f1f5f9] text-[#64748b]'}`}>
-              {counts[key]}
-            </span>
-            {statusTab === key && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#00334f]" />}
-          </button>
-        ))}
-      </div>
+      <LedgerTabs tabs={tabs} active={statusTab} onChange={changed(setStatusTab)} />
 
       {isLoading ? (
         <SkeletonTable cols={9} />
       ) : isError ? (
         <DataError onRetry={refetch} />
-      ) : !apiInvoices.length ? (
+      ) : !data?.meta.total && !filtered ? (
         <EmptyState title="No invoices yet" description="Generate invoices for a term to begin tracking." action={{ label: 'Generate Invoices', href: '/finance/invoices/generate' }} />
-      ) : !visible.length ? (
+      ) : !data?.items.length ? (
         <EmptyState title="No matching invoices" description="Try adjusting your search or filters." />
       ) : (
-        <>
-          <InvoiceLedgerTable rows={pageInvoices} />
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between pt-1">
-              <span className="text-xs font-semibold text-[#64748b]">
-                Showing {page * INV_PAGE_SIZE + 1}–{Math.min((page + 1) * INV_PAGE_SIZE, visible.length)} of {visible.length} invoices
-              </span>
-              <div className="flex items-center gap-1">
-                <button
-                  disabled={page === 0}
-                  onClick={() => setPage((p) => p - 1)}
-                  className="flex h-8 w-8 items-center justify-center rounded border border-[#d5dde6] text-[#64748b] transition hover:bg-[#f1f5f9] disabled:opacity-40"
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </button>
-                {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
-                  const p = totalPages <= 7 ? i : page < 4 ? i : page > totalPages - 4 ? totalPages - 7 + i : page - 3 + i;
-                  return (
-                    <button
-                      key={p}
-                      onClick={() => setPage(p)}
-                      className={`h-8 w-8 rounded border text-xs font-black transition ${page === p ? 'border-[#00334f] bg-[#00334f] text-white' : 'border-[#d5dde6] text-[#64748b] hover:bg-[#f1f5f9]'}`}
-                    >
-                      {p + 1}
-                    </button>
-                  );
-                })}
-                <button
-                  disabled={page >= totalPages - 1}
-                  onClick={() => setPage((p) => p + 1)}
-                  className="flex h-8 w-8 items-center justify-center rounded border border-[#d5dde6] text-[#64748b] transition hover:bg-[#f1f5f9] disabled:opacity-40"
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-          )}
-        </>
+        <div className={isFetching ? 'opacity-70 transition-opacity' : 'transition-opacity'}>
+          <InvoiceLedgerTable rows={data.items} />
+          <LedgerPager page={data.meta.page} totalPages={data.meta.totalPages} total={data.meta.total} limit={INV_PAGE_SIZE} noun="invoices" onPage={setPage} />
+        </div>
       )}
     </FinanceWorkspaceShell>
   );
@@ -785,16 +712,37 @@ export function InvoiceListPage() {
 export function GenerateInvoicesPage() {
   const navigate = useNavigate();
   const generateMutation = useGenerateInvoicesMutation();
-  const [form, setForm] = useState({ term: '', academicYear: new Date().getFullYear().toString(), dueDate: '', scope: 'ALL' });
-  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setForm((p) => ({ ...p, [k]: e.target.value }));
+  const { data: terms = [] } = useFinanceTerms();
+  const { data: years = [] } = useFinanceAcademicYears();
+  const { data: classes = [] } = useFinanceClasses();
+  const [termId, setTermId] = useState('');
+  const [classIds, setClassIds] = useState<string[]>([]);
+  const [jobId, setJobId] = useState('');
+  const { data: job } = useInvoiceJob(jobId);
+
+  // Default to the current term once the terms arrive
+  useEffect(() => {
+    if (!termId && terms.length) setTermId((terms.find((t) => t.isCurrent) ?? terms[terms.length - 1]).id);
+  }, [terms, termId]);
+
+  const term = terms.find((t) => t.id === termId);
+  const yearName = years.find((y) => y.id === term?.academicYearId)?.name ?? '';
+  const running = Boolean(jobId) && (!job || job.status === 'PENDING' || job.status === 'RUNNING');
+  const toggleClass = (id: string) => setClassIds((cur) => (cur.includes(id) ? cur.filter((c) => c !== id) : [...cur, id]));
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.term || !form.dueDate) { toast('Term and due date are required', 'error'); return; }
-    generateMutation.mutate({ term: form.term, academicYear: form.academicYear, dueDate: form.dueDate, scope: form.scope }, {
-      onSuccess: () => { toast('Invoice generation started. Invoices will appear shortly.', 'success'); navigate('/finance/invoices'); },
-      onError: () => toast('Failed to start invoice generation. Please try again.', 'error'),
-    });
+    if (!term) { toast('Choose the term to invoice', 'error'); return; }
+    generateMutation.mutate(
+      { termId: term.id, academicYearId: term.academicYearId, ...(classIds.length ? { classIds } : {}) },
+      {
+        onSuccess: (res) => {
+          const started = ((res as { data?: { jobId?: string } })?.data ?? res) as { jobId?: string } | undefined;
+          if (started?.jobId) setJobId(started.jobId);
+        },
+        onError: (err) => toast(err instanceof Error && err.message ? err.message : 'Failed to start invoice generation. Please try again.', 'error'),
+      },
+    );
   };
 
   return (
@@ -806,44 +754,76 @@ export function GenerateInvoicesPage() {
             <FileSpreadsheet className="h-5 w-5 text-[#00334f]" />
             <div>
               <h2 className="font-display text-xl font-black text-[#00334f]">Generate Term Invoices</h2>
-              <p className="text-sm font-semibold text-[#64748b]">Creates invoices for all eligible enrolled students based on their fee structure.</p>
+              <p className="text-sm font-semibold text-[#64748b]">Creates an invoice for each enrolled student from the fee structures and assignments that apply to them.</p>
             </div>
           </div>
+
           <div className="mt-5 grid gap-4 md:grid-cols-2">
             <label className="block">
               <span className="text-[11px] font-black uppercase tracking-widest text-[#64748b]">Term *</span>
-              <input required value={form.term} onChange={set('term')} className="mt-2 h-11 w-full rounded border border-[#d5dde6] bg-[#f7f9fb] px-3 font-semibold outline-none focus:border-[#00334f] focus:ring-2 focus:ring-[#00334f]/10" placeholder="e.g. Term II 2026" />
-            </label>
-            <label className="block">
-              <span className="text-[11px] font-black uppercase tracking-widest text-[#64748b]">Academic Year</span>
-              <input value={form.academicYear} onChange={set('academicYear')} className="mt-2 h-11 w-full rounded border border-[#d5dde6] bg-[#f7f9fb] px-3 font-semibold outline-none focus:border-[#00334f] focus:ring-2 focus:ring-[#00334f]/10" placeholder="e.g. 2026" />
-            </label>
-            <label className="block">
-              <span className="text-[11px] font-black uppercase tracking-widest text-[#64748b]">Due Date *</span>
-              <input required type="date" value={form.dueDate} onChange={set('dueDate')} className="mt-2 h-11 w-full rounded border border-[#d5dde6] bg-[#f7f9fb] px-3 font-semibold outline-none focus:border-[#00334f] focus:ring-2 focus:ring-[#00334f]/10" />
-            </label>
-            <label className="block">
-              <span className="text-[11px] font-black uppercase tracking-widest text-[#64748b]">Scope</span>
-              <select value={form.scope} onChange={set('scope')} className="mt-2 h-11 w-full rounded border border-[#d5dde6] bg-[#f7f9fb] px-3 font-semibold outline-none focus:border-[#00334f]">
-                <option value="ALL">All students</option>
-                <option value="UNPAID_ONLY">Skip already invoiced</option>
+              <select required value={termId} onChange={(e) => setTermId(e.target.value)} disabled={running} className="mt-2 h-11 w-full rounded border border-[#d5dde6] bg-[#f7f9fb] px-3 font-semibold outline-none focus:border-[#00334f]">
+                <option value="" disabled>Choose a term…</option>
+                {terms.map((t) => {
+                  const y = years.find((yr) => yr.id === t.academicYearId)?.name;
+                  return <option key={t.id} value={t.id}>{t.name}{y ? ` · ${y}` : ''}{t.isCurrent ? ' (current)' : ''}</option>;
+                })}
               </select>
             </label>
+            <div>
+              <span className="text-[11px] font-black uppercase tracking-widest text-[#64748b]">Academic year</span>
+              <p className="mt-2 flex h-11 items-center rounded border border-[#d5dde6] bg-[#f1f5f9] px-3 font-semibold text-[#334155]">{yearName || '—'}</p>
+            </div>
           </div>
+
+          <div className="mt-5">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-black uppercase tracking-widest text-[#64748b]">Classes</span>
+              <button type="button" onClick={() => setClassIds([])} className="text-[11px] font-black text-[#00334f] hover:underline">{classIds.length ? 'Clear selection (all classes)' : 'All classes'}</button>
+            </div>
+            <div className="mt-2 flex max-h-44 flex-wrap gap-2 overflow-y-auto rounded border border-[#d5dde6] bg-[#f7f9fb] p-3">
+              {classes.length === 0 && <span className="text-sm font-semibold text-[#64748b]">Loading classes…</span>}
+              {classes.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  disabled={running}
+                  onClick={() => toggleClass(c.id)}
+                  className={`rounded-full border px-3 py-1 text-xs font-black transition ${classIds.includes(c.id) ? 'border-[#00334f] bg-[#00334f] text-white' : 'border-[#d5dde6] bg-white text-[#334155] hover:border-[#00334f]'}`}
+                >
+                  {c.name}{c.stream ? ` ${c.stream}` : ''}
+                </button>
+              ))}
+            </div>
+            <p className="mt-1 text-xs font-semibold text-[#64748b]">Leave empty to invoice every class you can access.</p>
+          </div>
+
           <div className="mt-5 rounded border border-[#d59a1b]/30 bg-[#d59a1b]/5 p-3 text-xs font-bold text-[#7a5200]">
-            This will generate invoices for all enrolled students who do not already have one for this term. The action is audited.
+            Students who already have an invoice for this term are skipped, so it is safe to run this again. Each school invoices its own students only. The due date follows the school's payment grace period. The action is audited.
           </div>
+
+          {jobId && (
+            <div className={`mt-4 rounded-lg border p-4 text-sm font-bold ${job?.status === 'FAILED' ? 'border-[#e11d48]/30 bg-[#e11d48]/5 text-[#9f0f2c]' : job?.status === 'COMPLETED' ? 'border-[#10b981]/30 bg-[#10b981]/5 text-[#047857]' : 'border-[#d5dde6] bg-[#f7f9fb] text-[#334155]'}`}>
+              {running && 'Generating invoices… this can take a minute for a whole school.'}
+              {job?.status === 'COMPLETED' && `Done — ${job.result?.generated ?? 0} invoices created, ${job.result?.skipped ?? 0} skipped (already invoiced or not enrolled)${job.result?.failed ? `, ${job.result.failed} failed` : ''}.`}
+              {job?.status === 'FAILED' && `Generation failed${job.error ? `: ${job.error}` : ''}.`}
+            </div>
+          )}
+
           <div className="mt-4 flex gap-2">
-            <Button type="submit" className="rounded bg-[#00334f] hover:bg-[#001e30] hover:shadow-none" disabled={generateMutation.isPending}>
-              <Send className="h-4 w-4" /> {generateMutation.isPending ? 'Generating…' : 'Generate Invoices'}
-            </Button>
-            <Button type="button" variant="secondary" className="rounded" onClick={() => navigate('/finance/invoices')}>Cancel</Button>
+            {job?.status === 'COMPLETED' ? (
+              <Button type="button" className="rounded bg-[#00334f] hover:bg-[#001e30] hover:shadow-none" onClick={() => navigate('/finance/invoices')}>View invoices</Button>
+            ) : (
+              <Button type="submit" className="rounded bg-[#00334f] hover:bg-[#001e30] hover:shadow-none" disabled={generateMutation.isPending || running || !term}>
+                <Send className="h-4 w-4" /> {generateMutation.isPending || running ? 'Generating…' : 'Generate Invoices'}
+              </Button>
+            )}
+            <Button type="button" variant="secondary" className="rounded" onClick={() => navigate('/finance/invoices')}>{job?.status === 'COMPLETED' ? 'Close' : 'Cancel'}</Button>
           </div>
         </form>
         <SideSummary title="Generation Preview" items={[
-          ['Term', form.term || '—'],
-          ['Due date', form.dueDate || '—'],
-          ['Scope', form.scope === 'ALL' ? 'All students' : 'New invoices only'],
+          ['Term', term ? term.name : '—'],
+          ['Academic year', yearName || '—'],
+          ['Classes', classIds.length ? `${classIds.length} selected` : 'All'],
           ['Audit', 'Full trail captured'],
         ]} />
       </div>
@@ -854,7 +834,6 @@ export function GenerateInvoicesPage() {
 export function InvoiceDetailPage() {
   const { id } = useParams();
   const { data: apiInvoice, isLoading } = useInvoiceById(id ?? '') as unknown as { data: (typeof invoices)[number] | undefined; isLoading: boolean; isError: boolean };
-  const { data: allPayments = [] as typeof payments } = usePayments() as unknown as { data: typeof payments };
   const cancelMutation   = useCancelInvoiceMutation();
   const discountMutation = useApplyInvoiceDiscountMutation();
   const waiveMutation    = useWaiveInvoiceMutation();
@@ -872,9 +851,12 @@ export function InvoiceDetailPage() {
 
   const invoice = apiInvoice;
   const embeddedPayments: Array<(typeof payments)[number]> = Array.isArray((invoice as any).payments) ? (invoice as any).payments : [];
-  const invoicePayments = embeddedPayments.length > 0
-    ? embeddedPayments
-    : allPayments.filter((p: (typeof payments)[number]) => p.invoiceId === invoice.id || p.invoiceNumber === invoice.number);
+  const invoicePayments = embeddedPayments;
+  const lastConfirmed = invoicePayments
+    .filter((p) => String(p.status).toUpperCase() === 'CONFIRMED' && p.date)
+    .map((p) => String(p.date))
+    .sort()
+    .at(-1);
   const hasConfirmedPayment = invoicePayments.some((p) => String(p.status).toUpperCase() === 'CONFIRMED');
   const isPending = cancelMutation.isPending || discountMutation.isPending || waiveMutation.isPending || pdfLoading;
   const discountPreviewBalance = invoice.outstanding - (Number(discountForm.amount) || 0);
@@ -955,7 +937,7 @@ export function InvoiceDetailPage() {
             {
               label: 'Paid',
               value: formatTZS(invoice.paid),
-              detail: invoice.lastPayment && invoice.lastPayment !== 'None' ? `Last: ${formatDate(invoice.lastPayment)}` : 'No payments yet',
+              detail: lastConfirmed ? `Last: ${formatDate(lastConfirmed)}` : 'No payments yet',
               tone: 'green',
               trend: invoice.paid > 0 ? 'up' : undefined,
               progress: invoice.total > 0 ? Math.round((invoice.paid / invoice.total) * 100) : 0,
@@ -1118,8 +1100,8 @@ export function InvoiceDetailPage() {
 export function StudentLedgerPage() {
   const { studentId } = useParams<{ studentId: string }>();
   const { data: studentInvoices = [] as typeof invoices, isLoading } = useStudentInvoices(studentId ?? '') as unknown as { data: typeof invoices; isLoading: boolean };
-  const { data: allPayments = [] as typeof payments } = usePayments() as unknown as { data: typeof payments };
-  const { data: allReceipts = [] as typeof receipts } = useReceipts() as unknown as { data: typeof receipts };
+  const { data: paymentLedger } = usePaymentLedger({ page: 1, limit: 100, studentId: studentId ?? '' }, { enabled: Boolean(studentId) });
+  const { data: receiptLedger } = useReceiptLedger({ page: 1, limit: 100, studentId: studentId ?? '' }, { enabled: Boolean(studentId) });
   const { data: statementData } = useStudentStatement(studentId ?? '') as unknown as { data?: { url?: string } };
   const navigate = useNavigate();
   const generateStatement = useGenerateReportMutation();
@@ -1129,18 +1111,8 @@ export function StudentLedgerPage() {
   const [copiedId, setCopiedId] = useState(false);
 
   const studentInfo = studentInvoices[0] as (typeof invoices)[number] | undefined;
-  const invoiceIds = useMemo(() => new Set(studentInvoices.map((i) => i.id)), [studentInvoices]);
-  const studentPayments = useMemo(
-    () => allPayments.filter((p) => p.invoiceId && invoiceIds.has(p.invoiceId)),
-    [allPayments, invoiceIds],
-  );
-  const studentReceipts = useMemo(
-    () => allReceipts.filter((r) => {
-      const receiptPaymentId = (r as unknown as Record<string, string>).paymentId;
-      return studentPayments.some((p) => p.id === receiptPaymentId || p.receiptId === r.id);
-    }),
-    [allReceipts, studentPayments],
-  );
+  const studentPayments = (paymentLedger?.items ?? []) as unknown as typeof payments;
+  const studentReceipts = (receiptLedger?.items ?? []) as unknown as typeof receipts;
 
   const totalInvoiced  = studentInvoices.reduce((s, i) => s + i.total, 0);
   const totalPaid      = studentInvoices.reduce((s, i) => s + i.paid, 0);
@@ -1153,7 +1125,7 @@ export function StudentLedgerPage() {
 
   const copyId = () => {
     if (!studentId) return;
-    void navigator.clipboard.writeText(studentId).then(() => {
+    void navigator.clipboard.writeText(studentInfo?.registration || studentId).then(() => {
       setCopiedId(true);
       setTimeout(() => setCopiedId(false), 2000);
     });
@@ -1227,7 +1199,7 @@ export function StudentLedgerPage() {
                   className="flex items-center gap-1 text-[#94a3b8] transition hover:text-[#00334f]"
                 >
                   {copiedId ? <Check className="h-3 w-3 text-[#10b981]" /> : <Copy className="h-3 w-3" />}
-                  {copiedId ? 'Copied!' : `ID: ${studentId.slice(0, 8)}…`}
+                  {copiedId ? 'Copied!' : 'Copy reg. no.'}
                 </button>
               )}
             </div>
@@ -1403,8 +1375,6 @@ function BalancePreviewPanel({ invoice, amount }: { invoice: (typeof invoices)[n
 }
 
 function SmartPaymentForm({ method }: { method: 'cash' | 'bank' }) {
-  const { data: apiInvoices = [] as typeof invoices } = useInvoices() as unknown as { data: typeof invoices };
-  const { data: apiPayments = [] as typeof payments } = usePayments() as unknown as { data: typeof payments };
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const sessionUser = useAuthStore((s) => (s.session as unknown as { user?: { name?: string } } | null)?.user?.name ?? 'Finance Officer');
@@ -1429,20 +1399,27 @@ function SmartPaymentForm({ method }: { method: 'cash' | 'bank' }) {
   const [uploadError, setUploadError]       = useState('');
   const [overpayConfirmed, setOverpayConfirmed] = useState(false);
 
-  // Auto-select invoice from URL params once invoices load
+  // The server does the searching (the desk can have thousands of invoices) — only invoices that still owe money
+  const OPEN_STATUSES = 'ISSUED,PARTIALLY_PAID,OVERDUE';
+  const debouncedSearch = useDebounced(search.trim());
+  const { data: searchLedger } = useInvoiceLedger({ page: 1, limit: 8, search: debouncedSearch, status: OPEN_STATUSES }, { enabled: debouncedSearch.length >= 2 });
+  const { data: preInvoice } = useInvoiceById(preInvoiceId ?? '') as unknown as { data?: (typeof invoices)[number] };
+  const { data: preStudentLedger } = useInvoiceLedger(
+    { page: 1, limit: 1, studentId: preStudentId ?? undefined, status: OPEN_STATUSES, sort: 'outstanding' },
+    { enabled: Boolean(preStudentId) && !preInvoiceId },
+  );
+  const debouncedReference = useDebounced(reference.trim());
+  const { data: referenceMatches } = usePaymentLedger(
+    { page: 1, limit: 5, search: debouncedReference },
+    { enabled: method === 'bank' && debouncedReference.length >= 4 },
+  );
+
+  // Auto-select the invoice (or the student's biggest open invoice) named in the URL
+  const preselected = preInvoice ?? (preStudentLedger?.items[0] as (typeof invoices)[number] | undefined);
   useEffect(() => {
-    if (!apiInvoices.length) return;
-    if (preInvoiceId) {
-      const inv = apiInvoices.find((i) => i.id === preInvoiceId);
-      if (inv) pickInvoice(inv);
-    } else if (preStudentId) {
-      const inv = apiInvoices
-        .filter((i) => i.studentId === preStudentId && i.outstanding > 0)
-        .sort((a, b) => new Date(b.dueDate).getTime() - new Date(a.dueDate).getTime())[0];
-      if (inv) pickInvoice(inv);
-    }
+    if (preselected && !selectedInvoice) pickInvoice(preselected);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [apiInvoices.length, preInvoiceId, preStudentId]);
+  }, [preselected?.id]);
 
   const pickInvoice = (inv: (typeof invoices)[number]) => {
     setSelectedInvoice(inv);
@@ -1456,20 +1433,11 @@ function SmartPaymentForm({ method }: { method: 'cash' | 'bank' }) {
   const outstanding        = selectedInvoice?.outstanding ?? 0;
   const overpay            = isOverpayment(amount, outstanding);
   const missingReference   = method === 'bank' && !reference.trim();
-  const duplicateRef       = method === 'bank' && duplicateReferenceWarning(reference, apiPayments.map((p) => p.reference ?? ''));
+  const duplicateRef       = method === 'bank' && debouncedReference.length >= 4 && (referenceMatches?.items ?? []).some((p) => String(p.reference ?? '').toLowerCase() === debouncedReference.toLowerCase());
   const canSubmit          = !!selectedInvoice && amount > 0 && !missingReference && (!overpay || overpayConfirmed);
   const isPending          = cashMutation.isPending || bankMutation.isPending;
 
-  const searchResults = useMemo(() => {
-    if (search.trim().length < 2) return [] as typeof invoices;
-    const q = search.toLowerCase();
-    return apiInvoices.filter((i) =>
-      i.outstanding > 0 &&
-      (i.student.toLowerCase().includes(q) ||
-       i.number.toLowerCase().includes(q) ||
-       (i.registration ?? '').toLowerCase().includes(q)),
-    ).slice(0, 8);
-  }, [apiInvoices, search]);
+  const searchResults = (search.trim().length >= 2 && search.trim() === debouncedSearch ? searchLedger?.items ?? [] : []) as unknown as typeof invoices;
 
   const handleEvidenceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1500,11 +1468,13 @@ function SmartPaymentForm({ method }: { method: 'cash' | 'bank' }) {
     }
     const mutate = method === 'cash' ? cashMutation : bankMutation;
     mutate.mutate(body, {
-      onSuccess: () => {
-        toast(`${method === 'cash' ? 'Cash payment' : 'Bank transfer'} submitted for approval`, 'success');
+      onSuccess: (result) => {
+        const created = ((result as { data?: unknown } | undefined)?.data ?? result) as { requiresApproval?: boolean } | undefined;
+        const label = method === 'cash' ? 'Cash payment' : 'Bank transfer';
+        toast(created?.requiresApproval === false ? `${label} recorded — receipt issued` : `${label} submitted for approval`, 'success');
         navigate('/finance/payments');
       },
-      onError: () => toast('Failed to submit payment. Please try again.', 'error'),
+      onError: (e) => toast(e instanceof Error && e.message ? e.message : 'Failed to submit payment. Please try again.', 'error'),
     });
   };
 
@@ -1762,20 +1732,97 @@ function SmartPaymentForm({ method }: { method: 'cash' | 'bank' }) {
   );
 }
 
+const PAY_PAGE_SIZE = 25;
+
+const PAY_TABS: { key: string; label: string; status?: string }[] = [
+  { key: 'ALL', label: 'All' },
+  { key: 'CONFIRMED', label: 'Confirmed', status: 'CONFIRMED' },
+  { key: 'PENDING', label: 'Awaiting approval', status: 'PENDING' },
+  { key: 'REJECTED', label: 'Rejected', status: 'REJECTED' },
+  { key: 'REFUNDED', label: 'Refunded', status: 'REFUNDED' },
+];
+
+const PAY_METHODS: { value: string; label: string }[] = [
+  { value: '', label: 'All methods' },
+  { value: 'CASH', label: 'Cash' },
+  { value: 'BANK_TRANSFER', label: 'Bank transfer' },
+  { value: 'MOBILE_MONEY', label: 'Mobile money' },
+  { value: 'SCHOLARSHIP', label: 'Scholarship' },
+  { value: 'WAIVER', label: 'Waiver' },
+  { value: 'OTHER', label: 'Other' },
+];
+
 export function PaymentListPage() {
-  const { data: apiPayments = [] as typeof payments, isLoading, isError, refetch } = usePayments() as unknown as { data: typeof payments; isLoading: boolean; isError: boolean; refetch: () => void };
+  const [search, setSearch] = useState('');
+  const [tab, setTab] = useState('ALL');
+  const [method, setMethod] = useState('');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const [page, setPage] = useState(1);
+  const q = useDebounced(search.trim());
+  const changed = (set: (v: string) => void) => (v: string) => { set(v); setPage(1); };
+
+  const { data, isLoading, isError, isFetching, refetch } = usePaymentLedger({
+    page,
+    limit: PAY_PAGE_SIZE,
+    search: q || undefined,
+    status: PAY_TABS.find((t) => t.key === tab)?.status,
+    method: method || undefined,
+    startDate: from || undefined,
+    endDate: to ? `${to}T23:59:59.999Z` : undefined,
+  });
+  const counts = data?.counts ?? {};
+  const amounts = data?.amounts ?? {};
+  const filtered = Boolean(q || method || from || to || tab !== 'ALL');
+
   return (
     <FinanceWorkspaceShell title="Payment Ledger" eyebrow="Search and reconcile">
       <FinanceBreadcrumb crumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Payments' }]} />
-      <FinanceFilters items={['Method', 'Status', 'Date range', 'Amount range', 'Entered by']} />
+
+      <FinanceMetricStrip items={[
+        { label: 'Confirmed', value: formatTZS(data?.confirmed.amount ?? 0), detail: `${data?.confirmed.count ?? 0} payments${filtered ? ' (filtered)' : ''}`, tone: 'green' },
+        { label: 'Awaiting approval', value: String(counts.PENDING ?? 0), detail: formatTZS(amounts.PENDING ?? 0), tone: (counts.PENDING ?? 0) > 0 ? 'gold' : 'slate' },
+        { label: 'Rejected', value: String(counts.REJECTED ?? 0), detail: formatTZS(amounts.REJECTED ?? 0), tone: (counts.REJECTED ?? 0) > 0 ? 'red' : 'slate' },
+        { label: 'Refunded', value: String(counts.REFUNDED ?? 0), detail: formatTZS(amounts.REFUNDED ?? 0), tone: 'slate' },
+      ]} />
+
+      <div className="flex flex-wrap items-center gap-3">
+        <LedgerSearch value={search} onChange={changed(setSearch)} placeholder="Search payment #, reference, invoice #, student or payer…" />
+        <select value={method} onChange={(e) => changed(setMethod)(e.target.value)} className={selectClass} aria-label="Method">
+          {PAY_METHODS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+        </select>
+        <label className="flex items-center gap-2 text-xs font-black uppercase tracking-wide text-[#64748b]">
+          From
+          <input type="date" value={from} max={to || undefined} onChange={(e) => changed(setFrom)(e.target.value)} className={selectClass} />
+        </label>
+        <label className="flex items-center gap-2 text-xs font-black uppercase tracking-wide text-[#64748b]">
+          To
+          <input type="date" value={to} min={from || undefined} onChange={(e) => changed(setTo)(e.target.value)} className={selectClass} />
+        </label>
+        {(from || to || method) && (
+          <button onClick={() => { setFrom(''); setTo(''); setMethod(''); setPage(1); }} className="h-10 rounded-lg px-3 text-xs font-black text-[#00334f] hover:bg-[#eef5f8]">Clear</button>
+        )}
+      </div>
+
+      <LedgerTabs
+        tabs={PAY_TABS.map((t) => ({ key: t.key, label: t.label, count: counts[t.key] ?? 0 }))}
+        active={tab}
+        onChange={changed(setTab)}
+      />
+
       {isLoading ? (
-        <SkeletonTable cols={6} />
+        <SkeletonTable cols={9} />
       ) : isError ? (
         <DataError onRetry={refetch} />
-      ) : !apiPayments.length ? (
+      ) : !data?.meta.total && !filtered ? (
         <EmptyState title="No payments recorded" description="Payments will appear here once they are entered at the cash desk." />
+      ) : !data?.items.length ? (
+        <EmptyState title="No matching payments" description="Try adjusting your search or filters." />
       ) : (
-        <PaymentTable rows={apiPayments} />
+        <div className={isFetching ? 'opacity-70 transition-opacity' : 'transition-opacity'}>
+          <PaymentTable rows={data.items as unknown as typeof payments} />
+          <LedgerPager page={data.meta.page} totalPages={data.meta.totalPages} total={data.meta.total} limit={PAY_PAGE_SIZE} noun="payments" onPage={setPage} />
+        </div>
       )}
     </FinanceWorkspaceShell>
   );
@@ -1802,17 +1849,12 @@ type QueueTab = 'all' | 'cash' | 'bank' | 'stale';
 export function PendingPaymentApprovalsPage() {
   const { data: apiPending = [] as typeof payments, isLoading, isError, refetch } = usePendingPaymentApprovals() as unknown as { data: typeof payments; isLoading: boolean; isError: boolean; refetch: () => void };
   const addNoteMutation = useAddPaymentNoteMutation();
-  const uploadMutation  = useFileUploadMutation();
-  const fileInputRef    = useRef<HTMLInputElement>(null);
 
   const [tab, setTab]               = useState<QueueTab>('all');
   const [search, setSearch]         = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [noteText, setNoteText]     = useState<Record<string, string>>({});
   const [localNotes, setLocalNotes] = useState<Record<string, string[]>>({});
-  const [evidenceId, setEvidenceId] = useState<Record<string, string>>({});
-  const [uploadErr, setUploadErr]   = useState('');
-  const [uploadingFor, setUploadingFor] = useState<string | null>(null);
 
   const staleCount = apiPending.filter((p) => isStale(p.date)).length;
 
@@ -1841,41 +1883,20 @@ export function PendingPaymentApprovalsPage() {
 
   const totalValue = visible.reduce((s, p) => s + p.amount, 0);
 
-  const submitNote = (paymentId: string) => {
-    const text = (noteText[paymentId] ?? '').trim();
+  const submitNote = (rowId: string, paymentId: string) => {
+    const text = (noteText[rowId] ?? '').trim();
     if (!text) return;
     addNoteMutation.mutate(
       { id: paymentId, note: text },
       {
         onSuccess: () => {
-          setLocalNotes((prev) => ({ ...prev, [paymentId]: [...(prev[paymentId] ?? []), text] }));
-          setNoteText((prev) => ({ ...prev, [paymentId]: '' }));
+          setLocalNotes((prev) => ({ ...prev, [rowId]: [...(prev[rowId] ?? []), text] }));
+          setNoteText((prev) => ({ ...prev, [rowId]: '' }));
           toast('Note added', 'success');
         },
         onError: () => toast('Failed to save note', 'error'),
       },
     );
-  };
-
-  const handleEvidence = (paymentId: string, e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const err = validateFile(file);
-    if (err) { setUploadErr(err); return; }
-    setUploadErr('');
-    setUploadingFor(paymentId);
-    uploadMutation.mutate(file, {
-      onSuccess: (result) => {
-        const fileId = ((result as unknown as Record<string, Record<string, string>>).file?.id) ?? '';
-        setEvidenceId((prev) => ({ ...prev, [paymentId]: fileId }));
-        setUploadingFor(null);
-        toast('Evidence attached', 'success');
-      },
-      onError: (err) => {
-        setUploadErr(err instanceof Error ? err.message : 'Upload failed');
-        setUploadingFor(null);
-      },
-    });
   };
 
   return (
@@ -1951,15 +1972,6 @@ export function PendingPaymentApprovalsPage() {
         </div>
       </div>
 
-      {/* Hidden file input */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/jpeg,image/png,image/webp,application/pdf"
-        className="hidden"
-        onChange={(e) => expandedId && handleEvidence(expandedId, e)}
-      />
-
       {/* Queue cards */}
       {isLoading ? (
         <SkeletonCards count={4} />
@@ -1976,7 +1988,7 @@ export function PendingPaymentApprovalsPage() {
             const expanded   = expandedId === payment.id;
             const pending    = addNoteMutation.isPending && expandedId === payment.id;
             const notes      = localNotes[payment.id] ?? [];
-            const hasEvidence = Boolean(evidenceId[payment.id]);
+            const paymentId  = (payment as unknown as { paymentId: string }).paymentId;
             const method     = (payment.method ?? '').toUpperCase();
             const isCash     = method.includes('CASH');
             const methodLabel = isCash ? 'Cash' : method.includes('BANK') ? 'Bank' : method.replace(/_/g, ' ');
@@ -2034,7 +2046,13 @@ export function PendingPaymentApprovalsPage() {
                       <div className="space-y-4">
                         <div>
                           <p className="mb-2 text-[11px] font-black uppercase tracking-widest text-[#64748b]">Verification Notes</p>
-                          {/* Existing session notes */}
+                          {payment.notes ? (
+                            <div className="mb-3 flex items-start gap-2 rounded-lg bg-[#f7f9fb] p-3">
+                              <MessageSquare className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#00334f]" />
+                              <p className="whitespace-pre-wrap text-xs font-semibold text-[#334155]">{payment.notes}</p>
+                            </div>
+                          ) : null}
+                          {/* Notes added in this session */}
                           {notes.length > 0 && (
                             <div className="mb-3 space-y-2">
                               {notes.map((note, i) => (
@@ -2054,32 +2072,14 @@ export function PendingPaymentApprovalsPage() {
                           />
                           <div className="mt-2 flex gap-2">
                             <Button
-                              onClick={() => submitNote(payment.id)}
+                              onClick={() => submitNote(payment.id, paymentId)}
                               disabled={!(noteText[payment.id] ?? '').trim() || pending}
                               className="rounded bg-[#00334f] hover:bg-[#001e30] hover:shadow-none"
                             >
                               <MessageSquare className="h-3.5 w-3.5" />
                               {pending ? 'Saving…' : 'Add Note'}
                             </Button>
-                            {/* Evidence upload */}
-                            <Button
-                              variant="secondary"
-                              className="rounded"
-                              onClick={() => {
-                                setUploadErr('');
-                                fileInputRef.current?.click();
-                              }}
-                              disabled={uploadMutation.isPending && uploadingFor === payment.id}
-                            >
-                              {hasEvidence
-                                ? <><Paperclip className="h-3.5 w-3.5 text-[#10b981]" /> Evidence attached</>
-                                : uploadMutation.isPending && uploadingFor === payment.id
-                                  ? <><UploadCloud className="h-3.5 w-3.5" /> Uploading…</>
-                                  : <><UploadCloud className="h-3.5 w-3.5" /> Attach evidence</>
-                              }
-                            </Button>
                           </div>
-                          {uploadErr && <p className="mt-1.5 text-[11px] font-black text-[#e11d48]">{uploadErr}</p>}
                         </div>
                       </div>
 
@@ -2107,7 +2107,7 @@ export function PendingPaymentApprovalsPage() {
                             </NavLink>
                           )}
                           <NavLink
-                            to={`/finance/payments/${payment.id}`}
+                            to={`/finance/payments/${paymentId}`}
                             className="flex items-center justify-between rounded-lg border border-[#d5dde6] bg-white px-3 py-2.5 text-xs font-black text-[#00334f] transition hover:border-[#00334f] hover:bg-[#eef5f8]"
                           >
                             <span className="flex items-center gap-1.5"><ClipboardCheck className="h-3.5 w-3.5" /> Full Payment Detail</span>
@@ -2132,48 +2132,106 @@ export function PendingPaymentApprovalsPage() {
   );
 }
 
+const REFUND_ROLES = new Set(['PRINCIPAL', 'HEAD_OF_SCHOOL', 'MANAGER', 'SUPER_ADMIN', 'SYSTEM_ADMIN']);
+
 export function PaymentDetailPage() {
   const { id } = useParams();
-  const { data: apiPayments = [] as typeof payments, isLoading } = usePayments() as unknown as { data: typeof payments; isLoading: boolean };
+  const { data: payment, isLoading, isError, refetch } = usePayment(id ?? '');
   const refundMutation = useRefundPaymentMutation();
-  const navigate = useNavigate();
+  const role = String(useAuthStore((state) => state.session?.user?.role) ?? '').toUpperCase();
+  const [refundOpen, setRefundOpen] = useState(false);
+  const [refundReason, setRefundReason] = useState('');
 
   if (isLoading) return <FinanceWorkspaceShell title="Loading…" eyebrow="Payment profile"><SkeletonTable cols={4} /></FinanceWorkspaceShell>;
-  const payment = apiPayments.find((p) => p.id === id) ?? null;
-  if (!payment) return <FinanceWorkspaceShell title="Not Found" eyebrow="Payment profile"><EmptyState title="Payment not found" description="This payment record does not exist." /></FinanceWorkspaceShell>;
+  if (isError || !payment) {
+    return (
+      <FinanceWorkspaceShell title="Payment not found" eyebrow="Payment profile">
+        <FinanceBreadcrumb crumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Payments', to: '/finance/payments' }, { label: 'Not found' }]} />
+        {isError ? <DataError onRetry={refetch} /> : <EmptyState title="Payment not found" description="This payment does not exist, or it belongs to a school you cannot access." />}
+      </FinanceWorkspaceShell>
+    );
+  }
+
+  const confirmed = payment.status === 'CONFIRMED';
+  const canRefund = confirmed && REFUND_ROLES.has(role);
+  const tone = confirmed ? 'green' : ['REJECTED', 'REFUNDED', 'CANCELLED'].includes(payment.status) ? 'red' : 'gold';
+
+  const steps: Array<{ title: string; at?: string }> = [
+    { title: `Payment recorded${payment.enteredBy && payment.enteredBy !== 'Finance desk' ? ` by ${payment.enteredBy}` : ''}`, at: payment.createdAt || payment.date },
+  ];
+  if (payment.requiresApproval) steps.push({ title: 'Sent to the Principal for approval', at: payment.approval?.requestedAt });
+  if (payment.status === 'PENDING') steps.push({ title: 'Waiting for approval' });
+  if (payment.confirmedAt) steps.push({ title: payment.requiresApproval ? 'Approved · receipt issued' : 'Confirmed · receipt issued', at: payment.confirmedAt });
+  if (payment.rejectedAt) steps.push({ title: `Rejected${payment.rejectionReason ? ` — ${payment.rejectionReason}` : ''}`, at: payment.rejectedAt });
+  if (payment.refundedAt) steps.push({ title: `Refunded${payment.refundReason ? ` — ${payment.refundReason}` : ''} · receipt voided`, at: payment.refundedAt });
+
+  const submitRefund = () => {
+    if (refundReason.trim().length < 5) { toast('Please give a reason of at least a few words', 'error'); return; }
+    refundMutation.mutate(
+      { id: payment.id, body: { refundReason: refundReason.trim() } },
+      {
+        onSuccess: () => { toast('Payment refunded and receipt voided', 'warning'); setRefundOpen(false); setRefundReason(''); },
+        onError: (e) => toast(e instanceof Error ? e.message : 'Could not refund this payment', 'error'),
+      },
+    );
+  };
 
   return (
-    <FinanceWorkspaceShell title={payment.id} eyebrow="Payment profile">
-      <FinanceBreadcrumb crumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Payments', to: '/finance/payments' }, { label: payment.id }]} />
+    <FinanceWorkspaceShell title={payment.paymentNumber || payment.number} eyebrow="Payment profile">
+      <FinanceBreadcrumb crumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Payments', to: '/finance/payments' }, { label: payment.paymentNumber || payment.number }]} />
       <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-gutter">
           <FinanceMetricStrip items={[
-            { label: 'Amount', value: formatTZS(payment.amount), detail: payment.method.replaceAll('_', ' '), tone: payment.status === 'REJECTED' ? 'red' : 'green', trend: payment.status === 'REJECTED' ? 'down' : 'up' },
-            { label: 'Status', value: payment.status, detail: formatDate(payment.date), tone: payment.status === 'APPROVED' ? 'green' : payment.status === 'REJECTED' ? 'red' : 'gold' },
-            { label: 'Invoice', value: payment.invoiceNumber, detail: payment.student, tone: 'navy' },
-            { label: 'Reference', value: payment.reference ?? '—', detail: payment.enteredBy, tone: 'slate' },
+            { label: 'Amount', value: formatTZS(payment.amount), detail: payment.method.replaceAll('_', ' ').toLowerCase(), tone: tone === 'red' ? 'red' : 'green', trend: tone === 'red' ? 'down' : 'up' },
+            { label: 'Status', value: payment.status === 'PENDING' ? 'Awaiting approval' : payment.status.charAt(0) + payment.status.slice(1).toLowerCase(), detail: formatDate(payment.date), tone },
+            { label: 'Invoice', value: payment.invoiceNumber, detail: `${formatTZS(payment.invoiceOutstanding)} still owed`, tone: 'navy' },
+            { label: 'Reference', value: payment.reference || '—', detail: payment.enteredBy, tone: 'slate' },
           ]} />
-          <Timeline rows={[
-            `Payment recorded by ${payment.enteredBy || 'Finance staff'}`,
-            'Routed for Principal approval',
-            payment.status === 'APPROVED' ? 'Approved · Receipt issued' : (payment.status === 'REJECTED' ? 'Rejected · Awaiting correction' : 'Awaiting approval'),
-          ]} />
+
+          <div className="rounded-lg border border-[#d5dde6] bg-white p-5">
+            <h2 className="font-display text-xl font-black text-[#00334f]">Paid for</h2>
+            <dl className="mt-4 grid gap-4 text-sm sm:grid-cols-2">
+              <div><dt className="text-[11px] font-black uppercase tracking-widest text-[#64748b]">Student</dt><dd className="mt-1 font-black text-[#0f172a]">{payment.student}</dd><dd className="text-xs font-semibold text-[#64748b]">{[payment.registration, payment.className].filter(Boolean).join(' · ')}</dd></div>
+              <div><dt className="text-[11px] font-black uppercase tracking-widest text-[#64748b]">Paid by</dt><dd className="mt-1 font-black text-[#0f172a]">{payment.payer || '—'}</dd><dd className="text-xs font-semibold text-[#64748b]">{payment.payerPhone}</dd></div>
+              {payment.notes ? <div className="sm:col-span-2"><dt className="text-[11px] font-black uppercase tracking-widest text-[#64748b]">Notes</dt><dd className="mt-1 whitespace-pre-wrap font-semibold text-[#0f172a]">{payment.notes}</dd></div> : null}
+            </dl>
+          </div>
+
+          <Timeline rows={steps.map((st) => st.title)} times={steps.map((st) => (st.at ? formatDate(st.at) : ''))} />
         </div>
         <div className="space-y-gutter">
-          <div className="rounded-lg border border-[#d5dde6] bg-white p-5 sticky top-24">
+          <div className="sticky top-24 rounded-lg border border-[#d5dde6] bg-white p-5">
             <p className="text-[11px] font-black uppercase tracking-widest text-[#64748b]">Payment Actions</p>
             <div className="mt-4 space-y-2">
-              <NavLink to={`/finance/invoices/${payment.invoiceId ?? payment.invoiceNumber}`}><Button variant="secondary" className="w-full justify-between rounded"><span>Open invoice</span><ArrowRight className="h-4 w-4" /></Button></NavLink>
-              {payment.status === 'APPROVED' && (
-                <Button variant="secondary" className="w-full justify-between rounded"
-                  onClick={() => { if (!window.confirm('Refund this payment? Enter reason below.')) return; const reason = window.prompt('Refund reason:'); if (!reason) return; refundMutation.mutate({ id: payment.id, body: { reason } }, { onSuccess: () => toast('Refund processed', 'warning'), onError: () => toast('Failed to process refund', 'error') }); }}>
+              <NavLink to={`/finance/invoices/${payment.invoiceId}`}><Button variant="secondary" className="w-full justify-between rounded"><span>Open invoice {payment.invoiceNumber}</span><ArrowRight className="h-4 w-4" /></Button></NavLink>
+              {payment.receiptId ? (
+                <NavLink to={`/finance/receipts/${payment.receiptId}`}><Button variant="secondary" className="w-full justify-between rounded"><span>View receipt {payment.receiptNumber}{payment.receiptVoided ? ' (void)' : ''}</span><ArrowRight className="h-4 w-4" /></Button></NavLink>
+              ) : null}
+              {canRefund && !refundOpen && (
+                <Button variant="secondary" className="w-full justify-between rounded" onClick={() => setRefundOpen(true)}>
                   <span>Refund with reason</span><ArrowRight className="h-4 w-4" />
                 </Button>
               )}
-              <Button variant="secondary" className="w-full justify-between rounded" onClick={() => navigate('/finance/receipts')}>
-                <span>View receipts</span><ArrowRight className="h-4 w-4" />
-              </Button>
+              {confirmed && !canRefund && (
+                <p className="rounded border border-[#d5dde6] bg-[#f7f9fb] p-3 text-xs font-semibold text-[#64748b]">Refunds are approved by the Principal or Head of School.</p>
+              )}
             </div>
+            {refundOpen && (
+              <div className="mt-4 space-y-3 rounded border border-[#e11d48]/30 bg-[#e11d48]/5 p-3">
+                <p className="text-xs font-black text-[#9f0f2c]">Refunding returns {formatTZS(payment.amount)} to the invoice balance and voids the receipt. This cannot be undone.</p>
+                <textarea
+                  value={refundReason}
+                  onChange={(e) => setRefundReason(e.target.value)}
+                  rows={3}
+                  placeholder="Why is this payment being refunded?"
+                  className="w-full rounded border border-[#d5dde6] bg-white p-2 text-sm font-semibold outline-none focus:border-[#00334f]"
+                />
+                <div className="flex gap-2">
+                  <Button variant="secondary" className="flex-1 rounded" onClick={() => { setRefundOpen(false); setRefundReason(''); }}>Cancel</Button>
+                  <Button className="flex-1 rounded bg-[#e11d48] hover:bg-[#9f0f2c]" loading={refundMutation.isPending} onClick={submitRefund}>Confirm refund</Button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -2183,117 +2241,57 @@ export function PaymentDetailPage() {
 
 // ─── Receipt pages ────────────────────────────────────────────────────────────
 
-const RCP_PAGE_SIZE = 20;
-type RcpStatusTab = 'ALL' | 'ACTIVE' | 'VOID';
+const RCP_PAGE_SIZE = 25;
+
+const RCP_TABS: { key: string; label: string; state?: string }[] = [
+  { key: 'ALL', label: 'All' },
+  { key: 'ACTIVE', label: 'Active', state: 'ACTIVE' },
+  { key: 'VOID', label: 'Void', state: 'VOID' },
+];
 
 export function ReceiptListPage() {
-  const { data: apiReceipts = [] as typeof receipts, isLoading, isError, refetch } = useReceipts() as unknown as { data: typeof receipts; isLoading: boolean; isError: boolean; refetch: () => void };
-  const [search, setSearch]     = useState('');
-  const [statusTab, setStatusTab] = useState<RcpStatusTab>('ALL');
-  const [page, setPage]         = useState(0);
+  const [search, setSearch] = useState('');
+  const [tab, setTab] = useState('ALL');
+  const [page, setPage] = useState(1);
+  const q = useDebounced(search.trim());
+  const changed = (set: (v: string) => void) => (v: string) => { set(v); setPage(1); };
 
-  const counts = useMemo(() => ({
-    ALL:    apiReceipts.length,
-    ACTIVE: apiReceipts.filter((r) => r.status !== 'VOID').length,
-    VOID:   apiReceipts.filter((r) => r.status === 'VOID').length,
-  }), [apiReceipts]);
-
-  const visible = useMemo(() => {
-    let r = [...apiReceipts].sort((a, b) => new Date(b.issuedAt).getTime() - new Date(a.issuedAt).getTime());
-    if (statusTab !== 'ALL') r = r.filter((rc) => statusTab === 'VOID' ? rc.status === 'VOID' : rc.status !== 'VOID');
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      r = r.filter((rc) =>
-        rc.number.toLowerCase().includes(q) ||
-        rc.student.toLowerCase().includes(q) ||
-        (rc.paymentId ?? '').toLowerCase().includes(q),
-      );
-    }
-    return r;
-  }, [apiReceipts, statusTab, search]);
-
-  const totalPages    = Math.ceil(visible.length / RCP_PAGE_SIZE);
-  const pageReceipts  = visible.slice(page * RCP_PAGE_SIZE, (page + 1) * RCP_PAGE_SIZE);
-  const totalValue    = visible.filter((r) => r.status !== 'VOID').reduce((s, r) => s + r.amount, 0);
-
-  const RCP_TABS: { key: RcpStatusTab; label: string }[] = [
-    { key: 'ALL',    label: 'All'    },
-    { key: 'ACTIVE', label: 'Active' },
-    { key: 'VOID',   label: 'Void'   },
-  ];
+  const { data, isLoading, isError, isFetching, refetch } = useReceiptLedger({
+    page,
+    limit: RCP_PAGE_SIZE,
+    search: q || undefined,
+    state: RCP_TABS.find((t) => t.key === tab)?.state,
+  });
+  const counts = data?.counts ?? { ALL: 0, ACTIVE: 0, VOID: 0 };
+  const filtered = Boolean(q || tab !== 'ALL');
 
   return (
     <FinanceWorkspaceShell title="Receipt Ledger" eyebrow="Official payment receipts · search and void">
       <FinanceBreadcrumb crumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Receipts' }]} />
 
       <FinanceMetricStrip items={[
-        { label: 'Total Receipts', value: String(counts.ALL),    detail: 'all time',         tone: 'navy'  },
-        { label: 'Active',         value: String(counts.ACTIVE), detail: formatTZS(totalValue), tone: 'green' },
-        { label: 'Voided',         value: String(counts.VOID),   detail: 'cancelled',        tone: counts.VOID > 0 ? 'red' : 'slate' },
-        { label: 'Showing',        value: String(visible.length), detail: search || statusTab !== 'ALL' ? 'filtered' : 'all receipts', tone: 'slate' },
+        { label: 'Total Receipts', value: String(counts.ALL), detail: 'issued', tone: 'navy' },
+        { label: 'Active', value: String(counts.ACTIVE), detail: formatTZS(data?.activeAmount ?? 0), tone: 'green' },
+        { label: 'Voided', value: String(counts.VOID), detail: 'cancelled', tone: counts.VOID > 0 ? 'red' : 'slate' },
+        { label: 'Showing', value: String(data?.meta.total ?? 0), detail: filtered ? 'filtered' : 'all receipts', tone: 'slate' },
       ]} />
 
-      {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#64748b]" />
-        <input
-          value={search}
-          onChange={(e) => { setSearch(e.target.value); setPage(0); }}
-          placeholder="Search receipt number, student name, or payment ID…"
-          className="h-10 w-full rounded-lg border border-[#d5dde6] bg-white pl-9 pr-4 text-sm font-semibold placeholder:text-[#94a3b8] outline-none focus:border-[#00334f] focus:ring-2 focus:ring-[#00334f]/10"
-        />
-      </div>
-
-      {/* Status tabs */}
-      <div className="flex gap-1 border-b border-[#d5dde6]">
-        {RCP_TABS.map(({ key, label }) => (
-          <button
-            key={key}
-            onClick={() => { setStatusTab(key); setPage(0); }}
-            className={`relative px-4 py-2.5 text-sm font-black transition-colors ${statusTab === key ? 'text-[#00334f]' : 'text-[#64748b] hover:text-[#0f172a]'}`}
-          >
-            {label}
-            <span className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-black ${statusTab === key ? 'bg-[#00334f] text-white' : 'bg-[#f1f5f9] text-[#64748b]'}`}>
-              {counts[key]}
-            </span>
-            {statusTab === key && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#00334f]" />}
-          </button>
-        ))}
-      </div>
+      <LedgerSearch value={search} onChange={changed(setSearch)} placeholder="Search receipt #, payment #, reference or student name…" />
+      <LedgerTabs tabs={RCP_TABS.map((t) => ({ key: t.key, label: t.label, count: counts[t.key] }))} active={tab} onChange={changed(setTab)} />
 
       {isLoading ? (
-        <SkeletonTable cols={6} />
+        <SkeletonTable cols={7} />
       ) : isError ? (
         <DataError onRetry={refetch} />
-      ) : !apiReceipts.length ? (
-        <EmptyState title="No receipts yet" description="Receipts are generated automatically when payments are approved by the Principal." />
-      ) : !visible.length ? (
+      ) : !data?.meta.total && !filtered ? (
+        <EmptyState title="No receipts yet" description="Receipts are generated automatically when a payment is confirmed." />
+      ) : !data?.items.length ? (
         <EmptyState title="No matching receipts" description="Adjust your search or filter." />
       ) : (
-        <>
-          <ReceiptList rows={pageReceipts} />
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between pt-1">
-              <span className="text-xs font-semibold text-[#64748b]">
-                Showing {page * RCP_PAGE_SIZE + 1}–{Math.min((page + 1) * RCP_PAGE_SIZE, visible.length)} of {visible.length}
-              </span>
-              <div className="flex items-center gap-1">
-                <button disabled={page === 0} onClick={() => setPage((p) => p - 1)} className="flex h-8 w-8 items-center justify-center rounded border border-[#d5dde6] text-[#64748b] transition hover:bg-[#f1f5f9] disabled:opacity-40">
-                  <ChevronLeft className="h-4 w-4" />
-                </button>
-                {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
-                  const p = totalPages <= 7 ? i : page < 4 ? i : page > totalPages - 4 ? totalPages - 7 + i : page - 3 + i;
-                  return (
-                    <button key={p} onClick={() => setPage(p)} className={`h-8 w-8 rounded border text-xs font-black transition ${page === p ? 'border-[#00334f] bg-[#00334f] text-white' : 'border-[#d5dde6] text-[#64748b] hover:bg-[#f1f5f9]'}`}>{p + 1}</button>
-                  );
-                })}
-                <button disabled={page >= totalPages - 1} onClick={() => setPage((p) => p + 1)} className="flex h-8 w-8 items-center justify-center rounded border border-[#d5dde6] text-[#64748b] transition hover:bg-[#f1f5f9] disabled:opacity-40">
-                  <ChevronRight className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-          )}
-        </>
+        <div className={isFetching ? 'opacity-70 transition-opacity' : 'transition-opacity'}>
+          <ReceiptList rows={data.items as unknown as typeof receipts} />
+          <LedgerPager page={data.meta.page} totalPages={data.meta.totalPages} total={data.meta.total} limit={RCP_PAGE_SIZE} noun="receipts" onPage={setPage} />
+        </div>
       )}
     </FinanceWorkspaceShell>
   );
@@ -2304,11 +2302,13 @@ export function ReceiptDetailPage() {
   const navigate = useNavigate();
 
   const { data: apiReceipt, isLoading }                   = useReceiptById(id ?? '') as unknown as { data: (typeof receipts)[number] | undefined; isLoading: boolean };
-  const { data: allPayments = [] as typeof payments }     = usePayments()             as unknown as { data: typeof payments };
   const voidMutation = useVoidReceiptMutation();
+  const role = String(useAuthStore((state) => state.session?.user?.role) ?? '').toUpperCase();
+  const canVoid = ['PRINCIPAL', 'HEAD_OF_SCHOOL', 'MANAGER', 'SUPER_ADMIN', 'SYSTEM_ADMIN'].includes(role);
 
   const receipt  = apiReceipt;
-  const payment  = allPayments.find((p) => p.id === receipt?.paymentId);
+  const { data: paymentRecord } = usePayment(receipt?.paymentId ?? '');
+  const payment  = paymentRecord as unknown as (Partial<(typeof payments)[number]> & { bankName?: string }) | undefined;
   const { data: invoice } = useInvoiceById(payment?.invoiceId ?? '') as unknown as { data: (typeof invoices)[number] | undefined };
 
   const [voidOpen, setVoidOpen]     = useState(false);
@@ -2318,7 +2318,7 @@ export function ReceiptDetailPage() {
   const handleVoid = () => {
     if (!voidReason.trim() || !receipt) return;
     voidMutation.mutate(
-      { id: receipt.id, body: { reason: voidReason } },
+      { id: receipt.id, body: { voidReason: voidReason.trim() } },
       {
         onSuccess: () => { toast('Receipt voided', 'warning'); navigate('/finance/receipts'); },
         onError:   () => toast('Failed to void receipt', 'error'),
@@ -2345,8 +2345,9 @@ export function ReceiptDetailPage() {
         {/* Branded receipt */}
         <ReceiptPreview
           receipt={receipt}
-          payment={payment as typeof payment & { bankName?: string }}
+          payment={payment}
           invoice={invoice}
+          school={(apiReceipt as { school?: { name: string; motto?: string | null; address?: string | null; phone?: string | null; email?: string | null } } | undefined)?.school}
         />
 
         {/* Sidebar controls */}
@@ -2401,7 +2402,7 @@ export function ReceiptDetailPage() {
           </div>
 
           {/* Void form */}
-          {receipt.status !== 'VOID' && (
+          {receipt.status !== 'VOID' && canVoid && (
             <div className="rounded-lg border border-[#d5dde6] bg-white p-5">
               <p className="text-[11px] font-black uppercase tracking-widest text-[#64748b]">Void Receipt</p>
               {!voidOpen ? (
@@ -2757,20 +2758,23 @@ export function FeeStructuresPage() {
       onError: () => { toast('Failed to deactivate structure', 'error'); setDeactivating(null); },
     });
   };
-  const stageTotals = apiStructures.reduce<Record<string, number>>((acc, structure) => {
-    acc[structure.educationStage] = (acc[structure.educationStage] ?? 0) + structure.amount;
+  const { data: termList = [] } = useFinanceTerms();
+  const termName = (id: unknown) => termList.find((t) => t.id === id)?.name ?? '';
+  const stageCounts = apiStructures.reduce<Record<string, number>>((acc, structure) => {
+    const label = stageLabel(structure.educationStage);
+    if (label && structure.active) acc[label] = (acc[label] ?? 0) + 1;
     return acc;
   }, {});
 
   return (
     <FinanceWorkspaceShell title="Fee Structures" eyebrow="Class and term pricing">
       <FinanceBreadcrumb crumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Fee Setup' }, { label: 'Structures' }]} />
-      <div className="grid gap-3 md:grid-cols-3">
-        {['Primary', 'O-Level', 'A-Level'].map((stage) => (
+      <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-5">
+        {STAGE_LABELS.filter((stage) => stageCounts[stage]).map((stage) => (
           <div key={stage} className="rounded-[24px] border border-[#d7dee8] bg-white p-4 shadow-sm">
             <p className="text-[11px] font-black uppercase tracking-[0.2em] text-[#6a7485]">{stage}</p>
-            <p className="mt-2 font-mono text-xl font-black text-[#10233f]">{formatTZS(stageTotals[stage] ?? 0)}</p>
-            <p className="mt-1 text-xs font-semibold text-[#6a7485]">Active fee targets in this stage</p>
+            <p className="mt-2 font-mono text-xl font-black text-[#10233f]">{stageCounts[stage]}</p>
+            <p className="mt-1 text-xs font-semibold text-[#6a7485]">active fee structures</p>
           </div>
         ))}
       </div>
@@ -2796,23 +2800,22 @@ export function FeeStructuresPage() {
           ]}
         />
       </div>
-      <FinanceTable columns={['Structure', 'Category', 'Target', 'Stage', 'Group', 'Amount', 'Effective Term', 'Status', 'Actions']} minWidth={1060}>
+      <FinanceTable columns={['Category', 'Target', 'Stage', 'Group', 'Amount', 'Term', 'Status', 'Actions']} minWidth={960}>
         {apiStructures.map((structure) => (
           <tr key={structure.id} className="even:bg-[#f7f9fb]">
-            <Td>#{structure.id.slice(0, 8)}</Td>
             <Td>{structure.category}</Td>
             <Td>{structure.className || '—'}</Td>
             <Td>{structure.educationStage ? structure.educationStage.replaceAll('_', ' ') : '—'}</Td>
             <Td>{structure.studentGroup || (structure.classLevel ? `Level ${structure.classLevel}` : '—')}</Td>
             <Td amount><AmountDisplay amount={structure.amount} /></Td>
-            <Td>{structure.effectiveTerm || 'Annual'}</Td>
+            <Td>{structure.effectiveTerm || termName((structure as unknown as { termId?: string }).termId) || 'All terms'}</Td>
             <Td><FinanceStatusBadge status={structure.active ? 'ACTIVE' : 'INACTIVE'} /></Td>
             <Td>
               <Button
                 variant="secondary"
                 className="rounded py-1.5 text-xs"
                 disabled={deactivating === structure.id}
-                onClick={() => handleDeactivate(structure.id)}
+                onClick={() => { if (window.confirm(`Deactivate the ${structure.category} fee for ${structure.className || 'this target'}? New invoices will stop using it.`)) handleDeactivate(structure.id); }}
               >
                 {deactivating === structure.id ? '…' : 'Deactivate'}
               </Button>
@@ -2829,7 +2832,7 @@ export function FeeMatrixPage() {
 
   const { data: rawCategories = [] } = useFeeCategories() as unknown as { data: typeof feeCategories };
   const { data: apiClasses = [] } = useFinanceClasses();
-  const { data: apiStructures = [] } = useFeeStructures() as unknown as { data: typeof feeStructures };
+  const { data: apiStructures = [], isSuccess: structuresReady } = useFeeStructures() as unknown as { data: typeof feeStructures; isSuccess: boolean };
   const { data: years = [] } = useFinanceAcademicYears();
   const { data: terms = [] } = useFinanceTerms();
   const createMutation = useCreateFeeStructureMutation();
@@ -2837,7 +2840,8 @@ export function FeeMatrixPage() {
 
   const [yearId, setYearId] = useState('');
   const [termId, setTermId] = useState('');
-  const [stageTab, setStageTab] = useState<'Primary' | 'O-Level' | 'A-Level'>('O-Level');
+  const [stageTab, setStageTab] = useState<StageLabel>('O-Level');
+  const [stagePicked, setStagePicked] = useState(false);
   const [columns, setColumns] = useState<ColDef[]>([]);
   const [matrix, setMatrix] = useState<Record<string, Record<string, string>>>({});
   const [original, setOriginal] = useState<Record<string, Record<string, { amount: string; structureId: string | null }>>>({});
@@ -2862,13 +2866,17 @@ export function FeeMatrixPage() {
   const stageClasses = useMemo(
     () =>
       apiClasses
-        .filter((c) => {
-          const norm = c.educationStage.replace(/_/g, '-');
-          return norm === stageTab || c.educationStage === stageTab;
-        })
+        .filter((c) => stageLabel(c.educationStage) === stageTab)
         .sort((a, b) => a.level - b.level),
     [apiClasses, stageTab],
   );
+
+  // Open on the first stage that actually has classes (a primary-only school has no O-Level)
+  useEffect(() => {
+    if (stagePicked || !apiClasses.length) return;
+    const first = STAGE_LABELS.find((label) => apiClasses.some((c) => stageLabel(c.educationStage) === label));
+    if (first && first !== stageTab) setStageTab(first);
+  }, [apiClasses, stagePicked, stageTab]);
 
   // Reset columns and signal matrix re-init on stage change
   useEffect(() => {
@@ -2884,7 +2892,8 @@ export function FeeMatrixPage() {
 
   // Populate matrix from API structures (only on demand)
   useEffect(() => {
-    if (!matrixNeedsInit || !columns.length || !categories.length) return;
+    // wait for the saved structures, otherwise the grid would initialise empty and never fill in
+    if (!matrixNeedsInit || !structuresReady || !columns.length || !categories.length) return;
     setMatrixNeedsInit(false);
     const newMat: Record<string, Record<string, string>> = {};
     const newOrig: Record<string, Record<string, { amount: string; structureId: string | null }>> = {};
@@ -2892,13 +2901,11 @@ export function FeeMatrixPage() {
       newMat[cat.id] = {};
       newOrig[cat.id] = {};
       columns.forEach((col) => {
-        const struct = (apiStructures as typeof feeStructures).find((s) =>
-          s.category === cat.name &&
-          col.classIds.some((cid) => {
-            const cls = apiClasses.find((c) => c.id === cid);
-            return cls && s.className === cls.name;
-          }),
+        // Match on the class id (class names repeat across schools and carry streams), preferring the chosen term
+        const candidates = (apiStructures as unknown as Array<{ id: string; category: string; classId?: string; termId?: string; amount: number }>).filter((s) =>
+          s.category === cat.name && s.classId && col.classIds.includes(s.classId),
         );
+        const struct = (termId ? candidates.find((s) => s.termId === termId) : undefined) ?? candidates.find((s) => !s.termId) ?? candidates[0];
         const amt = struct ? String(struct.amount) : '';
         newMat[cat.id][col.id] = amt;
         newOrig[cat.id][col.id] = { amount: amt, structureId: struct?.id ?? null };
@@ -2906,7 +2913,7 @@ export function FeeMatrixPage() {
     });
     setMatrix(newMat);
     setOriginal(newOrig);
-  }, [matrixNeedsInit, columns, categories, apiStructures, apiClasses]);
+  }, [matrixNeedsInit, structuresReady, columns, categories, apiStructures, apiClasses]);
 
   const effectiveAmt = (catId: string, colId: string): string => {
     const col = columns.find((c) => c.id === colId);
@@ -3005,7 +3012,7 @@ export function FeeMatrixPage() {
     }
   };
 
-  const STAGE_TABS: Array<'Primary' | 'O-Level' | 'A-Level'> = ['Primary', 'O-Level', 'A-Level'];
+  const STAGE_TABS = STAGE_LABELS.filter((label) => apiClasses.some((c) => stageLabel(c.educationStage) === label) || label === stageTab);
   const cap = 'text-[11px] font-black uppercase tracking-widest text-[#64748b]';
   const filteredTerms = terms.filter((t) => !effectiveYearId || t.academicYearId === effectiveYearId);
 
@@ -3056,7 +3063,7 @@ export function FeeMatrixPage() {
       {/* ── Stage tabs ── */}
       <div className="flex w-fit gap-1 rounded-xl border border-[#d5dde6] bg-[#f7f9fb] p-1">
         {STAGE_TABS.map((s) => (
-          <button key={s} onClick={() => setStageTab(s)}
+          <button key={s} onClick={() => { setStagePicked(true); setStageTab(s); }}
             className={`rounded-lg px-5 py-1.5 text-sm font-bold transition-all ${stageTab === s ? 'bg-white shadow text-[#00334f]' : 'text-[#64748b] hover:text-[#00334f]'}`}>
             {s}
           </button>
@@ -3450,7 +3457,7 @@ export function CreateFeeStructurePage() {
               <label className="block">
                 <span className={cap}>Education Stage</span>
                 <select value={educationStage} onChange={(e) => setEducationStage(e.target.value)} className={sel}>
-                  <option value="PRIMARY">Primary</option><option value="O_LEVEL">O-Level</option><option value="A_LEVEL">A-Level</option>
+                  <option value="NURSERY">Nursery</option><option value="PRE_UNIT">Pre-Unit</option><option value="PRIMARY">Primary</option><option value="O_LEVEL">O-Level</option><option value="A_LEVEL">A-Level</option>
                 </select>
               </label>
               <label className="block">
@@ -3489,30 +3496,59 @@ export function CreateFeeStructurePage() {
 
 export function FeeAssignmentsPage() {
   const { data: apiAssignments = [] as typeof feeAssignments, isLoading, isError, refetch } = useFeeAssignments() as unknown as { data: typeof feeAssignments; isLoading: boolean; isError: boolean; refetch: () => void };
+  const { data: termList = [] } = useFinanceTerms();
   const removeMutation = useDeleteFeeAssignmentMutation();
   const [removing, setRemoving] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [classFilter, setClassFilter] = useState('');
+
+  const categories = useMemo(() => [...new Set(apiAssignments.map((a) => a.category).filter(Boolean))].sort(), [apiAssignments]);
+  const classNames = useMemo(() => [...new Set(apiAssignments.map((a) => a.className).filter(Boolean))].sort(), [apiAssignments]);
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return apiAssignments.filter((a) =>
+      (!categoryFilter || a.category === categoryFilter) &&
+      (!classFilter || a.className === classFilter) &&
+      (!q || a.student.toLowerCase().includes(q) || a.category.toLowerCase().includes(q)),
+    );
+  }, [apiAssignments, search, categoryFilter, classFilter]);
+
   return (
     <FinanceWorkspaceShell title="Optional Fee Assignments" eyebrow="Student and bulk assignment">
       <FinanceBreadcrumb crumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Fee Setup' }, { label: 'Assignments' }]} />
-      <FinanceFilters items={['Fee category', 'Class', 'Term', 'Effective date']} />
-      {isLoading ? <SkeletonTable cols={8} /> : isError ? <DataError onRetry={refetch} /> : apiAssignments.length === 0 ? <EmptyState title="No fee assignments" description="Assign optional fees to students individually or in bulk." /> : (
-      <FinanceTable columns={['Assignment', 'Student', 'Class', 'Category', 'Amount', 'Term', 'Effective', 'Actions']} minWidth={900}>
-        {apiAssignments.map((assignment) => (
+      <div className="flex flex-wrap items-center gap-3">
+        <LedgerSearch value={search} onChange={setSearch} placeholder="Search student or fee category…" />
+        <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className={selectClass} aria-label="Fee category">
+          <option value="">All categories</option>
+          {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <select value={classFilter} onChange={(e) => setClassFilter(e.target.value)} className={selectClass} aria-label="Class">
+          <option value="">All classes</option>
+          {classNames.map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
+      </div>
+      {isLoading ? <SkeletonTable cols={7} /> : isError ? <DataError onRetry={refetch} /> : apiAssignments.length === 0 ? <EmptyState title="No fee assignments" description="Assign optional fees to students and they will be added to their next invoice." /> : visible.length === 0 ? <EmptyState title="No matching assignments" description="Try a different search or filter." /> : (
+      <FinanceTable columns={['Student', 'Class', 'Category', 'Billed as', 'Term', 'Assigned', 'Actions']} minWidth={900}>
+        {visible.map((assignment) => (
           <tr key={assignment.id} className="even:bg-[#f7f9fb]">
-            <Td>{assignment.id}</Td>
-            <Td>{assignment.student}</Td>
-            <Td>{assignment.className}</Td>
+            <Td>
+              <div className="font-black text-[#0f172a]">{assignment.student}</div>
+              {(assignment as unknown as { registrationNumber?: string }).registrationNumber ? <div className="text-[11px] text-[#64748b]">{(assignment as unknown as { registrationNumber?: string }).registrationNumber}</div> : null}
+            </Td>
+            <Td>{assignment.className || '—'}</Td>
             <Td>{assignment.category}</Td>
-            <Td amount><AmountDisplay amount={assignment.amount} /></Td>
-            <Td>{assignment.term}</Td>
-            <Td>{assignment.effectiveDate}</Td>
+            <Td>{assignment.amount > 0 ? <AmountDisplay amount={assignment.amount} /> : <span className="text-xs font-semibold text-[#64748b]">Per fee structure</span>}</Td>
+            <Td>{assignment.term || termList.find((t) => t.id === (assignment as unknown as { termId?: string }).termId)?.name || 'Every term'}</Td>
+            <Td>{assignment.effectiveDate ? formatDate(assignment.effectiveDate) : '—'}</Td>
             <Td>
               <Button variant="secondary" className="rounded py-1.5 text-xs" disabled={removing === assignment.id || removeMutation.isPending}
                 onClick={() => {
+                  if (!window.confirm(`Remove ${assignment.category} from ${assignment.student}? It will no longer appear on new invoices.`)) return;
                   setRemoving(assignment.id);
                   removeMutation.mutate(assignment.id, {
                     onSuccess: () => { toast('Fee assignment removed', 'warning'); setRemoving(null); },
-                    onError: () => { toast('Failed to remove assignment', 'error'); setRemoving(null); },
+                    onError: (e) => { toast(e instanceof Error && e.message ? e.message : 'Failed to remove assignment', 'error'); setRemoving(null); },
                   });
                 }}>
                 {removing === assignment.id ? '…' : 'Remove'}
@@ -4012,9 +4048,9 @@ export function CollectionSummaryReportPage() {
       collectionRate?: number;
       byPaymentMethod?: Array<{ method: string; totalAmount: unknown; transactionCount?: number }>;
       byFeeCategory?: Array<{ category?: string; name?: string; totalAmount: unknown; count?: number }>;
+      dailyTrend?: Array<{ date: string; amount: number }>;
     };
   };
-  const { data: apiPayments = [] as typeof payments } = usePayments() as unknown as { data: typeof payments };
 
   const totalInvoiced = Number(summary?.totalInvoiced ?? 0);
   const totalCollected = Number(summary?.totalCollected ?? 0);
@@ -4024,21 +4060,8 @@ export function CollectionSummaryReportPage() {
   const cats = summary?.byFeeCategory ?? [];
   const methodTotal = methods.reduce((s, m) => s + Number(m.totalAmount ?? 0), 0) || 1;
 
-  // 14-day payment trend
-  const trendData = useMemo(() => {
-    const today = new Date();
-    const byDay = new Map<string, number>();
-    for (let i = 13; i >= 0; i--) {
-      const d = new Date(today);
-      d.setDate(d.getDate() - i);
-      byDay.set(d.toISOString().slice(0, 10), 0);
-    }
-    apiPayments.forEach((p) => {
-      const day = String(p.date ?? '').slice(0, 10);
-      if (byDay.has(day)) byDay.set(day, (byDay.get(day) ?? 0) + Number(p.amount ?? 0));
-    });
-    return [...byDay.values()];
-  }, [apiPayments]);
+  // 14-day payment trend (summed on the server, so it is complete however many payments there are)
+  const trendData = (summary?.dailyTrend ?? []).map((d) => d.amount);
 
   async function handleDownloadPdf() {
     toast('Generating PDF…', 'info');
@@ -4194,15 +4217,13 @@ export function CollectionSummaryReportPage() {
                 <thead>
                   <tr className="text-[11px] font-black uppercase tracking-widest text-[#64748b]">
                     <th className="py-2 text-left">Category</th>
-                    <th className="py-2 text-right">Count</th>
-                    <th className="py-2 text-right">Amount Collected</th>
+                    <th className="py-2 text-right">Billed</th>
                   </tr>
                 </thead>
                 <tbody>
                   {cats.map((c) => (
                     <tr key={String(c.category ?? c.name)} className="border-t border-[#f1f5f9]">
                       <td className="py-2 font-bold text-[#0f172a]">{String(c.category ?? c.name ?? '—')}</td>
-                      <td className="py-2 text-right font-mono text-[#64748b]">{c.count ?? 0}</td>
                       <td className="py-2 text-right font-mono font-black text-[#00334f]">{formatTZS(Number(c.totalAmount ?? 0))}</td>
                     </tr>
                   ))}
@@ -4214,7 +4235,7 @@ export function CollectionSummaryReportPage() {
           {/* 14-day trend chart */}
           <MiniColumnChart
             title="14-Day Collection Trend"
-            subtitle={`${apiPayments.length} payments in period`}
+            subtitle={`${formatTZS(trendData.reduce((sum, v) => sum + v, 0))} collected in 14 days`}
             data={trendData.length ? trendData : [0]}
             startLabel="14 days ago"
             endLabel="Today"
@@ -4241,7 +4262,7 @@ export function CollectionSummaryReportPage() {
               {[
                 ['Methods used', String(methods.length)],
                 ['Fee categories', String(cats.length)],
-                ['Payment records', String(apiPayments.length)],
+                ['Transactions', String(methods.reduce((sum, m) => sum + Number(m.transactionCount ?? 0), 0))],
                 ['Rate', `${Math.round(collectionRate)}%`],
               ].map(([k, v]) => (
                 <div key={k} className="flex items-center justify-between">
@@ -4580,36 +4601,12 @@ export function DailyCollectionsReportPage() {
       byMethod?: Array<{ method: string; amount: number }>;
     }>;
   };
-  const { data: apiPayments = [] as typeof payments } = usePayments() as unknown as { data: typeof payments };
 
   const today = new Date().toISOString().slice(0, 10);
   const weekAgo = new Date(Date.now() - 7 * 86_400_000).toISOString().slice(0, 10);
   const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10);
 
-  // Derive daily aggregates from payments if dailyRows is empty
-  const effectiveRows = useMemo(() => {
-    if (dailyRows.length > 0) return dailyRows;
-    // Build from payments
-    const byDay = new Map<string, { totalAmount: number; transactionCount: number; byMethod: Map<string, number> }>();
-    apiPayments.forEach((p) => {
-      const day = String(p.date ?? '').slice(0, 10);
-      if (!day) return;
-      if (!byDay.has(day)) byDay.set(day, { totalAmount: 0, transactionCount: 0, byMethod: new Map() });
-      const g = byDay.get(day)!;
-      g.totalAmount += Number(p.amount ?? 0);
-      g.transactionCount += 1;
-      const method = String((p as Record<string, unknown>).method ?? 'UNKNOWN');
-      g.byMethod.set(method, (g.byMethod.get(method) ?? 0) + Number(p.amount ?? 0));
-    });
-    return [...byDay.entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([date, g]) => ({
-        date,
-        totalAmount: g.totalAmount,
-        transactionCount: g.transactionCount,
-        byMethod: [...g.byMethod.entries()].map(([method, amount]) => ({ method, amount })),
-      }));
-  }, [dailyRows, apiPayments]);
+  const effectiveRows = dailyRows;
 
   const sortedDesc = useMemo(() => [...effectiveRows].sort((a, b) => String(b.date ?? '').localeCompare(String(a.date ?? ''))), [effectiveRows]);
 
@@ -4862,7 +4859,7 @@ export function FeeDefaultersReportPage() {
   type ContactStatus = 'PENDING' | 'CONTACTED' | 'PROMISED' | 'ESCALATED';
   type ContactNote = { text: string; method: string; date: string; followUp: string };
 
-  const { data: apiInvoices = [] as typeof invoices } = useInvoices() as unknown as { data: typeof invoices };
+  const { data: apiInvoices = [] as typeof invoices } = useFeeDefaulters() as unknown as { data: typeof invoices };
   const { data: apiOverview = EMPTY_OVERVIEW } = useFinanceOverview() as unknown as { data: typeof financeOverview };
 
   const overdue = useMemo(() => overdueInvoices(apiInvoices), [apiInvoices]);
@@ -4949,6 +4946,8 @@ export function FeeDefaultersReportPage() {
         { label: 'Not Yet Contacted', value: String(notContacted), detail: 'No contact logged yet',    tone: 'navy' },
         { label: 'Escalated',         value: String(escalated),    detail: 'Referred for action',      tone: 'red' },
       ]} />
+
+      <p className="text-xs font-semibold text-[#64748b]">Contact status and follow-up notes on this page are working notes for this browser session; they are not saved to the student record.</p>
 
       {/* ── Filter bar ── */}
       <div className="flex flex-wrap items-center gap-3">
@@ -5197,9 +5196,7 @@ export function FinancialAuditLogPage() {
       if (logo) { doc.addImage(logo, 'PNG', M, 7, 26, 26, undefined, 'FAST'); }
       const tx = M + 30;
       doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(255, 255, 255); doc.text('Kilimanjaro Schools', tx, 15);
-      doc.setFont('helvetica', 'italic'); doc.setFontSize(7.5); doc.setTextColor(213, 154, 27); doc.text('Excellence in Education Since 2003', tx, 20);
       doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.setTextColor(200, 220, 230);
-      doc.text('P.O. Box 4502, Moshi, Kilimanjaro, Tanzania', tx, 25);
       doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.setTextColor(160, 200, 220);
       doc.text('FINANCIAL AUDIT LOG', PW - M, 13, { align: 'right' });
       doc.setFont('helvetica', 'bold'); doc.setFontSize(14); doc.setTextColor(255, 255, 255); doc.text('Immutable Audit Trail', PW - M, 22, { align: 'right' });
@@ -5307,52 +5304,35 @@ export function FinancialAuditLogPage() {
 }
 
 export function FinanceExportsPage() {
-  const [generating, setGenerating] = useState<string | null>(null);
-  const generateMutation = useGenerateReportMutation();
+  const [generating, setGenerating] = useState<ExportKey | null>(null);
 
-  const exportItems = [
-    { label: 'Invoices CSV',                 icon: FileText,        reportType: 'finance-invoices',             format: 'csv' },
-    { label: 'Payments CSV',                 icon: WalletCards,     reportType: 'finance-payments',             format: 'csv' },
-    { label: 'Receipts CSV',                 icon: ReceiptText,     reportType: 'finance-receipts',             format: 'csv' },
-    { label: 'Outstanding balances PDF',     icon: AlertTriangle,   reportType: 'finance-outstanding-balances', format: 'pdf' },
-    { label: 'Collection summary PDF',       icon: FileSpreadsheet, reportType: 'finance-collection-summary',   format: 'pdf' },
-    { label: 'Fee matrix CSV',               icon: FileSpreadsheet, reportType: 'finance-fee-matrix',           format: 'csv' },
-    { label: 'Assets CSV',                   icon: FileText,        reportType: 'finance-assets',               format: 'csv' },
-    { label: 'Audit log CSV',                icon: ShieldCheck,     reportType: 'finance-audit-log',            format: 'csv' },
-  ];
-
-  const handleExport = async (item: typeof exportItems[0]) => {
-    setGenerating(item.label);
-    toast(`Generating ${item.label}…`, 'info');
+  const handleExport = async (item: (typeof EXPORTS)[number]) => {
+    setGenerating(item.key);
     try {
-      const result = await generateMutation.mutateAsync({ type: item.reportType, format: item.format }) as Record<string, unknown> | undefined;
-      const jobId = String(result?.id ?? result?.jobId ?? '');
-      if (!jobId) throw new Error('No job id');
-      await downloadReportWhenReady(jobId, `${item.label}.${item.format}`);
-      toast(`${item.label} downloaded`, 'success');
-    } catch {
-      toast(`Failed to generate ${item.label}. Please try again.`, 'error');
+      const count = await exportFinanceCsv(item.key);
+      toast(count ? `${item.label}: ${count} rows downloaded` : `${item.label}: nothing to export yet`, count ? 'success' : 'info');
+    } catch (e) {
+      toast(e instanceof Error && e.message ? `Could not export ${item.label}: ${e.message}` : `Could not export ${item.label}. Please try again.`, 'error');
     } finally {
       setGenerating(null);
     }
   };
 
   return (
-    <FinanceWorkspaceShell title="Finance Export Center" eyebrow="Controlled extraction">
+    <FinanceWorkspaceShell title="Finance Export Center" eyebrow="CSV extracts for Excel">
       <FinanceBreadcrumb crumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Export Center' }]} />
+      <p className="text-sm font-semibold text-[#64748b]">Exports cover only the schools you can access, and include everything in that scope — not just what is on screen.</p>
       <div className="grid gap-gutter md:grid-cols-2 xl:grid-cols-4">
-        {exportItems.map((item) => (
-          <div key={item.label} className="group flex flex-col rounded-lg border border-[#d5dde6] bg-white p-5 transition hover:border-[#00334f] hover:shadow-sm">
+        {EXPORTS.map((item) => (
+          <div key={item.key} className="group flex flex-col rounded-lg border border-[#d5dde6] bg-white p-5 transition hover:border-[#00334f] hover:shadow-sm">
             <div className="flex h-10 w-10 items-center justify-center rounded border border-[#00334f]/20 bg-[#00334f]/5">
-              <item.icon className="h-5 w-5 text-[#00334f]" />
+              <FileSpreadsheet className="h-5 w-5 text-[#00334f]" />
             </div>
             <h3 className="mt-4 font-display text-lg font-black text-[#00334f]">{item.label}</h3>
-            <p className="mt-2 grow text-sm font-semibold text-[#64748b]">
-              Export creates an audit row with actor, filters, and timestamp.
-            </p>
+            <p className="mt-2 grow text-sm font-semibold text-[#64748b]">{item.description}</p>
             <Button className="mt-4 w-full rounded bg-[#00334f] hover:bg-[#001e30] hover:shadow-none" disabled={generating !== null}
               onClick={() => handleExport(item)}>
-              <Download className="h-4 w-4" /> {generating === item.label ? 'Generating…' : 'Export'}
+              <Download className="h-4 w-4" /> {generating === item.key ? 'Preparing…' : 'Download CSV'}
             </Button>
           </div>
         ))}
@@ -5491,16 +5471,16 @@ function SideSummary({ title, items }: { title: string; items: Array<[string, st
   );
 }
 
-function Timeline({ rows }: { rows: string[] }) {
+function Timeline({ rows, times }: { rows: string[]; times?: string[] }) {
   return (
     <div className="rounded-lg border border-[#d5dde6] bg-white p-5">
       <h2 className="font-display text-xl font-black text-[#00334f]">Timeline</h2>
       <div className="mt-5 space-y-4 border-l-2 border-[#d5dde6] pl-5">
         {rows.map((row, index) => (
-          <div key={row} className="relative">
+          <div key={`${index}-${row}`} className="relative">
             <span className={`absolute -left-[29px] top-1 h-4 w-4 rounded-full border-2 border-white shadow-sm ${index === rows.length - 1 ? 'bg-[#d59a1b]' : 'bg-[#00334f]'}`} />
             <p className="text-sm font-black text-[#00334f]">{row}</p>
-            <p className="text-xs font-semibold text-[#64748b]">Recorded in system</p>
+            {times?.[index] ? <p className="text-xs font-semibold text-[#64748b]">{times[index]}</p> : null}
           </div>
         ))}
       </div>

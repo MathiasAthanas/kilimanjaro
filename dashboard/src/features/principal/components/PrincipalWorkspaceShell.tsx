@@ -649,10 +649,10 @@ export function PaymentApprovalCard({ approval }: { approval: PrincipalPaymentAp
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-[10px] font-black uppercase tracking-widest text-ks-muted">
-            {approval.paymentId} · {approval.method} · {approval.age} ago
+            {approval.paymentNumber || 'Payment'} · {approval.method.replaceAll('_', ' ')}{approval.age ? ` · waiting ${approval.age}` : ''}
           </p>
           <h3 className="mt-1 font-display text-xl font-black text-ks-navy">{approval.student}</h3>
-          <p className="text-sm font-semibold text-ks-muted">{approval.invoice} · ref: {approval.reference}</p>
+          <p className="text-sm font-semibold text-ks-muted">{approval.invoice}{approval.reference ? ` · ref: ${approval.reference}` : ''}</p>
         </div>
         <p className="shrink-0 font-mono text-xl font-black text-ks-navy">TZS {approval.amount.toLocaleString('en-US')}</p>
       </div>

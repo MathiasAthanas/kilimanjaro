@@ -9,9 +9,15 @@ export type FinanceStatus =
   | 'CANCELLED'
   | 'ACTIVE'
   | 'INACTIVE'
-  | 'DISPOSED';
+  | 'DISPOSED'
+  | 'ISSUED'
+  | 'PARTIALLY_PAID'
+  | 'WAIVED'
+  | 'DRAFT'
+  | 'CONFIRMED'
+  | 'REFUNDED';
 
-export type PaymentMethod = 'CASH' | 'BANK' | 'MOBILE_MONEY';
+export type PaymentMethod = 'CASH' | 'BANK' | 'BANK_TRANSFER' | 'MOBILE_MONEY' | 'SCHOLARSHIP' | 'WAIVER' | 'OTHER';
 
 export type Invoice = {
   id: string;
@@ -25,7 +31,7 @@ export type Invoice = {
   total: number;
   paid: number;
   outstanding: number;
-  status: Extract<FinanceStatus, 'PAID' | 'PARTIAL' | 'OVERDUE' | 'VOID' | 'CANCELLED'>;
+  status: Extract<FinanceStatus, 'PAID' | 'PARTIAL' | 'PARTIALLY_PAID' | 'ISSUED' | 'DRAFT' | 'WAIVED' | 'OVERDUE' | 'VOID' | 'CANCELLED'>;
   dueDate: string;
   lastPayment: string;
   lineItems: Array<{ category: string; amount: number; mandatory: boolean }>;
@@ -38,9 +44,10 @@ export type Payment = {
   invoiceId: string;
   invoiceNumber: string;
   student: string;
+  registration?: string;
   method: PaymentMethod;
   amount: number;
-  status: Extract<FinanceStatus, 'PENDING' | 'APPROVED' | 'REJECTED'>;
+  status: Extract<FinanceStatus, 'PENDING' | 'APPROVED' | 'CONFIRMED' | 'REJECTED' | 'REFUNDED' | 'CANCELLED'>;
   enteredBy: string;
   date: string;
   receiptId?: string;
@@ -53,6 +60,7 @@ export type Receipt = {
   id: string;
   number: string;
   paymentId: string;
+  paymentNumber?: string;
   student: string;
   amount: number;
   method: PaymentMethod;

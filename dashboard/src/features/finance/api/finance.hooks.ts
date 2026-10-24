@@ -1,8 +1,12 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../lib/api/client';
 import { arrayFromApi, payloadOf } from '../../../lib/api/response';
 
 // ─── Query key factory ────────────────────────────────────────────────────────
+
+/** Server payloads are read defensively field by field; this is the one place that opts out of strict typing. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Loose = Record<string, any>;
 
 export const financeKeys = {
   all: ['finance'] as const,
@@ -49,13 +53,17 @@ export function useFinanceOverview() {
         const payload = payloadOf(r) as Record<string, unknown>;
         // The API nests financial totals under "billing"
         const b = (payload?.billing ?? payload) as Record<string, unknown>;
+        const overdue = (payload?.overdueAnalysis ?? {}) as Record<string, unknown>;
+        const today = new Date().toISOString().slice(0, 10);
+        const daily = (Array.isArray(payload?.dailyCollectionThisMonth) ? payload.dailyCollectionThisMonth : []) as Array<Record<string, unknown>>;
+        const todayRow = daily.find((d) => String(d.date) === today);
         return {
           totalInvoiced:  decimalToNumber(b.totalInvoiced),
           totalCollected: decimalToNumber(b.totalCollected),
           outstanding:    decimalToNumber(b.totalOutstanding ?? b.outstanding),
           collectionRate: Number(b.collectionRate ?? 0),
-          today:          decimalToNumber(b.todayCollection ?? b.today),
-          overdueInvoices: Number(b.overdueCount ?? b.overdueInvoices ?? 0),
+          today:          decimalToNumber(b.todayCollection ?? b.today ?? todayRow?.amount),
+          overdueInvoices: Number(overdue.overdueCount ?? b.overdueCount ?? b.overdueInvoices ?? 0),
         };
       }),
     staleTime: 60_000,
@@ -171,70 +179,52 @@ function normaliseInvoice(raw: unknown) {
   };
 }
 
-// Build a studentId → "First Last" map (the invoice list carries only studentId).
-// Cached so multiple finance screens share the single fetch.
-let studentNameMapCache: Map<string, { name: string; registration: string; className: string }> | null = null;
-async function getStudentNameMap(): Promise<Map<string, { name: string; registration: string; className: string }>> {
-  if (studentNameMapCache) return studentNameMapCache;
-  const map = new Map<string, { name: string; registration: string; className: string }>();
-  try {
-    for (let page = 1; page <= 4; page++) {
-      const res = await api.get('/students', { params: { page, limit: 100 } }).then(payloadOf) as Record<string, unknown>;
-      const rows = arrayFromApi(res, ['items', 'students']) as Record<string, unknown>[];
-      rows.forEach((s) => {
-        const name = [s.firstName, s.lastName].filter(Boolean).join(' ').trim();
-        const enrolment = Array.isArray(s.enrolments) ? (s.enrolments[0] as Record<string, unknown> | undefined) : undefined;
-        const className = String((enrolment?.class as Record<string, unknown> | undefined)?.name ?? '');
-        map.set(String(s.id), { name, registration: String(s.registrationNumber ?? ''), className });
-      });
-      const meta = (res.meta ?? {}) as Record<string, number>;
-      if (!meta.totalPages || page >= meta.totalPages) break;
-    }
-  } catch { /* names are best-effort */ }
-  studentNameMapCache = map;
-  return map;
-}
-
 export function useInvoices(params?: Record<string, unknown>) {
   return useQuery({
     queryKey: financeKeys.invoices(params),
     queryFn: async () => {
-      const [rows, nameMap] = await Promise.all([
-        api.get('/finance/invoices', { params }).then((r) => arrayFromApi(payloadOf(r), ['items', 'invoices'])),
-        getStudentNameMap(),
-      ]);
-      return rows.map((raw) => {
-        const inv = normaliseInvoice(raw);
-        if (!inv.student) {
-          const info = nameMap.get(String((raw as Record<string, unknown>).studentId ?? ''));
-          if (info) {
-            inv.student = info.name;
-            if (!inv.registration) inv.registration = info.registration;
-            if (!inv.className) inv.className = info.className;
-          }
-        }
-        return inv;
-      });
+      const rows = await api.get('/finance/invoices', { params }).then((r) => arrayFromApi(payloadOf(r), ['items', 'invoices']));
+      return rows.map(normaliseInvoice);
     },
+  });
+}
+
+export interface LedgerMeta { page: number; limit: number; total: number; totalPages: number }
+
+/** One page of the invoice ledger with totals, status counts and filter choices for the whole filtered set. */
+export function useInvoiceLedger(params: { page: number; limit?: number; status?: string; search?: string; classId?: string; termId?: string; studentId?: string; sort?: 'outstanding' }, options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: [...financeKeys.all, 'invoice-ledger', params] as const,
+    queryFn: async () => {
+      const raw = (await api.get('/finance/invoices', { params: { ...params, paged: 1 } }).then(payloadOf)) as Loose;
+      return {
+        items: arrayFromApi(raw, ['items']).map(normaliseInvoice),
+        meta: (raw.meta ?? { page: 1, limit: 25, total: 0, totalPages: 1 }) as LedgerMeta,
+        totals: {
+          total: decimalToNumber(raw.totals?.totalAmount),
+          paid: decimalToNumber(raw.totals?.paidAmount),
+          outstanding: decimalToNumber(raw.totals?.outstanding),
+        },
+        counts: (raw.counts ?? {}) as Record<string, number>,
+        facets: {
+          classes: ((raw.facets?.classes ?? []) as Array<{ id: string; name: string; schoolName?: string | null }>).map((c, _i, all) => ({
+            id: c.id,
+            // two schools can both have a "Form 1": tell them apart
+            name: c.schoolName && all.some((o) => o.id !== c.id && o.name === c.name) ? `${c.name} · ${c.schoolName}` : c.name,
+          })),
+          terms: (raw.facets?.terms ?? []) as Array<{ id: string; name: string; academicYearName?: string | null }>,
+        },
+      };
+    },
+    placeholderData: keepPreviousData,
+    enabled: options?.enabled ?? true,
   });
 }
 
 export function useInvoice(id: string) {
   return useQuery({
     queryKey: financeKeys.invoice(id),
-    queryFn: async () => {
-      const raw = await api.get(`/finance/invoices/${id}`).then(payloadOf);
-      const inv = normaliseInvoice(raw);
-      if (!inv.student) {
-        const info = (await getStudentNameMap()).get(String((raw as Record<string, unknown>).studentId ?? ''));
-        if (info) {
-          inv.student = info.name;
-          if (!inv.registration) inv.registration = info.registration;
-          if (!inv.className) inv.className = info.className;
-        }
-      }
-      return inv;
-    },
+    queryFn: async () => normaliseInvoice(await api.get(`/finance/invoices/${id}`).then(payloadOf)),
     enabled: Boolean(id),
   });
 }
@@ -250,34 +240,81 @@ export function useStudentInvoices(studentId: string) {
   });
 }
 
-export function usePayments() {
+function normalisePayment(raw: unknown) {
+  const p = raw as Record<string, unknown>;
+  const invoiceId = strOf(p.invoiceId, p.invoice_id);
+  return {
+    ...p,
+    id: strOf(p.id) || crypto.randomUUID(),
+    invoiceId,
+    paymentNumber: strOf(p.paymentNumber, p.number),
+    // Payment column shows the payment reference; Invoice column links the invoice
+    number: strOf(p.paymentNumber, p.number, p.id),
+    invoiceNumber: strOf(p.invoiceNumber) || '—',
+    student: strOf(p.studentName, p.student) || strOf(p.payerName) || 'Payer',
+    registration: strOf(p.registrationNumber),
+    payer: strOf(p.payerName),
+    method: strOf(p.method, p.paymentMethod, p.payment_method),
+    amount: decimalToNumber(p.amount ?? p.total),
+    status: strOf(p.status, p.approvalStatus, p.paymentStatus) || 'PENDING',
+    enteredBy: strOf(p.enteredBy, p.recordedBy) || (p.requiresApproval && p.status === 'PENDING' ? 'Awaiting approval' : 'Finance desk'),
+    date: strOf(p.paidAt, p.date, p.createdAt, p.created_at),
+    reference: strOf(p.referenceNumber, p.reference, p.bankReference),
+    notes: strOf(p.notes, p.comment, p.description),
+    receiptId: strOf(p.receiptId),
+  };
+}
+
+export function usePayments(params?: Record<string, unknown>) {
   return useQuery({
-    queryKey: financeKeys.payments(),
-    queryFn: () =>
-      api.get('/finance/payments').then((r) =>
-        arrayFromApi(payloadOf(r), ['items', 'payments']).map((raw) => {
-          const p = raw as Record<string, unknown>;
-          const invoiceId = strOf(p.invoiceId, p.invoice_id);
-          return {
-            ...p,
-            id: strOf(p.id) || crypto.randomUUID(),
-            invoiceId,
-            paymentNumber: strOf(p.paymentNumber, p.number),
-            // Payment column shows the payment reference; Invoice column links the invoice
-            number: strOf(p.paymentNumber, p.number, p.id),
-            invoiceNumber: strOf(p.invoiceNumber) || (invoiceId ? `INV #${invoiceId.slice(0, 8)}` : '—'),
-            student: strOf(p.payerName, p.student, p.studentName) || 'Payer',
-            method: strOf(p.method, p.paymentMethod, p.payment_method),
-            amount: decimalToNumber(p.amount ?? p.total),
-            status: strOf(p.status, p.approvalStatus, p.paymentStatus) || 'PENDING',
-            // no human recorder name on the payment record; show channel marker instead of duplicating payer
-            enteredBy: strOf(p.enteredBy, p.recordedBy) || (p.requiresApproval ? 'Awaiting approval' : 'Finance desk'),
-            date: strOf(p.paidAt, p.date, p.createdAt, p.created_at),
-            reference: strOf(p.referenceNumber, p.reference, p.bankReference),
-            notes: strOf(p.notes, p.comment, p.description),
-          };
-        }),
-      ),
+    queryKey: [...financeKeys.payments(), params ?? {}] as const,
+    queryFn: () => api.get('/finance/payments', { params }).then((r) => arrayFromApi(payloadOf(r), ['items', 'payments']).map(normalisePayment)),
+  });
+}
+
+export function usePayment(id: string) {
+  return useQuery({
+    queryKey: [...financeKeys.payments(), 'detail', id] as const,
+    queryFn: async () => {
+      const raw = (await api.get(`/finance/payments/${id}`).then(payloadOf)) as Loose;
+      return {
+        ...normalisePayment(raw),
+        receiptNumber: strOf(raw.receiptNumber),
+        receiptVoided: Boolean(raw.receiptVoided),
+        className: strOf(raw.className),
+        invoiceTotal: decimalToNumber(raw.invoiceTotal),
+        invoiceOutstanding: decimalToNumber(raw.invoiceOutstanding),
+        requiresApproval: Boolean(raw.requiresApproval),
+        approval: (raw.approval ?? null) as null | { decision?: string | null; requestedAt?: string; reviewedAt?: string | null; rejectionReason?: string | null; notes?: string | null; supportingDocumentUrl?: string | null },
+        confirmedAt: strOf(raw.confirmedAt),
+        rejectedAt: strOf(raw.rejectedAt),
+        rejectionReason: strOf(raw.rejectionReason),
+        refundedAt: strOf(raw.refundedAt),
+        refundReason: strOf(raw.refundReason),
+        createdAt: strOf(raw.createdAt),
+        payerPhone: strOf(raw.payerPhone),
+      };
+    },
+    enabled: Boolean(id),
+  });
+}
+
+/** One page of the payment ledger with totals and status counts for everything that matches. */
+export function usePaymentLedger(params: { page: number; limit?: number; status?: string; method?: string; search?: string; startDate?: string; endDate?: string; studentId?: string }, options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: [...financeKeys.all, 'payment-ledger', params] as const,
+    queryFn: async () => {
+      const raw = (await api.get('/finance/payments', { params: { ...params, paged: 1 } }).then(payloadOf)) as Loose;
+      return {
+        items: arrayFromApi(raw, ['items']).map(normalisePayment),
+        meta: (raw.meta ?? { page: 1, limit: 25, total: 0, totalPages: 1 }) as LedgerMeta,
+        confirmed: { amount: decimalToNumber(raw.totals?.confirmedAmount), count: Number(raw.totals?.confirmedCount ?? 0) },
+        counts: (raw.counts ?? {}) as Record<string, number>,
+        amounts: Object.fromEntries(Object.entries((raw.amounts ?? {}) as Record<string, unknown>).map(([k, v]) => [k, decimalToNumber(v)])) as Record<string, number>,
+      };
+    },
+    placeholderData: keepPreviousData,
+    enabled: options?.enabled ?? true,
   });
 }
 
@@ -288,52 +325,79 @@ export function usePendingPaymentApprovals() {
       api
         .get('/finance/payments/pending-approval')
         .then((r) =>
+          // Each row is an approval record with its payment nested inside
           arrayFromApi(payloadOf(r), ['items', 'approvals', 'payments']).map((raw) => {
-            const p = raw as Record<string, unknown>;
+            const a = raw as Record<string, unknown>;
+            const p = (a.payment ?? {}) as Record<string, unknown>;
             return {
               ...p,
-              id: strOf(p.id) || crypto.randomUUID(),
-              invoiceNumber: strOf(p.paymentNumber, p.invoiceNumber, p.invoiceId),
-              student: strOf(p.payerName, p.student, p.studentName) || 'Payer',
-              method: strOf(p.method, p.paymentMethod, p.payment_method),
-              amount: decimalToNumber(p.amount ?? p.total),
-              status: strOf(p.status, p.approvalStatus) || 'PENDING',
-              enteredBy: strOf(p.payerName, p.enteredBy, p.recordedBy, p.createdBy) || '—',
-              date: strOf(p.paidAt, p.date, p.createdAt, p.created_at),
-              reference: strOf(p.referenceNumber, p.reference, p.bankReference),
+              approvalId: strOf(a.id),
+              id: strOf(a.id) || crypto.randomUUID(),
+              paymentId: strOf(a.paymentId, p.id),
+              invoiceId: strOf(p.invoiceId),
+              number: strOf(p.paymentNumber),
+              invoiceNumber: strOf(a.invoiceNumber),
+              student: strOf(a.studentName, p.payerName) || 'Payer',
+              registration: strOf(a.registrationNumber),
+              method: strOf(p.method),
+              amount: decimalToNumber(p.amount),
+              status: 'PENDING',
+              enteredBy: 'Finance office',
+              date: strOf(a.requestedAt, p.paidAt, p.createdAt),
+              reference: strOf(p.referenceNumber),
+              notes: strOf(a.notes, p.notes),
             };
           }),
         ),
   });
 }
 
-export function useReceipts() {
+function normaliseReceipt(raw: unknown) {
+  const rc = raw as Record<string, unknown>;
+  return {
+    ...rc,
+    id: strOf(rc.id) || crypto.randomUUID(),
+    number: strOf(rc.number, rc.receiptNumber, rc.id),
+    paymentId: strOf(rc.paymentId, rc.payment_id),
+    paymentNumber: strOf(rc.paymentNumber),
+    invoiceNumber: strOf(rc.invoiceNumber),
+    student: strOf(rc.studentName, rc.student, rc.payerName) || 'Payer',
+    amount: decimalToNumber(rc.amount ?? rc.total),
+    method: strOf(rc.method, rc.paymentMethod, rc.payment_method),
+    issuedAt: strOf(rc.issuedAt, rc.issued_at, rc.createdAt, rc.created_at),
+    status: rc.isVoided === true ? 'VOID' : strOf(rc.status) || 'ACTIVE',
+  };
+}
+
+export function useReceipts(params?: Record<string, unknown>) {
   return useQuery({
-    queryKey: financeKeys.receipts(),
-    queryFn: () =>
-      api.get('/finance/receipts').then((r) =>
-        arrayFromApi(payloadOf(r), ['items', 'receipts']).map((raw) => {
-          const rc = raw as Record<string, unknown>;
-          return {
-            ...rc,
-            id: strOf(rc.id) || crypto.randomUUID(),
-            number: strOf(rc.number, rc.receiptNumber, rc.id),
-            paymentId: strOf(rc.paymentId, rc.payment_id),
-            student: strOf(rc.studentName, rc.student, rc.payerName) || 'Payer',
-            amount: decimalToNumber(rc.amount ?? rc.total),
-            method: strOf(rc.method, rc.paymentMethod, rc.payment_method),
-            issuedAt: strOf(rc.issuedAt, rc.issued_at, rc.createdAt, rc.created_at),
-            status: strOf(rc.status) || 'ACTIVE',
-          };
-        }),
-      ),
+    queryKey: [...financeKeys.receipts(), params ?? {}] as const,
+    queryFn: () => api.get('/finance/receipts', { params }).then((r) => arrayFromApi(payloadOf(r), ['items', 'receipts']).map(normaliseReceipt)),
+  });
+}
+
+/** One page of the receipt ledger with the active/void counts for everything that matches. */
+export function useReceiptLedger(params: { page: number; limit?: number; state?: string; search?: string; studentId?: string }, options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: [...financeKeys.all, 'receipt-ledger', params] as const,
+    queryFn: async () => {
+      const raw = (await api.get('/finance/receipts', { params: { ...params, paged: 1 } }).then(payloadOf)) as Loose;
+      return {
+        items: arrayFromApi(raw, ['items']).map(normaliseReceipt),
+        meta: (raw.meta ?? { page: 1, limit: 25, total: 0, totalPages: 1 }) as LedgerMeta,
+        activeAmount: decimalToNumber(raw.totals?.activeAmount),
+        counts: (raw.counts ?? { ALL: 0, ACTIVE: 0, VOID: 0 }) as Record<string, number>,
+      };
+    },
+    placeholderData: keepPreviousData,
+    enabled: options?.enabled ?? true,
   });
 }
 
 export function useReceipt(id: string) {
   return useQuery({
     queryKey: financeKeys.receipt(id),
-    queryFn: () => api.get(`/finance/receipts/${id}`).then(payloadOf),
+    queryFn: () => api.get(`/finance/receipts/${id}`).then((r) => normaliseReceipt(payloadOf(r))),
     enabled: Boolean(id),
   });
 }
@@ -464,18 +528,14 @@ export function useFeeAssignments() {
   return useQuery({
     queryKey: financeKeys.feeAssignments(),
     queryFn: async () => {
-      const [rows, nameMap] = await Promise.all([
-        api.get('/finance/fee-assignments').then((r) => arrayFromApi(payloadOf(r), ['items', 'feeAssignments', 'assignments'])),
-        getStudentNameMap(),
-      ]);
+      const rows = await api.get('/finance/fee-assignments').then((r) => arrayFromApi(payloadOf(r), ['items', 'feeAssignments', 'assignments']));
       return rows.map((raw) => {
         const a = raw as Record<string, unknown>;
-        const info = nameMap.get(String(a.studentId ?? ''));
         return {
           ...a,
           id: strOf(a.id) || crypto.randomUUID(),
-          student: strOf(a.student, a.studentName) || info?.name || '—',
-          className: strOf(a.className, a.class, a.class_name) || info?.className || '',
+          student: strOf(a.student, a.studentName) || '—',
+          className: strOf(a.className, a.class, a.class_name),
           // feeCategory is a nested relation; strOf resolves its .name
           category: strOf(a.category, a.feeCategory, a.feeCategoryName),
           amount: decimalToNumber(a.amount ?? a.feeAmount),
@@ -620,7 +680,40 @@ export function useFinanceAuditLogs() {
 export function useCollectionSummary() {
   return useQuery({
     queryKey: financeKeys.collectionSummary(),
-    queryFn: () => api.get('/finance/reports/collection-summary').then(payloadOf),
+    queryFn: async () => {
+      const raw = (await api.get('/finance/reports/collection-summary').then(payloadOf)) as Loose;
+      const rows = (v: unknown) => (Array.isArray(v) ? (v as Array<Loose>) : []);
+      return {
+        totalInvoiced: decimalToNumber(raw.totalBilled ?? raw.totalInvoiced),
+        totalCollected: decimalToNumber(raw.totalCollected),
+        outstanding: decimalToNumber(raw.totalOutstanding ?? raw.outstanding),
+        collectionRate: Number(raw.collectionRate ?? 0),
+        overdueCount: Number(raw.overdueCount ?? 0),
+        overdueAmount: decimalToNumber(raw.overdueAmount),
+        byPaymentMethod: rows(raw.byPaymentMethod).map((m) => ({
+          method: String(m.method ?? ''),
+          totalAmount: decimalToNumber(m.totalAmount ?? m.amount),
+          amount: decimalToNumber(m.totalAmount ?? m.amount),
+          transactionCount: Number(m.transactionCount ?? m.count ?? 0),
+          count: Number(m.transactionCount ?? m.count ?? 0),
+        })),
+        byFeeCategory: rows(raw.byFeeCategory).map((c) => ({
+          category: String(c.feeCategoryName ?? c.category ?? c.name ?? ''),
+          name: String(c.feeCategoryName ?? c.category ?? c.name ?? ''),
+          totalAmount: decimalToNumber(c.billed ?? c.totalAmount),
+        })),
+        byClass: rows(raw.byClass).map((c) => ({
+          classId: String(c.classId ?? ''),
+          className: String(c.className ?? ''),
+          invoiceCount: Number(c.invoiceCount ?? 0),
+          billed: decimalToNumber(c.billed),
+          collected: decimalToNumber(c.collected),
+          outstanding: decimalToNumber(c.outstanding),
+          collectionRate: Number(c.collectionRate ?? 0),
+        })),
+        dailyTrend: rows(raw.dailyTrend).map((d) => ({ date: String(d.date), amount: decimalToNumber(d.amount) })),
+      };
+    },
   });
 }
 
@@ -628,19 +721,15 @@ export function useOutstandingBalances() {
   return useQuery({
     queryKey: financeKeys.outstandingBalances(),
     queryFn: async () => {
-      const [rows, nameMap] = await Promise.all([
-        api.get('/finance/reports/outstanding-balances').then((r) => arrayFromApi(payloadOf(r), ['items', 'balances', 'outstandingBalances'])),
-        getStudentNameMap(),
-      ]);
+      const rows = await api.get('/finance/reports/outstanding-balances').then((r) => arrayFromApi(payloadOf(r), ['items', 'balances', 'outstandingBalances']));
       return rows.map((raw) => {
         const b = raw as Record<string, unknown>;
-        const info = nameMap.get(String(b.studentId ?? ''));
         return {
           ...b,
           invoiceNumber: strOf(b.invoiceNumber, b.number),
-          student: strOf(b.student, b.studentName) || info?.name || '—',
-          registration: strOf(b.registration, b.registrationNumber) || info?.registration || '',
-          className: strOf(b.className, b.class) || info?.className || '',
+          student: strOf(b.student, b.studentName) || '—',
+          registration: strOf(b.registration, b.registrationNumber),
+          className: strOf(b.className, b.class),
           totalAmount: decimalToNumber(b.totalAmount ?? b.total),
           paidAmount: decimalToNumber(b.paidAmount ?? b.paid),
           outstanding: decimalToNumber(b.outstanding ?? b.outstandingBalance ?? b.balance),
@@ -652,23 +741,36 @@ export function useOutstandingBalances() {
   });
 }
 
+/** Confirmed collections per day (last 31 days) with the split by payment method. */
 export function useDailyCollections() {
   return useQuery({
     queryKey: financeKeys.dailyCollections(),
     queryFn: () =>
-      api
-        .get('/finance/reports/daily-collections')
-        .then((r) => arrayFromApi(payloadOf(r), ['collections', 'dailyCollections'])),
+      api.get('/finance/reports/daily-summary', { params: { days: 31 } }).then((r) =>
+        arrayFromApi(payloadOf(r), ['items', 'collections']).map((raw) => {
+          const d = raw as Record<string, unknown>;
+          return {
+            date: strOf(d.date),
+            totalAmount: decimalToNumber(d.totalAmount),
+            transactionCount: Number(d.transactionCount ?? 0),
+            byMethod: (Array.isArray(d.byMethod) ? d.byMethod : []).map((m) => ({
+              method: strOf((m as Record<string, unknown>).method),
+              amount: decimalToNumber((m as Record<string, unknown>).amount),
+            })),
+          };
+        }),
+      ),
   });
 }
 
+/** Every overdue invoice in scope (server-side, biggest debt first), shaped like an invoice row. */
 export function useFeeDefaulters() {
   return useQuery({
     queryKey: financeKeys.feeDefaulters(),
     queryFn: () =>
       api
         .get('/finance/reports/fee-defaulters')
-        .then((r) => arrayFromApi(payloadOf(r), ['defaulters', 'feeDefaulters'])),
+        .then((r) => arrayFromApi(payloadOf(r), ['defaulters', 'feeDefaulters', 'items']).map(normaliseInvoice)),
   });
 }
 
@@ -683,12 +785,28 @@ export function useStudentStatement(studentId: string) {
 
 // ─── Mutations ────────────────────────────────────────────────────────────────
 
+/** Progress of a bulk invoice job; polls until it finishes. */
+export function useInvoiceJob(jobId: string) {
+  return useQuery({
+    queryKey: [...financeKeys.all, 'invoice-job', jobId] as const,
+    queryFn: async () =>
+      (await api.get(`/finance/invoices/jobs/${jobId}`).then(payloadOf)) as {
+        jobId: string;
+        status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED';
+        result?: { generated: number; skipped: number; failed: number };
+        error?: string;
+      },
+    enabled: Boolean(jobId),
+    refetchInterval: (query) => (query.state.data && (query.state.data.status === 'COMPLETED' || query.state.data.status === 'FAILED') ? false : 1500),
+  });
+}
+
 export function useGenerateInvoicesMutation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: Record<string, unknown>) =>
       api.post('/finance/invoices/generate', body).then((r) => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: financeKeys.invoices() }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: financeKeys.all }),
   });
 }
 
@@ -697,10 +815,7 @@ export function useCashPaymentMutation() {
   return useMutation({
     mutationFn: (body: Record<string, unknown>) =>
       api.post('/finance/payments/cash', body).then((r) => r.data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: financeKeys.payments() });
-      qc.invalidateQueries({ queryKey: financeKeys.invoices() });
-    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: financeKeys.all }),
   });
 }
 
@@ -709,10 +824,7 @@ export function useBankTransferMutation() {
   return useMutation({
     mutationFn: (body: Record<string, unknown>) =>
       api.post('/finance/payments/bank-transfer', body).then((r) => r.data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: financeKeys.payments() });
-      qc.invalidateQueries({ queryKey: financeKeys.invoices() });
-    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: financeKeys.all }),
   });
 }
 
@@ -721,8 +833,7 @@ export function useApprovePaymentMutation() {
   return useMutation({
     mutationFn: ({ id, body }: { id: string; body?: Record<string, unknown> }) =>
       api.patch(`/finance/payments/approvals/${id}/approve`, body ?? {}).then((r) => r.data),
-    onSuccess: () =>
-      qc.invalidateQueries({ queryKey: financeKeys.pendingPaymentApprovals() }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: financeKeys.all }),
   });
 }
 
@@ -731,8 +842,7 @@ export function useRejectPaymentMutation() {
   return useMutation({
     mutationFn: ({ id, body }: { id: string; body?: Record<string, unknown> }) =>
       api.patch(`/finance/payments/approvals/${id}/reject`, body ?? {}).then((r) => r.data),
-    onSuccess: () =>
-      qc.invalidateQueries({ queryKey: financeKeys.pendingPaymentApprovals() }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: financeKeys.all }),
   });
 }
 
@@ -741,7 +851,7 @@ export function useRefundPaymentMutation() {
   return useMutation({
     mutationFn: ({ id, body }: { id: string; body?: Record<string, unknown> }) =>
       api.patch(`/finance/payments/${id}/refund`, body ?? {}).then((r) => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: financeKeys.payments() }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: financeKeys.all }),
   });
 }
 
@@ -750,7 +860,7 @@ export function useAddPaymentNoteMutation() {
   return useMutation({
     mutationFn: ({ id, note }: { id: string; note: string }) =>
       api.post(`/finance/payments/${id}/notes`, { note }).then((r) => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: financeKeys.pendingPaymentApprovals() }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: financeKeys.all }),
   });
 }
 
@@ -759,7 +869,7 @@ export function useVoidReceiptMutation() {
   return useMutation({
     mutationFn: ({ id, body }: { id: string; body?: Record<string, unknown> }) =>
       api.patch(`/finance/receipts/${id}/void`, body ?? {}).then((r) => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: financeKeys.receipts() }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: financeKeys.all }),
   });
 }
 
@@ -807,10 +917,7 @@ export function useApplyInvoiceDiscountMutation() {
   return useMutation({
     mutationFn: ({ id, body }: { id: string; body: Record<string, unknown> }) =>
       api.patch(`/finance/invoices/${id}/discount`, body).then((r) => r.data),
-    onSuccess: (_d, { id }) => {
-      qc.invalidateQueries({ queryKey: financeKeys.invoice(id) });
-      qc.invalidateQueries({ queryKey: financeKeys.invoices() });
-    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: financeKeys.all }),
   });
 }
 
@@ -819,10 +926,7 @@ export function useCancelInvoiceMutation() {
   return useMutation({
     mutationFn: ({ id, body }: { id: string; body?: Record<string, unknown> }) =>
       api.patch(`/finance/invoices/${id}/cancel`, body ?? {}).then((r) => r.data),
-    onSuccess: (_d, { id }) => {
-      qc.invalidateQueries({ queryKey: financeKeys.invoice(id) });
-      qc.invalidateQueries({ queryKey: financeKeys.invoices() });
-    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: financeKeys.all }),
   });
 }
 
@@ -831,7 +935,7 @@ export function useBulkFeeAssignmentMutation() {
   return useMutation({
     mutationFn: (body: Record<string, unknown>) =>
       api.post('/finance/fee-assignments/bulk', body).then((r) => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: financeKeys.feeAssignments() }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: financeKeys.all }),
   });
 }
 
@@ -851,7 +955,7 @@ export function useDeleteFeeAssignmentMutation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.delete(`/finance/fee-assignments/${id}`).then((r) => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: financeKeys.feeAssignments() }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: financeKeys.all }),
   });
 }
 
@@ -908,10 +1012,7 @@ export function useWaiveInvoiceMutation() {
   return useMutation({
     mutationFn: ({ id, body }: { id: string; body: Record<string, unknown> }) =>
       api.patch(`/finance/invoices/${id}/waive`, body).then((r) => r.data?.data ?? r.data),
-    onSuccess: (_d, { id }) => {
-      qc.invalidateQueries({ queryKey: financeKeys.invoice(id) });
-      qc.invalidateQueries({ queryKey: financeKeys.invoices() });
-    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: financeKeys.all }),
   });
 }
 

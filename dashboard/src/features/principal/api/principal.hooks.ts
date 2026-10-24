@@ -264,25 +264,43 @@ export function useClassTermResults(classId: string | undefined, termId: string 
   });
 }
 
+function waitingFor(from: unknown): { label: string; hours: number } {
+  const t = from ? new Date(String(from)).getTime() : NaN;
+  if (Number.isNaN(t)) return { label: '', hours: 0 };
+  const hours = Math.max(0, Math.floor((Date.now() - t) / 3_600_000));
+  if (hours < 1) return { label: 'just now', hours };
+  if (hours < 24) return { label: `${hours}h`, hours };
+  return { label: `${Math.floor(hours / 24)}d ${hours % 24}h`, hours };
+}
+
 export function usePrincipalPendingPayments() {
   return useQuery({
     queryKey: principalKeys.pendingPayments(),
     queryFn: () =>
       api.get('/finance/payments/pending-approval').then((r) =>
         arrayFromApi(payloadOf(r), ['items', 'payments', 'approvals']).map((raw) => {
-          const p = raw as Record<string, unknown>;
+          // Each row is an approval record with its payment nested inside
+          const a = raw as Record<string, unknown>;
+          const pay = (a.payment ?? {}) as Record<string, unknown>;
+          const waited = waitingFor(a.requestedAt ?? pay.createdAt);
+          const amount = Number(pay.amount ?? a.amount ?? 0);
+          const risk: 'critical' | 'high' | 'medium' | 'stable' = waited.hours >= 72 ? 'critical' : waited.hours >= 48 || amount >= 5_000_000 ? 'high' : waited.hours >= 24 ? 'medium' : 'stable';
           return {
-            ...p,
-            id: String(p.id ?? crypto.randomUUID()),
-            paymentId: String(p.paymentId ?? p.payment_id ?? p.transactionId ?? p.id ?? ''),
-            student: resolveName(p.student ?? p.studentName ?? p.payer) || 'Student',
-            invoice: String(p.invoice ?? p.invoiceId ?? p.invoiceNumber ?? p.invoice_number ?? ''),
-            method: String(p.method ?? p.paymentMethod ?? p.payment_method ?? p.type ?? ''),
-            amount: Number(p.amount ?? p.total ?? p.paymentAmount ?? 0),
-            reference: String(p.reference ?? p.referenceNumber ?? p.transactionRef ?? p.bankReference ?? ''),
-            enteredBy: String(p.enteredBy ?? p.recordedBy ?? p.createdBy ?? p.staffName ?? ''),
-            age: String(p.age ?? p.timeAgo ?? p.elapsedTime ?? ''),
-            risk: String(p.risk ?? p.riskLevel ?? p.flagLevel ?? 'medium'),
+            ...a,
+            id: String(a.id ?? crypto.randomUUID()),
+            paymentId: String(a.paymentId ?? pay.id ?? ''),
+            paymentNumber: String(pay.paymentNumber ?? ''),
+            student: resolveName(a.studentName ?? a.student ?? pay.payerName) || 'Student',
+            registration: String(a.registrationNumber ?? ''),
+            invoice: String(a.invoiceNumber ?? ''),
+            method: String(pay.method ?? a.method ?? ''),
+            amount,
+            reference: String(pay.referenceNumber ?? a.reference ?? ''),
+            enteredBy: 'Finance office',
+            age: waited.label,
+            risk,
+            notes: String(a.notes ?? pay.notes ?? ''),
+            evidenceUrl: String(a.supportingDocumentUrl ?? ''),
           };
         }),
       ),
@@ -344,7 +362,13 @@ export function usePrincipalFinanceOverview() {
           todayCollection: Number(todayEntry?.amount ?? 0),
           overdueCount: Number(overdue.overdueCount ?? 0),
           collectionTrend: trend.map((t) => Number(t.rate ?? 0)),
-          byClass: byClass.map((c) => ({ label: String(c.className ?? ''), value: Number(c.overdueCount ?? 0) })),
+          // two schools can both have a "Form 1": add the school when a name repeats
+          byClass: byClass.map((c) => {
+            const name = String(c.className ?? '');
+            const repeated = byClass.filter((o) => String(o.className ?? '') === name).length > 1;
+            return { label: repeated && c.schoolName ? `${name} · ${String(c.schoolName).replace(/\s*school\s*$/i, '')}` : name, value: Number(c.overdueCount ?? 0) };
+          }),
+          classCount: byClass.length,
         };
       }),
     staleTime: 30_000,
@@ -435,7 +459,7 @@ export function useRejectPaymentMutation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, reason }: { id: string; reason: string }) =>
-      api.patch(`/finance/payments/approvals/${id}/reject`, { reason }).then((r) => r.data?.data ?? r.data),
+      api.patch(`/finance/payments/approvals/${id}/reject`, { rejectionReason: reason }).then((r) => r.data?.data ?? r.data),
     onSuccess: () => qc.invalidateQueries({ queryKey: principalKeys.pendingPayments() }),
   });
 }

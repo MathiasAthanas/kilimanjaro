@@ -50,7 +50,9 @@ import {
   useSignReportCardMutation,
   usePatchSchoolSettingsMutation,
 } from '../api/principal.hooks';
-import { useInvoices } from '../../finance/api/finance.hooks';
+import { useInvoiceLedger } from '../../finance/api/finance.hooks';
+import { FinanceStatusBadge } from '../../finance/components/FinanceWorkspaceShell';
+import { LedgerPager, LedgerSearch, LedgerTabs, useDebounced } from '../../finance/components/LedgerControls';
 import { downloadReportWhenReady, useGenerateReportMutation, useGenerateReportCardsMutation } from '../../operations/api/operations.hooks';
 import { useAcademicYears, useTerms } from '../../admin/api/admin.hooks';
 import { useAqaSchoolSummary, useAqaPairings, useCreateAqaInterventionMutation } from '../../aqa/api/aqa.hooks';
@@ -83,10 +85,10 @@ import { SkeletonTable } from '../../../components/common/SkeletonTable';
 
 const money = (n: number) => `TZS ${n.toLocaleString('en-US')}`;
 
-// Zero-value school health â€” shown before data loads (no fake scores)
+// Zero-value school health — shown before data loads (no fake scores)
 const EMPTY_HEALTH: SchoolHealth = { score: 0, academic: 0, finance: 0, operations: 0, trend: 0 };
 
-// â”€â”€â”€ Home dashboard â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Home dashboard ───────────────────────────────────────────────────────────
 
 export function PrincipalHomePage() {
   const { data: apiHealth = EMPTY_HEALTH } = usePrincipalSchoolHealth() as { data: SchoolHealth };
@@ -107,12 +109,12 @@ export function PrincipalHomePage() {
 
   return (
     <PrincipalWorkspaceShell title="Executive Decision Room" eyebrow="Headmaster command center">
-      {/* Critical alert banner â€” only shown when there are pending decisions */}
+      {/* Critical alert banner — only shown when there are pending decisions */}
       {totalPending > 0 && (
         <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-ks-rose/30 bg-ks-rose/8 p-4">
           <AlertTriangle className="h-5 w-5 shrink-0 text-ks-rose" />
           <p className="font-black text-ks-rose">
-            {totalPending} decision{totalPending !== 1 ? 's' : ''} pending your authorization â€” marks approvals and payment approvals require action.
+            {totalPending} decision{totalPending !== 1 ? 's' : ''} pending your authorization — marks approvals and payment approvals require action.
           </p>
           <NavLink to="/principal/approvals" className="ml-auto">
             <Button className="rounded-xl bg-ks-rose py-2 text-xs hover:bg-ks-rose/90">Review Now</Button>
@@ -197,20 +199,20 @@ export function PrincipalHomePage() {
   );
 }
 
-// â”€â”€â”€ Marks final approval â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Marks final approval ─────────────────────────────────────────────────────
 
 export function MarksFinalApprovalPage() {
   const { data: apiAssessments = [] as PrincipalAssessment[], isLoading, isError } = usePendingMarkApprovals() as { data: PrincipalAssessment[]; isLoading: boolean; isError: boolean };
   const criticalTotal = apiAssessments.reduce((s, a) => s + (a.criticalAlerts ?? 0), 0);
   const lowestAvg = apiAssessments.length ? Math.min(...apiAssessments.map((a) => a.average ?? 100)) : null;
-  const lowestClass = lowestAvg !== null ? (apiAssessments.find((a) => (a.average ?? 100) === lowestAvg)?.className ?? 'â€”') : 'â€”';
+  const lowestClass = lowestAvg !== null ? (apiAssessments.find((a) => (a.average ?? 100) === lowestAvg)?.className ?? '—') : '—';
   return (
     <PrincipalWorkspaceShell title="Marks Final Approval" eyebrow="Final academic lock">
       <PrincipalBreadcrumb crumbs={[{ label: 'Executive', to: '/principal' }, { label: 'Approvals' }]} />
       <ExecutiveMetricGrid items={[
-        { label: 'Ready for Lock',    value: isLoading ? 'â€”' : String(apiAssessments.length), detail: 'HOD-approved assessments',  tone: 'high' },
-        { label: 'Critical Students', value: isLoading ? 'â€”' : String(criticalTotal),          detail: 'Visible before you decide', tone: criticalTotal > 0 ? 'critical' : 'stable' },
-        { label: 'Lowest Average',    value: isLoading ? 'â€”' : lowestAvg !== null ? `${lowestAvg}%` : 'N/A', detail: lowestClass, tone: lowestAvg !== null && lowestAvg < 60 ? 'critical' : 'stable' },
+        { label: 'Ready for Lock',    value: isLoading ? '—' : String(apiAssessments.length), detail: 'HOD-approved assessments',  tone: 'high' },
+        { label: 'Critical Students', value: isLoading ? '—' : String(criticalTotal),          detail: 'Visible before you decide', tone: criticalTotal > 0 ? 'critical' : 'stable' },
+        { label: 'Lowest Average',    value: isLoading ? '—' : lowestAvg !== null ? `${lowestAvg}%` : 'N/A', detail: lowestClass, tone: lowestAvg !== null && lowestAvg < 60 ? 'critical' : 'stable' },
         { label: 'Audit Mode',        value: 'ON',    detail: 'Every decision traced',       tone: 'stable' },
       ]} />
       <div className="rounded-2xl border border-ks-amber/30 bg-ks-amber/5 p-4">
@@ -224,13 +226,13 @@ export function MarksFinalApprovalPage() {
   );
 }
 
-// â”€â”€â”€ Marks review detail â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Marks review detail ──────────────────────────────────────────────────────
 
 export function PrincipalMarksReviewPage() {
   const { loading, item: assessment } = useAssessment();
   const { data: apiMarkRows = [] as MarkRow[] } = useMarksForApproval(assessment?.id) as { data: MarkRow[] };
 
-  if (loading) return <PrincipalWorkspaceShell title="Loadingâ€¦" eyebrow="Assessment approval dossier"><SkeletonTable cols={6} /></PrincipalWorkspaceShell>;
+  if (loading) return <PrincipalWorkspaceShell title="Loading…" eyebrow="Assessment approval dossier"><SkeletonTable cols={6} /></PrincipalWorkspaceShell>;
   if (!assessment) return (
     <PrincipalWorkspaceShell title="Assessment Not Found" eyebrow="Assessment approval dossier">
       <PrincipalBreadcrumb crumbs={[{ label: 'Executive', to: '/principal' }, { label: 'Approvals', to: '/principal/approvals' }, { label: 'Not Found' }]} />
@@ -293,7 +295,7 @@ export function PrincipalMarksReviewPage() {
   );
 }
 
-// â”€â”€â”€ Results publishing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Results publishing ───────────────────────────────────────────────────────
 
 export function ResultsPublishingPage() {
   const { data: apiPublishClasses, isLoading, isError } = usePublishReadiness();
@@ -317,7 +319,7 @@ export function ResultsPublishingPage() {
   );
 }
 
-// â”€â”€â”€ Report cards management â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Report cards management ──────────────────────────────────────────────────
 
 export function ReportCardsManagementPage() {
   const [batchMode, setBatchMode] = useState(false);
@@ -351,10 +353,10 @@ export function ReportCardsManagementPage() {
     <PrincipalWorkspaceShell title="Report Cards Management" eyebrow="Comments and sign-off">
       <PrincipalBreadcrumb crumbs={[{ label: 'Executive', to: '/principal' }, { label: 'Report Cards' }]} />
       <ExecutiveMetricGrid items={[
-        { label: 'Total Cards',      value: isLoading ? 'â€”' : String(totalCards),   detail: 'Across all classes',         tone: 'stable' },
-        { label: 'Missing Items',    value: isLoading ? 'â€”' : String(missingTotal),  detail: 'Principal sign-off queue',   tone: missingTotal > 0 ? 'high' : 'stable' },
-        { label: 'Ready Classes',    value: isLoading ? 'â€”' : String(readyClasses),  detail: 'â‰¥ 90% readiness',            tone: 'medium' },
-        { label: 'Classes Total',    value: isLoading ? 'â€”' : String(safeClasses.length), detail: 'Tracked this term',     tone: 'stable' },
+        { label: 'Total Cards',      value: isLoading ? '—' : String(totalCards),   detail: 'Across all classes',         tone: 'stable' },
+        { label: 'Missing Items',    value: isLoading ? '—' : String(missingTotal),  detail: 'Principal sign-off queue',   tone: missingTotal > 0 ? 'high' : 'stable' },
+        { label: 'Ready Classes',    value: isLoading ? '—' : String(readyClasses),  detail: '≥ 90% readiness',            tone: 'medium' },
+        { label: 'Classes Total',    value: isLoading ? '—' : String(safeClasses.length), detail: 'Tracked this term',     tone: 'stable' },
       ]} />
 
       {/* ── Generate Report Cards Panel ── */}
@@ -408,7 +410,7 @@ export function ReportCardsManagementPage() {
         <div>
           <p className="font-display text-base font-black text-ks-navy">Batch Principal Comment</p>
           <p className="text-sm font-semibold text-ks-muted">
-            {batchMode ? 'Batch mode ON â€” comment will apply to all selected class cards after confirmation.' : 'Apply the same comment to all report cards in a selected class.'}
+            {batchMode ? 'Batch mode ON — comment will apply to all selected class cards after confirmation.' : 'Apply the same comment to all report cards in a selected class.'}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -449,7 +451,7 @@ export function ReportCardsManagementPage() {
               {item.missingItems > 0 ? `${item.missingItems} missing items` : 'All items complete'}
             </p>
             <span className="mt-3 inline-flex items-center gap-1 text-xs font-black text-ks-blue">
-              Open class <span className="transition group-hover:translate-x-1">â†’</span>
+              Open class <span className="transition group-hover:translate-x-1">→</span>
             </span>
           </NavLink>
         ))}
@@ -458,7 +460,7 @@ export function ReportCardsManagementPage() {
   );
 }
 
-// â”€â”€â”€ Report card detail â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Report card detail ───────────────────────────────────────────────────────
 
 export function PrincipalReportCardDetailPage() {
   const { id } = useParams();
@@ -488,7 +490,7 @@ export function PrincipalReportCardDetailPage() {
   };
 
   return (
-    <PrincipalWorkspaceShell title={`Report Cards Â· ${classLabel}`} eyebrow="Headmaster sign-off">
+    <PrincipalWorkspaceShell title={`Report Cards · ${classLabel}`} eyebrow="Headmaster sign-off">
       <PrincipalBreadcrumb crumbs={[
         { label: 'Executive', to: '/principal' },
         { label: 'Report Cards', to: '/principal/report-cards' },
@@ -525,7 +527,7 @@ export function PrincipalReportCardDetailPage() {
                 <div className="h-full rounded-full bg-ks-gold transition-all" style={{ width: `${readiness}%` }} />
               </div>
               {missing > 0 && (
-                <p className="mt-3 text-sm font-black text-ks-amber">{missing} item{missing !== 1 ? 's' : ''} still missing â€” signing is possible but those cards will lack complete data.</p>
+                <p className="mt-3 text-sm font-black text-ks-amber">{missing} item{missing !== 1 ? 's' : ''} still missing — signing is possible but those cards will lack complete data.</p>
               )}
             </div>
           </div>
@@ -539,7 +541,7 @@ export function PrincipalReportCardDetailPage() {
               onChange={(e) => setComment(e.target.value)}
               disabled={signed}
               className="mt-3 h-32 w-full rounded-xl border border-ks-line p-4 font-semibold text-ks-slate outline-none focus:border-ks-blue disabled:opacity-60"
-              placeholder={`Enter principal comment for ${classLabel} Term II 2026â€¦`}
+              placeholder={`Enter principal comment for ${classLabel} Term II 2026…`}
             />
             <div className="mt-4 flex flex-wrap gap-2">
               <Button
@@ -547,7 +549,7 @@ export function PrincipalReportCardDetailPage() {
                 disabled={signed || signMutation.isPending}
                 onClick={handleSign}
               >
-                <Lock className="h-4 w-4" /> {signMutation.isPending ? 'Savingâ€¦' : 'Save and Sign'}
+                <Lock className="h-4 w-4" /> {signMutation.isPending ? 'Saving…' : 'Save and Sign'}
               </Button>
               {!signed && (
                 <Button variant="secondary" className="rounded-xl" onClick={() => setComment('')}>Clear</Button>
@@ -555,7 +557,7 @@ export function PrincipalReportCardDetailPage() {
             </div>
             {signed && (
               <p className="mt-3 rounded-xl border border-ks-emerald/30 bg-ks-emerald/5 px-3 py-2 text-xs font-black text-ks-emerald">
-                Signed â€” audit record created. Navigate back to sign other classes.
+                Signed — audit record created. Navigate back to sign other classes.
               </p>
             )}
           </div>
@@ -582,7 +584,7 @@ export function PrincipalReportCardDetailPage() {
   );
 }
 
-// â”€â”€â”€ Finance oversight â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Finance oversight ────────────────────────────────────────────────────────
 
 export function FinanceOversightPage() {
   const { data: fin } = usePrincipalFinanceOverview();
@@ -595,10 +597,10 @@ export function FinanceOversightPage() {
   const pendingCount = apiApprovals.length;
   const trendValues = fin?.collectionTrend.length ? fin.collectionTrend : [0];
   const byClassValues = fin?.byClass.length
-    ? fin.byClass.slice(0, 4).map((c, i) => ({
+    ? fin.byClass.slice(0, 6).map((c, i) => ({
         label: c.label,
         value: c.value,
-        tone: ['bg-ks-rose', 'bg-ks-amber', 'bg-ks-blue', 'bg-ks-emerald'][i] as string,
+        tone: ['bg-ks-rose', 'bg-ks-amber', 'bg-ks-blue', 'bg-ks-emerald', 'bg-ks-gold', 'bg-ks-navy'][i] as string,
       }))
     : [];
 
@@ -606,7 +608,7 @@ export function FinanceOversightPage() {
     <PrincipalWorkspaceShell title="Finance Oversight" eyebrow="Executive financial control">
       <PrincipalBreadcrumb crumbs={[{ label: 'Executive', to: '/principal' }, { label: 'Finance' }]} />
       <ExecutiveMetricGrid items={[
-        { label: 'Collection Rate',    value: `${collectionRate.toFixed(1)}%`, detail: 'Term II Â· target 100%',       tone: collectionRate >= 80 ? 'stable' : collectionRate >= 60 ? 'medium' : 'critical' },
+        { label: 'Collection Rate',    value: `${collectionRate.toFixed(1)}%`, detail: 'Current term · target 100%',       tone: collectionRate >= 80 ? 'stable' : collectionRate >= 60 ? 'medium' : 'critical' },
         { label: 'Outstanding',        value: money(outstanding),              detail: `${overdueCount} overdue invoices`, tone: 'critical' },
         { label: "Today's Collection", value: money(todayCollection),          detail: 'Cash and bank receipts',      tone: 'stable' },
         { label: 'Pending Approval',   value: String(pendingCount),            detail: 'Manual entries awaiting you', tone: pendingCount > 0 ? 'high' : 'stable' },
@@ -632,7 +634,7 @@ export function FinanceOversightPage() {
         />
         <ExecutiveBarChart
           title="Outstanding by Class"
-          subtitle="Overdue invoices per class"
+          subtitle={`Overdue invoices · ${byClassValues.length} of ${fin?.classCount ?? 0} classes, most overdue first`}
           values={byClassValues}
         />
       </div>
@@ -660,13 +662,13 @@ export function FinanceOversightPage() {
   );
 }
 
-// â”€â”€â”€ Payment approvals â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Payment approvals ────────────────────────────────────────────────────────
 
 export function PaymentApprovalsPage() {
   const { data: apiApprovals = [] as PrincipalPaymentApproval[] } = usePrincipalPendingPayments() as { data: PrincipalPaymentApproval[] };
   const highest = apiApprovals.length ? Math.max(...apiApprovals.map((a) => a.amount)) : 0;
   const total = apiApprovals.reduce((s, a) => s + a.amount, 0);
-  const oldest = apiApprovals.find((a) => a.age)?.age ?? 'â€”';
+  const oldest = apiApprovals.find((a) => a.age)?.age ?? '—';
   return (
     <PrincipalWorkspaceShell title="Payment Approval" eyebrow="Manual payment authority">
       <PrincipalBreadcrumb crumbs={[
@@ -677,8 +679,8 @@ export function PaymentApprovalsPage() {
       <ExecutiveMetricGrid items={[
         { label: 'Pending',      value: String(apiApprovals.length), detail: 'Awaiting authorization', tone: apiApprovals.length > 0 ? 'high' : 'stable' },
         { label: 'Highest Risk', value: money(highest), detail: 'Highest pending value', tone: highest > 0 ? 'critical' : 'stable' },
-        { label: 'Oldest',       value: oldest,          detail: 'Oldest pending queue age', tone: oldest === 'â€”' ? 'stable' : 'high' },
-        { label: 'Today Total',  value: money(total), detail: 'Combined pending value', tone: total > 0 ? 'medium' : 'stable' },
+        { label: 'Oldest',       value: oldest,          detail: 'Oldest pending queue age', tone: oldest === '—' ? 'stable' : 'high' },
+        { label: 'Total Pending', value: money(total), detail: 'Combined pending value', tone: total > 0 ? 'medium' : 'stable' },
       ]} />
       <div className="rounded-2xl border border-ks-navy/20 bg-ks-navy/5 p-4">
         <p className="text-sm font-black text-ks-navy">
@@ -697,12 +699,12 @@ export function PaymentApprovalsPage() {
   );
 }
 
-// â”€â”€â”€ Payment approval detail â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Payment approval detail ──────────────────────────────────────────────────
 
 export function PaymentApprovalDetailPage() {
   const { loading, item: approval } = usePaymentApproval();
 
-  if (loading) return <PrincipalWorkspaceShell title="Loadingâ€¦" eyebrow="Payment approval dossier"><SkeletonTable cols={4} /></PrincipalWorkspaceShell>;
+  if (loading) return <PrincipalWorkspaceShell title="Loading…" eyebrow="Payment approval dossier"><SkeletonTable cols={4} /></PrincipalWorkspaceShell>;
   if (!approval) return (
     <PrincipalWorkspaceShell title="Approval Not Found" eyebrow="Payment approval dossier">
       <PrincipalBreadcrumb crumbs={[{ label: 'Executive', to: '/principal' }, { label: 'Finance', to: '/principal/finance' }, { label: 'Payment Approvals', to: '/principal/finance/approvals' }, { label: 'Not Found' }]} />
@@ -711,30 +713,40 @@ export function PaymentApprovalDetailPage() {
   );
 
   return (
-    <PrincipalWorkspaceShell title={approval.paymentId} eyebrow="Payment approval dossier">
+    <PrincipalWorkspaceShell title={approval.paymentNumber || 'Payment approval'} eyebrow="Payment approval dossier">
       <PrincipalBreadcrumb crumbs={[
         { label: 'Executive', to: '/principal' },
         { label: 'Finance', to: '/principal/finance' },
         { label: 'Payment Approvals', to: '/principal/finance/approvals' },
-        { label: approval.paymentId },
+        { label: approval.paymentNumber || 'Payment' },
       ]} />
       <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_420px]">
         <div className="space-y-gutter">
           <ExecutiveMetricGrid items={[
             { label: 'Amount',     value: money(approval.amount),  detail: approval.method.replaceAll('_', ' '),  tone: approval.risk as 'critical' | 'high' | 'medium' | 'stable' },
             { label: 'Invoice',    value: approval.invoice,        detail: approval.student,                      tone: 'medium' },
-            { label: 'Reference',  value: approval.reference,      detail: `Queued ${approval.age} ago`,          tone: 'high' },
+            { label: 'Reference',  value: approval.reference || '—', detail: approval.age ? `Waiting ${approval.age}` : 'Just submitted', tone: 'high' },
             { label: 'Entered By', value: approval.enteredBy,      detail: 'Finance office',                      tone: 'stable' },
           ]} />
-          {/* Bank slip preview */}
+          {/* Evidence the finance office attached */}
           <div className="rounded-2xl border border-ks-line bg-white p-6 shadow-sm">
-            <p className="text-[11px] font-black uppercase tracking-widest text-ks-muted">Bank slip / evidence preview</p>
-            <div className="mt-4 grid h-72 place-items-center rounded-xl border border-dashed border-ks-line bg-ks-paper">
-              <div className="text-center">
-                <p className="font-display text-3xl font-black text-ks-navy">{approval.reference}</p>
-                <p className="mt-2 text-sm font-bold text-ks-muted">Slip image Â· {approval.method}</p>
-              </div>
-            </div>
+            <p className="text-[11px] font-black uppercase tracking-widest text-ks-muted">Evidence</p>
+            {approval.evidenceUrl ? (
+              /\.(png|jpe?g|webp)(\?|$)/i.test(approval.evidenceUrl) ? (
+                <a href={approval.evidenceUrl} target="_blank" rel="noreferrer">
+                  <img src={approval.evidenceUrl} alt="Payment evidence" className="mt-4 max-h-96 w-full rounded-xl border border-ks-line object-contain" />
+                </a>
+              ) : (
+                <a href={approval.evidenceUrl} target="_blank" rel="noreferrer" className="mt-4 inline-flex items-center gap-2 rounded-xl border border-ks-line px-4 py-3 text-sm font-black text-ks-navy hover:bg-ks-paper">
+                  Open attached document
+                </a>
+              )
+            ) : (
+              <p className="mt-4 rounded-xl border border-dashed border-ks-line bg-ks-paper p-6 text-center text-sm font-bold text-ks-muted">
+                No bank slip or document was attached to this payment.
+              </p>
+            )}
+            {approval.notes ? <p className="mt-4 whitespace-pre-wrap text-sm font-semibold text-ks-slate">{approval.notes}</p> : null}
           </div>
         </div>
         <PaymentApprovalCard approval={approval} />
@@ -743,23 +755,18 @@ export function PaymentApprovalDetailPage() {
   );
 }
 
-// â”€â”€â”€ Invoice management â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Invoice management ───────────────────────────────────────────────────────
 
 export function PrincipalInvoiceManagementPage() {
-  const { data: invoices = [], isLoading, isError } = useInvoices({ limit: 100 }) as {
-    data: Array<{
-      id: string;
-      number: string;
-      student: string;
-      className: string;
-      total: number;
-      paid: number;
-      outstanding: number;
-      status: string;
-    }>;
-    isLoading: boolean;
-    isError: boolean;
-  };
+  const [search, setSearch] = useState('');
+  const [tab, setTab] = useState('ALL');
+  const [page, setPage] = useState(1);
+  const q = useDebounced(search.trim());
+  const statuses: Record<string, string | undefined> = { ALL: undefined, OVERDUE: 'OVERDUE', PARTIALLY_PAID: 'PARTIALLY_PAID', PAID: 'PAID' };
+  const { data, isLoading, isError, isFetching } = useInvoiceLedger({ page, limit: 25, search: q || undefined, status: statuses[tab] });
+  const counts = data?.counts ?? {};
+  const changed = (set: (v: string) => void) => (v: string) => { set(v); setPage(1); };
+
   return (
     <PrincipalWorkspaceShell title="Invoice Management" eyebrow="Read-only executive finance view">
       <PrincipalBreadcrumb crumbs={[
@@ -767,45 +774,62 @@ export function PrincipalInvoiceManagementPage() {
         { label: 'Finance', to: '/principal/finance' },
         { label: 'Invoices' },
       ]} />
+      <ExecutiveMetricGrid items={[
+        { label: 'Invoiced', value: money(data?.totals.total ?? 0), detail: `${data?.meta.total ?? 0} invoices`, tone: 'stable' },
+        { label: 'Collected', value: money(data?.totals.paid ?? 0), detail: data && data.totals.total > 0 ? `${Math.round((data.totals.paid / data.totals.total) * 100)}% collected` : '—', tone: 'stable' },
+        { label: 'Outstanding', value: money(data?.totals.outstanding ?? 0), detail: `${counts.OVERDUE ?? 0} overdue`, tone: (counts.OVERDUE ?? 0) > 0 ? 'critical' : 'stable' },
+      ]} />
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-ks-navy/15 bg-ks-navy/5 p-3">
         <p className="text-sm font-black text-ks-navy">Read-only view. Changes must be made by Finance Office.</p>
         <NavLink to="/finance/invoices"><Button variant="secondary" className="rounded-xl py-1.5 text-xs">Open Finance Office</Button></NavLink>
       </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <LedgerSearch value={search} onChange={changed(setSearch)} placeholder="Search student, registration or invoice number…" />
+      </div>
+      <LedgerTabs
+        tabs={[
+          { key: 'ALL', label: 'All', count: counts.ALL ?? 0 },
+          { key: 'OVERDUE', label: 'Overdue', count: counts.OVERDUE ?? 0 },
+          { key: 'PARTIALLY_PAID', label: 'Part paid', count: counts.PARTIALLY_PAID ?? 0 },
+          { key: 'PAID', label: 'Paid', count: counts.PAID ?? 0 },
+        ]}
+        active={tab}
+        onChange={changed(setTab)}
+      />
       {isLoading && <SkeletonTable cols={8} />}
       {isError && <DataError message="Could not load invoices from Finance. Refresh to retry." />}
-      {!isLoading && !isError && invoices.length === 0 && (
-        <EmptyState title="No invoices found" description="Invoices created by Finance Office will appear here for principal oversight." />
+      {!isLoading && !isError && !data?.items.length && (
+        <EmptyState title="No invoices found" description={q || tab !== 'ALL' ? 'Nothing matches that search or filter.' : 'Invoices created by Finance Office will appear here for principal oversight.'} />
       )}
-      {!isLoading && !isError && invoices.length > 0 && (
-        <ExecutiveTable columns={['Invoice', 'Student', 'Class', 'Total', 'Paid', 'Outstanding', 'Status', 'Link']}>
-          {invoices.map((invoice) => (
-            <tr key={invoice.id} className="transition hover:bg-ks-paper">
-              <Td><span className="font-black text-ks-navy">{invoice.number || invoice.id}</span></Td>
-              <Td>{invoice.student || '—'}</Td>
-              <Td>{invoice.className || '—'}</Td>
-              <Td>{money(invoice.total)}</Td>
-              <Td>{money(invoice.paid)}</Td>
-              <Td>
-                <span className={invoice.outstanding > 0 ? 'font-black text-ks-rose' : 'font-black text-ks-emerald'}>
-                  {money(invoice.outstanding)}
-                </span>
-              </Td>
-              <Td>
-                <Badge tone={invoice.outstanding > 0 ? 'amber' : 'emerald'}>
-                  {invoice.status || (invoice.outstanding > 0 ? 'partial' : 'paid')}
-                </Badge>
-              </Td>
-              <Td>
-                <NavLink to={`/finance/invoices/${invoice.id}`} className="text-xs font-black text-ks-blue hover:underline">Open</NavLink>
-              </Td>
-            </tr>
-          ))}
-        </ExecutiveTable>
+      {!isLoading && !isError && !!data?.items.length && (
+        <div className={isFetching ? 'opacity-70 transition-opacity' : 'transition-opacity'}>
+          <ExecutiveTable columns={['Invoice', 'Student', 'Class', 'Total', 'Paid', 'Outstanding', 'Status', 'Link']}>
+            {data.items.map((invoice) => (
+              <tr key={invoice.id} className="transition hover:bg-ks-paper">
+                <Td><span className="font-black text-ks-navy">{invoice.number || invoice.id}</span></Td>
+                <Td>{invoice.student || '—'}</Td>
+                <Td>{invoice.className || '—'}</Td>
+                <Td>{money(invoice.total)}</Td>
+                <Td>{money(invoice.paid)}</Td>
+                <Td>
+                  <span className={invoice.outstanding > 0 ? 'font-black text-ks-rose' : 'font-black text-ks-emerald'}>
+                    {money(invoice.outstanding)}
+                  </span>
+                </Td>
+                <Td><FinanceStatusBadge status={invoice.status} /></Td>
+                <Td>
+                  <NavLink to={`/finance/invoices/${invoice.id}`} className="text-xs font-black text-ks-blue hover:underline">Open</NavLink>
+                </Td>
+              </tr>
+            ))}
+          </ExecutiveTable>
+          <LedgerPager page={data.meta.page} totalPages={data.meta.totalPages} total={data.meta.total} limit={25} noun="invoices" onPage={setPage} />
+        </div>
       )}
     </PrincipalWorkspaceShell>
   );
 }
-// â”€â”€â”€ Performance overview â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Performance overview ─────────────────────────────────────────────────────
 
 export function PrincipalPerformanceOverviewPage() {
   const { data: schoolSummary } = useAqaSchoolSummary() as { data: Record<string, unknown> | undefined };
@@ -825,13 +849,13 @@ export function PrincipalPerformanceOverviewPage() {
   const openDiscipline   = apiInterventions.filter((i) => i.status === 'OPEN').length;
 
   return (
-    <PrincipalWorkspaceShell title="Performance Overview" eyebrow="Institutional academic intelligence Â· live">
+    <PrincipalWorkspaceShell title="Performance Overview" eyebrow="Institutional academic intelligence · live">
       <PrincipalBreadcrumb crumbs={[{ label: 'Executive', to: '/principal' }, { label: 'Performance' }]} />
       <ExecutiveMetricGrid items={[
-        { label: 'Critical Alerts',      value: String(criticalCount || 'â€”'),                                       detail: 'Unresolved school-wide',        tone: criticalCount > 0 ? 'critical' : 'stable' },
-        { label: 'At-Risk Students',     value: String(atRiskCount || 'â€”'),                                         detail: 'Across all classes',            tone: atRiskCount > 30 ? 'high' : 'medium' },
-        { label: 'Pairing Effectiveness',value: pairingEff > 0 ? `${pairingEff}%` : 'â€”',                           detail: `${activePairings} active pairs`, tone: pairingEff >= 60 ? 'stable' : 'medium' },
-        { label: 'Improving Students',   value: String(improvingCount || 'â€”'),                                      detail: 'Positive trajectory',           tone: 'stable' },
+        { label: 'Critical Alerts',      value: String(criticalCount || '—'),                                       detail: 'Unresolved school-wide',        tone: criticalCount > 0 ? 'critical' : 'stable' },
+        { label: 'At-Risk Students',     value: String(atRiskCount || '—'),                                         detail: 'Across all classes',            tone: atRiskCount > 30 ? 'high' : 'medium' },
+        { label: 'Pairing Effectiveness',value: pairingEff > 0 ? `${pairingEff}%` : '—',                           detail: `${activePairings} active pairs`, tone: pairingEff >= 60 ? 'stable' : 'medium' },
+        { label: 'Improving Students',   value: String(improvingCount || '—'),                                      detail: 'Positive trajectory',           tone: 'stable' },
       ]} />
 
       <div className="grid gap-gutter xl:grid-cols-3">
@@ -898,7 +922,7 @@ export function PrincipalPerformanceOverviewPage() {
   );
 }
 
-// â”€â”€â”€ Student profile â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Student profile ──────────────────────────────────────────────────────────
 
 export function PrincipalStudentProfilePage() {
   const { studentId } = useParams();
@@ -915,7 +939,7 @@ export function PrincipalStudentProfilePage() {
   const [showInterventionForm, setShowInterventionForm] = useState(false);
   const [exportBusy, setExportBusy] = useState(false);
 
-  if (loading) return <PrincipalWorkspaceShell title="Loadingâ€¦" eyebrow="Executive student profile"><SkeletonTable cols={4} /></PrincipalWorkspaceShell>;
+  if (loading) return <PrincipalWorkspaceShell title="Loading…" eyebrow="Executive student profile"><SkeletonTable cols={4} /></PrincipalWorkspaceShell>;
   if (!student) return (
     <PrincipalWorkspaceShell title="Student Not Found" eyebrow="Executive student profile">
       <PrincipalBreadcrumb crumbs={[{ label: 'Executive', to: '/principal' }, { label: 'Students', to: '/principal/students' }, { label: 'Not Found' }]} />
@@ -940,7 +964,7 @@ export function PrincipalStudentProfilePage() {
       { studentId: studentId ?? selectedStudent.id, reason: interventionReason, type: 'ACADEMIC', initiatedBy: 'PRINCIPAL', priority: 'HIGH' },
       {
         onSuccess: () => { toast(`AQA intervention created for ${selectedStudent.name}.`); setShowInterventionForm(false); setInterventionReason(''); },
-        onError: () => toast('Failed to create intervention â€” check AQA service.'),
+        onError: () => toast('Failed to create intervention — check AQA service.'),
       },
     );
   }
@@ -955,7 +979,7 @@ export function PrincipalStudentProfilePage() {
 
   async function handleExportDossier() {
     setExportBusy(true);
-    toast('Generating student dossierâ€¦');
+    toast('Generating student dossier…');
     generateMutation.mutate(
       { type: 'STUDENT_DOSSIER', studentId: studentId ?? selectedStudent.id, studentName: selectedStudent.name },
       {
@@ -963,17 +987,17 @@ export function PrincipalStudentProfilePage() {
           const id = (data as Record<string, unknown>)?.id as string | undefined;
           if (id) {
             try { await downloadReportWhenReady(id, `dossier-${selectedStudent.name.replace(/\s+/g, '-')}.pdf`); toast('Dossier downloaded.'); }
-            catch { toast('Dossier still generating â€” check Reports page shortly.'); }
-          } else { toast('Report queued â€” check Operations â†’ Reports.'); }
+            catch { toast('Dossier still generating — check Reports page shortly.'); }
+          } else { toast('Report queued — check Operations → Reports.'); }
           setExportBusy(false);
         },
-        onError: () => { toast('Export failed â€” check Operations service.'); setExportBusy(false); },
+        onError: () => { toast('Export failed — check Operations service.'); setExportBusy(false); },
       },
     );
   }
 
   return (
-    <PrincipalWorkspaceShell title={selectedStudent.name} eyebrow="Executive student profile Â· 360Â° view">
+    <PrincipalWorkspaceShell title={selectedStudent.name} eyebrow="Executive student profile · 360° view">
       <PrincipalBreadcrumb crumbs={[
         { label: 'Executive', to: '/principal' },
         { label: 'Students', to: '/principal/students' },
@@ -1010,12 +1034,12 @@ export function PrincipalStudentProfilePage() {
                 className="rounded-2xl border border-ks-rose/30 bg-ks-rose/5 p-5">
                 <p className="mb-3 text-sm font-black text-ks-rose">Flag {selectedStudent.name} for AQA Intervention</p>
                 <textarea value={interventionReason} onChange={(e) => setInterventionReason(e.target.value)}
-                  rows={3} placeholder="Describe the academic concern (e.g. three consecutive score drops, disengagement)â€¦"
+                  rows={3} placeholder="Describe the academic concern (e.g. three consecutive score drops, disengagement)…"
                   className="w-full rounded-xl border border-ks-line bg-white px-4 py-3 text-sm text-ks-navy placeholder:text-ks-muted focus:border-ks-blue focus:outline-none" />
                 <div className="mt-3 flex gap-2">
                   <Button onClick={handleFlagIntervention} disabled={interventionMutation.isPending}
                     className="rounded-xl bg-ks-rose text-white text-xs">
-                    {interventionMutation.isPending ? 'Submittingâ€¦' : 'Submit Intervention'}
+                    {interventionMutation.isPending ? 'Submitting…' : 'Submit Intervention'}
                   </Button>
                   <Button variant="secondary" onClick={() => setShowInterventionForm(false)} className="rounded-xl text-xs">Cancel</Button>
                 </div>
@@ -1028,7 +1052,7 @@ export function PrincipalStudentProfilePage() {
             {showMeetingForm && (
               <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
                 className="rounded-2xl border border-ks-blue/30 bg-ks-blue/5 p-5">
-                <p className="mb-3 text-sm font-black text-ks-navy">Schedule Guardian Meeting â€” {selectedStudent.name}</p>
+                <p className="mb-3 text-sm font-black text-ks-navy">Schedule Guardian Meeting — {selectedStudent.name}</p>
                 <p className="mb-3 text-xs text-ks-muted">Guardian contact: <span className="font-bold text-ks-navy">{selectedStudent.guardian}</span></p>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div>
@@ -1039,7 +1063,7 @@ export function PrincipalStudentProfilePage() {
                   <div>
                     <label className="mb-1 block text-xs font-bold text-ks-muted">Agenda / notes</label>
                     <input type="text" value={meetingNotes} onChange={(e) => setMeetingNotes(e.target.value)}
-                      placeholder="Brief agenda for the meetingâ€¦"
+                      placeholder="Brief agenda for the meeting…"
                       className="w-full rounded-xl border border-ks-line bg-white px-4 py-2.5 text-sm text-ks-navy placeholder:text-ks-muted focus:border-ks-blue focus:outline-none" />
                   </div>
                 </div>
@@ -1089,7 +1113,7 @@ export function PrincipalStudentProfilePage() {
                 </button>
 
                 {/* Create announcement */}
-                <button onClick={() => navigate(`/principal/announcements/create?prefill=${encodeURIComponent(`Urgent: regarding ${selectedStudent.name} â€” ${selectedStudent.alertStatus}`)}`)}
+                <button onClick={() => navigate(`/principal/announcements/create?prefill=${encodeURIComponent(`Urgent: regarding ${selectedStudent.name} — ${selectedStudent.alertStatus}`)}`)}
                   className="flex w-full items-center gap-3 rounded-xl border border-transparent px-4 py-3 text-left text-sm font-bold text-ks-slate transition hover:border-ks-line hover:bg-ks-paper hover:text-ks-navy">
                   <Megaphone className="h-4 w-4 shrink-0" />
                   Create urgent announcement
@@ -1106,7 +1130,7 @@ export function PrincipalStudentProfilePage() {
                 <button onClick={handleExportDossier} disabled={exportBusy}
                   className="flex w-full items-center gap-3 rounded-xl border border-transparent px-4 py-3 text-left text-sm font-bold text-ks-slate transition hover:border-ks-line hover:bg-ks-paper hover:text-ks-navy disabled:opacity-50">
                   <Download className="h-4 w-4 shrink-0" />
-                  {exportBusy ? 'Generatingâ€¦' : 'Export student dossier'}
+                  {exportBusy ? 'Generating…' : 'Export student dossier'}
                 </button>
               </div>
             </div>
@@ -1115,7 +1139,7 @@ export function PrincipalStudentProfilePage() {
             <div className="rounded-2xl border border-ks-line bg-white p-4 shadow-sm">
               <p className="text-[11px] font-black uppercase tracking-widest text-ks-muted">Guardian contact</p>
               <p className="mt-2 font-display text-sm font-black text-ks-navy">{selectedStudent.guardian}</p>
-              <p className="mt-0.5 text-xs text-ks-muted">{selectedStudent.className} Â· {selectedStudent.alertStatus}</p>
+              <p className="mt-0.5 text-xs text-ks-muted">{selectedStudent.className} · {selectedStudent.alertStatus}</p>
             </div>
           </div>
         </div>
@@ -1124,7 +1148,7 @@ export function PrincipalStudentProfilePage() {
   );
 }
 
-// â”€â”€â”€ All students â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── All students ─────────────────────────────────────────────────────────────
 
 export function PrincipalStudentsPage() {
   const [filter, setFilter] = useState<'all' | 'critical' | 'finance'>('all');
@@ -1184,7 +1208,7 @@ export function PrincipalStudentsPage() {
             <Td className="text-xs">{student.guardian}</Td>
             <Td>
               <NavLink className="text-xs font-black text-ks-blue hover:underline" to={`/principal/students/${student.id}`}>
-                Profile â†’
+                Profile →
               </NavLink>
             </Td>
           </tr>
@@ -1195,7 +1219,7 @@ export function PrincipalStudentsPage() {
   );
 }
 
-// â”€â”€â”€ Discipline overview â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Discipline overview ──────────────────────────────────────────────────────
 
 export function DisciplineOverviewPage() {
   const { data: apiIncidents = [] as DisciplineIncident[] } = usePrincipalDiscipline() as { data: DisciplineIncident[] };
@@ -1262,7 +1286,7 @@ export function DisciplineOverviewPage() {
   );
 }
 
-// â”€â”€â”€ Staff overview â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Staff overview ───────────────────────────────────────────────────────────
 
 export function StaffOverviewPage() {
   const { data: apiStaff = [] as StaffMember[] } = usePrincipalStaff() as { data: StaffMember[] };
@@ -1320,7 +1344,7 @@ export function StaffOverviewPage() {
   );
 }
 
-// â”€â”€â”€ Announcements â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Announcements ────────────────────────────────────────────────────────────
 
 export function PrincipalAnnouncementsPage() {
   const { data: rawAnnouncements } = usePrincipalAnnouncements() as {
@@ -1382,7 +1406,7 @@ export function PrincipalAnnouncementsPage() {
   );
 }
 
-// â”€â”€â”€ Create announcement â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Create announcement ──────────────────────────────────────────────────────
 
 export function CreatePrincipalAnnouncementPage() {
   const navigate = useNavigate();
@@ -1455,7 +1479,7 @@ export function CreatePrincipalAnnouncementPage() {
             )}
             <div className="mt-5 flex flex-wrap gap-2">
               <Button type="submit" className="rounded-xl bg-ks-navy" disabled={createMutation.isPending}>
-                <Send className="h-4 w-4" /> {createMutation.isPending ? 'Publishingâ€¦' : 'Preview and Publish'}
+                <Send className="h-4 w-4" /> {createMutation.isPending ? 'Publishing…' : 'Preview and Publish'}
               </Button>
             </div>
           </div>
@@ -1644,9 +1668,9 @@ export function PrincipalAnalyticsPage() {
     </PrincipalWorkspaceShell>
   );
 }
-// â”€â”€â”€ Reports â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Reports ──────────────────────────────────────────────────────────────────
 
-// Maps UI label â†’ backend ReportType enum value
+// Maps UI label → backend ReportType enum value
 const REPORT_TYPE_MAP: Record<string, string> = {
   'School Overview':      'SCHOOL_OVERVIEW',
   'Academic Performance': 'PERFORMANCE_ENGINE',
@@ -1661,7 +1685,7 @@ export function PrincipalReportsPage() {
   const { mutate: generateReport } = useGenerateReportMutation();
   // null = idle | title = loading (queuing or preparing download)
   const [loadingReport, setLoadingReport] = useState<string | null>(null);
-  const [loadingLabel, setLoadingLabel] = useState('Queuingâ€¦');
+  const [loadingLabel, setLoadingLabel] = useState('Queuing…');
 
   const reports = [
     ['School Overview',      'Full institutional health across academic, finance, and operations.'],
@@ -1675,19 +1699,19 @@ export function PrincipalReportsPage() {
 
   function handleGenerate(title: string) {
     setLoadingReport(title);
-    setLoadingLabel('Queuingâ€¦');
+    setLoadingLabel('Queuing…');
     generateReport(
       { reportType: REPORT_TYPE_MAP[title] ?? 'CUSTOM', scope: 'school' },
       {
         onSuccess: async (data) => {
           const reportId = (data as Record<string, unknown>)?.reportId as string | undefined;
           if (!reportId) {
-            toast(`${title} report queued â€” check Reports â€º Jobs to download.`, 'success');
+            toast(`${title} report queued — check Reports › Jobs to download.`, 'success');
             setLoadingReport(null);
             return;
           }
           // Poll until READY then auto-download
-          setLoadingLabel('Preparingâ€¦');
+          setLoadingLabel('Preparing…');
           try {
             await downloadReportWhenReady(
               reportId,
@@ -1699,7 +1723,7 @@ export function PrincipalReportsPage() {
             toast(
               msg === 'generation-failed'
                 ? `${title} report generation failed on the server.`
-                : `${title} is taking too long â€” check Reports â€º Jobs to download when ready.`,
+                : `${title} is taking too long — check Reports › Jobs to download when ready.`,
               'error',
             );
           } finally {
@@ -1733,7 +1757,7 @@ export function PrincipalReportsPage() {
   );
 }
 
-// â”€â”€â”€ School settings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── School settings ──────────────────────────────────────────────────────────
 
 export function SchoolSettingsPage() {
   const { data: schoolSettings } = usePrincipalSchoolSettings() as {
@@ -1785,7 +1809,7 @@ export function SchoolSettingsPage() {
               <label className="block"><span className="text-[11px] font-black uppercase tracking-widest text-ks-muted">Location</span><input value={identity.location} onChange={(e) => setIdentity((v) => ({ ...v, location: e.target.value }))} className="mt-2 h-11 w-full rounded-xl border border-ks-line bg-ks-paper px-4 font-semibold text-ks-navy outline-none focus:border-ks-blue focus:bg-white" /></label>
             </div>
             <Button variant="secondary" className="mt-4 rounded-xl" disabled={patchMutation.isPending} onClick={handleSaveIdentity}>
-              {patchMutation.isPending ? 'Savingâ€¦' : 'Save Identity'}
+              {patchMutation.isPending ? 'Saving…' : 'Save Identity'}
             </Button>
           </SettingsBlock>
 
@@ -1798,7 +1822,7 @@ export function SchoolSettingsPage() {
               <label className="block"><span className="text-[11px] font-black uppercase tracking-widest text-ks-muted">Term End</span><input value={calendar.termEnd} onChange={(e) => setCalendar((v) => ({ ...v, termEnd: e.target.value }))} className="mt-2 h-11 w-full rounded-xl border border-ks-line bg-ks-paper px-4 font-semibold text-ks-navy outline-none focus:border-ks-blue focus:bg-white" /></label>
             </div>
             <Button variant="secondary" className="mt-4 rounded-xl" disabled={patchMutation.isPending} onClick={handleSaveCalendar}>
-              {patchMutation.isPending ? 'Savingâ€¦' : 'Save Calendar'}
+              {patchMutation.isPending ? 'Saving…' : 'Save Calendar'}
             </Button>
           </SettingsBlock>
 
@@ -1809,7 +1833,7 @@ export function SchoolSettingsPage() {
                 ? gradingScale.map((g) => (
                     <div key={g.grade} className="flex items-center justify-between border-b border-ks-line px-4 py-3 last:border-0">
                       <span className="font-display text-xl font-black text-ks-navy">{g.grade}</span>
-                      <span className="font-mono font-bold text-ks-muted">{g.minScore}â€“{g.maxScore}%</span>
+                      <span className="font-mono font-bold text-ks-muted">{g.minScore}–{g.maxScore}%</span>
                       <span className="text-sm font-bold text-ks-slate">{g.label}</span>
                     </div>
                   ))
@@ -1848,7 +1872,7 @@ export function SchoolSettingsPage() {
                   to={String(to)}
                   className="flex items-center justify-between rounded-xl border border-ks-line px-4 py-3 text-sm font-bold text-ks-slate transition hover:border-ks-gold/50 hover:text-ks-navy"
                 >
-                  {label} <span className="text-ks-muted">â†’</span>
+                  {label} <span className="text-ks-muted">→</span>
                 </NavLink>
               ))}
             </div>
@@ -1864,7 +1888,7 @@ export function SchoolSettingsPage() {
   );
 }
 
-// â”€â”€â”€ Audit trail â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Audit trail ──────────────────────────────────────────────────────────────
 
 export function PrincipalAuditPage() {
   const [filter, setFilter] = useState<string>('All');
@@ -1925,9 +1949,9 @@ export function PrincipalAuditPage() {
   );
 }
 
-// â”€â”€â”€ Exports â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Exports ──────────────────────────────────────────────────────────────────
 
-// Maps export label â†’ backend ReportType
+// Maps export label → backend ReportType
 const EXPORT_TYPE_MAP: Record<string, string> = {
   'Decision Audit CSV':           'AUDIT_EXPORT',
   'School Health PDF':            'SCHOOL_OVERVIEW',
@@ -1958,7 +1982,7 @@ const emptyCalendar = {
 export function PrincipalExportsPage() {
   const { mutate: generateReport } = useGenerateReportMutation();
   const [generating, setGenerating] = useState<string | null>(null);
-  const [loadingLabel, setLoadingLabel] = useState('Queuingâ€¦');
+  const [loadingLabel, setLoadingLabel] = useState('Queuing…');
 
   const items = [
     ['Decision Audit CSV',            'All principal decisions with timestamps, reasons, and correlation IDs.'],
@@ -1973,23 +1997,23 @@ export function PrincipalExportsPage() {
 
   const handleExport = (title: string) => {
     setGenerating(title);
-    setLoadingLabel('Queuingâ€¦');
+    setLoadingLabel('Queuing…');
     generateReport(
       { reportType: EXPORT_TYPE_MAP[title] ?? 'CUSTOM', scope: 'school' },
       {
         onSuccess: async (data) => {
           const reportId = (data as Record<string, unknown>)?.reportId as string | undefined;
           if (!reportId) {
-            toast(`${title} queued â€” check Reports â€º Jobs to download.`, 'success');
+            toast(`${title} queued — check Reports › Jobs to download.`, 'success');
             setGenerating(null);
             return;
           }
-          setLoadingLabel('Preparingâ€¦');
+          setLoadingLabel('Preparing…');
           try {
             await downloadReportWhenReady(reportId, `${title.replace(/\s+/g, '-').toLowerCase()}.pdf`);
             toast(`${title} download started!`, 'success');
           } catch {
-            toast(`${title} is taking too long â€” check Reports â€º Jobs to download when ready.`, 'error');
+            toast(`${title} is taking too long — check Reports › Jobs to download when ready.`, 'error');
           } finally {
             setGenerating(null);
           }
@@ -2027,7 +2051,7 @@ export function PrincipalExportsPage() {
   );
 }
 
-// â”€â”€â”€ Shared helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Shared helpers ───────────────────────────────────────────────────────────
 
 function SettingsBlock({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
   return (
@@ -2040,7 +2064,7 @@ function SettingsBlock({ title, subtitle, children }: { title: string; subtitle:
 }
 
 
-// â”€â”€â”€ Private components â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Private components ───────────────────────────────────────────────────────
 
 function PrincipalCriticalStudentsTable() {
   const { data: apiStudents = [] as PrincipalStudent[] } = usePrincipalStudents() as { data: PrincipalStudent[] };
@@ -2066,7 +2090,7 @@ function PrincipalCriticalStudentsTable() {
             <Td>
               <div className="flex items-center gap-2">
                 <NavLink to={`/principal/students/${student.id}`} className="text-xs font-black text-ks-blue hover:underline">Profile</NavLink>
-                <span className="text-ks-mist">Â·</span>
+                <span className="text-ks-mist">·</span>
                 <button className="text-xs font-black text-ks-rose hover:underline">Escalate</button>
               </div>
             </Td>
@@ -2077,8 +2101,8 @@ function PrincipalCriticalStudentsTable() {
   );
 }
 
-// â”€â”€â”€ Param hooks â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// Return null when the requested id is not found â€” callers must handle the null
+// ─── Param hooks ──────────────────────────────────────────────────────────────
+// Return null when the requested id is not found — callers must handle the null
 // case with an EmptyState or DataError rather than silently showing wrong data.
 
 function useAssessment() {

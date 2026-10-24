@@ -48,16 +48,21 @@ export type PublishClass = {
 };
 
 export type PrincipalPaymentApproval = {
+  /** The approval record's id (what approve/reject act on) */
   id: string;
   paymentId: string;
+  paymentNumber: string;
   student: string;
+  registration: string;
   invoice: string;
-  method: 'CASH' | 'BANK' | 'MOBILE_MONEY';
+  method: string;
   amount: number;
   reference: string;
   enteredBy: string;
   age: string;
   risk: Urgency;
+  notes: string;
+  evidenceUrl: string;
 };
 
 export type PrincipalStudent = {

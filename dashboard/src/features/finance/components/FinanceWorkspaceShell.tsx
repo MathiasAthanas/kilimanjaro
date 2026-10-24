@@ -1,21 +1,17 @@
 import {
-  AlertTriangle,
   ArrowRight,
   BadgeCheck,
   Ban,
-  CheckCircle2,
   ChevronRight,
   ClipboardList,
   Download,
   FileText,
   Filter,
   Lock,
-  QrCode,
   Search,
   ShieldCheck,
   TrendingDown,
   TrendingUp,
-  WalletCards,
   ChevronDown,
   ChevronUp,
   UserCircle,
@@ -25,16 +21,14 @@ import {
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { ReactNode } from 'react';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { Badge } from '../../../components/common/Badge';
 import { Button } from '../../../components/common/Button';
-import type { Asset, AuditEntry, FinanceStatus, Invoice, Payment, PaymentMethod, Receipt } from '../types/finance.types';
-import { duplicateReferenceWarning, formatDate, formatTZS, isOverpayment, parseTZSInput } from '../utils/money';
+import type { Asset, AuditEntry, Invoice, Payment, Receipt } from '../types/finance.types';
+import { formatDate, formatTZS } from '../utils/money';
 import { useFinanceOverview, usePendingPaymentApprovals } from '../api/finance.hooks';
-import { useFileUploadMutation, validateFile } from '../../../lib/api/upload';
 import { api } from '../../../lib/api/client';
-import type { UploadedFile } from '../../../lib/api/upload';
 import { useAuthStore } from '../../../lib/auth/authStore';
 import { financeHeaderLinks } from './financeHeaderLinks';
 
@@ -155,16 +149,36 @@ export function AmountDisplay({ amount, tone = 'neutral' }: { amount: number; to
 
 // ─── Status badge ─────────────────────────────────────────────────────────────
 
-export function FinanceStatusBadge({ status }: { status: FinanceStatus | PaymentMethod }) {
-  const tone =
-    status === 'PAID' || status === 'APPROVED' || status === 'ACTIVE' || status === 'CASH'
-      ? 'emerald'
-      : status === 'PARTIAL' || status === 'PENDING' || status === 'BANK' || status === 'MOBILE_MONEY'
-      ? 'amber'
-      : status === 'OVERDUE' || status === 'REJECTED' || status === 'VOID' || status === 'DISPOSED'
-      ? 'rose'
-      : 'slate';
-  return <Badge tone={tone}>{status.replaceAll('_', ' ')}</Badge>;
+const STATUS_LABELS: Record<string, string> = {
+  PARTIALLY_PAID: 'Part paid',
+  PARTIAL: 'Part paid',
+  ISSUED: 'Unpaid',
+  PENDING_APPROVAL: 'Awaiting approval',
+  BANK_TRANSFER: 'Bank transfer',
+  BANK: 'Bank transfer',
+  MOBILE_MONEY: 'Mobile money',
+  VOID: 'Void',
+};
+
+const EMERALD = new Set(['PAID', 'APPROVED', 'ACTIVE', 'CONFIRMED', 'CASH', 'COMPLETED', 'DISBURSED']);
+const AMBER = new Set(['PARTIAL', 'PARTIALLY_PAID', 'PENDING', 'PENDING_APPROVAL', 'ISSUED', 'BANK', 'BANK_TRANSFER', 'MOBILE_MONEY', 'SUBMITTED']);
+const ROSE = new Set(['OVERDUE', 'REJECTED', 'VOID', 'CANCELLED', 'DISPOSED', 'REFUNDED']);
+
+/** Colour and wording for any finance status or payment method the backend can send. */
+export function FinanceStatusBadge({ status }: { status: string }) {
+  const key = String(status ?? '').toUpperCase();
+  const tone = EMERALD.has(key) ? 'emerald' : AMBER.has(key) ? 'amber' : ROSE.has(key) ? 'rose' : 'slate';
+  const label = STATUS_LABELS[key] ?? key.replaceAll('_', ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase());
+  return <Badge tone={tone}>{label}</Badge>;
+}
+
+/** Left-rail colour for table rows. */
+export function statusRail(status: string): string {
+  const key = String(status ?? '').toUpperCase();
+  if (EMERALD.has(key)) return '#10b981';
+  if (ROSE.has(key)) return key === 'CANCELLED' || key === 'VOID' ? '#94a3b8' : '#e11d48';
+  if (AMBER.has(key)) return '#d59a1b';
+  return '#64748b';
 }
 
 // ─── Metric strip ─────────────────────────────────────────────────────────────
@@ -197,7 +211,7 @@ export function FinanceMetricStrip({
         return (
           <div key={item.label} className={`rounded-lg border border-[#d5dde6] border-l-4 bg-white p-6 ${rail}`}>
             <p className="text-[10px] font-black uppercase tracking-widest text-[#64748b]">{item.label}</p>
-            <p className="mt-2 font-mono text-[34px] font-black leading-none tabular-nums text-[#0f172a]">{item.value}</p>
+            <p className={`mt-2 break-words font-mono font-black leading-tight tabular-nums text-[#0f172a] ${item.value.length > 18 ? 'text-[18px]' : item.value.length > 13 ? 'text-[24px]' : 'text-[34px]'}`}>{item.value}</p>
             <div className="mt-2 flex items-center gap-1">
               {item.trend === 'up'   && <TrendingUp   className={`h-3.5 w-3.5 ${trendColor}`} />}
               {item.trend === 'down' && <TrendingDown  className={`h-3.5 w-3.5 ${trendColor}`} />}
@@ -391,10 +405,7 @@ export function InvoiceTable({ rows }: { rows: Invoice[] }) {
   return (
     <FinanceTable columns={['Invoice', 'Student', 'Class', 'Term', 'Total', 'Paid', 'Outstanding', 'Status', 'Due Date', '']}>
       {rows.map((invoice) => {
-        const railColor =
-          invoice.status === 'PAID'    ? '#10b981' :
-          invoice.status === 'OVERDUE' ? '#e11d48' :
-          invoice.status === 'PARTIAL' ? '#d59a1b' : '#64748b';
+        const railColor = statusRail(invoice.status);
         return (
           <tr
             key={invoice.id}
@@ -440,10 +451,7 @@ export function PaymentTable({ rows }: { rows: Payment[] }) {
   return (
     <FinanceTable columns={['Payment', 'Student', 'Invoice', 'Method', 'Amount', 'Status', 'Entered by', 'Date', 'Receipt', '']}>
       {rows.map((payment) => {
-        const railColor =
-          payment.status === 'APPROVED' ? '#10b981' :
-          payment.status === 'REJECTED' ? '#e11d48' :
-          '#64748b';
+        const railColor = statusRail(payment.status);
         return (
           <tr
             key={payment.id}
@@ -455,7 +463,10 @@ export function PaymentTable({ rows }: { rows: Payment[] }) {
                 {payment.number || payment.id}
               </NavLink>
             </Td>
-            <Td>{payment.student}</Td>
+            <Td>
+              <div className="font-semibold text-[#0f172a]">{payment.student}</div>
+              {payment.registration ? <div className="text-[11px] text-[#64748b]">{payment.registration}</div> : null}
+            </Td>
             <Td>
               {payment.invoiceId ? (
                 <NavLink className="font-semibold text-[#00334f] hover:underline" to={`/finance/invoices/${payment.invoiceId}`}>
@@ -467,7 +478,7 @@ export function PaymentTable({ rows }: { rows: Payment[] }) {
             </Td>
             <Td><FinanceStatusBadge status={payment.method} /></Td>
             <Td amount>
-              <AmountDisplay amount={payment.amount} tone={payment.status === 'REJECTED' ? 'void' : 'paid'} />
+              <AmountDisplay amount={payment.amount} tone={['REJECTED', 'CANCELLED', 'REFUNDED'].includes(payment.status) ? 'void' : 'paid'} />
             </Td>
             <Td><FinanceStatusBadge status={payment.status} /></Td>
             <Td>{payment.enteredBy}</Td>
@@ -515,704 +526,39 @@ export async function getLogoBase64(): Promise<string | null> {
   }
 }
 
-// ─── Invoice PDF generator ────────────────────────────────────────────────────
-
-interface InvoicePdfData {
-  number: string;
-  student: string;
-  registration?: string;
-  guardian?: string;
-  className?: string;
-  term?: string;
-  dueDate?: string;
-  status: string;
-  total: number;
-  paid: number;
-  outstanding: number;
-  lineItems?: Array<{ category?: string; feeCategoryName?: string; amount: number; mandatory?: boolean }>;
-}
-
-async function generateInvoicePdf(data: InvoicePdfData): Promise<void> {
-  const [{ jsPDF }, logo] = await Promise.all([import('jspdf'), getLogoBase64()]);
-  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-
-  const PW = 210;
-  const M  = 14;
-  const CW = PW - M * 2;
-
-  const NAVY  : [number,number,number] = [0, 51, 79];
-  const GOLD  : [number,number,number] = [213,154, 27];
-  const LIGHT : [number,number,number] = [248,250,252];
-  const SLATE : [number,number,number] = [100,116,139];
-  const DARK  : [number,number,number] = [15,  23, 42];
-  const WHITE : [number,number,number] = [255,255,255];
-  const GREEN : [number,number,number] = [16, 185,129];
-  const RED   : [number,number,number] = [220, 38, 38];
-
-  const statusColors: Record<string, [number,number,number]> = {
-    PAID: GREEN, PARTIAL: GOLD, OVERDUE: RED, VOID: SLATE, CANCELLED: SLATE,
-  };
-  const statusColor = statusColors[data.status] ?? NAVY;
-
-  // ── HEADER ─────────────────────────────────────────────────────────────────
-  doc.setFillColor(...NAVY);
-  doc.rect(0, 0, PW, 46, 'F');
-
-  // School logo or fallback KS badge
-  if (logo) {
-    doc.addImage(logo, 'PNG', M, 7, 28, 28, undefined, 'FAST');
-  } else {
-    doc.setDrawColor(...GOLD);
-    doc.setLineWidth(0.8);
-    doc.circle(M + 9, 23, 9, 'D');
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(10);
-    doc.setTextColor(...GOLD);
-    doc.text('KS', M + 9, 21.5, { align: 'center' });
-    doc.setFontSize(5);
-    doc.setTextColor(...WHITE);
-    doc.text('SCHOOLS', M + 9, 27, { align: 'center' });
-  }
-
-  const textX = M + 32;
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(14);
-  doc.setTextColor(...WHITE);
-  doc.text('Kilimanjaro Schools', textX, 17);
-  doc.setFont('helvetica', 'italic');
-  doc.setFontSize(8);
-  doc.setTextColor(...GOLD);
-  doc.text('Excellence in Education Since 2003', textX, 22);
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7);
-  doc.setTextColor(200, 220, 230);
-  doc.text('P.O. Box 4502, Moshi, Kilimanjaro, Tanzania  ·  Tel: +255 754 000 000', textX, 27);
-  doc.text('finance@kilimanjaroschools.ac.tz', textX, 31);
-
-  // Invoice label + number
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7);
-  doc.setTextColor(160, 200, 220);
-  doc.text('FEE INVOICE', PW - M, 14, { align: 'right' });
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(16);
-  doc.setTextColor(...WHITE);
-  doc.text(data.number, PW - M, 23, { align: 'right' });
-
-  // Status badge
-  doc.setFillColor(...statusColor);
-  doc.roundedRect(PW - M - 34, 27, 34, 8, 1.5, 1.5, 'F');
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7);
-  doc.setTextColor(...WHITE);
-  doc.text(data.status, PW - M - 17, 32.3, { align: 'center' });
-
-  // ── GOLD STRIPE ────────────────────────────────────────────────────────────
-  doc.setFillColor(...GOLD);
-  doc.rect(0, 46, PW, 2, 'F');
-
-  // ── 2-COLUMN INFO ──────────────────────────────────────────────────────────
-  let y = 56;
-
-  // Left: billed to
-  doc.setDrawColor(...GOLD);
-  doc.setLineWidth(0.5);
-  doc.line(M, y, M, y + 28);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(6.5);
-  doc.setTextColor(...SLATE);
-  doc.text('BILLED TO', M + 3, y + 1.5);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
-  doc.setTextColor(...DARK);
-  doc.text(data.student, M + 3, y + 8);
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  doc.setTextColor(...SLATE);
-  if (data.registration) doc.text(`Reg: ${data.registration}`, M + 3, y + 14);
-  if (data.className) doc.text(`Class: ${data.className}`, M + 3, y + 19);
-  if (data.guardian) doc.text(`Guardian: ${data.guardian}`, M + 3, y + 24);
-
-  // Right: invoice details
-  const rx = M + CW / 2;
-  doc.setDrawColor(...GOLD);
-  doc.line(rx, y, rx, y + 28);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(6.5);
-  doc.setTextColor(...SLATE);
-  doc.text('INVOICE DETAILS', rx + 3, y + 1.5);
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.5);
-  doc.setTextColor(...DARK);
-  if (data.term) doc.text(`Term: ${data.term}`, rx + 3, y + 8);
-  if (data.dueDate) doc.text(`Due Date: ${formatDate(data.dueDate)}`, rx + 3, y + 14);
-  doc.text(`Issued: ${formatDate(new Date().toISOString())}`, rx + 3, y + 19);
-
-  y += 36;
-
-  // ── DASHED SEPARATOR ───────────────────────────────────────────────────────
-  doc.setDrawColor(220, 225, 235);
-  doc.setLineWidth(0.3);
-  doc.setLineDashPattern([2, 2], 0);
-  doc.line(M, y, PW - M, y);
-  doc.setLineDashPattern([], 0);
-  y += 8;
-
-  // ── FEE BREAKDOWN TABLE ────────────────────────────────────────────────────
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7);
-  doc.setTextColor(...SLATE);
-  doc.text('FEE SCHEDULE', M, y);
-  y += 4;
-
-  const items = (data.lineItems ?? []).map((it) => ({
-    name: it.feeCategoryName ?? it.category ?? 'School Fees',
-    amount: Number(it.amount),
-    mandatory: it.mandatory ?? true,
-  }));
-  if (items.length === 0) items.push({ name: 'School Fees', amount: data.total, mandatory: true });
-
-  const rowH   = 8;
-  const COL_BADGE = 22;
-  const COL_AMT   = 46;
-  const tableRight = PW - M;
-
-  // Header
-  doc.setFillColor(...NAVY);
-  doc.rect(M, y, CW, rowH, 'F');
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7.5);
-  doc.setTextColor(...WHITE);
-  doc.text('DESCRIPTION', M + 3, y + 5.2);
-  doc.text('TYPE', tableRight - COL_AMT - COL_BADGE + 3, y + 5.2);
-  doc.text('AMOUNT (TZS)', tableRight - 3, y + 5.2, { align: 'right' });
-  y += rowH;
-
-  items.forEach((item, i) => {
-    doc.setFillColor(...(i % 2 === 0 ? WHITE : LIGHT));
-    doc.rect(M, y, CW, rowH, 'F');
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8.5);
-    doc.setTextColor(...DARK);
-    doc.text(item.name, M + 3, y + 5.2);
-    const bx = tableRight - COL_AMT - COL_BADGE + 2;
-    doc.setFillColor(...(item.mandatory ? [0,51,79] : [213,154,27]) as [number,number,number]);
-    doc.roundedRect(bx, y + 1.5, COL_BADGE - 4, 5, 1, 1, 'F');
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(6);
-    doc.setTextColor(...WHITE);
-    doc.text(item.mandatory ? 'MANDATORY' : 'OPTIONAL', bx + (COL_BADGE - 4) / 2, y + 5, { align: 'center' });
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8.5);
-    doc.setTextColor(...DARK);
-    doc.text(formatTZS(item.amount), tableRight - 3, y + 5.2, { align: 'right' });
-    y += rowH;
-  });
-
-  // Summary rows
-  const summaryRows: Array<{ label: string; value: string; bg: [number,number,number]; textColor: [number,number,number] }> = [
-    { label: 'INVOICE TOTAL',   value: formatTZS(data.total),       bg: [30, 41, 59],  textColor: WHITE },
-    { label: 'AMOUNT PAID',     value: formatTZS(data.paid),        bg: [5, 46, 22],   textColor: GREEN },
-    { label: 'OUTSTANDING BALANCE', value: formatTZS(data.outstanding), bg: data.outstanding <= 0 ? [5,46,22] : NAVY, textColor: data.outstanding <= 0 ? GREEN : GOLD },
-  ];
-
-  summaryRows.forEach(({ label, value, bg, textColor }) => {
-    doc.setFillColor(...bg);
-    doc.rect(M, y, CW, rowH + 1, 'F');
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
-    doc.setTextColor(...WHITE);
-    doc.text(label, M + 3, y + 6);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9);
-    doc.setTextColor(...textColor);
-    doc.text(value, tableRight - 3, y + 6, { align: 'right' });
-    y += rowH + 1;
-  });
-  y += 6;
-
-  // ── AMOUNT IN WORDS ────────────────────────────────────────────────────────
-  doc.setFillColor(255, 251, 235);
-  doc.setDrawColor(...GOLD);
-  doc.setLineWidth(0.3);
-  doc.roundedRect(M, y, CW, 10, 1.5, 1.5, 'FD');
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7);
-  doc.setTextColor(...SLATE);
-  doc.text('TOTAL IN WORDS:', M + 3, y + 4.5);
-  doc.setFont('helvetica', 'italic');
-  doc.setFontSize(7.5);
-  doc.setTextColor(51, 65, 85);
-  const words = amountInWords(data.total);
-  doc.text(words, M + 36, y + 4.5);
-  y += 14;
-
-  // ── PAYMENT INSTRUCTIONS ───────────────────────────────────────────────────
-  doc.setFillColor(...LIGHT);
-  doc.setDrawColor(226, 232, 240);
-  doc.roundedRect(M, y, CW, 22, 1.5, 1.5, 'FD');
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7.5);
-  doc.setTextColor(...NAVY);
-  doc.text('PAYMENT INSTRUCTIONS', M + 4, y + 6);
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7.5);
-  doc.setTextColor(...SLATE);
-  doc.text('Please quote your invoice number when making payment.', M + 4, y + 11.5);
-  doc.text('Cash: Finance Office · CRDB Bank transfer · Mobile Money (M-Pesa / Airtel)', M + 4, y + 16);
-  doc.text(`For enquiries: finance@kilimanjaroschools.ac.tz  ·  +255 754 000 000`, M + 4, y + 20.5);
-  y += 28;
-
-  // ── SIGNATURES ─────────────────────────────────────────────────────────────
-  const sigW = (CW - 10) / 2;
-  doc.setDrawColor(...DARK);
-  doc.setLineWidth(0.5);
-  doc.line(M, y + 16, M + sigW, y + 16);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7.5);
-  doc.setTextColor(...SLATE);
-  doc.text('FINANCE OFFICER', M + sigW / 2, y + 19.5, { align: 'center' });
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(6.5);
-  doc.text('Authorized Signatory', M + sigW / 2, y + 23, { align: 'center' });
-
-  const s2x = M + sigW + 10;
-  doc.line(s2x, y + 16, s2x + sigW, y + 16);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7.5);
-  doc.setTextColor(...SLATE);
-  doc.text('PRINCIPAL / DIRECTOR', s2x + sigW / 2, y + 19.5, { align: 'center' });
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(6.5);
-  doc.text('School Stamp', s2x + sigW / 2, y + 23, { align: 'center' });
-  y += 30;
-
-  // VOID / CANCELLED watermark
-  if (['VOID', 'CANCELLED'].includes(data.status)) {
-    doc.saveGraphicsState();
-    doc.setGState(new (doc as any).GState({ opacity: 0.07 }));
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(80);
-    doc.setTextColor(220, 38, 38);
-    doc.text(data.status, PW / 2, 148, { align: 'center', angle: 45 });
-    doc.restoreGraphicsState();
-  }
-
-  // ── FOOTER ─────────────────────────────────────────────────────────────────
-  doc.setFillColor(248, 250, 252);
-  doc.setDrawColor(226, 232, 240);
-  doc.setLineWidth(0.3);
-  doc.rect(M, y, CW, 16, 'FD');
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7);
-  doc.setTextColor(148, 163, 184);
-  doc.text('This is an official computer-generated invoice of Kilimanjaro Schools.', PW / 2, y + 6, { align: 'center' });
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7);
-  doc.setTextColor(...NAVY);
-  doc.text(`Verify at: kilimanjaroschools.ac.tz/verify/${data.number}`, PW / 2, y + 11.5, { align: 'center' });
-
-  doc.save(`${data.number}.pdf`);
-}
+// ─── PDF downloads (drawn by the finance service with the school's own letterhead) ───
 
 type FinanceToastTone = 'success' | 'error' | 'info' | 'warning';
 
-export async function downloadInvoicePdf(invoice: {
-  id: string; number: string; student: string; registration?: string; guardian?: string;
-  className?: string; term?: string; dueDate?: string; status: string;
-  total: number; paid: number; outstanding: number;
-  lineItems?: Array<{ category?: string; amount: number; mandatory?: boolean }>;
-}, toastFn?: (msg: string, tone?: FinanceToastTone) => void): Promise<void> {
+async function saveServerPdf(path: string, fallbackName: string): Promise<void> {
+  const res = await api.get(path, { responseType: 'blob' });
+  const disposition = String(res.headers?.['content-disposition'] ?? '');
+  const name = /filename="?([^";]+)"?/i.exec(disposition)?.[1] ?? fallbackName;
+  const url = URL.createObjectURL(res.data as Blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = name;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
+export async function downloadInvoicePdf(invoice: { id: string; number: string }, toastFn?: (msg: string, tone?: FinanceToastTone) => void): Promise<void> {
   try {
-    await generateInvoicePdf({
-      number:      invoice.number,
-      student:     invoice.student,
-      registration: invoice.registration,
-      guardian:    invoice.guardian,
-      className:   invoice.className,
-      term:        invoice.term,
-      dueDate:     invoice.dueDate,
-      status:      invoice.status,
-      total:       invoice.total,
-      paid:        invoice.paid,
-      outstanding: invoice.outstanding,
-      lineItems:   invoice.lineItems,
-    });
+    await saveServerPdf(`/finance/invoices/${invoice.id}/pdf`, `invoice_${invoice.number}.pdf`);
     toastFn?.('Invoice PDF downloaded', 'success');
   } catch (e: any) {
-    console.error('Invoice PDF error:', e);
-    toastFn?.(e?.message ?? 'Failed to generate invoice PDF', 'error');
+    toastFn?.(e?.response?.data?.message ?? 'Could not download the invoice PDF', 'error');
   }
-}
-
-// ─── Receipt list ─────────────────────────────────────────────────────────────
-
-// ─── Receipt PDF generator ────────────────────────────────────────────────────
-
-interface ReceiptPdfData {
-  number: string;
-  studentName: string;
-  registrationNumber?: string;
-  className?: string;
-  amount: number;
-  method: string;
-  issuedAt: string;
-  paidAt?: string;
-  referenceNumber?: string | null;
-  bankName?: string;
-  status: string;
-  invoiceNumber?: string;
-  termName?: string;
-  dueDate?: string;
-  lineItems?: Array<{ feeCategoryName?: string; category?: string; amount: number; mandatory?: boolean }>;
-  outstandingBalance?: number;
-  issuedByName?: string;
-}
-
-async function generateReceiptPdf(data: ReceiptPdfData): Promise<void> {
-  const [{ jsPDF }, logo] = await Promise.all([import('jspdf'), getLogoBase64()]);
-  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-
-  const PW = 210;
-  const M  = 14;
-  const CW = PW - M * 2;
-
-  // ── colour palette ─────────────────────────────────────────────────────────
-  const NAVY  : [number,number,number] = [0,  51,  79];
-  const GOLD  : [number,number,number] = [213,154, 27];
-  const LIGHT : [number,number,number] = [248,250,252];
-  const SLATE : [number,number,number] = [100,116,139];
-  const DARK  : [number,number,number] = [15,  23, 42];
-  const WHITE : [number,number,number] = [255,255,255];
-  const GREEN : [number,number,number] = [16, 185,129];
-  const VOID_C: [number,number,number] = [100,116,139];
-
-  const isPaid = data.status !== 'VOID';
-  const statusColor: [number,number,number] = isPaid ? GREEN : VOID_C;
-
-  // ── HEADER BAND ────────────────────────────────────────────────────────────
-  doc.setFillColor(...NAVY);
-  doc.rect(0, 0, PW, 46, 'F');
-
-  // School logo or fallback KS badge
-  if (logo) {
-    doc.addImage(logo, 'PNG', M, 7, 28, 28, undefined, 'FAST');
-  } else {
-    doc.setDrawColor(...GOLD);
-    doc.setLineWidth(0.8);
-    doc.circle(M + 9, 23, 9, 'D');
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(10);
-    doc.setTextColor(...GOLD);
-    doc.text('KS', M + 9, 21.5, { align: 'center' });
-    doc.setFontSize(5);
-    doc.setTextColor(...WHITE);
-    doc.text('SCHOOLS', M + 9, 27, { align: 'center' });
-  }
-
-  // School name + details
-  const textX = M + 32;
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(14);
-  doc.setTextColor(...WHITE);
-  doc.text('Kilimanjaro Schools', textX, 17);
-  doc.setFont('helvetica', 'italic');
-  doc.setFontSize(8);
-  doc.setTextColor(...GOLD);
-  doc.text('Excellence in Education Since 2003', textX, 22);
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7);
-  doc.setTextColor(200, 220, 230);
-  doc.text('P.O. Box 4502, Moshi, Kilimanjaro, Tanzania  ·  Tel: +255 754 000 000', textX, 27);
-  doc.text('finance@kilimanjaroschools.ac.tz', textX, 31);
-
-  // Receipt label + number (top-right)
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7);
-  doc.setTextColor(160, 200, 220);
-  doc.text('OFFICIAL RECEIPT', PW - M, 14, { align: 'right' });
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(16);
-  doc.setTextColor(...WHITE);
-  doc.text(data.number, PW - M, 23, { align: 'right' });
-
-  // Status badge
-  doc.setFillColor(...statusColor);
-  doc.roundedRect(PW - M - 34, 27, 34, 8, 1.5, 1.5, 'F');
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7);
-  doc.setTextColor(...WHITE);
-  doc.text(isPaid ? '✓  ACTIVE' : '✗  VOID', PW - M - 17, 32.3, { align: 'center' });
-
-  // ── GOLD STRIPE ────────────────────────────────────────────────────────────
-  doc.setFillColor(...GOLD);
-  doc.rect(0, 46, PW, 2, 'F');
-
-  // ── 3-COLUMN INFO GRID ─────────────────────────────────────────────────────
-  let y = 56;
-  const col = CW / 3;
-
-  const drawSection = (title: string, lines: string[], cx: number, cy: number) => {
-    doc.setDrawColor(...GOLD);
-    doc.setLineWidth(0.5);
-    doc.line(M + cx, cy, M + cx, cy + 2 + lines.length * 4.5);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(6.5);
-    doc.setTextColor(...SLATE);
-    doc.text(title.toUpperCase(), M + cx + 3, cy + 1.5);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9);
-    doc.setTextColor(...DARK);
-    lines.forEach((line, i) => {
-      if (i === 0) { doc.setFont('helvetica', 'bold'); doc.setFontSize(10); }
-      else { doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(...SLATE); }
-      doc.text(line, M + cx + 3, cy + 7 + i * 5);
-    });
-  };
-
-  const col1Lines = [data.studentName];
-  if (data.registrationNumber) col1Lines.push(`Reg: ${data.registrationNumber}`);
-  if (data.className) col1Lines.push(data.className);
-  drawSection('Received From', col1Lines, 0, y);
-
-  const col2Lines = [data.invoiceNumber ?? '—'];
-  if (data.termName) col2Lines.push(data.termName);
-  if (data.dueDate) col2Lines.push(`Due: ${formatDate(data.dueDate)}`);
-  drawSection('Invoice Details', col2Lines, col, y);
-
-  const methodLabel = (data.method ?? '').replace(/_/g, ' ');
-  const col3Lines = [methodLabel, formatDate(data.paidAt ?? data.issuedAt)];
-  if (data.bankName) col3Lines.push(data.bankName);
-  if (data.referenceNumber) col3Lines.push(`Ref: ${data.referenceNumber}`);
-  drawSection('Payment Method', col3Lines, col * 2, y);
-
-  y += 38;
-
-  // ── DASHED SEPARATOR ───────────────────────────────────────────────────────
-  doc.setDrawColor(220, 225, 235);
-  doc.setLineWidth(0.3);
-  doc.setLineDashPattern([2, 2], 0);
-  doc.line(M, y, PW - M, y);
-  doc.setLineDashPattern([], 0);
-  y += 8;
-
-  // ── FEE BREAKDOWN TABLE ────────────────────────────────────────────────────
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7);
-  doc.setTextColor(...SLATE);
-  doc.text('FEE BREAKDOWN', M, y);
-  y += 4;
-
-  const items = (data.lineItems ?? []).map((it) => ({
-    name: (it.feeCategoryName ?? it.category ?? 'School Fees'),
-    amount: it.amount,
-    mandatory: it.mandatory ?? true,
-  }));
-  if (items.length === 0) items.push({ name: 'School Fees', amount: data.amount, mandatory: true });
-
-  const COL_AMT = 50;
-  const COL_BADGE = 22;
-  const tableLeft = M;
-  const tableRight = PW - M;
-  const rowH = 8;
-
-  // Table header
-  doc.setFillColor(0, 51, 79);
-  doc.rect(tableLeft, y, CW, rowH, 'F');
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7.5);
-  doc.setTextColor(...WHITE);
-  doc.text('DESCRIPTION', tableLeft + 3, y + 5.2);
-  doc.text('TYPE', tableRight - COL_AMT - COL_BADGE + 3, y + 5.2);
-  doc.text('AMOUNT (TZS)', tableRight - 3, y + 5.2, { align: 'right' });
-  y += rowH;
-
-  // Rows
-  items.forEach((item, i) => {
-    doc.setFillColor(...(i % 2 === 0 ? WHITE : LIGHT));
-    doc.rect(tableLeft, y, CW, rowH, 'F');
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8.5);
-    doc.setTextColor(...DARK);
-    doc.text(item.name, tableLeft + 3, y + 5.2);
-    // type badge
-    const bx = tableRight - COL_AMT - COL_BADGE + 2;
-    doc.setFillColor(...(item.mandatory ? [0,51,79] : [213,154,27]) as [number,number,number]);
-    doc.roundedRect(bx, y + 1.5, COL_BADGE - 4, 5, 1, 1, 'F');
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(6);
-    doc.setTextColor(...WHITE);
-    doc.text(item.mandatory ? 'MANDATORY' : 'OPTIONAL', bx + (COL_BADGE - 4) / 2, y + 5, { align: 'center' });
-    // amount
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8.5);
-    doc.setTextColor(...DARK);
-    doc.text(formatTZS(item.amount), tableRight - 3, y + 5.2, { align: 'right' });
-    y += rowH;
-  });
-
-  // Total row
-  doc.setFillColor(...NAVY);
-  doc.rect(tableLeft, y, CW, rowH + 1, 'F');
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9);
-  doc.setTextColor(...WHITE);
-  doc.text('TOTAL AMOUNT RECEIVED', tableLeft + 3, y + 6);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
-  doc.setTextColor(...GOLD);
-  doc.text(formatTZS(data.amount), tableRight - 3, y + 6, { align: 'right' });
-  y += rowH + 5;
-
-  // Amount in words
-  doc.setFillColor(255, 251, 235);
-  doc.setDrawColor(213, 154, 27);
-  doc.setLineWidth(0.3);
-  doc.roundedRect(M, y, CW, 10, 1.5, 1.5, 'FD');
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7);
-  doc.setTextColor(...SLATE);
-  doc.text('AMOUNT IN WORDS:', M + 3, y + 4.5);
-  doc.setFont('helvetica', 'italic');
-  doc.setFontSize(8);
-  doc.setTextColor(51, 65, 85);
-  doc.text(amountInWords(data.amount), M + 40, y + 4.5);
-  y += 14;
-
-  // Remaining balance
-  if (data.outstandingBalance !== undefined) {
-    const cleared = data.outstandingBalance <= 0;
-    doc.setFillColor(...(cleared ? [240,253,244] : [255,251,235]) as [number,number,number]);
-    doc.setDrawColor(...(cleared ? [16,185,129] : [213,154,27]) as [number,number,number]);
-    doc.setLineWidth(0.3);
-    doc.roundedRect(M, y, CW, 10, 1.5, 1.5, 'FD');
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8);
-    doc.setTextColor(...SLATE);
-    doc.text('Remaining balance after this payment:', M + 3, y + 6.2);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
-    doc.setTextColor(...(cleared ? GREEN : GOLD));
-    doc.text(
-      cleared ? 'TZS 0  ·  Invoice Fully Cleared ✓' : formatTZS(Math.max(0, data.outstandingBalance)),
-      PW - M - 3, y + 6.2, { align: 'right' },
-    );
-    y += 14;
-  }
-
-  // ── DASHED SEPARATOR ───────────────────────────────────────────────────────
-  doc.setDrawColor(220, 225, 235);
-  doc.setLineWidth(0.3);
-  doc.setLineDashPattern([2, 2], 0);
-  doc.line(M, y, PW - M, y);
-  doc.setLineDashPattern([], 0);
-  y += 8;
-
-  // ── SIGNATURE SECTION ──────────────────────────────────────────────────────
-  const sigW = (CW - 10) / 3;
-  // QR placeholder box
-  doc.setDrawColor(220, 225, 235);
-  doc.setLineWidth(0.3);
-  doc.rect(M, y, sigW, 22, 'D');
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(6.5);
-  doc.setTextColor(...SLATE);
-  doc.text('SCAN TO VERIFY', M + sigW / 2, y + 18, { align: 'center' });
-  doc.setFontSize(16);
-  doc.text('▦', M + sigW / 2, y + 11, { align: 'center' });
-
-  // Finance Officer signature
-  const sig1x = M + sigW + 5;
-  doc.setDrawColor(...DARK);
-  doc.setLineWidth(0.5);
-  doc.line(sig1x, y + 19, sig1x + sigW, y + 19);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7.5);
-  doc.setTextColor(...SLATE);
-  doc.text('FINANCE OFFICER', sig1x + sigW / 2, y + 22.5, { align: 'center' });
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(6.5);
-  doc.text('Signature & Date', sig1x + sigW / 2, y + 26, { align: 'center' });
-
-  // Principal signature
-  const sig2x = sig1x + sigW + 5;
-  doc.setDrawColor(...DARK);
-  doc.line(sig2x, y + 19, sig2x + sigW, y + 19);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7.5);
-  doc.setTextColor(...SLATE);
-  doc.text('AUTHORISED SIGNATORY', sig2x + sigW / 2, y + 22.5, { align: 'center' });
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(6.5);
-  doc.text('Principal / Director', sig2x + sigW / 2, y + 26, { align: 'center' });
-
-  y += 33;
-
-  // VOID watermark
-  if (!isPaid) {
-    doc.saveGraphicsState();
-    doc.setGState(new (doc as any).GState({ opacity: 0.08 }));
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(72);
-    doc.setTextColor(220, 38, 38);
-    doc.text('VOID', PW / 2, 148, { align: 'center', angle: 45 });
-    doc.restoreGraphicsState();
-  }
-
-  // ── FOOTER ─────────────────────────────────────────────────────────────────
-  doc.setFillColor(248, 250, 252);
-  doc.setDrawColor(226, 232, 240);
-  doc.setLineWidth(0.3);
-  doc.rect(M, y, CW, 16, 'FD');
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7);
-  doc.setTextColor(148, 163, 184);
-  doc.text(
-    'This is a computer-generated official receipt of Kilimanjaro Schools. Valid without a physical signature.',
-    PW / 2, y + 6, { align: 'center' },
-  );
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7);
-  doc.setTextColor(...NAVY);
-  doc.text(
-    `Verify authenticity at: kilimanjaroschools.ac.tz/verify/${data.number}`,
-    PW / 2, y + 11.5, { align: 'center' },
-  );
-
-  doc.save(`${data.number}.pdf`);
 }
 
 export async function downloadReceiptPdf(receiptId: string, toast?: (msg: string, tone?: FinanceToastTone) => void): Promise<void> {
   try {
-    const raw = await api.get(`/finance/receipts/${receiptId}`).then((r) => {
-      const d = r.data?.data ?? r.data;
-      return d as Record<string, unknown>;
-    });
-
-    const lineItems = Array.isArray((raw as any).invoice?.lineItems)
-      ? (raw as any).invoice.lineItems
-      : Array.isArray((raw as any).lineItems) ? (raw as any).lineItems : [];
-
-    await generateReceiptPdf({
-      number:              String(raw.receiptNumber ?? raw.number ?? receiptId),
-      studentName:         String(raw.studentName ?? raw.student ?? 'Student'),
-      registrationNumber:  raw.registrationNumber ? String(raw.registrationNumber) : undefined,
-      className:           raw.className ? String(raw.className) : undefined,
-      amount:              Number(raw.amount ?? 0),
-      method:              String(raw.method ?? raw.paymentMethod ?? ''),
-      issuedAt:            String(raw.issuedAt ?? raw.createdAt ?? new Date().toISOString()),
-      paidAt:              raw.paidAt ? String(raw.paidAt) : undefined,
-      referenceNumber:     raw.referenceNumber ? String(raw.referenceNumber) : null,
-      status:              (raw.isVoided || raw.status === 'VOID') ? 'VOID' : 'ACTIVE',
-      invoiceNumber:       raw.invoiceNumber ? String(raw.invoiceNumber) : undefined,
-      termName:            raw.termName ? String(raw.termName) : undefined,
-      lineItems,
-      outstandingBalance:  raw.outstandingBalance !== undefined ? Number(raw.outstandingBalance) : undefined,
-    });
+    await saveServerPdf(`/finance/receipts/${receiptId}/pdf`, 'receipt.pdf');
     toast?.('Receipt downloaded', 'success');
   } catch (e: any) {
-    console.error('Receipt PDF error:', e);
-    toast?.(e?.response?.data?.message ?? 'Failed to generate receipt PDF', 'error');
+    toast?.(e?.response?.data?.message ?? 'Could not download the receipt PDF', 'error');
   }
 }
 
@@ -1233,7 +579,7 @@ export function ReceiptList({ rows, onDownloadPdf }: { rows: Receipt[]; onDownlo
   return (
     <FinanceTable columns={['Receipt #', 'Payment', 'Student', 'Amount', 'Method', 'Issued', 'Status', '']} minWidth={920}>
       {rows.map((receipt) => {
-        const railColor = receipt.status === 'VOID' ? '#64748b' : '#10b981';
+        const railColor = statusRail(receipt.status);
         return (
           <tr
             key={receipt.id}
@@ -1245,7 +591,11 @@ export function ReceiptList({ rows, onDownloadPdf }: { rows: Receipt[]; onDownlo
                 {receipt.number}
               </NavLink>
             </Td>
-            <Td className="font-mono text-[11px] text-[#94a3b8]">{receipt.paymentId?.slice(0, 8)}…</Td>
+            <Td className="font-mono text-[11px] text-[#64748b]">
+              {receipt.paymentId ? (
+                <NavLink className="hover:underline" to={`/finance/payments/${receipt.paymentId}`}>{receipt.paymentNumber || 'View payment'}</NavLink>
+              ) : '—'}
+            </Td>
             <Td>{receipt.student}</Td>
             <Td amount>
               <AmountDisplay amount={receipt.amount} tone={receipt.status === 'VOID' ? 'void' : 'paid'} />
@@ -1267,202 +617,6 @@ export function ReceiptList({ rows, onDownloadPdf }: { rows: Receipt[]; onDownlo
         );
       })}
     </FinanceTable>
-  );
-}
-
-// ─── Payment form ─────────────────────────────────────────────────────────────
-
-export function PaymentForm({ method, invoices, references }: { method: 'cash' | 'bank'; invoices: Invoice[]; references: string[] }) {
-  const sessionUser = useAuthStore((state) => state.session?.user?.name ?? 'Finance Officer');
-  const selectedInvoice = invoices.find((i) => i.outstanding > 0) ?? invoices[0];
-  const [amountText, setAmountText] = useState('400000');
-  const [reference, setReference] = useState(method === 'bank' ? 'CRDB-8841' : '');
-  const [confirmed, setConfirmed] = useState(false);
-  const [evidenceFile, setEvidenceFile] = useState<UploadedFile | null>(null);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const uploadMutation = useFileUploadMutation();
-  const amount = parseTZSInput(amountText);
-  const overpay = isOverpayment(amount, selectedInvoice.outstanding);
-  const missingReference = method === 'bank' && !reference.trim();
-  const duplicateReference = method === 'bank' && duplicateReferenceWarning(reference, references);
-  const blocked = amount <= 0 || missingReference || (overpay && !confirmed);
-
-  const handleEvidenceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const err = validateFile(file);
-    if (err) { setUploadError(err); return; }
-    setUploadError(null);
-    uploadMutation.mutate(file, {
-      onSuccess: (result) => setEvidenceFile(result.file),
-      onError: (err) => setUploadError(err instanceof Error ? err.message : 'Upload failed'),
-    });
-  };
-
-  return (
-    <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_380px]">
-      {/* ── Form ── */}
-      <div className="rounded-lg border border-[#d5dde6] bg-white">
-        <div className="flex items-center gap-3 border-b border-[#d5dde6] bg-[#f7f9fb] px-5 py-4">
-          <WalletCards className="h-5 w-5 text-[#00334f]" />
-          <div>
-            <h2 className="font-display text-xl font-black text-[#00334f]">
-              Record {method === 'bank' ? 'Bank Transfer' : 'Cash Payment'}
-            </h2>
-            <p className="text-sm font-semibold text-[#64748b]">
-              Validation-first entry · Approval trail attached
-            </p>
-          </div>
-        </div>
-        <div className="p-5">
-          <div className="grid gap-4 md:grid-cols-2">
-            <Field label="Invoice Search" value={`${selectedInvoice.number} – ${selectedInvoice.student}`} />
-            <Field label="Payer / Guardian" value={selectedInvoice.guardian} />
-            <label className="block">
-              <span className="text-[10px] font-black uppercase tracking-widest text-[#64748b]">Amount (TZS)</span>
-              <div className="relative mt-2">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-black text-[#94a3b8]">TZS</span>
-                <input
-                  value={amountText}
-                  onChange={(e) => setAmountText(e.target.value)}
-                  className="h-11 w-full rounded border border-[#d5dde6] pl-12 pr-3 font-mono font-black outline-none focus:border-[#00334f] focus:ring-2 focus:ring-[#00334f]/10"
-                />
-              </div>
-            </label>
-            <Field label="Payment Date" value="May 21, 2026" />
-            {method === 'bank' ? (
-              <>
-                <Field label="Bank Name" value="CRDB Bank" />
-                <label className="block">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-[#64748b]">Reference Number</span>
-                  <input
-                    value={reference}
-                    onChange={(e) => setReference(e.target.value)}
-                    className="mt-2 h-11 w-full rounded border border-[#d5dde6] px-3 font-mono font-black outline-none focus:border-[#00334f] focus:ring-2 focus:ring-[#00334f]/10"
-                    placeholder="e.g. CRDB-XXXXXXX"
-                  />
-                </label>
-                {/* ── Bank slip / evidence upload ── */}
-                <div className="md:col-span-2">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-[#64748b]">Bank Slip / Evidence</span>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp,application/pdf"
-                    className="hidden"
-                    onChange={handleEvidenceChange}
-                  />
-                  {evidenceFile ? (
-                    <div className="mt-2 flex items-center gap-3 rounded border border-[#10b981]/30 bg-[#10b981]/5 px-3 py-2">
-                      <CheckCircle2 className="h-4 w-4 shrink-0 text-[#10b981]" />
-                      <div className="min-w-0">
-                        <p className="truncate text-xs font-black text-[#00334f]">{evidenceFile.originalName}</p>
-                        <p className="text-[10px] font-semibold text-[#64748b]">{(evidenceFile.sizeBytes / 1024).toFixed(0)} KB · uploaded</p>
-                      </div>
-                      <button type="button" onClick={() => setEvidenceFile(null)} className="ml-auto shrink-0 text-[10px] font-black text-[#e11d48] hover:underline">Remove</button>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={uploadMutation.isPending}
-                      className="mt-2 flex w-full items-center justify-center gap-2 rounded border-2 border-dashed border-[#d5dde6] bg-[#f7f9fb] py-3 text-xs font-black text-[#64748b] transition hover:border-[#00334f] hover:text-[#00334f] disabled:opacity-50"
-                    >
-                      <TrendingUp className="h-4 w-4" />
-                      {uploadMutation.isPending ? 'Uploading…' : 'Upload bank slip or receipt (JPEG, PNG, PDF)'}
-                    </button>
-                  )}
-                  {uploadError && <p className="mt-1 text-[11px] font-black text-[#e11d48]">{uploadError}</p>}
-                </div>
-              </>
-            ) : (
-              <>
-                <Field label="Received By" value={sessionUser} />
-                <Field label="Cash Drawer" value="FD-02 / Morning Session" />
-              </>
-            )}
-          </div>
-          <textarea
-            className="mt-4 h-24 w-full rounded border border-[#d5dde6] p-3 text-sm font-semibold text-[#334155] outline-none focus:border-[#00334f]"
-            defaultValue="Payment captured from finance desk. Receipt awaits approval if workflow requires."
-          />
-          <div className="mt-4 space-y-2">
-            {overpay && <Warning text={`Amount exceeds outstanding balance by ${formatTZS(amount - selectedInvoice.outstanding)}. Confirmation required.`} />}
-            {missingReference && <Warning text="Bank reference number is required before submission." />}
-            {duplicateReference && <Warning text="Duplicate bank reference detected. Verify statement before submitting." />}
-          </div>
-          {overpay && (
-            <label className="mt-4 flex items-center gap-2 text-sm font-bold text-[#00334f]">
-              <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} className="h-4 w-4 accent-[#00334f]" />
-              I confirm this overpayment should be accepted for review.
-            </label>
-          )}
-          <Button disabled={blocked} className="mt-5 rounded bg-[#00334f] hover:bg-[#001e30] hover:shadow-none disabled:opacity-50">
-            <CheckCircle2 className="h-4 w-4" /> Submit for Posting
-          </Button>
-        </div>
-      </div>
-
-      {/* ── Invoice summary ── */}
-      <InvoiceSummary invoice={selectedInvoice} amount={amount} />
-    </div>
-  );
-}
-
-function Field({ label, value }: { label: string; value: string }) {
-  return (
-    <label className="block">
-      <span className="text-[10px] font-black uppercase tracking-widest text-[#64748b]">{label}</span>
-      <input
-        className="mt-2 h-11 w-full rounded border border-[#d5dde6] bg-[#f7f9fb] px-3 font-semibold text-[#334155] outline-none focus:border-[#00334f] focus:bg-white focus:ring-2 focus:ring-[#00334f]/10"
-        defaultValue={value}
-      />
-    </label>
-  );
-}
-
-function Warning({ text }: { text: string }) {
-  return (
-    <div className="flex items-start gap-2 rounded border border-[#e11d48]/30 bg-[#e11d48]/5 px-3 py-2 text-xs font-black text-[#e11d48]">
-      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" /> {text}
-    </div>
-  );
-}
-
-function InvoiceSummary({ invoice, amount }: { invoice: Invoice; amount: number }) {
-  return (
-    <div className="sticky top-24 h-fit rounded-lg border border-[#d5dde6] bg-white">
-      <div className="border-b border-[#d5dde6] bg-[#f7f9fb] px-5 py-4">
-        <p className="text-[10px] font-black uppercase tracking-widest text-[#64748b]">Selected Invoice</p>
-        <h3 className="mt-1 font-display text-2xl font-black text-[#00334f]">{invoice.number}</h3>
-        <p className="text-sm font-bold text-[#64748b]">{invoice.student} · {invoice.className}</p>
-      </div>
-      <div className="p-5">
-        <div className="space-y-3">
-          <SummaryLine label="Invoice total"  value={formatTZS(invoice.total)}       />
-          <SummaryLine label="Already paid"   value={formatTZS(invoice.paid)}        good />
-          <SummaryLine label="Outstanding"    value={formatTZS(invoice.outstanding)} danger />
-          <div className="border-t border-[#e2e8f0] pt-3">
-            <SummaryLine label="This payment" value={formatTZS(amount)} />
-          </div>
-        </div>
-        <div className="mt-5 rounded border-l-4 border-[#00334f] bg-[#f7f9fb] p-3 text-xs font-bold text-[#64748b]">
-          Finance officers can enter payments but cannot approve their own entries. Approval is delegated to Principal or Managing Director.
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function SummaryLine({ label, value, good = false, danger = false }: { label: string; value: string; good?: boolean; danger?: boolean }) {
-  return (
-    <div className="flex items-center justify-between gap-4">
-      <span className="text-sm font-bold text-[#64748b]">{label}</span>
-      <span className={`font-mono font-black tabular-nums ${good ? 'text-[#10b981]' : danger ? 'text-[#e11d48]' : 'text-[#0f172a]'}`}>
-        {value}
-      </span>
-    </div>
   );
 }
 
@@ -1544,12 +698,17 @@ export function ReceiptPreview({
   receipt,
   payment,
   invoice,
+  school,
 }: {
   receipt: Receipt;
   payment?: Partial<Payment> & { bankName?: string };
   invoice?: Invoice;
+  school?: { name: string; motto?: string | null; address?: string | null; phone?: string | null; email?: string | null } | null;
 }) {
   const isPaid = receipt.status !== 'VOID';
+  const schoolName = school?.name ?? 'School';
+  const initials = schoolName.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
+  const contactLine = [school?.address, school?.phone].filter(Boolean).join(' · ');
   const invoiceNum  = payment?.invoiceNumber ?? '—';
   const term        = invoice?.term ?? '—';
   const className   = invoice?.className ?? '';
@@ -1569,17 +728,13 @@ export function ReceiptPreview({
           {/* School identity */}
           <div className="flex items-center gap-4">
             <div className="flex h-16 w-16 shrink-0 flex-col items-center justify-center rounded-full border-2 border-[#d59a1b] bg-white/10">
-              <span className="font-display text-xl font-black leading-none text-[#d59a1b]">KS</span>
-              <div className="my-1 h-px w-8 bg-[#d59a1b]/50" />
-              <span className="text-[7px] font-black uppercase tracking-widest text-white/70">SCHOOLS</span>
+              <span className="font-display text-xl font-black leading-none text-[#d59a1b]">{initials || 'KS'}</span>
             </div>
             <div>
-              <h1 className="font-display text-xl font-black text-white">Kilimanjaro Schools</h1>
-              <p className="text-[11px] font-semibold italic text-[#d59a1b]/90">Excellence in Education Since 2003</p>
-              <p className="mt-0.5 text-[10px] font-semibold text-white/55">
-                P.O. Box 4502, Moshi, Kilimanjaro, Tanzania · Tel: +255 754 000 000
-              </p>
-              <p className="text-[10px] font-semibold text-white/55">finance@kilimanjaroschools.ac.tz</p>
+              <h1 className="font-display text-xl font-black text-white">{schoolName}</h1>
+              {school?.motto ? <p className="text-[11px] font-semibold italic text-[#d59a1b]/90">{school.motto}</p> : null}
+              {contactLine ? <p className="mt-0.5 text-[10px] font-semibold text-white/55">{contactLine}</p> : null}
+              {school?.email ? <p className="text-[10px] font-semibold text-white/55">{school.email}</p> : null}
             </div>
           </div>
           {/* Receipt number + status stamp */}
@@ -1628,7 +783,7 @@ export function ReceiptPreview({
 
         {/* Fee breakdown */}
         <div>
-          <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-[#64748b]">Fee Breakdown</p>
+          <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-[#64748b]">Invoice fee breakdown</p>
           <div className="overflow-hidden rounded-lg border border-[#e2e8f0]">
             {lineItems.length > 0 ? (
               lineItems.map((item, i) => (
@@ -1683,12 +838,10 @@ export function ReceiptPreview({
 
         {/* Signature + QR row */}
         <div className="grid grid-cols-3 items-end gap-6">
-          {/* QR placeholder */}
+          {/* Stamp space */}
           <div className="flex flex-col items-center gap-1.5">
-            <div className="flex h-16 w-16 items-center justify-center rounded-lg border border-[#d5dde6] bg-[#f8fafc]">
-              <QrCode className="h-10 w-10 text-[#64748b]" />
-            </div>
-            <p className="text-center text-[9px] font-semibold text-[#94a3b8]">Scan to verify</p>
+            <div className="flex h-16 w-full items-center justify-center rounded-lg border-2 border-dashed border-[#d5dde6]" />
+            <p className="text-center text-[9px] font-semibold text-[#94a3b8]">School stamp</p>
           </div>
           <div className="flex flex-col items-center">
             <div className="mb-2 w-full border-b-2 border-[#334155]" />
@@ -1705,11 +858,7 @@ export function ReceiptPreview({
         {/* Footer */}
         <div className="mt-6 rounded-lg border border-[#e2e8f0] bg-[#f8fafc] px-5 py-3 text-center">
           <p className="text-[10px] font-semibold text-[#94a3b8]">
-            This is a computer-generated official receipt of Kilimanjaro Schools. Valid without a physical signature.
-          </p>
-          <p className="mt-0.5 text-[10px] font-semibold text-[#94a3b8]">
-            Verify authenticity at:{' '}
-            <span className="font-black text-[#00334f]">kilimanjaroschools.ac.tz/verify/{receipt.number}</span>
+            This is a computer-generated official receipt of {schoolName}. Valid without a physical signature.
           </p>
         </div>
       </div>
