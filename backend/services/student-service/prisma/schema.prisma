@@ -564,6 +564,26 @@ model Department {
   @@schema("students")
 }
 
+/// Immutable record of a high-impact roster lifecycle action. The JSON payload
+/// stores the verified impact snapshot and the final outcome for audit review.
+model StudentLifecycleOperation {
+  id            String   @id @default(uuid())
+  schoolId      String?
+  classId       String?
+  action        String
+  actorId       String
+  reason        String
+  targetCount   Int
+  impact        Json
+  outcome       Json
+  createdAt     DateTime @default(now())
+
+  @@index([schoolId, createdAt])
+  @@index([classId, createdAt])
+  @@index([actorId, createdAt])
+  @@schema("students")
+}
+
 model DepartmentHod {
   id             String     @id @default(uuid())
   departmentId   String

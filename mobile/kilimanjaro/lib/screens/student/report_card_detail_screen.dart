@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/providers/auth_provider.dart';
+import '../../core/providers/notification_provider.dart';
 import '../../core/providers/student_provider.dart';
 import '../../widgets/common/ks_empty_state.dart';
 import '../../widgets/common/ks_shimmer_list.dart';
@@ -19,14 +19,10 @@ class ReportCardDetailScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final cardAsync = ref.watch(reportCardByIdProvider(termId));
     final termAsync = ref.watch(termByIdProvider(termId));
-    final authState = ref.watch(authControllerProvider);
+    final user = ref.watch(currentUserProvider).valueOrNull;
 
-    final studentName = authState is AuthAuthenticated
-        ? authState.user.name
-        : 'Student';
-    final registrationNumber = authState is AuthAuthenticated
-        ? (authState.user.registrationNumber ?? '')
-        : '';
+    final studentName = user?.name ?? 'Student';
+    final registrationNumber = user?.registrationNumber ?? '';
 
     return Scaffold(
       body: cardAsync.when(
@@ -67,7 +63,7 @@ class ReportCardDetailScreen extends ConsumerWidget {
                       overallGrade: card.overallGrade,
                       rank: card.rank,
                       totalStudents: card.totalStudents,
-                      generatedAt: formatShortDate(DateTime(2026, 3, 21)),
+                      generatedAt: formatShortDate(DateTime.now()),
                       subjectRows: term.subjects
                           .map(
                             (subject) => ReportCardSubjectRow(

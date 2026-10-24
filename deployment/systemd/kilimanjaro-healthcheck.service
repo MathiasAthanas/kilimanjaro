@@ -1,0 +1,8 @@
+[Unit]
+Description=Kilimanjaro backend health watchdog
+After=network-online.target pm2-kilimanjaro.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/kilimanjaro-healthcheck

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/network/api_failure.dart';
+import '../../core/providers/notification_provider.dart';
 import '../../core/providers/snackbar_provider.dart';
 import '../../core/providers/teacher_provider.dart';
 import '../../core/theme/app_colors.dart';
@@ -24,14 +26,18 @@ class TeacherHomeScreen extends ConsumerWidget {
     final sessions = ref.watch(teacherAttendanceSessionsProvider);
     final alerts = ref.watch(teacherAlertsProvider);
     final pairings = ref.watch(teacherPairingsProvider);
+    final user = ref.watch(currentUserProvider).valueOrNull;
     final openAssessments = assessments
         .where((item) => item.status == TeacherAssessmentStatus.open)
         .toList();
+    final subjects = classes.map((c) => c.subject).where((s) => s.isNotEmpty).toSet().take(3);
 
     return Scaffold(
       appBar: KSAppBar(
-        title: 'Mwalimu Rose',
-        subtitle: 'Mathematics · Physics — Form 2 & 3',
+        title: user != null ? 'Hi ${user.name.split(' ').first}' : 'Teacher Home',
+        subtitle: subjects.isEmpty
+            ? 'Your classes, marks and attendance'
+            : '${subjects.join(' · ')} — ${classes.length} classes',
         showBack: false,
         variant: KSAppBarVariant.hero,
         actions: [
@@ -189,7 +195,7 @@ class ClassDetailScreen extends ConsumerWidget {
     return Scaffold(
       appBar: KSAppBar(
         title: item.title,
-        subtitle: '${item.studentCount} students · next ${item.nextLesson}',
+        subtitle: item.nextLesson.isEmpty ? '${item.studentCount} students' : '${item.studentCount} students · next ${item.nextLesson}',
         variant: KSAppBarVariant.hero,
         actions: [
           IconButton(
@@ -462,7 +468,7 @@ class _KSNumpadState extends State<KSNumpad> {
     final invalid = parsed != null && parsed > widget.maxScore;
     return SafeArea(
       child: SizedBox(
-        height: 380,
+        height: 460,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
           child: Column(
@@ -510,7 +516,7 @@ class _KSNumpadState extends State<KSNumpad> {
                   crossAxisCount: 3,
                   mainAxisSpacing: 8,
                   crossAxisSpacing: 8,
-                  childAspectRatio: 1.65,
+                  childAspectRatio: 2.2,
                   children:
                       [
                         '7',
@@ -1027,9 +1033,18 @@ class _AttendanceMarkingScreenState
                 ? 'Save Attendance — ${session.title}'
                 : 'Mark all students to save ($marked / ${students.length})',
             onPressed: allMarked
-                ? () => ref
-                    .read(snackbarProvider.notifier)
-                    .show('Attendance saved for ${session.title}.')
+                ? () async {
+                    final snackbar = ref.read(snackbarProvider.notifier);
+                    try {
+                      await ref
+                          .read(teacherAttendanceControllerProvider.notifier)
+                          .submitAttendance(session.id, session.classSubjectId);
+                      refreshTeacherAttendanceSessions(ref);
+                      snackbar.show('Attendance saved for ${session.title}.');
+                    } catch (e) {
+                      snackbar.show(ApiFailure.from(e).message);
+                    }
+                  }
                 : null,
           ),
         ],
@@ -1385,16 +1400,33 @@ class TeacherAnnouncementsListScreen extends ConsumerWidget {
   }
 }
 
-class CreateAnnouncementScreen extends StatefulWidget {
-  const CreateAnnouncementScreen({super.key});
+class CreateAnnouncementScreen extends ConsumerStatefulWidget {
+  const CreateAnnouncementScreen({super.key, this.asHod = false});
+
+  /// When true the composer posts under HOD context (same endpoint, wider
+  /// default audience). Purely a UI hint; the backend authorizes by role.
+  final bool asHod;
+
   @override
-  State<CreateAnnouncementScreen> createState() =>
+  ConsumerState<CreateAnnouncementScreen> createState() =>
       _CreateAnnouncementScreenState();
 }
 
-class _CreateAnnouncementScreenState extends State<CreateAnnouncementScreen> {
+class _CreateAnnouncementScreenState
+    extends ConsumerState<CreateAnnouncementScreen> {
   final _title = TextEditingController();
   final _body = TextEditingController();
+  final Set<String> _roles = {'STUDENT', 'PARENT'};
+  bool _alsoPush = true;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _title.addListener(() => setState(() {}));
+    _body.addListener(() => setState(() {}));
+  }
+
   @override
   void dispose() {
     _title.dispose();
@@ -1402,8 +1434,42 @@ class _CreateAnnouncementScreenState extends State<CreateAnnouncementScreen> {
     super.dispose();
   }
 
+  bool get _canPublish =>
+      _title.text.trim().isNotEmpty &&
+      _body.text.trim().isNotEmpty &&
+      _roles.isNotEmpty &&
+      !_saving;
+
+  Future<void> _publish() async {
+    setState(() => _saving = true);
+    final data = <String, dynamic>{
+      'title': _title.text.trim(),
+      'body': _body.text.trim(),
+      'targetRoles': _roles.toList(),
+      'channels': ['IN_APP', if (_alsoPush) 'PUSH'],
+    };
+    try {
+      final service = ref.read(teacherServiceProvider);
+      if (service == null) throw Exception('Sign in to publish.');
+      await service.createAnnouncement(data);
+      if (!mounted) return;
+      ref.read(snackbarProvider.notifier).show('Announcement published.');
+      context.pop();
+    } catch (e) {
+      if (!mounted) return;
+      ref.read(snackbarProvider.notifier).show(ApiFailure.from(e).message);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final audiences = <(String, String, Color)>[
+      ('STUDENT', 'Students', AppColors.skyBlue600),
+      ('PARENT', 'Parents', AppColors.accentAmber),
+      ('TEACHER', 'Teachers', AppColors.accentTeal),
+    ];
     return Scaffold(
       appBar: const KSAppBar(
         title: 'Create Announcement',
@@ -1413,21 +1479,31 @@ class _CreateAnnouncementScreenState extends State<CreateAnnouncementScreen> {
       body: TeacherSurface(
         children: [
           TeacherCard(
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: const [
-                TeacherStatusPill(
-                  label: 'STUDENTS',
-                  color: AppColors.skyBlue600,
-                ),
-                TeacherStatusPill(
-                  label: 'PARENTS',
-                  color: AppColors.accentAmber,
-                ),
-                TeacherStatusPill(
-                  label: 'TEACHERS',
-                  color: AppColors.accentTeal,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('AUDIENCE',
+                    style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                        color: AppColors.textMuted,
+                        letterSpacing: 1.1)),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: audiences.map((a) {
+                    final selected = _roles.contains(a.$1);
+                    return GestureDetector(
+                      onTap: () => setState(() {
+                        selected ? _roles.remove(a.$1) : _roles.add(a.$1);
+                      }),
+                      child: TeacherStatusPill(
+                        label: a.$2.toUpperCase(),
+                        color: selected ? a.$3 : AppColors.textMuted,
+                      ),
+                    );
+                  }).toList(),
                 ),
               ],
             ),
@@ -1449,9 +1525,25 @@ class _CreateAnnouncementScreenState extends State<CreateAnnouncementScreen> {
               ],
             ),
           ),
+          TeacherCard(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            child: Row(
+              children: [
+                const Expanded(
+                  child: Text('Also send as a push notification',
+                      style: TextStyle(fontWeight: FontWeight.w700)),
+                ),
+                Switch.adaptive(
+                  value: _alsoPush,
+                  onChanged: (v) => setState(() => _alsoPush = v),
+                ),
+              ],
+            ),
+          ),
           KSButton(
             label: 'Publish Announcement',
-            onPressed: () => context.pop(),
+            isLoading: _saving,
+            onPressed: _canPublish ? _publish : null,
           ),
         ],
       ),
@@ -1480,11 +1572,62 @@ class _CreateInterventionScreenState
   InterventionType _type = InterventionType.supportGiven;
   String? _selectedPeerId;
   bool _addFollowUp = false;
+  bool _saving = false;
 
   @override
   void dispose() {
     _notes.dispose();
     super.dispose();
+  }
+
+  /// Maps the mobile intervention type to the backend InterventionType enum.
+  String _backendType(InterventionType t) => switch (t) {
+        InterventionType.supportGiven => 'TEACHER_SUPPORT_GIVEN',
+        InterventionType.parentMeeting => 'PARENT_MEETING_SCHEDULED',
+        InterventionType.followUp => 'ADDITIONAL_LESSONS_ASSIGNED',
+        InterventionType.peerPairing => 'MANUAL_PAIRING_CREATED',
+        InterventionType.other => 'OTHER',
+      };
+
+  Future<void> _save() async {
+    final studentId = widget.studentId;
+    if (studentId == null) {
+      ref
+          .read(snackbarProvider.notifier)
+          .show('Open an intervention from a student to save it.');
+      return;
+    }
+    final note = _notes.text.trim();
+    if (note.isEmpty) {
+      ref.read(snackbarProvider.notifier).show('Add a note before saving.');
+      return;
+    }
+    setState(() => _saving = true);
+    final data = <String, dynamic>{
+      'studentId': studentId,
+      'type': _backendType(_type),
+      'note': _type == InterventionType.peerPairing && _selectedPeerId != null
+          ? '$note\n(Peer mentor suggested)'
+          : note,
+      if (_addFollowUp)
+        'followUpDate': DateTime.now()
+            .add(const Duration(days: 7))
+            .toUtc()
+            .toIso8601String(),
+    };
+    try {
+      final service = ref.read(teacherServiceProvider);
+      if (service == null) throw Exception('Sign in to save.');
+      await service.createIntervention(data);
+      if (!mounted) return;
+      ref.read(snackbarProvider.notifier).show('Intervention logged.');
+      context.pop();
+    } catch (e) {
+      if (!mounted) return;
+      ref.read(snackbarProvider.notifier).show(ApiFailure.from(e).message);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   @override
@@ -1814,15 +1957,8 @@ class _CreateInterventionScreenState
           // ── Save ──────────────────────────────────────────────────────
           KSButton(
             label: 'Save Intervention Record',
-            onPressed: () {
-              ref.read(snackbarProvider.notifier).show(
-                    _type == InterventionType.peerPairing &&
-                            _selectedPeerId != null
-                        ? 'Peer pairing recorded and suggested.'
-                        : 'Intervention logged successfully.',
-                  );
-              context.pop();
-            },
+            isLoading: _saving,
+            onPressed: _saving ? null : _save,
           ),
         ],
       ),

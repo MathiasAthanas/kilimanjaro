@@ -3,6 +3,7 @@ import { Prisma, DisciplineCategory, DisciplineSeverity } from '../../generated/
 import { PrismaService } from '../prisma/prisma.service';
 import { RabbitMqService } from '../rabbitmq/rabbitmq.service';
 import { RequestUser } from '../common/interfaces/request-user.interface';
+import { schoolScopeFilter, assertSchoolInScope } from '../common/helpers/school-scope.helper';
 import { CreateDisciplineDto } from './dto/create-discipline.dto';
 import { ResolveDisciplineDto } from './dto/resolve-discipline.dto';
 
@@ -49,10 +50,12 @@ export class DisciplineService {
     },
     user?: RequestUser,
   ): Promise<unknown> {
-    const schoolFilter: Prisma.DisciplineRecordWhereInput =
-      user?.scope === 'SCHOOL'
-        ? { student: { schoolId: user.activeSchoolId ?? user.schoolIds?.find((id) => id !== '*') ?? undefined } }
-        : {};
+    // DisciplineRecord has no schoolId column — scope through the student's school.
+    // Honours an active school for group users too (not just SCHOOL-scoped staff).
+    const scope = schoolScopeFilter(user);
+    const schoolFilter: Prisma.DisciplineRecordWhereInput = scope.schoolId
+      ? { student: { schoolId: scope.schoolId as any } }
+      : {};
 
     const where: Prisma.DisciplineRecordWhereInput = {
       ...schoolFilter,
@@ -98,7 +101,14 @@ export class DisciplineService {
     });
   }
 
-  async resolve(recordId: string, dto: ResolveDisciplineDto): Promise<unknown> {
+  async resolve(recordId: string, dto: ResolveDisciplineDto, user?: RequestUser): Promise<unknown> {
+    const existing = await this.prisma.disciplineRecord.findUnique({
+      where: { id: recordId },
+      include: { student: { select: { schoolId: true } } },
+    });
+    if (!existing) throw new ForbiddenException('Discipline record not found');
+    assertSchoolInScope(user, existing.student?.schoolId ?? null);
+
     return this.prisma.disciplineRecord.update({
       where: { id: recordId },
       data: {

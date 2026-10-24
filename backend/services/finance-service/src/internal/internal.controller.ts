@@ -1,4 +1,4 @@
-import { Controller, Get, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { InternalApiGuard } from '../common/guards/internal-api.guard';
 import { PrismaService } from '../prisma/prisma.service';
@@ -8,6 +8,37 @@ import { PrismaService } from '../prisma/prisma.service';
 @UseGuards(InternalApiGuard)
 export class InternalController {
   constructor(private readonly prisma: PrismaService) {}
+
+  @Get('lifecycle-usage')
+  async lifecycleUsage(
+    @Query('studentIds') rawStudentIds = '',
+    @Query('classId') classId?: string,
+  ) {
+    const studentIds = [...new Set(rawStudentIds.split(',').map((id) => id.trim()).filter(Boolean))].slice(0, 500);
+    const studentWhere = studentIds.length ? { studentId: { in: studentIds } } : { studentId: '__none__' };
+    const [assignments, invoices, payments, receipts, feeStructures, classInvoices, classReceipts] = await Promise.all([
+      this.prisma.studentFeeAssignment.findMany({ where: studentWhere, distinct: ['studentId'], select: { studentId: true } }),
+      this.prisma.invoice.findMany({ where: studentWhere, distinct: ['studentId'], select: { studentId: true } }),
+      this.prisma.payment.findMany({ where: studentWhere, distinct: ['studentId'], select: { studentId: true } }),
+      this.prisma.receipt.findMany({ where: studentWhere, distinct: ['studentId'], select: { studentId: true } }),
+      classId ? this.prisma.feeStructure.count({ where: { classId } }) : Promise.resolve(0),
+      classId ? this.prisma.invoice.count({ where: { classId } }) : Promise.resolve(0),
+      classId ? this.prisma.receipt.count({ where: { classId } }) : Promise.resolve(0),
+    ]);
+    const protectedStudentIds = [...new Set([
+      ...assignments, ...invoices, ...payments, ...receipts,
+    ].map((item) => item.studentId))];
+    return {
+      protectedStudentIds,
+      counts: {
+        feeAssignments: assignments.length,
+        invoices: invoices.length,
+        payments: payments.length,
+        receipts: receipts.length,
+      },
+      classRecords: { feeStructures, invoices: classInvoices, receipts: classReceipts },
+    };
+  }
 
   @Get('student/:studentId/balance')
   async balance(@Param('studentId') studentId: string) {

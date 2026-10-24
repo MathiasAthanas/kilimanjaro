@@ -14,7 +14,7 @@ String formatShortDate(DateTime value) => _shortDateFormat.format(value);
 String formatMonthYear(DateTime value) => _monthYearFormat.format(value);
 
 String timeAgo(DateTime value) {
-  final now = DateTime(2026, 3, 21);
+  final now = DateTime.now();
   final diff = now.difference(value).inDays;
   if (diff <= 0) return 'Today';
   if (diff == 1) return '1 day ago';

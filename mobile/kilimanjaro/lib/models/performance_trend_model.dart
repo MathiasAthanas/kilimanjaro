@@ -1,3 +1,5 @@
+import 'json_num.dart';
+
 class PerformanceTrendPoint {
   const PerformanceTrendPoint({
     required this.label,
@@ -12,7 +14,7 @@ class PerformanceTrendPoint {
   factory PerformanceTrendPoint.fromJson(Map<String, dynamic> json) {
     return PerformanceTrendPoint(
       label: json['label'] as String? ?? json['termName'] as String? ?? '',
-      value: (json['value'] as num?)?.toDouble() ?? (json['score'] as num?)?.toDouble() ?? 0.0,
+      value: numOf(json['value'])?.toDouble() ?? numOf(json['score'])?.toDouble() ?? 0.0,
       grade: json['grade'] as String? ?? '',
     );
   }

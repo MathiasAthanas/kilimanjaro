@@ -7,11 +7,13 @@ import '../../../models/auth_user.dart';
 import '../../../models/notification_model.dart';
 import '../../../models/notification_preference_model.dart';
 import '../../../models/search_result_model.dart';
-import '../../config/app_config.dart';
+import '../../network/api_client.dart';
+import '../../network/api_failure.dart';
 import '../interfaces/notification_service_interface.dart';
 
 class ApiNotificationService implements INotificationService {
-  ApiNotificationService(this._storage) : _dio = _buildDio();
+  ApiNotificationService(this._storage)
+      : _dio = buildApiClient(_storage, pathPrefix: '/api/v1');
 
   final FlutterSecureStorage _storage;
   final Dio _dio;
@@ -19,17 +21,6 @@ class ApiNotificationService implements INotificationService {
   // Local cache for stream simulation (poll-based)
   final _streamController = StreamController<List<NotificationModel>>.broadcast();
   Timer? _pollTimer;
-
-  static Dio _buildDio() {
-    return Dio(
-      BaseOptions(
-        baseUrl: '${AppConfig.apiBaseUrl}/api/v1',
-        connectTimeout: const Duration(seconds: 15),
-        receiveTimeout: const Duration(seconds: 30),
-        headers: {'Content-Type': 'application/json'},
-      ),
-    );
-  }
 
   Future<Options> _auth() async {
     final token = await _storage.read(key: 'access_token');
@@ -49,10 +40,11 @@ class ApiNotificationService implements INotificationService {
           if (m[key] is List) return m[key] as List<dynamic>;
         }
       }
-    } on DioException {
-      return [];
+      return const [];
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) return const [];
+      throw ApiFailure.fromDio(e);
     }
-    return [];
   }
 
   // ─── Notifications ────────────────────────────────────────────────────────
@@ -68,12 +60,22 @@ class ApiNotificationService implements INotificationService {
     // Poll every 30 seconds and emit to stream
     _pollTimer?.cancel();
     _pollTimer = Timer.periodic(const Duration(seconds: 30), (_) async {
-      final notifications = await getNotifications(user);
-      _streamController.add(notifications);
+      try {
+        final notifications = await getNotifications(user);
+        _streamController.add(notifications);
+      } catch (_) {
+        // Keep the stream alive across transient poll failures; the last good
+        // list stays on screen.
+      }
     });
 
-    // Emit immediately
-    getNotifications(user).then(_streamController.add).catchError((_) {});
+    // Emit immediately. Forward a first-load failure to the stream so the
+    // notifications screen can show an error/retry state instead of an empty
+    // list; transient poll failures after that are ignored to keep the stream
+    // alive.
+    getNotifications(user)
+        .then(_streamController.add)
+        .catchError((Object e) => _streamController.addError(e));
 
     return _streamController.stream;
   }
@@ -84,8 +86,9 @@ class ApiNotificationService implements INotificationService {
     try {
       final resp = await _dio.get<Map<String, dynamic>>('/notifications/$id', options: opts);
       return NotificationModel.fromJson(resp.data!);
-    } on DioException {
-      return null;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) return null;
+      throw ApiFailure.fromDio(e);
     }
   }
 
@@ -120,8 +123,9 @@ class ApiNotificationService implements INotificationService {
           ? resp.data as List<dynamic>
           : (resp.data as Map<String, dynamic>?)?['preferences'] as List<dynamic>? ?? [];
       return list.cast<Map<String, dynamic>>().map(NotificationPreferenceModel.fromJson).toList();
-    } on DioException {
-      return [];
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) return const [];
+      throw ApiFailure.fromDio(e);
     }
   }
 

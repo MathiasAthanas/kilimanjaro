@@ -17,6 +17,7 @@ import { ListUsersDto } from './dto/list-users.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { AdminResetPasswordDto } from './dto/admin-reset-password.dto';
 import { getPagination } from '../common/helpers/pagination.helper';
+import { resolveOrderBy } from '../common/helpers/sort.helper';
 
 type AuthActor = {
   sub: string;
@@ -602,21 +603,51 @@ export class UsersService {
       role: this.resolveVisibleRoleFilter(query.role, actor?.role),
       isActive: query.isActive,
       ...(query.phoneNumber ? { phoneNumber: UsersService.normalisePhone(query.phoneNumber) } : {}),
+      ...(query.search
+        ? {
+            OR: [
+              { firstName: { contains: query.search, mode: 'insensitive' } },
+              { lastName: { contains: query.search, mode: 'insensitive' } },
+              { email: { contains: query.search, mode: 'insensitive' } },
+              { registrationNumber: { contains: query.search, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
       ...this.userSchoolScope(actor),
     };
+
+    const orderBy = resolveOrderBy<Prisma.UserOrderByWithRelationInput | Prisma.UserOrderByWithRelationInput[]>(
+      query.sortBy,
+      query.sortDir,
+      {
+        name: (dir) => [{ firstName: dir }, { lastName: dir }],
+        email: (dir) => ({ email: dir }),
+        role: (dir) => ({ role: dir }),
+        status: (dir) => ({ isActive: dir }),
+        lastLoginAt: (dir) => ({ lastLoginAt: dir }),
+        createdAt: (dir) => ({ createdAt: dir }),
+      },
+      { createdAt: 'desc' },
+    );
 
     const [items, total] = await this.prisma.$transaction([
       this.prisma.user.findMany({
         where,
         skip: pagination.skip,
         take: pagination.take,
-        orderBy: { createdAt: 'desc' },
+        orderBy,
+        include: {
+          schoolMemberships: {
+            where: { isActive: true },
+            select: { schoolId: true },
+          },
+        },
       }),
       this.prisma.user.count({ where }),
     ]);
 
     return {
-      items: items.map((item: User) => this.toSafeUser(item)),
+      items: items.map((item) => this.toSafeUser(item)),
       total,
       page: pagination.page,
       limit: pagination.limit,
@@ -655,7 +686,7 @@ export class UsersService {
     });
   }
 
-  toSafeUser(user: User) {
+  toSafeUser(user: User & { schoolMemberships?: Array<{ schoolId: string | null }> }) {
     return {
       id: user.id,
       email: user.email,
@@ -673,6 +704,7 @@ export class UsersService {
       lastLoginAt: user.lastLoginAt,
       lastLoginIp: user.lastLoginIp,
       createdAt: user.createdAt,
+      schoolIds: [...new Set((user.schoolMemberships ?? []).map((membership) => membership.schoolId).filter((id): id is string => Boolean(id)))],
       updatedAt: user.updatedAt,
       createdBy: user.createdBy,
     };

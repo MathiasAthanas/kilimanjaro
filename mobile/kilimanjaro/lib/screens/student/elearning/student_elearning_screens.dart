@@ -11,6 +11,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:video_player/video_player.dart';
 
+import '../../../core/config/app_config.dart';
 import '../../../core/providers/elearning/elearning_provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../models/elearning_models.dart';
@@ -330,7 +331,7 @@ class _StudentMaterialViewerScreenState
     }
   }
 
-  String _baseUrl() => 'http://localhost:3000';
+  String _baseUrl() => AppConfig.apiBaseUrl;
 
   @override
   Widget build(BuildContext context) {

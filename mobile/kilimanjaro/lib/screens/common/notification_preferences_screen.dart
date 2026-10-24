@@ -15,7 +15,7 @@ class NotificationPreferencesScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final user = ref.watch(currentUserProvider).value;
+    final user = ref.watch(currentUserProvider).valueOrNull;
     final prefsMap = ref.watch(notificationPreferencesControllerProvider);
     final initialAsync = ref.watch(preferencesProvider);
     final prefs = prefsMap.isNotEmpty

@@ -19,9 +19,9 @@ class PerformanceAlertsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final children =
-        ref.watch(parentChildrenProvider).value ?? const <ChildSummary>[];
+        ref.watch(parentChildrenProvider).valueOrNull ?? const <ChildSummary>[];
     final activeChildId = ref.watch(activeParentChildIdProvider);
-    final child = ref.watch(activeParentChildProvider).value;
+    final child = ref.watch(activeParentChildProvider).valueOrNull;
     final alertsAsync = ref.watch(activeParentAlertsProvider);
 
     return Scaffold(

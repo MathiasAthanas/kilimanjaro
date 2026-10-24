@@ -18,4 +18,6 @@ abstract interface class ITeacherService {
   Future<List<TeacherSyllabusProgress>> getSyllabusProgress();
   Future<void> updateSyllabusProgress(String classSubjectId, int covered);
   Future<List<AnnouncementModel>> getAnnouncements();
+  Future<void> createAnnouncement(Map<String, dynamic> data);
+  Future<void> createIntervention(Map<String, dynamic> data);
 }

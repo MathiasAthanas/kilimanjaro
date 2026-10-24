@@ -291,6 +291,28 @@ export function useAdminUsers() {
   });
 }
 
+/** Server-side paginated/searched/sorted users list for the Users table. */
+export function useAdminUsersPage(params?: Record<string, unknown>) {
+  const activeSchoolKey = useActiveSchoolKey();
+  return useQuery({
+    queryKey: [...adminKeys.users(), 'page', params ?? {}, activeSchoolKey] as const,
+    queryFn: () =>
+      api.get('/auth/users', { params }).then((r) => {
+        const payload = payloadOf(r) as Record<string, unknown>;
+        return {
+          users: toAdminUsers(payload),
+          meta: {
+            page: Number(payload.page ?? 1),
+            limit: Number(payload.limit ?? 20),
+            total: Number(payload.total ?? 0),
+            totalPages: Number(payload.totalPages ?? 1),
+          },
+        };
+      }),
+    staleTime: 30_000,
+  });
+}
+
 export function useTeachingStaff() {
   const activeSchoolKey = useActiveSchoolKey();
   return useQuery({
@@ -350,6 +372,42 @@ export function useClassStudents(classId: string | undefined, filters: Record<st
     queryFn: () => api.get(`/students/classes/${classId}/students`, { params: filters }).then(payloadOf),
     enabled: !!classId,
     staleTime: 15_000,
+  });
+}
+
+export type StudentLifecycleAction = 'UNENROL_STUDENTS' | 'DELETE_STUDENTS' | 'DELETE_CLASS_AND_STUDENTS' | 'DELETE_EMPTY_CLASS';
+
+export type StudentLifecyclePreview = {
+  class: { id: string; name: string; schoolId: string | null; schoolName: string | null };
+  action: StudentLifecycleAction;
+  candidateStudents: Array<{ id: string; name: string; registrationNumber: string }>;
+  eligibleStudentIds: string[];
+  blockedStudents: Array<{ id: string; name: string; reasons: string[] }>;
+  localCounts: Record<string, number>;
+  dependencyUsage: Array<{ source: string; protectedStudentIds: string[]; counts: Record<string, number>; classRecords?: Record<string, number> }>;
+  classBlockers: string[];
+  canExecute: boolean;
+  confirmationText: string;
+  fingerprint: string;
+};
+
+export function useStudentLifecyclePreviewMutation() {
+  return useMutation({
+    mutationFn: (body: { classId: string; action: StudentLifecycleAction; studentIds?: string[]; allClassStudents?: boolean }) =>
+      api.post('/students/lifecycle/preview', body).then((r) => payloadOf(r) as StudentLifecyclePreview),
+  });
+}
+
+export function useStudentLifecycleExecuteMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { classId: string; action: StudentLifecycleAction; studentIds?: string[]; allClassStudents?: boolean; reason: string; confirmation: string; fingerprint: string; deleteLinkedAccounts?: boolean }) =>
+      api.post('/students/lifecycle/execute', body).then((r) => payloadOf(r)),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['class-students'] });
+      qc.invalidateQueries({ queryKey: ['admin', 'classes'] });
+      qc.invalidateQueries({ queryKey: ['import', 'classes'] });
+    },
   });
 }
 

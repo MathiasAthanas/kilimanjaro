@@ -66,3 +66,5 @@ flutter:
     - assets/lottie/
     - assets/fonts/
     - .env
+    - .env.staging
+    - .env.production

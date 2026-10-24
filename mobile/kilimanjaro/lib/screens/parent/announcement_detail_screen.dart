@@ -21,7 +21,7 @@ class ParentAnnouncementDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final announcementsAsync = ref.watch(parentAnnouncementsProvider);
-    final child = ref.watch(activeParentChildProvider).value;
+    final child = ref.watch(activeParentChildProvider).valueOrNull;
 
     return Scaffold(
       appBar: KSAppBar(

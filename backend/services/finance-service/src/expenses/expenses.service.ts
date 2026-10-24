@@ -4,7 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { NumberSequenceService } from '../common/helpers/number-sequence.service';
 import { RequestUser } from '../common/interfaces/request-user.interface';
-import { schoolScopeFilter } from '../common/helpers/school-scope.helper';
+import { schoolScopeFilter, assertSchoolInScope } from '../common/helpers/school-scope.helper';
 import { CreateExpenseDto } from './dto/create-expense.dto';
 import { VoidExpenseDto } from './dto/void-expense.dto';
 
@@ -92,9 +92,10 @@ export class ExpensesService {
     return { items, meta: { page, limit, total, totalPages: Math.ceil(total / limit) } };
   }
 
-  async byId(id: string) {
+  async byId(id: string, user?: RequestUser) {
     const row = await this.prisma.expense.findUnique({ where: { id } });
     if (!row) throw new NotFoundException('Expense not found');
+    assertSchoolInScope(user, row.schoolId ?? null);
     return row;
   }
 
@@ -129,7 +130,7 @@ export class ExpensesService {
   }
 
   async void(id: string, dto: VoidExpenseDto, user: RequestUser) {
-    const existing = await this.byId(id);
+    const existing = await this.byId(id, user);
     if (existing.status === 'VOIDED') throw new BadRequestException('Expense already voided');
     if (existing.fundRequestId) {
       throw new BadRequestException('Disbursement expenses cannot be voided here; reverse via the fund request');

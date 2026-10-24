@@ -19,7 +19,7 @@ class ParentInvoiceDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final invoiceAsync = ref.watch(parentInvoiceByIdProvider(invoiceId));
-    final child = ref.watch(activeParentChildProvider).value;
+    final child = ref.watch(activeParentChildProvider).valueOrNull;
 
     return Scaffold(
       appBar: KSAppBar(

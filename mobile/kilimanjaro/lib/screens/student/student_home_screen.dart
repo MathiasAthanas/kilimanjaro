@@ -25,13 +25,13 @@ class StudentHomeScreen extends ConsumerWidget {
     final currentTerm = ref.watch(currentStudentTermProvider);
     final alert = ref.watch(primaryStudentAlertProvider);
     final attendanceSummary = ref.watch(attendanceSummaryProvider);
-    final invoice = ref.watch(currentInvoiceProvider).value;
-    final announcements = ref.watch(announcementsProvider).value ?? const [];
+    final invoice = ref.watch(currentInvoiceProvider).valueOrNull;
+    final announcements = ref.watch(announcementsProvider).valueOrNull ?? const [];
     final highlightedSubjects = ref
         .watch(sortedCurrentSubjectsProvider)
         .take(3)
         .toList();
-    final user = ref.watch(currentUserProvider).value;
+    final user = ref.watch(currentUserProvider).valueOrNull;
     final totalAttendance = attendanceSummary.values.fold<int>(
       0,
       (sum, item) => sum + item,

@@ -2,7 +2,8 @@ import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../../models/auth_user.dart';
-import '../../config/app_config.dart';
+import '../../network/api_client.dart';
+import '../../network/api_failure.dart';
 
 class StaffMetric {
   const StaffMetric({required this.label, required this.value, this.detail});
@@ -16,21 +17,11 @@ class StaffMetric {
 /// Finance, System Admin). These roles work in the web dashboard — the mobile
 /// app gives them a glanceable summary, notifications and profile only.
 class ApiStaffMetricsService {
-  ApiStaffMetricsService(this._storage) : _dio = _buildDio();
+  ApiStaffMetricsService(this._storage)
+      : _dio = buildApiClient(_storage, pathPrefix: '/api/v1');
 
   final FlutterSecureStorage _storage;
   final Dio _dio;
-
-  static Dio _buildDio() {
-    return Dio(
-      BaseOptions(
-        baseUrl: '${AppConfig.apiBaseUrl}/api/v1',
-        connectTimeout: const Duration(seconds: 15),
-        receiveTimeout: const Duration(seconds: 30),
-        headers: {'Content-Type': 'application/json'},
-      ),
-    );
-  }
 
   Future<Options> _auth() async {
     final token = await _storage.read(key: 'access_token');
@@ -48,10 +39,11 @@ class ApiStaffMetricsService {
         final inner = data['data'];
         return inner is Map<String, dynamic> ? inner : data;
       }
-    } on DioException {
       return null;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) return null;
+      throw ApiFailure.fromDio(e);
     }
-    return null;
   }
 
   String _formatTzs(dynamic value) {

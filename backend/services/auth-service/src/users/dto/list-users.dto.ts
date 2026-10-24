@@ -2,6 +2,7 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Role } from '../../../generated/prisma';
 import { Transform } from 'class-transformer';
 import { IsBoolean, IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { SortDir } from '../../common/helpers/sort.helper';
 
 export class ListUsersDto {
   @ApiPropertyOptional({ default: 1 })
@@ -34,4 +35,19 @@ export class ListUsersDto {
   @IsOptional()
   @IsString()
   phoneNumber?: string;
+
+  @ApiPropertyOptional({ description: 'Search by name, email or registration number' })
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  sortBy?: string;
+
+  @ApiPropertyOptional({ enum: SortDir })
+  @IsOptional()
+  @IsEnum(SortDir)
+  sortDir?: SortDir;
 }

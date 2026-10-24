@@ -1,4 +1,5 @@
 import 'subject_result_model.dart';
+import 'json_num.dart';
 
 class TermResultModel {
   const TermResultModel({
@@ -37,7 +38,7 @@ class TermResultModel {
         .toList();
 
     final double overallScore = reportCard != null
-        ? (reportCard['overallAverage'] as num?)?.toDouble() ?? _avgScore(subjects)
+        ? numOf(reportCard['overallAverage'])?.toDouble() ?? _avgScore(subjects)
         : _avgScore(subjects);
 
     final String overallGrade = reportCard != null

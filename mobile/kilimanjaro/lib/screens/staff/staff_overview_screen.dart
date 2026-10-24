@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/providers/auth_provider.dart';
+import '../../core/providers/notification_provider.dart';
 import '../../core/services/api/api_staff_metrics_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../models/auth_user.dart';
@@ -12,7 +12,7 @@ import '../../widgets/common/ks_app_bar.dart';
 import '../../widgets/common/ks_empty_state.dart';
 
 final _staffMetricsServiceProvider = Provider<ApiStaffMetricsService>((ref) {
-  return ApiStaffMetricsService(const FlutterSecureStorage());
+  return ApiStaffMetricsService(ref.watch(secureStorageProvider));
 });
 
 final staffMetricsProvider =
@@ -31,9 +31,7 @@ class StaffOverviewScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final metricsAsync = ref.watch(staffMetricsProvider(role));
-    final authState = ref.watch(authControllerProvider);
-    final userName =
-        authState is AuthAuthenticated ? authState.user.name : role.label;
+    final userName = ref.watch(currentUserProvider).valueOrNull?.name ?? role.label;
     final segment = role.shellSegment;
 
     return Scaffold(

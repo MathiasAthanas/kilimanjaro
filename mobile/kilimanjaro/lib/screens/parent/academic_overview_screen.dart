@@ -24,7 +24,7 @@ class AcademicOverviewScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final children =
-        ref.watch(parentChildrenProvider).value ?? const <ChildSummary>[];
+        ref.watch(parentChildrenProvider).valueOrNull ?? const <ChildSummary>[];
     final activeChildId = ref.watch(activeParentChildIdProvider);
     final childAsync = ref.watch(activeParentChildProvider);
     final termAsync = ref.watch(selectedParentTermProvider);

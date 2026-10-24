@@ -1,3 +1,5 @@
+import 'json_num.dart';
+
 class PeerPairingModel {
   const PeerPairingModel({
     required this.subjectId,
@@ -24,7 +26,7 @@ class PeerPairingModel {
       subjectName: json['subjectName'] as String? ?? '',
       peerName: (json['peer'] as Map<String, dynamic>?)?['name'] as String? ?? json['peerName'] as String? ?? 'Peer',
       peerRank: json['peerRank'] as int? ?? 0,
-      peerScore: (json['peerScoreAtPairing'] as num?)?.toDouble() ?? (json['peerScore'] as num?)?.toDouble() ?? 0.0,
+      peerScore: numOf(json['peerScoreAtPairing'])?.toDouble() ?? numOf(json['peerScore'])?.toDouble() ?? 0.0,
       status: json['status'] as String? ?? 'SUGGESTED',
       startedAt: activatedAt != null ? DateTime.parse(activatedAt) : DateTime.now(),
     );

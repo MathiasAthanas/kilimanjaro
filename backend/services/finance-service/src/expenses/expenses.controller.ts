@@ -33,8 +33,8 @@ export class ExpensesController {
 
   @Get(':id')
   @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN, ROLES.MANAGING_DIRECTOR)
-  byId(@Param('id') id: string) {
-    return this.expensesService.byId(id);
+  byId(@Param('id') id: string, @CurrentUser() user?: RequestUser) {
+    return this.expensesService.byId(id, user);
   }
 
   @Patch(':id/void')

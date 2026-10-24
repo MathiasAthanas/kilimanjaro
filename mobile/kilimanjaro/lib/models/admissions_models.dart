@@ -1,3 +1,5 @@
+import 'json_num.dart';
+
 // Admissions pipeline models — mirror the `/admissions/*` API contracts.
 
 class AdmissionsSummary {
@@ -20,15 +22,15 @@ class AdmissionsSummary {
     final funnel = <String, int>{};
     for (final item in funnelRaw) {
       final map = item as Map<String, dynamic>;
-      funnel[map['stage'] as String? ?? ''] = (map['count'] as num?)?.toInt() ?? 0;
+      funnel[map['stage'] as String? ?? ''] = numOf(map['count'])?.toInt() ?? 0;
     }
     final totals = json['totals'] as Map<String, dynamic>? ?? const {};
     return AdmissionsSummary(
       funnel: funnel,
-      total: (totals['total'] as num?)?.toInt() ?? 0,
-      active: (totals['active'] as num?)?.toInt() ?? 0,
-      enrolled: (totals['enrolled'] as num?)?.toInt() ?? 0,
-      conversionRate: (totals['conversionRate'] as num?)?.toDouble() ?? 0,
+      total: numOf(totals['total'])?.toInt() ?? 0,
+      active: numOf(totals['active'])?.toInt() ?? 0,
+      enrolled: numOf(totals['enrolled'])?.toInt() ?? 0,
+      conversionRate: numOf(totals['conversionRate'])?.toDouble() ?? 0,
     );
   }
 }
@@ -53,6 +55,67 @@ class AdmissionStageEvent {
   }
 }
 
+class AdmissionAssessment {
+  const AdmissionAssessment({
+    required this.id,
+    required this.scheduledAt,
+    this.subjectFocus,
+    this.score,
+    this.maxScore,
+    required this.outcome,
+    this.notes,
+  });
+
+  final String id;
+  final DateTime? scheduledAt;
+  final String? subjectFocus;
+  final double? score;
+  final double? maxScore;
+  final String outcome; // PENDING | PASSED | FAILED | WAIVED
+  final String? notes;
+
+  factory AdmissionAssessment.fromJson(Map<String, dynamic> json) {
+    return AdmissionAssessment(
+      id: json['id'] as String? ?? '',
+      scheduledAt: DateTime.tryParse(json['scheduledAt'] as String? ?? ''),
+      subjectFocus: json['subjectFocus'] as String?,
+      score: numOf(json['score'])?.toDouble(),
+      maxScore: numOf(json['maxScore'])?.toDouble(),
+      outcome: json['outcome'] as String? ?? 'PENDING',
+      notes: json['notes'] as String?,
+    );
+  }
+}
+
+class AdmissionOffer {
+  const AdmissionOffer({
+    required this.id,
+    required this.classId,
+    required this.decision,
+    this.feeExpectation,
+    this.expiresAt,
+    this.note,
+  });
+
+  final String id;
+  final String classId;
+  final String decision; // PENDING | ACCEPTED | DECLINED
+  final double? feeExpectation;
+  final DateTime? expiresAt;
+  final String? note;
+
+  factory AdmissionOffer.fromJson(Map<String, dynamic> json) {
+    return AdmissionOffer(
+      id: json['id'] as String? ?? '',
+      classId: json['classId'] as String? ?? '',
+      decision: json['decision'] as String? ?? 'PENDING',
+      feeExpectation: numOf(json['feeExpectation'])?.toDouble(),
+      expiresAt: DateTime.tryParse(json['expiresAt'] as String? ?? ''),
+      note: json['note'] as String?,
+    );
+  }
+}
+
 class AdmissionApplicant {
   const AdmissionApplicant({
     required this.id,
@@ -62,9 +125,12 @@ class AdmissionApplicant {
     required this.guardianPhone,
     required this.sourceChannel,
     this.className,
+    this.prospectiveClassId,
     this.notes,
     this.createdAt,
     this.stageEvents = const [],
+    this.assessments = const [],
+    this.offer,
   });
 
   final String id;
@@ -74,9 +140,16 @@ class AdmissionApplicant {
   final String guardianPhone;
   final String sourceChannel;
   final String? className;
+  final String? prospectiveClassId;
   final String? notes;
   final DateTime? createdAt;
   final List<AdmissionStageEvent> stageEvents;
+  final List<AdmissionAssessment> assessments;
+  final AdmissionOffer? offer;
+
+  /// The most recent assessment, if any.
+  AdmissionAssessment? get latestAssessment =>
+      assessments.isEmpty ? null : assessments.first;
 
   factory AdmissionApplicant.fromJson(Map<String, dynamic> json) {
     final first = json['firstName'] as String? ?? '';
@@ -89,6 +162,11 @@ class AdmissionApplicant {
     final events = (json['stageEvents'] as List<dynamic>? ?? const [])
         .map((item) => AdmissionStageEvent.fromJson(item as Map<String, dynamic>))
         .toList();
+    final assessments = (json['assessments'] as List<dynamic>? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(AdmissionAssessment.fromJson)
+        .toList();
+    final offerJson = json['offer'] as Map<String, dynamic>?;
     return AdmissionApplicant(
       id: json['id'] as String? ?? '',
       fullName: [first, middle, last].where((p) => p.isNotEmpty).join(' '),
@@ -99,9 +177,12 @@ class AdmissionApplicant {
       guardianPhone: json['guardianPhone'] as String? ?? '',
       sourceChannel: json['sourceChannel'] as String? ?? 'WALK_IN',
       className: classLabel?.isEmpty ?? true ? null : classLabel,
+      prospectiveClassId: cls == null ? null : cls['id'] as String?,
       notes: json['notes'] as String?,
       createdAt: DateTime.tryParse(json['createdAt'] as String? ?? ''),
       stageEvents: events,
+      assessments: assessments,
+      offer: offerJson == null ? null : AdmissionOffer.fromJson(offerJson),
     );
   }
 }

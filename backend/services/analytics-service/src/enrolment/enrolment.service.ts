@@ -7,28 +7,29 @@ import { toChart } from '../common/helpers/chart-formatter.helper';
 export class EnrolmentService {
   constructor(private readonly prisma: PrismaService, private readonly redis: RedisService) {}
 
-  async enrolment(academicYearId?: string, termId?: string) {
-    const key = `analytics:enrolment:${academicYearId || 'all'}:${termId || 'all'}`;
+  async enrolment(academicYearId?: string, termId?: string, schoolId?: string | null) {
+    const key = `analytics:enrolment:${schoolId || 'group'}:${academicYearId || 'all'}:${termId || 'all'}`;
     const cached = await this.redis.get<any>(key);
     if (cached) return cached;
 
-    const students = await this.prisma.student.findMany();
+    const schoolFilter = schoolId ? { schoolId } : {};
+    const students = await this.prisma.student.findMany({ where: schoolFilter });
     const byGender = students.reduce<Record<string, number>>((acc, s) => { acc[s.gender] = (acc[s.gender] || 0) + 1; return acc; }, {});
     const byStatus = students.reduce<Record<string, number>>((acc, s) => { acc[s.status] = (acc[s.status] || 0) + 1; return acc; }, {});
 
-    const classes = await this.prisma.class.findMany({ where: { academicYearId: academicYearId || undefined } });
-    const byClass = await Promise.all(classes.map(async (c) => ({ className: c.name, stream: c.stream, count: await this.prisma.enrolment.count({ where: { classId: c.id, isActive: true } }), capacity: c.capacity })));
+    const classes = await this.prisma.class.findMany({ where: { academicYearId: academicYearId || undefined, ...schoolFilter } });
+    const byClass = await Promise.all(classes.map(async (c) => ({ className: c.name, stream: c.stream, count: await this.prisma.enrolment.count({ where: { classId: c.id, isActive: true, ...schoolFilter } }), capacity: c.capacity })));
 
     const years = await this.prisma.academicYear.findMany({ orderBy: { name: 'asc' } });
     const byYear = [] as any[];
     for (let i = 0; i < years.length; i += 1) {
-      const count = await this.prisma.enrolment.count({ where: { academicYearId: years[i].id, isActive: true } });
+      const count = await this.prisma.enrolment.count({ where: { academicYearId: years[i].id, isActive: true, ...schoolFilter } });
       const prev = i > 0 ? byYear[i - 1].count : count;
       byYear.push({ year: years[i].name, count, growthRate: prev ? ((count - prev) / prev) * 100 : 0 });
     }
 
     const terms = await this.prisma.term.findMany({ orderBy: { name: 'asc' } });
-    const byTerm = await Promise.all(terms.map(async (t) => ({ term: t.name, year: t.academicYearId, count: await this.prisma.enrolment.count({ where: { termId: t.id, isActive: true } }) })));
+    const byTerm = await Promise.all(terms.map(async (t) => ({ term: t.name, year: t.academicYearId, count: await this.prisma.enrolment.count({ where: { termId: t.id, isActive: true, ...schoolFilter } }) })));
 
     const result = {
       summary: {
@@ -58,7 +59,8 @@ export class EnrolmentService {
     return result;
   }
 
-  async chart() {
+  async chart(schoolId?: string | null) {
+    const schoolFilter = schoolId ? { schoolId } : {};
     const years = await this.prisma.academicYear.findMany({ orderBy: { name: 'asc' } });
     const labels: string[] = [];
     const total: number[] = [];
@@ -69,7 +71,7 @@ export class EnrolmentService {
       const terms = await this.prisma.term.findMany({ where: { academicYearId: year.id }, orderBy: { name: 'asc' } });
       for (const term of terms) {
         labels.push(`${year.name}-${term.name}`);
-        const enrolments = await this.prisma.enrolment.findMany({ where: { termId: term.id, isActive: true } });
+        const enrolments = await this.prisma.enrolment.findMany({ where: { termId: term.id, isActive: true, ...schoolFilter } });
         total.push(enrolments.length);
         const ids = enrolments.map((e) => e.studentId);
         male.push(await this.prisma.student.count({ where: { id: { in: ids }, gender: 'MALE' } }));

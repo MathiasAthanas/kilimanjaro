@@ -175,7 +175,7 @@ class _ProfileStats extends ConsumerWidget {
   List<Widget> _studentMetrics(WidgetRef ref) {
     final term = ref.watch(currentStudentTermProvider);
     final attendance = ref.watch(attendanceSummaryProvider);
-    final invoice = ref.watch(currentInvoiceProvider).value;
+    final invoice = ref.watch(currentInvoiceProvider).valueOrNull;
     final totalAttendance = attendance.values.fold<int>(
       0,
       (sum, value) => sum + value,

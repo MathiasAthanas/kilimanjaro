@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/announcement_model.dart';
@@ -35,22 +36,28 @@ final parentServiceProvider = Provider<IParentService>((ref) {
 });
 
 final parentChildrenProvider = FutureProvider<List<ChildSummary>>((ref) async {
-  return ref.watch(parentServiceProvider).getChildren();
+  final kids = await ref.watch(parentServiceProvider).getChildren();
+  debugPrint('[DBG] children loaded: ${kids.length}');
+  return kids;
 });
 
 // Explicitly selected child — set by the child switcher screen
-final activeParentChildIdProvider = StateProvider<String>((ref) => '');
+final activeParentChildIdProvider = StateProvider<String>((ref) {
+  ref.watch(sessionEpochProvider);
+  return '';
+});
 
 // Resolved active child — auto-selects first child until the user picks one
 final resolvedActiveChildIdProvider = Provider<String>((ref) {
   final explicit = ref.watch(activeParentChildIdProvider);
   if (explicit.isNotEmpty) return explicit;
   if (AppConfig.useMockData) return MockParentDataService.aminaId;
-  return ref.watch(parentChildrenProvider).value?.firstOrNull?.id ?? '';
+  return ref.watch(parentChildrenProvider).valueOrNull?.firstOrNull?.id ?? '';
 });
 
 final activeParentChildProvider = FutureProvider<ChildSummary?>((ref) async {
   final childId = ref.watch(resolvedActiveChildIdProvider);
+  debugPrint('[DBG] active child id: "$childId"');
   if (childId.isEmpty) return null;
   await Future<void>.delayed(const Duration(milliseconds: 500));
   return ref.watch(parentServiceProvider).getChild(childId);
@@ -73,7 +80,10 @@ final activeParentTermProvider = FutureProvider<TermResultModel?>((ref) async {
   return terms.where((item) => item.isCurrent).firstOrNull;
 });
 
-final parentSelectedTermIdProvider = StateProvider<String?>((ref) => null);
+final parentSelectedTermIdProvider = StateProvider<String?>((ref) {
+  ref.watch(sessionEpochProvider);
+  return null;
+});
 
 final selectedParentTermProvider = FutureProvider<TermResultModel?>((ref) async {
   final selectedId = ref.watch(parentSelectedTermIdProvider);
@@ -174,7 +184,7 @@ final parentAnnouncementFilterProvider =
 
 final filteredParentAnnouncementsProvider = Provider<List<AnnouncementModel>>((ref) {
   final filter = ref.watch(parentAnnouncementFilterProvider);
-  final items = ref.watch(parentAnnouncementsProvider).value ?? const <AnnouncementModel>[];
+  final items = ref.watch(parentAnnouncementsProvider).valueOrNull ?? const <AnnouncementModel>[];
   final sorted = [...items]..sort((a, b) => a.priority.index.compareTo(b.priority.index));
   if (filter == null) return sorted;
   return sorted.where((item) => item.priority == filter).toList();

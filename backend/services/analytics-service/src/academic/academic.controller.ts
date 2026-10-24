@@ -1,7 +1,10 @@
 import { Controller, Get, Param, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { ROLES } from '../common/constants/roles';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
+import { RequestUser } from '../common/interfaces/request-user.interface';
+import { resolveScopeSchoolId } from '../common/helpers/school-scope.helper';
 import { AcademicService } from './academic.service';
 
 @ApiTags('Analytics - Academic')
@@ -14,8 +17,8 @@ export class AcademicController {
   @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA, ROLES.MANAGING_DIRECTOR, ROLES.BOARD_DIRECTOR)
   @ApiOperation({ summary: 'School academic overview analytics' })
   @ApiResponse({ status: 200 })
-  overview(@Query('academicYearId') academicYearId?: string, @Query('termId') termId?: string) {
-    return this.service.getOverview(academicYearId, termId);
+  overview(@Query('academicYearId') academicYearId?: string, @Query('termId') termId?: string, @CurrentUser() user?: RequestUser) {
+    return this.service.getOverview(academicYearId, termId, resolveScopeSchoolId(user));
   }
 
   @Get('subject/:subjectId')
@@ -55,7 +58,7 @@ export class AcademicController {
   @Get('performance-engine')
   @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA, ROLES.MANAGING_DIRECTOR)
   @ApiOperation({ summary: 'Performance engine effectiveness' })
-  performanceEngine(@Query('academicYearId') academicYearId?: string, @Query('termId') termId?: string) {
-    return this.service.getPerformanceEngine(academicYearId, termId);
+  performanceEngine(@Query('academicYearId') academicYearId?: string, @Query('termId') termId?: string, @CurrentUser() user?: RequestUser) {
+    return this.service.getPerformanceEngine(academicYearId, termId, resolveScopeSchoolId(user));
   }
 }

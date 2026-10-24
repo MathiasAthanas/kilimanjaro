@@ -23,6 +23,8 @@ import { ChangeStatusDto } from './dto/change-status.dto';
 import { PromoteStudentDto } from './dto/promote-student.dto';
 import { BulkPromoteStudentsDto } from './dto/bulk-promote-students.dto';
 import { AccessControlService } from '../common/helpers/access-control.service';
+import { StudentLifecycleService } from './student-lifecycle.service';
+import { ExecuteStudentLifecycleDto, StudentLifecyclePreviewDto } from './dto/student-lifecycle.dto';
 
 @ApiTags('Students')
 @Controller('students')
@@ -33,6 +35,7 @@ export class StudentsController {
     private readonly studentsService: StudentsService,
     private readonly studentImportService: StudentImportService,
     private readonly accessControl: AccessControlService,
+    private readonly lifecycleService: StudentLifecycleService,
   ) {}
 
   private async assertScopedAccess(user: RequestUser, studentId: string): Promise<void> {
@@ -57,6 +60,20 @@ export class StudentsController {
   @ApiOperation({ summary: 'Class-first bulk import (preview or commit) with validation' })
   async import(@Body() dto: ImportStudentsDto, @CurrentUser() user?: RequestUser) {
     return this.studentImportService.run(dto, user?.id || 'system', user);
+  }
+
+  @Post('lifecycle/preview')
+  @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN')
+  @ApiOperation({ summary: 'Preview a class/student lifecycle action and its protected dependencies' })
+  async lifecyclePreview(@Body() dto: StudentLifecyclePreviewDto, @CurrentUser() user?: RequestUser) {
+    return this.lifecycleService.preview(dto, user);
+  }
+
+  @Post('lifecycle/execute')
+  @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN')
+  @ApiOperation({ summary: 'Execute a confirmed, dependency-checked class/student lifecycle action' })
+  async lifecycleExecute(@Body() dto: ExecuteStudentLifecycleDto, @CurrentUser() user?: RequestUser) {
+    return this.lifecycleService.execute(dto, user);
   }
 
   @Get('stats')

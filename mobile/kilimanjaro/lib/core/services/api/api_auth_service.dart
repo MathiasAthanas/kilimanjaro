@@ -3,25 +3,15 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../../models/auth_result.dart';
 import '../../../models/auth_user.dart';
-import '../../config/app_config.dart';
+import '../../network/api_client.dart';
 import '../interfaces/auth_service_interface.dart';
 
 class ApiAuthService implements IAuthService {
-  ApiAuthService(this._storage) : _dio = _buildDio();
+  ApiAuthService(this._storage)
+      : _dio = buildApiClient(_storage, pathPrefix: '/api/v1');
 
   final FlutterSecureStorage _storage;
   final Dio _dio;
-
-  static Dio _buildDio() {
-    return Dio(
-      BaseOptions(
-        baseUrl: '${AppConfig.apiBaseUrl}/api/v1',
-        connectTimeout: const Duration(seconds: 15),
-        receiveTimeout: const Duration(seconds: 30),
-        headers: {'Content-Type': 'application/json'},
-      ),
-    );
-  }
 
   Future<Options> _authOptions() async {
     final token = await _storage.read(key: 'access_token');

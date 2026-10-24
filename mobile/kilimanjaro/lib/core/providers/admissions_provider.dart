@@ -1,4 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import 'auth_provider.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../models/admissions_models.dart';
@@ -6,7 +8,7 @@ import '../services/api/api_admissions_service.dart';
 import '../services/interfaces/admissions_service_interface.dart';
 
 final admissionsServiceProvider = Provider<IAdmissionsService>((ref) {
-  return ApiAdmissionsService(const FlutterSecureStorage());
+  return ApiAdmissionsService(ref.watch(secureStorageProvider));
 });
 
 final admissionsSummaryProvider = FutureProvider<AdmissionsSummary?>((ref) {

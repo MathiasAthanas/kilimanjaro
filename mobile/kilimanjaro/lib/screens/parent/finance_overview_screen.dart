@@ -21,9 +21,9 @@ class ParentFinanceOverviewScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final children =
-        ref.watch(parentChildrenProvider).value ?? const <ChildSummary>[];
+        ref.watch(parentChildrenProvider).valueOrNull ?? const <ChildSummary>[];
     final activeId = ref.watch(activeParentChildIdProvider);
-    final activeChild = ref.watch(activeParentChildProvider).value;
+    final activeChild = ref.watch(activeParentChildProvider).valueOrNull;
     final invoiceAsync = ref.watch(activeParentInvoiceProvider);
     final combinedAsync = ref.watch(parentCombinedOutstandingProvider);
     final paymentsAsync = ref.watch(parentReceiptsProvider);
@@ -88,7 +88,7 @@ class ParentFinanceOverviewScreen extends ConsumerWidget {
                   ),
                   data: (payments) {
                     final yearPayments = payments
-                        .where((item) => item.receipt.date.year == 2026)
+                        .where((item) => item.receipt.date.year == DateTime.now().year)
                         .take(3);
                     return Column(
                       children: yearPayments

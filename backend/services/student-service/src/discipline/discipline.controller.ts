@@ -55,7 +55,7 @@ export class DisciplineController {
   @Patch('discipline/:recordId/resolve')
   @Roles('PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN', 'HEAD_OF_DEPARTMENT', 'SYSTEM_ADMIN')
   @ApiOperation({ summary: 'Resolve discipline record' })
-  async resolve(@Param('recordId') recordId: string, @Body() dto: ResolveDisciplineDto) {
-    return this.disciplineService.resolve(recordId, dto);
+  async resolve(@Param('recordId') recordId: string, @Body() dto: ResolveDisciplineDto, @CurrentUser() user?: RequestUser) {
+    return this.disciplineService.resolve(recordId, dto, user);
   }
 }

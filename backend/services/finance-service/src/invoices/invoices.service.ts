@@ -15,7 +15,7 @@ import { AccessControlService } from '../common/helpers/access-control.service';
 import { NumberSequenceService } from '../common/helpers/number-sequence.service';
 import { RequestUser } from '../common/interfaces/request-user.interface';
 import { PrismaService } from '../prisma/prisma.service';
-import { schoolScopeFilter } from '../common/helpers/school-scope.helper';
+import { schoolScopeFilter, assertSchoolInScope } from '../common/helpers/school-scope.helper';
 import { RabbitMqService } from '../rabbitmq/rabbitmq.service';
 import { RedisService } from '../redis/redis.service';
 import { StudentClientService } from '../student-client/student-client.service';
@@ -416,9 +416,11 @@ export class InvoicesService {
 
     if (user.role === 'PARENT') {
       await this.accessControl.assertParentOwnsStudent(user.id, invoice.studentId);
-    }
-    if (user.role === 'STUDENT') {
+    } else if (user.role === 'STUDENT') {
       await this.accessControl.assertStudentOwnsRecord(user.id, invoice.studentId);
+    } else {
+      // Staff: block cross-school access by id (group users pass through).
+      assertSchoolInScope(user, invoice.schoolId ?? null);
     }
 
     return invoice;

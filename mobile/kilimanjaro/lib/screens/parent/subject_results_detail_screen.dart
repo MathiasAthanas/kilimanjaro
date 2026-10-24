@@ -25,9 +25,9 @@ class SubjectResultsDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final subjectAsync = ref.watch(parentSubjectByIdProvider(subjectId));
-    final child = ref.watch(activeParentChildProvider).value;
+    final child = ref.watch(activeParentChildProvider).valueOrNull;
     final alerts =
-        ref.watch(activeParentAlertsProvider).value ??
+        ref.watch(activeParentAlertsProvider).valueOrNull ??
         const <PerformanceAlertModel>[];
 
     final subjectName = subjectAsync.value?.name;

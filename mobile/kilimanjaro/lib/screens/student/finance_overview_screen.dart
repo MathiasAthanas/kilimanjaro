@@ -16,7 +16,7 @@ import 'student_formatters.dart';
 class FinanceOverviewScreen extends ConsumerWidget {
   const FinanceOverviewScreen({super.key});
 
-  static final _today = DateTime(2026, 4, 3);
+  static DateTime get _today => DateTime.now();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

@@ -31,6 +31,7 @@ export class AttendanceController {
     'HEAD_OF_DEPARTMENT',
     'TEACHER',
     'PARENT',
+    'STUDENT',
   )
   @ApiOperation({ summary: 'List attendance records with attendance rate' })
   async list(@Query() query: AttendanceFilterDto, @CurrentUser() user?: RequestUser) {

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/providers/elearning/elearning_provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../models/elearning_models.dart';
+import '../../../widgets/common/ks_error_view.dart';
 
 class TeacherCoursesHomeScreen extends ConsumerWidget {
   const TeacherCoursesHomeScreen({super.key});
@@ -48,50 +49,112 @@ class TeacherCoursesHomeScreen extends ConsumerWidget {
   }
 }
 
-class TeacherCourseDetailScreen extends StatelessWidget {
+class TeacherCourseDetailScreen extends ConsumerWidget {
   const TeacherCourseDetailScreen({super.key, required this.courseId});
   final String courseId;
 
   @override
-  Widget build(BuildContext context) => _TeacherElScaffold(
-    title: 'Course Workspace',
-    subtitle: 'Lessons, materials, assignments, quizzes and communication.',
-    children: [
-      const _ReadinessCard(),
-      _ActionCard(
-        'Lesson planner',
-        'Reorder weekly units, publish lessons and attach content.',
-        Icons.view_timeline_rounded,
-        () => context.push('/teacher/courses/$courseId/lesson/lesson-linear'),
-      ),
-      _ActionCard(
-        'Material studio',
-        'Text notes, PDF, image, video, link and low-bandwidth downloads.',
-        Icons.upload_file_rounded,
-        () => context.push(
-          '/teacher/courses/$courseId/lesson/lesson-linear/material/new',
+  Widget build(BuildContext context, WidgetRef ref) {
+    final lessonsAsync = ref.watch(elearningLessonsProvider(courseId));
+    final quizzesAsync = ref.watch(elearningQuizzesProvider(courseId));
+
+    return _TeacherElScaffold(
+      title: 'Course Workspace',
+      subtitle: 'Lessons, materials, assignments, quizzes and communication.',
+      children: [
+        const _ReadinessCard(),
+
+        // ─── Lessons (real backend records) ──────────────────────────────
+        const _SectionLabel('Lessons'),
+        lessonsAsync.when(
+          loading: () => const _InlineLoader(),
+          error: (e, _) => KSErrorView(
+            error: e,
+            onRetry: () => ref.invalidate(elearningLessonsProvider(courseId)),
+          ),
+          data: (lessons) {
+            if (lessons.isEmpty) {
+              return const _ActionCard(
+                'No lessons yet',
+                'Create lessons from the web dashboard, then manage them here.',
+                Icons.view_timeline_rounded,
+                null,
+              );
+            }
+            return Column(
+              children: [
+                for (final lesson in lessons)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: _ActionCard(
+                      lesson.title,
+                      'Week ${lesson.weekNumber ?? lesson.orderIndex} · ${lesson.status} · ${lesson.materials.length} materials',
+                      Icons.menu_book_rounded,
+                      // Navigate only with the backend lesson id.
+                      () => context.push(
+                          '/teacher/courses/$courseId/lesson/${lesson.id}'),
+                    ),
+                  ),
+              ],
+            );
+          },
         ),
-      ),
-      _ActionCard(
-        'Assignments and grading',
-        'Create tasks, review missing work, score and return feedback.',
-        Icons.assignment_turned_in_rounded,
-        () => context.push('/teacher/courses/$courseId/assignments'),
-      ),
-      _ActionCard(
-        'Quiz builder',
-        'MCQ, true/false, short answer, auto-marking and manual queue.',
-        Icons.quiz_rounded,
-        () => context.push('/teacher/courses/$courseId/quizzes/quiz-linear'),
-      ),
-      _ActionCard(
-        'Engagement analytics',
-        'Completion heatmap, struggling students and late submissions.',
-        Icons.analytics_rounded,
-        () => context.push('/teacher/courses/$courseId/engagement'),
-      ),
-    ],
-  );
+
+        // ─── Assignments & grading (course-scoped, real id) ──────────────
+        const _SectionLabel('Assignments'),
+        _ActionCard(
+          'Assignments and grading',
+          'Create tasks, review missing work, score and return feedback.',
+          Icons.assignment_turned_in_rounded,
+          () => context.push('/teacher/courses/$courseId/assignments'),
+        ),
+
+        // ─── Quizzes (real backend records) ──────────────────────────────
+        const _SectionLabel('Quizzes'),
+        quizzesAsync.when(
+          loading: () => const _InlineLoader(),
+          error: (e, _) => KSErrorView(
+            error: e,
+            onRetry: () => ref.invalidate(elearningQuizzesProvider(courseId)),
+          ),
+          data: (quizzes) {
+            if (quizzes.isEmpty) {
+              return const _ActionCard(
+                'No quizzes yet',
+                'Create quizzes from the web dashboard, then manage them here.',
+                Icons.quiz_rounded,
+                null,
+              );
+            }
+            return Column(
+              children: [
+                for (final quiz in quizzes)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: _ActionCard(
+                      quiz.title,
+                      '${quiz.questions.length} questions · ${quiz.status}',
+                      Icons.quiz_rounded,
+                      // Navigate only with the backend quiz id.
+                      () => context.push(
+                          '/teacher/courses/$courseId/quizzes/${quiz.id}'),
+                    ),
+                  ),
+              ],
+            );
+          },
+        ),
+
+        const _SectionLabel('Insights'),
+        _ActionCard(
+          'Engagement analytics',
+          'Completion heatmap, struggling students and late submissions.',
+          Icons.analytics_rounded,
+          () => context.push('/teacher/courses/$courseId/engagement'),
+        ),
+      ],
+    );
+  }
 }
 
 class TeacherLessonDetailScreen extends ConsumerWidget {
@@ -475,6 +538,35 @@ class _TeacherCourseCard extends StatelessWidget {
     Icons.school_rounded,
     onTap,
   );
+}
+
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel(this.text);
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(top: 8, bottom: 6, left: 4),
+        child: Text(
+          text.toUpperCase(),
+          style: const TextStyle(
+            fontWeight: FontWeight.w900,
+            fontSize: 12,
+            letterSpacing: 0.8,
+            color: AppColors.eLearningPrimary,
+          ),
+        ),
+      );
+}
+
+class _InlineLoader extends StatelessWidget {
+  const _InlineLoader();
+
+  @override
+  Widget build(BuildContext context) => const Padding(
+        padding: EdgeInsets.symmetric(vertical: 24),
+        child: Center(child: CircularProgressIndicator()),
+      );
 }
 
 class _ActionCard extends StatelessWidget {

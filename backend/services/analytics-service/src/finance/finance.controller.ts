@@ -1,7 +1,10 @@
 import { Controller, Get, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { ROLES } from '../common/constants/roles';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
+import { RequestUser } from '../common/interfaces/request-user.interface';
+import { resolveScopeSchoolId } from '../common/helpers/school-scope.helper';
 import { FinanceAnalyticsService } from './finance.service';
 
 @ApiTags('Analytics - Finance')
@@ -14,15 +17,15 @@ export class FinanceController {
   @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.MANAGING_DIRECTOR, ROLES.BOARD_DIRECTOR, ROLES.FINANCE, ROLES.HEAD_OF_FINANCE)
   @ApiOperation({ summary: 'Finance overview analytics' })
   @ApiResponse({ status: 200 })
-  overview(@Query('academicYearId') academicYearId?: string, @Query('termId') termId?: string) {
-    return this.service.getOverview(academicYearId, termId);
+  overview(@Query('academicYearId') academicYearId?: string, @Query('termId') termId?: string, @CurrentUser() user?: RequestUser) {
+    return this.service.getOverview(academicYearId, termId, resolveScopeSchoolId(user) ?? undefined);
   }
 
   @Get('revenue-forecast')
   @Roles(ROLES.SYSTEM_ADMIN, ROLES.MANAGING_DIRECTOR, ROLES.BOARD_DIRECTOR)
   @ApiOperation({ summary: 'Revenue forecast analytics' })
-  forecast(@Query('academicYearId') academicYearId?: string) {
-    return this.service.getRevenueForecast(academicYearId);
+  forecast(@Query('academicYearId') academicYearId?: string, @CurrentUser() user?: RequestUser) {
+    return this.service.getRevenueForecast(academicYearId, resolveScopeSchoolId(user));
   }
 
   @Get('assets-summary')

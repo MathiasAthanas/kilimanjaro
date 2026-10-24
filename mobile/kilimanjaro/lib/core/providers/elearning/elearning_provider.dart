@@ -21,7 +21,7 @@ final elearningCoursesProvider =
 });
 
 final activeCourseCountProvider = Provider<int>((ref) {
-  final courses = ref.watch(elearningCoursesProvider).value ?? [];
+  final courses = ref.watch(elearningCoursesProvider).valueOrNull ?? [];
   return courses.where((c) => c.isActive).length;
 });
 

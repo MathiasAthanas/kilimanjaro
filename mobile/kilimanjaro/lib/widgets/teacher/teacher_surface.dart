@@ -195,7 +195,7 @@ class TeacherClassCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 4),
-                Text('${item.studentCount} students - next ${item.nextLesson}'),
+                Text(item.nextLesson.isEmpty ? '${item.studentCount} students' : '${item.studentCount} students - next ${item.nextLesson}'),
                 const SizedBox(height: 8),
                 LinearProgressIndicator(
                   value: item.averageScore / 100,

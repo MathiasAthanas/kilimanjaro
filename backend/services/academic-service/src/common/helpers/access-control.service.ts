@@ -22,6 +22,10 @@ export class AccessControlService {
   async resolveGuardianStudentIds(authUserId: string): Promise<string[]> {
     const payload = await this.studentClient.get<any>(`/students/internal/guardian-by-auth/${authUserId}`);
     const data = this.unwrap<any>(payload);
+    // guardian-by-auth returns one summary per child: [{ id, ... }]
+    if (Array.isArray(data)) {
+      return data.map((child: { id?: string }) => child?.id).filter((id): id is string => !!id);
+    }
     return data?.studentIds || [];
   }
 

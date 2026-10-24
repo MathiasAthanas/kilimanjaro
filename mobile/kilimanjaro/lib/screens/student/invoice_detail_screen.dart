@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/providers/notification_provider.dart';
 import '../../core/providers/student_provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../widgets/common/ks_empty_state.dart';
@@ -17,6 +18,7 @@ class InvoiceDetailScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final invoiceAsync = ref.watch(currentInvoiceProvider);
     final paymentsAsync = ref.watch(studentPaymentsProvider);
+    final user = ref.watch(currentUserProvider).valueOrNull;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final paperColor = isDark
         ? AppColors.darkSurface.withValues(alpha: 0.96)
@@ -91,17 +93,17 @@ class InvoiceDetailScreen extends ConsumerWidget {
                             children: [
                               _Cell(
                                 label: 'Student',
-                                value: 'Amina Baraka Juma',
+                                value: user?.name ?? '-',
                                 backgroundColor: paperInner,
                               ),
                               _Cell(
-                                label: 'Class',
-                                value: 'Form 3A',
+                                label: 'Reg. No.',
+                                value: user?.registrationNumber ?? '-',
                                 backgroundColor: paperInner,
                               ),
                               _Cell(
-                                label: 'Term',
-                                value: 'Term 1 2025/2026',
+                                label: 'Invoice',
+                                value: invoice.title,
                                 backgroundColor: paperInner,
                               ),
                               _Cell(

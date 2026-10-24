@@ -644,6 +644,13 @@ export class ElearningController {
   }
 
   @UseGuards(InternalApiGuard)
+  @Get('internal/lifecycle-usage')
+  lifecycleUsage(@Query('studentIds') rawStudentIds = '') {
+    const studentIds = [...new Set(rawStudentIds.split(',').map((id) => id.trim()).filter(Boolean))].slice(0, 500);
+    return this.service.lifecycleUsage(studentIds);
+  }
+
+  @UseGuards(InternalApiGuard)
   @Post('internal/enrollment-sync')
   internalEnrollmentSync(@Body() body: Record<string, unknown>) {
     return this.service.internalEnrollmentSync(body);

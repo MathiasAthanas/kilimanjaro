@@ -40,5 +40,5 @@ final themeModeControllerProvider =
 );
 
 final themeModeProvider = Provider<ThemeMode>((ref) {
-  return ref.watch(themeModeControllerProvider).value ?? ThemeMode.system;
+  return ref.watch(themeModeControllerProvider).valueOrNull ?? ThemeMode.system;
 });

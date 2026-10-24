@@ -15,4 +15,5 @@ abstract interface class IHodService {
   Future<List<HodIntervention>> getInterventions();
   Future<void> createIntervention(Map<String, dynamic> data);
   Future<List<AnnouncementModel>> getAnnouncements();
+  Future<void> createAnnouncement(Map<String, dynamic> data);
 }

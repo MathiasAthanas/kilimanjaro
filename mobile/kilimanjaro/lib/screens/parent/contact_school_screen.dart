@@ -17,7 +17,7 @@ class ContactSchoolScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final child = ref.watch(activeParentChildProvider).value;
+    final child = ref.watch(activeParentChildProvider).valueOrNull;
     final contactAsync = ref.watch(parentContactSchoolProvider);
 
     return Scaffold(

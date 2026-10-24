@@ -142,3 +142,16 @@ JOIN "students"."StudentGuardianLink" l ON l."guardianId" = g."id" AND l."isActi
 JOIN "students"."Student" s ON s."id" = l."studentId" AND s."schoolId" IS NOT NULL
 JOIN "auth"."users" au ON au."id" = g."authUserId" AND au."role" = 'PARENT'
 ON CONFLICT ("authUserId","schoolId","role") DO NOTHING;
+
+-- Step 3g — Student-domain records that carry a schoolId but were not stamped above
+UPDATE "students"."AttendanceRecord" a SET "schoolId" = s."schoolId"
+FROM "students"."Student" s WHERE a."studentId" = s."id" AND a."schoolId" IS NULL AND s."schoolId" IS NOT NULL;
+
+UPDATE "students"."PerformanceAlert" p SET "schoolId" = s."schoolId"
+FROM "students"."Student" s WHERE p."studentId" = s."id" AND p."schoolId" IS NULL AND s."schoolId" IS NOT NULL;
+
+UPDATE "students"."PeerPairing" p SET "schoolId" = s."schoolId"
+FROM "students"."Student" s WHERE p."studentId" = s."id" AND p."schoolId" IS NULL AND s."schoolId" IS NOT NULL;
+
+UPDATE "academics"."AcademicIntervention" i SET "schoolId" = s."schoolId"
+FROM "students"."Student" s WHERE i."studentId" = s."id" AND i."schoolId" IS NULL AND s."schoolId" IS NOT NULL;

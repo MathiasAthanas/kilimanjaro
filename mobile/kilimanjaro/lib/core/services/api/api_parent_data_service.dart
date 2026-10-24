@@ -11,25 +11,16 @@ import '../../../models/performance_trend_model.dart';
 import '../../../models/receipt_model.dart';
 import '../../../models/report_card_model.dart';
 import '../../../models/term_result_model.dart';
-import '../../config/app_config.dart';
+import '../../network/api_client.dart';
+import '../../network/api_failure.dart';
 import '../interfaces/parent_service_interface.dart';
 
 class ApiParentDataService implements IParentService {
-  ApiParentDataService(this._storage) : _dio = _buildDio();
+  ApiParentDataService(this._storage)
+      : _dio = buildApiClient(_storage, pathPrefix: '/api/v1');
 
   final FlutterSecureStorage _storage;
   final Dio _dio;
-
-  static Dio _buildDio() {
-    return Dio(
-      BaseOptions(
-        baseUrl: '${AppConfig.apiBaseUrl}/api/v1',
-        connectTimeout: const Duration(seconds: 15),
-        receiveTimeout: const Duration(seconds: 30),
-        headers: {'Content-Type': 'application/json'},
-      ),
-    );
-  }
 
   Future<Options> _auth() async {
     final token = await _storage.read(key: 'access_token');
@@ -43,10 +34,11 @@ class ApiParentDataService implements IParentService {
     try {
       final resp = await _dio.get<dynamic>(path, options: opts);
       if (resp.data is Map) return resp.data as Map<String, dynamic>;
-    } on DioException {
       return null;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) return null;
+      throw ApiFailure.fromDio(e);
     }
-    return null;
   }
 
   Future<List<dynamic>> _getList(String path, {Map<String, dynamic>? params}) async {
@@ -60,10 +52,11 @@ class ApiParentDataService implements IParentService {
           if (m[key] is List) return m[key] as List<dynamic>;
         }
       }
-    } on DioException {
-      return [];
+      return const [];
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) return const [];
+      throw ApiFailure.fromDio(e);
     }
-    return [];
   }
 
   // ─── Children ─────────────────────────────────────────────────────────────
@@ -92,8 +85,9 @@ class ApiParentDataService implements IParentService {
       if (dash != null) {
         return ChildSummary.fromJson({...child, ...dash});
       }
-    } on DioException {
-      // fallback to basic data
+    } catch (_) {
+      // Enrichment is best-effort: fall back to the basic child record if the
+      // per-child dashboard fetch fails, rather than failing the whole list.
     }
     return ChildSummary.fromJson(child);
   }
@@ -175,8 +169,9 @@ class ApiParentDataService implements IParentService {
         options: opts,
       );
       return ReportCardModel.fromJson(resp.data!);
-    } on DioException {
-      return null;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) return null;
+      throw ApiFailure.fromDio(e);
     }
   }
 
@@ -184,7 +179,7 @@ class ApiParentDataService implements IParentService {
 
   @override
   Future<List<AttendanceRecordModel>> getAttendanceRecords(String childId) async {
-    final list = await _getList('/students/attendance', params: {'studentId': childId});
+    final list = await _getList('/students/attendance', params: {'studentId': childId, 'limit': 400});
     return list.cast<Map<String, dynamic>>().map(AttendanceRecordModel.fromJson).toList();
   }
 
@@ -198,8 +193,9 @@ class ApiParentDataService implements IParentService {
         options: opts,
       );
       return resp.data;
-    } on DioException {
-      return null;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) return null;
+      throw ApiFailure.fromDio(e);
     }
   }
 
@@ -228,8 +224,9 @@ class ApiParentDataService implements IParentService {
         options: opts,
       );
       return PerformanceTrendModel.fromJson(resp.data!);
-    } on DioException {
-      return null;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) return null;
+      throw ApiFailure.fromDio(e);
     }
   }
 
@@ -237,7 +234,7 @@ class ApiParentDataService implements IParentService {
 
   @override
   Future<InvoiceModel> getCurrentInvoice(String childId) async {
-    final list = await _getList('/finance/invoices', params: {'studentId': childId});
+    final list = await _getList('/finance/invoices/student/$childId');
     if (list.isEmpty) throw Exception('No invoice found for child $childId');
     final invoices = list.cast<Map<String, dynamic>>();
     final current = invoices.where((i) => i['status'] != 'PAID').firstOrNull ?? invoices.first;
@@ -272,8 +269,29 @@ class ApiParentDataService implements IParentService {
 
   @override
   Future<Map<String, double>> getClassAverages(String childId, String termId) async {
-    // Class averages are staff-only data; return empty map (comparison chart degrades gracefully)
-    return {};
+    // Aggregated, privacy-safe class averages (no individual identities/results).
+    // This is an optional enhancement: it degrades to an empty map (the
+    // comparison chart hides itself) on ANY failure, so it can never turn a
+    // working screen into an error — matching the previous always-empty behavior
+    // while lighting up once the backend serves the endpoint.
+    try {
+      final data =
+          await _getMap('/mobile/parent/children/$childId/class-averages?termId=$termId');
+      if (data == null) return const {};
+      // Unwrap the gateway envelope ({data: {averages: {...}}}) if present.
+      final inner =
+          data['data'] is Map<String, dynamic> ? data['data'] as Map<String, dynamic> : data;
+      final payload =
+          inner['averages'] is Map ? inner['averages'] as Map : inner;
+      final result = <String, double>{};
+      payload.forEach((key, value) {
+        final numValue = value is num ? value.toDouble() : double.tryParse('$value');
+        if (numValue != null) result[key.toString()] = numValue;
+      });
+      return result;
+    } catch (_) {
+      return const {};
+    }
   }
 
   // ─── Announcements ────────────────────────────────────────────────────────
@@ -288,12 +306,24 @@ class ApiParentDataService implements IParentService {
 
   @override
   Future<ContactSchoolModel> getContactSchool(String childId) async {
-    // Contact school info is static / school-wide; return a sensible default
-    // that the school admin can configure later via a settings endpoint
+    // Prefer real, token-scoped contact details derived from the selected
+    // child's school. This is an optional enhancement that degrades to a neutral
+    // placeholder on ANY failure, so it can never turn a working screen into an
+    // error; it lights up automatically once the backend serves the endpoint.
+    try {
+      final data = await _getMap('/mobile/parent/children/$childId/school-contact');
+      if (data != null && data.isNotEmpty) {
+        final payload =
+            data['data'] is Map<String, dynamic> ? data['data'] as Map<String, dynamic> : data;
+        return ContactSchoolModel.fromJson(payload);
+      }
+    } catch (_) {
+      // fall through to the placeholder
+    }
     return const ContactSchoolModel(
-      schoolName: 'Kilimanjaro School',
-      address: 'Please contact the school office for the address',
-      openHours: 'Mon–Fri: 7:00 AM – 5:00 PM',
+      schoolName: 'Your school',
+      address: 'Contact details are not available yet.',
+      openHours: '',
       emergencyPhone: '',
       actions: [],
       teachers: [],

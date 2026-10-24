@@ -109,6 +109,11 @@ export class ClassesService {
       include: {
         academicYear: true,
         pathwayFrom: { include: { toClass: true } },
+        _count: {
+          select: {
+            enrolments: { where: { isActive: true } },
+          },
+        },
       },
       orderBy: [{ educationStage: 'asc' }, { sortOrder: 'asc' }, { level: 'asc' }, { name: 'asc' }, { stream: 'asc' }],
     });
@@ -121,6 +126,7 @@ export class ClassesService {
       const teacher = item.classTeacherId ? teachersById.get(item.classTeacherId) : undefined;
       return {
         ...item,
+        studentCount: item._count.enrolments,
         classTeacher: teacher ?? null,
         classTeacherName: teacher?.fullName ?? null,
         teacherName: teacher?.fullName ?? null,

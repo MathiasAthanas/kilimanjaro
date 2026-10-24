@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { schoolScopeFilter } from '../common/helpers/school-scope.helper';
+import { schoolScopeFilter, assertSchoolInScope } from '../common/helpers/school-scope.helper';
 import { RedisService } from '../redis/redis.service';
 import { StudentClientService } from '../student-client/student-client.service';
 import { RabbitMqService } from '../rabbitmq/rabbitmq.service';
@@ -389,8 +389,13 @@ export class ReportCardsService {
       throw new NotFoundException('Report card not found');
     }
 
-    if ([ROLES.PARENT, ROLES.STUDENT].includes(user.role as any) && !reportCard.isPublished) {
-      throw new ForbiddenException('Report card not published');
+    if ([ROLES.PARENT, ROLES.STUDENT].includes(user.role as any)) {
+      if (!reportCard.isPublished) {
+        throw new ForbiddenException('Report card not published');
+      }
+    } else {
+      // Staff: block cross-school access by id (group users pass through).
+      assertSchoolInScope(user, (reportCard as { schoolId?: string | null }).schoolId ?? null);
     }
 
     await this.redis.set(cacheKey, reportCard, 1800);
@@ -467,6 +472,7 @@ export class ReportCardsService {
   async signReportCard(id: string, signatureText: string, user: RequestUser) {
     const existing = await this.prisma.reportCard.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Report card not found');
+    assertSchoolInScope(user, (existing as { schoolId?: string | null }).schoolId ?? null);
 
     const updated = await this.prisma.reportCard.update({
       where: { id },
@@ -493,6 +499,7 @@ export class ReportCardsService {
     if (!existing) {
       throw new NotFoundException('Report card not found');
     }
+    assertSchoolInScope(user, (existing as { schoolId?: string | null }).schoolId ?? null);
 
     const data: any = {};
     if (user.role === ROLES.TEACHER && dto.teacherComment !== undefined) {

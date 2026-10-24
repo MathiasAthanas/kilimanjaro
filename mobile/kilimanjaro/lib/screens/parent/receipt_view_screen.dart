@@ -19,7 +19,7 @@ class ParentReceiptViewScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final receiptAsync = ref.watch(parentReceiptByIdProvider(receiptId));
-    final child = ref.watch(activeParentChildProvider).value;
+    final child = ref.watch(activeParentChildProvider).valueOrNull;
 
     return Scaffold(
       appBar: KSAppBar(

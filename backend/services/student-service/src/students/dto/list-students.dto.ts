@@ -1,6 +1,7 @@
 import { Type } from 'class-transformer';
 import { IsEnum, IsOptional, IsString, Min } from 'class-validator';
 import { StudentStatus } from '../../../generated/prisma';
+import { SortDir } from '../../common/helpers/sort.helper';
 
 export class ListStudentsDto {
   @IsOptional()
@@ -28,4 +29,13 @@ export class ListStudentsDto {
   @IsOptional()
   @IsString()
   search?: string;
+
+  /** Allow-listed sort column (see students.service). */
+  @IsOptional()
+  @IsString()
+  sortBy?: string;
+
+  @IsOptional()
+  @IsEnum(SortDir)
+  sortDir?: SortDir;
 }

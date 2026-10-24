@@ -331,7 +331,7 @@ export class SubjectsService {
       throw new NotFoundException('Class subject not found');
     }
     assertSchoolInScope(user, (existing as { schoolId?: string | null }).schoolId ?? null);
-    await this.assertHodSubjectScope(user, dto.subjectId ?? existing.subjectId, dto.academicYearId ?? existing.academicYearId);
+    await this.assertHodSubjectScope(user, existing.subjectId, existing.academicYearId);
     if (dto.teacherId !== undefined) {
       const schoolId = (existing as { schoolId?: string | null }).schoolId;
       if (!schoolId) throw new BadRequestException('This class-subject record has no school context. Recreate it from the selected school.');

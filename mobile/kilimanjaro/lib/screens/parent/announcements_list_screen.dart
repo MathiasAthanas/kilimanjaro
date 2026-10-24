@@ -17,7 +17,7 @@ class ParentAnnouncementsListScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final filter = ref.watch(parentAnnouncementFilterProvider);
     final items = ref.watch(filteredParentAnnouncementsProvider);
-    final child = ref.watch(activeParentChildProvider).value;
+    final child = ref.watch(activeParentChildProvider).valueOrNull;
 
     return Scaffold(
       appBar: KSAppBar(

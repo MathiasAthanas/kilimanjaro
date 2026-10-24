@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/navigation/drawer_config.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/providers/notification_provider.dart';
+import '../../core/providers/school_provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../models/auth_user.dart';
 import '../../models/nav_item.dart';
@@ -27,7 +28,7 @@ class KSSideDrawer extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final sections = drawerConfig[role] ?? const <DrawerSection>[];
-    final user = ref.watch(currentUserProvider).value;
+    final user = ref.watch(currentUserProvider).valueOrNull;
     final safeBottom = MediaQuery.paddingOf(context).bottom;
 
     return Drawer(
@@ -43,6 +44,7 @@ class KSSideDrawer extends ConsumerWidget {
             SliverToBoxAdapter(
               child: _DrawerHeader(role: role, user: user, onClose: onClose),
             ),
+            const SliverToBoxAdapter(child: _SchoolSwitcher()),
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
               sliver: SliverList.builder(
@@ -397,5 +399,89 @@ class _DrawerFooter extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+
+/// Lets staff who belong to several schools pick the school they are working
+/// in; the choice is sent with every request and reloads all data.
+class _SchoolSwitcher extends ConsumerWidget {
+  const _SchoolSwitcher();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final schools = ref.watch(userSchoolsProvider).valueOrNull ?? const <SchoolOption>[];
+    if (schools.length < 2) return const SizedBox.shrink();
+    final activeId = ref.watch(activeSchoolIdProvider).valueOrNull;
+    final active = schools.where((s) => s.id == activeId).firstOrNull;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+      child: Material(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(18),
+        child: ListTile(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          leading: const Icon(Icons.apartment_rounded, color: AppColors.skyBlue600),
+          title: Text(
+            active?.name ?? 'All schools',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontWeight: FontWeight.w800),
+          ),
+          subtitle: const Text('Tap to switch school'),
+          trailing: const Icon(Icons.swap_horiz_rounded),
+          onTap: () => _pick(context, ref, schools, activeId),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pick(
+    BuildContext context,
+    WidgetRef ref,
+    List<SchoolOption> schools,
+    String? activeId,
+  ) async {
+    final user = ref.read(currentUserProvider).valueOrNull;
+    final isGroup = user != null && user.schoolIds.isEmpty;
+    const allSchools = '__all__';
+    final chosen = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (isGroup)
+              ListTile(
+                leading: Icon(
+                  activeId == null
+                      ? Icons.radio_button_checked_rounded
+                      : Icons.radio_button_off_rounded,
+                  color: AppColors.skyBlue600,
+                ),
+                title: const Text('All schools'),
+                onTap: () => Navigator.of(sheetContext).pop(allSchools),
+              ),
+            for (final school in schools)
+              ListTile(
+                leading: Icon(
+                  school.id == activeId
+                      ? Icons.radio_button_checked_rounded
+                      : Icons.radio_button_off_rounded,
+                  color: AppColors.skyBlue600,
+                ),
+                title: Text(school.name),
+                onTap: () => Navigator.of(sheetContext).pop(school.id),
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (chosen == null) return;
+    final next = chosen == allSchools ? null : chosen;
+    if (next != activeId) await selectActiveSchool(ref, next);
   }
 }

@@ -4,7 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { AuditService } from '../audit/audit.service';
 import { RequestUser } from '../common/interfaces/request-user.interface';
-import { schoolScopeFilter } from '../common/helpers/school-scope.helper';
+import { schoolScopeFilter, assertSchoolInScope } from '../common/helpers/school-scope.helper';
 import { CreateFeeStructureDto } from './dto/create-fee-structure.dto';
 import { UpdateFeeStructureDto } from './dto/update-fee-structure.dto';
 import { AssignStudentGroupDto, CreateStudentGroupDto } from './dto/student-group.dto';
@@ -126,6 +126,7 @@ export class FeeStructuresService {
   async update(id: string, dto: UpdateFeeStructureDto, user: RequestUser) {
     const existing = await this.prisma.feeStructure.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Fee structure not found');
+    assertSchoolInScope(user, existing.schoolId ?? null);
 
     if (dto.amount && dto.amount !== existing.amount.toString()) {
       const linkedDraftSafe = await this.prisma.invoiceLineItem.findFirst({
@@ -174,6 +175,7 @@ export class FeeStructuresService {
   async deactivate(id: string, user: RequestUser) {
     const existing = await this.prisma.feeStructure.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Fee structure not found');
+    assertSchoolInScope(user, existing.schoolId ?? null);
 
     const updated = await this.prisma.feeStructure.update({
       where: { id },

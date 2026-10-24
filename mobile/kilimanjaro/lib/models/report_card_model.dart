@@ -1,3 +1,5 @@
+import 'json_num.dart';
+
 class ReportCardRemark {
   const ReportCardRemark({
     required this.author,
@@ -80,7 +82,7 @@ class ReportCardModel {
       title: json['title'] as String? ?? json['overallRemark'] as String? ?? '',
       classLabel: json['classLabel'] as String? ?? (json['class'] as Map<String, dynamic>?)?['name'] as String? ?? '',
       stream: json['stream'] as String? ?? '',
-      overallScore: (json['overallAverage'] as num?)?.toDouble() ?? (json['overallScore'] as num?)?.toDouble() ?? 0.0,
+      overallScore: numOf(json['overallAverage'])?.toDouble() ?? numOf(json['overallScore'])?.toDouble() ?? 0.0,
       overallGrade: json['overallGrade'] as String? ?? '',
       rank: json['rank'] as int? ?? 0,
       totalStudents: json['totalStudentsInClass'] as int? ?? json['totalStudents'] as int? ?? 0,

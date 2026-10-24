@@ -2,26 +2,15 @@ import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../../models/elearning_models.dart';
-import '../../config/app_config.dart';
+import '../../network/api_client.dart';
 
 /// Dio-based service that calls the elearning-service through the API gateway.
 class ElearningApiService {
-  ElearningApiService(this._storage) : _dio = _buildDio();
+  ElearningApiService(this._storage)
+      : _dio = buildApiClient(_storage, pathPrefix: '/elearning');
 
   final FlutterSecureStorage _storage;
   final Dio _dio;
-
-  static Dio _buildDio() {
-    final dio = Dio(
-      BaseOptions(
-        baseUrl: '${AppConfig.apiBaseUrl}/elearning',
-        connectTimeout: const Duration(seconds: 15),
-        receiveTimeout: const Duration(seconds: 30),
-        headers: {'Content-Type': 'application/json'},
-      ),
-    );
-    return dio;
-  }
 
   Future<Options> _authOptions() async {
     final token = await _storage.read(key: 'access_token');

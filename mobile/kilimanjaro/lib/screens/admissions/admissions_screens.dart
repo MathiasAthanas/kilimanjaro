@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/network/api_failure.dart';
 import '../../core/providers/admissions_provider.dart';
 import '../../core/providers/snackbar_provider.dart';
 import '../../core/theme/app_colors.dart';
@@ -446,37 +447,56 @@ class _ApplicantDetailBody extends ConsumerWidget {
     if (await canLaunchUrl(uri)) await launchUrl(uri);
   }
 
-  Future<void> _advance(
-      BuildContext context, WidgetRef ref, String toStage) async {
-    final service = ref.read(admissionsServiceProvider);
+  void _refresh(WidgetRef ref) {
+    ref.invalidate(applicantDetailProvider(applicant.id));
+    ref.invalidate(applicantsProvider);
+    ref.invalidate(admissionsSummaryProvider);
+  }
+
+  /// Runs a lifecycle action, refreshes the views, and reports the outcome.
+  Future<void> _run(
+    BuildContext context,
+    WidgetRef ref,
+    Future<AdmissionApplicant?> Function() action,
+    String success,
+  ) async {
     try {
-      await service.transitionStage(
-        applicantId: applicant.id,
-        toStage: toStage,
-        note: 'Updated from the mobile admissions desk',
-      );
-      ref.invalidate(applicantDetailProvider(applicant.id));
-      ref.invalidate(applicantsProvider);
-      ref.invalidate(admissionsSummaryProvider);
+      await action();
+      _refresh(ref);
       if (context.mounted) {
-        ref
-            .read(snackbarProvider.notifier)
-            .show('Moved to ${_stageLabel(toStage)}');
+        ref.read(snackbarProvider.notifier).show(success);
       }
-    } catch (_) {
+    } catch (e) {
       if (context.mounted) {
         ref
             .read(snackbarProvider.notifier)
-            .show('Could not update the stage — try again.');
+            .show(ApiFailure.from(e).message);
       }
     }
   }
 
+  Future<void> _advance(
+      BuildContext context, WidgetRef ref, String toStage) {
+    final service = ref.read(admissionsServiceProvider);
+    return _run(
+      context,
+      ref,
+      () => service.transitionStage(
+        applicantId: applicant.id,
+        toStage: toStage,
+        note: 'Updated from the mobile admissions desk',
+      ),
+      'Moved to ${_stageLabel(toStage)}',
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final canAdvanceToApplication = applicant.stage == 'INQUIRY';
-    final canWithdraw = !['ENROLLED', 'REJECTED', 'WITHDRAWN']
-        .contains(applicant.stage);
+    final stage = applicant.stage;
+    final canWithdraw =
+        !['ENROLLED', 'REJECTED', 'WITHDRAWN'].contains(stage);
+    final assessment = applicant.latestAssessment;
+    final offer = applicant.offer;
 
     return CommonScreenSurface(
       children: [
@@ -499,15 +519,15 @@ class _ApplicantDetailBody extends ConsumerWidget {
                         horizontal: 10, vertical: 5),
                     decoration: BoxDecoration(
                       color:
-                          _stageColor(applicant.stage).withValues(alpha: 0.12),
+                          _stageColor(stage).withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
-                      _stageLabel(applicant.stage),
+                      _stageLabel(stage),
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w800,
-                        color: _stageColor(applicant.stage),
+                        color: _stageColor(stage),
                       ),
                     ),
                   ),
@@ -524,20 +544,71 @@ class _ApplicantDetailBody extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: 12),
-        KSButton(
-          label: 'Call Guardian',
-          icon:
-              const Icon(Icons.call_rounded, size: 18, color: Colors.white),
-          onPressed: _callGuardian,
+        Row(
+          children: [
+            Expanded(
+              child: KSButton(
+                label: 'Call Guardian',
+                icon: const Icon(Icons.call_rounded,
+                    size: 18, color: Colors.white),
+                onPressed: _callGuardian,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: KSButton(
+                label: 'Edit',
+                secondary: true,
+                icon: const Icon(Icons.edit_rounded, size: 18),
+                onPressed: () => _editDetails(context, ref),
+              ),
+            ),
+          ],
         ),
-        if (canAdvanceToApplication) ...[
-          const SizedBox(height: 10),
-          KSButton(
-            label: 'Move to Application',
-            secondary: true,
-            onPressed: () => _advance(context, ref, 'APPLICATION'),
+
+        // ─── Assessment / offer status ──────────────────────────────────
+        if (assessment != null) ...[
+          const SizedBox(height: 12),
+          _StatusCard(
+            icon: Icons.fact_check_rounded,
+            color: AppColors.accentViolet,
+            title: 'Assessment',
+            lines: [
+              if (assessment.scheduledAt != null)
+                'Scheduled ${_shortDate(assessment.scheduledAt!)}',
+              if (assessment.subjectFocus?.isNotEmpty ?? false)
+                'Focus: ${assessment.subjectFocus}',
+              'Outcome: ${assessment.outcome}'
+                  '${assessment.score != null ? ' · ${assessment.score!.toStringAsFixed(0)}'
+                      '${assessment.maxScore != null ? '/${assessment.maxScore!.toStringAsFixed(0)}' : ''}' : ''}',
+            ],
           ),
         ],
+        if (offer != null) ...[
+          const SizedBox(height: 12),
+          _StatusCard(
+            icon: Icons.mail_rounded,
+            color: AppColors.accentTeal,
+            title: 'Offer',
+            lines: [
+              'Decision: ${offer.decision}',
+              if (offer.feeExpectation != null)
+                'Fee expectation: ${offer.feeExpectation!.toStringAsFixed(0)}',
+              if (offer.expiresAt != null)
+                'Expires ${_shortDate(offer.expiresAt!)}',
+            ],
+          ),
+        ],
+
+        // ─── Stage-appropriate lifecycle actions ────────────────────────
+        const SizedBox(height: 16),
+        Text('Actions',
+            style: Theme.of(context)
+                .textTheme
+                .titleMedium
+                ?.copyWith(fontWeight: FontWeight.w800)),
+        const SizedBox(height: 8),
+        ..._actionsForStage(context, ref, stage, assessment, offer),
         if (canWithdraw) ...[
           const SizedBox(height: 10),
           KSButton(
@@ -546,6 +617,7 @@ class _ApplicantDetailBody extends ConsumerWidget {
             onPressed: () => _advance(context, ref, 'WITHDRAWN'),
           ),
         ],
+
         const SizedBox(height: 16),
         Text('Stage Timeline',
             style: Theme.of(context)
@@ -564,9 +636,7 @@ class _ApplicantDetailBody extends ConsumerWidget {
               children: applicant.stageEvents.map((event) {
                 final dateLabel = event.createdAt == null
                     ? ''
-                    : '${event.createdAt!.day.toString().padLeft(2, '0')}'
-                        '/${event.createdAt!.month.toString().padLeft(2, '0')}'
-                        '/${event.createdAt!.year}';
+                    : _shortDate(event.createdAt!);
                 return Padding(
                   padding: const EdgeInsets.symmetric(vertical: 6),
                   child: Row(
@@ -607,24 +677,482 @@ class _ApplicantDetailBody extends ConsumerWidget {
               }).toList(),
             ),
           ),
-        const SizedBox(height: 12),
-        CommonCard(
-          child: Row(
-            children: [
-              const Icon(Icons.laptop_mac_rounded,
-                  size: 20, color: AppColors.skyBlue600),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'Assessments, offers and enrolment are completed in the web admissions workspace.',
-                  style: TextStyle(
-                      fontSize: 12, color: AppColors.textSecondary),
-                ),
-              ),
-            ],
-          ),
-        ),
       ],
+    );
+  }
+
+  List<Widget> _actionsForStage(
+    BuildContext context,
+    WidgetRef ref,
+    String stage,
+    AdmissionAssessment? assessment,
+    AdmissionOffer? offer,
+  ) {
+    final buttons = <Widget>[];
+    void add(String label, VoidCallback onPressed, {bool primary = false}) {
+      buttons
+        ..add(const SizedBox(height: 10))
+        ..add(KSButton(label: label, secondary: !primary, onPressed: onPressed));
+    }
+
+    switch (stage) {
+      case 'INQUIRY':
+        add('Move to Application', () => _advance(context, ref, 'APPLICATION'),
+            primary: true);
+        break;
+      case 'APPLICATION':
+        add('Schedule Assessment', () => _scheduleAssessment(context, ref),
+            primary: true);
+        break;
+      case 'ASSESSMENT':
+        add('Record Assessment Outcome',
+            () => _recordOutcome(context, ref, assessment),
+            primary: true);
+        if (assessment != null &&
+            (assessment.outcome == 'PASSED' || assessment.outcome == 'WAIVED')) {
+          add('Issue Offer', () => _issueOffer(context, ref));
+        }
+        break;
+      case 'OFFER':
+        add('Record Guardian Decision', () => _decideOffer(context, ref),
+            primary: true);
+        add('Re-issue Offer', () => _issueOffer(context, ref));
+        break;
+      case 'ACCEPTED':
+        add('Convert to Enrolled Student', () => _convert(context, ref),
+            primary: true);
+        break;
+      case 'ENROLLED':
+        buttons.add(const SizedBox(height: 4));
+        buttons.add(const _StatusCard(
+          icon: Icons.verified_rounded,
+          color: AppColors.accentEmerald,
+          title: 'Enrolled',
+          lines: ['This applicant is now an enrolled student.'],
+        ));
+        break;
+      default:
+        break;
+    }
+    return buttons;
+  }
+
+  // ─── Action sheets ──────────────────────────────────────────────────────
+
+  Future<void> _editDetails(BuildContext context, WidgetRef ref) async {
+    final phone = TextEditingController(text: applicant.guardianPhone);
+    final notes = TextEditingController(text: applicant.notes ?? '');
+    final saved = await _showFormSheet(
+      context,
+      title: 'Edit details',
+      fields: [
+        KSTextField(
+            controller: phone,
+            label: 'Guardian phone',
+            keyboardType: TextInputType.phone),
+        const SizedBox(height: 12),
+        KSTextField(controller: notes, label: 'Notes'),
+      ],
+    );
+    if (saved != true) return;
+    if (!context.mounted) return;
+    final service = ref.read(admissionsServiceProvider);
+    await _run(
+      context,
+      ref,
+      () => service.updateApplicant(applicant.id, {
+        'guardianPhone': phone.text.trim(),
+        'notes': notes.text.trim(),
+      }),
+      'Details updated',
+    );
+  }
+
+  Future<void> _scheduleAssessment(BuildContext context, WidgetRef ref) async {
+    DateTime when = DateTime.now().add(const Duration(days: 1));
+    final subject = TextEditingController();
+    final maxScore = TextEditingController(text: '100');
+    final notes = TextEditingController();
+    final saved = await _showFormSheet(
+      context,
+      title: 'Schedule assessment',
+      fields: [
+        _DatePickerRow(
+          label: 'When',
+          initial: when,
+          onChanged: (d) => when = d,
+        ),
+        const SizedBox(height: 12),
+        KSTextField(controller: subject, label: 'Subject focus (optional)'),
+        const SizedBox(height: 12),
+        KSTextField(
+            controller: maxScore,
+            label: 'Max score',
+            keyboardType: TextInputType.number),
+        const SizedBox(height: 12),
+        KSTextField(controller: notes, label: 'Notes (optional)'),
+      ],
+    );
+    if (saved != true) return;
+    if (!context.mounted) return;
+    final service = ref.read(admissionsServiceProvider);
+    await _run(
+      context,
+      ref,
+      () => service.scheduleAssessment(
+        applicantId: applicant.id,
+        scheduledAt: when,
+        subjectFocus: subject.text.trim(),
+        maxScore: double.tryParse(maxScore.text.trim()),
+        notes: notes.text.trim(),
+      ),
+      'Assessment scheduled',
+    );
+  }
+
+  Future<void> _recordOutcome(
+      BuildContext context, WidgetRef ref, AdmissionAssessment? assessment) async {
+    if (assessment == null) {
+      ref
+          .read(snackbarProvider.notifier)
+          .show('Schedule an assessment first.');
+      return;
+    }
+    final score = TextEditingController(
+        text: assessment.score?.toStringAsFixed(0) ?? '');
+    final notes = TextEditingController(text: assessment.notes ?? '');
+    String outcome = assessment.outcome == 'PENDING' ? 'PASSED' : assessment.outcome;
+    final saved = await _showFormSheet(
+      context,
+      title: 'Record outcome',
+      fields: [
+        _OutcomeDropdown(
+          initial: outcome,
+          onChanged: (v) => outcome = v,
+        ),
+        const SizedBox(height: 12),
+        KSTextField(
+            controller: score,
+            label: 'Score (optional)',
+            keyboardType: TextInputType.number),
+        const SizedBox(height: 12),
+        KSTextField(controller: notes, label: 'Notes (optional)'),
+      ],
+    );
+    if (saved != true) return;
+    if (!context.mounted) return;
+    final service = ref.read(admissionsServiceProvider);
+    await _run(
+      context,
+      ref,
+      () => service.recordAssessment(
+        assessmentId: assessment.id,
+        score: double.tryParse(score.text.trim()),
+        outcome: outcome,
+        notes: notes.text.trim(),
+      ),
+      'Outcome recorded',
+    );
+  }
+
+  Future<void> _issueOffer(BuildContext context, WidgetRef ref) async {
+    final classId =
+        TextEditingController(text: applicant.prospectiveClassId ?? '');
+    final fee = TextEditingController();
+    final note = TextEditingController();
+    DateTime? expiry;
+    final saved = await _showFormSheet(
+      context,
+      title: 'Issue offer',
+      fields: [
+        KSTextField(
+            controller: classId,
+            label: 'Class ID',
+            hint: 'Defaults to the prospective class'),
+        const SizedBox(height: 12),
+        KSTextField(
+            controller: fee,
+            label: 'Fee expectation (optional)',
+            keyboardType: TextInputType.number),
+        const SizedBox(height: 12),
+        _DatePickerRow(
+          label: 'Expires (optional)',
+          initial: DateTime.now().add(const Duration(days: 14)),
+          onChanged: (d) => expiry = d,
+        ),
+        const SizedBox(height: 12),
+        KSTextField(controller: note, label: 'Note (optional)'),
+      ],
+    );
+    if (saved != true) return;
+    if (classId.text.trim().isEmpty) {
+      if (context.mounted) {
+        ref.read(snackbarProvider.notifier).show('A class ID is required.');
+      }
+      return;
+    }
+    if (!context.mounted) return;
+    final service = ref.read(admissionsServiceProvider);
+    await _run(
+      context,
+      ref,
+      () => service.issueOffer(
+        applicantId: applicant.id,
+        classId: classId.text.trim(),
+        feeExpectation: double.tryParse(fee.text.trim()),
+        expiresAt: expiry,
+        note: note.text.trim(),
+      ),
+      'Offer issued',
+    );
+  }
+
+  Future<void> _decideOffer(BuildContext context, WidgetRef ref) async {
+    String decision = 'ACCEPTED';
+    final note = TextEditingController();
+    final saved = await _showFormSheet(
+      context,
+      title: 'Guardian decision',
+      fields: [
+        _DecisionDropdown(initial: decision, onChanged: (v) => decision = v),
+        const SizedBox(height: 12),
+        KSTextField(controller: note, label: 'Note (optional)'),
+      ],
+    );
+    if (saved != true) return;
+    if (!context.mounted) return;
+    final service = ref.read(admissionsServiceProvider);
+    await _run(
+      context,
+      ref,
+      () => service.decideOffer(
+        applicantId: applicant.id,
+        decision: decision,
+        note: note.text.trim(),
+      ),
+      decision == 'ACCEPTED' ? 'Offer accepted' : 'Offer declined',
+    );
+  }
+
+  Future<void> _convert(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Convert to student?'),
+        content: Text(
+            'This enrolls ${applicant.fullName} as a student and creates their '
+            'account, class placement and invoice. This cannot be undone.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Convert')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    if (!context.mounted) return;
+    final service = ref.read(admissionsServiceProvider);
+    await _run(
+      context,
+      ref,
+      () => service.convert(applicantId: applicant.id),
+      'Applicant enrolled as a student',
+    );
+  }
+}
+
+String _shortDate(DateTime d) =>
+    '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+
+/// Shows a bottom sheet with the given fields and a Save/Cancel footer.
+/// Returns true when the user taps Save.
+Future<bool?> _showFormSheet(
+  BuildContext context, {
+  required String title,
+  required List<Widget> fields,
+}) {
+  return showModalBottomSheet<bool>(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    builder: (ctx) => Padding(
+      padding: EdgeInsets.only(
+        left: 20,
+        right: 20,
+        top: 8,
+        bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title,
+              style: Theme.of(ctx)
+                  .textTheme
+                  .titleLarge
+                  ?.copyWith(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 16),
+          ...fields,
+          const SizedBox(height: 20),
+          KSButton(
+            label: 'Save',
+            onPressed: () => Navigator.of(ctx).pop(true),
+          ),
+          const SizedBox(height: 8),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _StatusCard extends StatelessWidget {
+  const _StatusCard({
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.lines,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String title;
+  final List<String> lines;
+
+  @override
+  Widget build(BuildContext context) {
+    return CommonCard(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 22, color: color),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title,
+                    style: const TextStyle(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 4),
+                ...lines.map((l) => Padding(
+                      padding: const EdgeInsets.only(bottom: 2),
+                      child: Text(l,
+                          style: TextStyle(
+                              fontSize: 12, color: AppColors.textSecondary)),
+                    )),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DatePickerRow extends StatefulWidget {
+  const _DatePickerRow({
+    required this.label,
+    required this.initial,
+    required this.onChanged,
+  });
+
+  final String label;
+  final DateTime initial;
+  final ValueChanged<DateTime> onChanged;
+
+  @override
+  State<_DatePickerRow> createState() => _DatePickerRowState();
+}
+
+class _DatePickerRowState extends State<_DatePickerRow> {
+  late DateTime _value = widget.initial;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: () async {
+        final picked = await showDatePicker(
+          context: context,
+          initialDate: _value,
+          firstDate: DateTime.now().subtract(const Duration(days: 365)),
+          lastDate: DateTime.now().add(const Duration(days: 365 * 2)),
+        );
+        if (picked != null) {
+          setState(() => _value = picked);
+          widget.onChanged(picked);
+        }
+      },
+      child: InputDecorator(
+        decoration: InputDecoration(labelText: widget.label),
+        child: Text(_shortDate(_value)),
+      ),
+    );
+  }
+}
+
+class _OutcomeDropdown extends StatefulWidget {
+  const _OutcomeDropdown({required this.initial, required this.onChanged});
+  final String initial;
+  final ValueChanged<String> onChanged;
+
+  @override
+  State<_OutcomeDropdown> createState() => _OutcomeDropdownState();
+}
+
+class _OutcomeDropdownState extends State<_OutcomeDropdown> {
+  late String _value = widget.initial;
+
+  @override
+  Widget build(BuildContext context) {
+    return DropdownButtonFormField<String>(
+      initialValue: _value,
+      decoration: const InputDecoration(labelText: 'Outcome'),
+      items: const [
+        DropdownMenuItem(value: 'PASSED', child: Text('Passed')),
+        DropdownMenuItem(value: 'FAILED', child: Text('Failed')),
+        DropdownMenuItem(value: 'WAIVED', child: Text('Waived')),
+      ],
+      onChanged: (v) {
+        if (v == null) return;
+        setState(() => _value = v);
+        widget.onChanged(v);
+      },
+    );
+  }
+}
+
+class _DecisionDropdown extends StatefulWidget {
+  const _DecisionDropdown({required this.initial, required this.onChanged});
+  final String initial;
+  final ValueChanged<String> onChanged;
+
+  @override
+  State<_DecisionDropdown> createState() => _DecisionDropdownState();
+}
+
+class _DecisionDropdownState extends State<_DecisionDropdown> {
+  late String _value = widget.initial;
+
+  @override
+  Widget build(BuildContext context) {
+    return DropdownButtonFormField<String>(
+      initialValue: _value,
+      decoration: const InputDecoration(labelText: 'Decision'),
+      items: const [
+        DropdownMenuItem(value: 'ACCEPTED', child: Text('Accepted')),
+        DropdownMenuItem(value: 'DECLINED', child: Text('Declined')),
+      ],
+      onChanged: (v) {
+        if (v == null) return;
+        setState(() => _value = v);
+        widget.onChanged(v);
+      },
     );
   }
 }

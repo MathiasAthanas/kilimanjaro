@@ -6,7 +6,7 @@ import { NumberSequenceService } from '../common/helpers/number-sequence.service
 import { ROLES } from '../common/constants/roles';
 import { RequestUser } from '../common/interfaces/request-user.interface';
 import { CreateFundRequestDto } from './dto/create-fund-request.dto';
-import { schoolScopeFilter, resolveWriteSchoolId } from '../common/helpers/school-scope.helper';
+import { schoolScopeFilter, resolveWriteSchoolId, assertSchoolInScope } from '../common/helpers/school-scope.helper';
 import {
   ApproveFundRequestDto,
   CancelFundRequestDto,
@@ -135,6 +135,7 @@ export class FundRequestsService {
       include: { events: { orderBy: { createdAt: 'asc' } } },
     });
     if (!row) throw new NotFoundException('Fund request not found');
+    assertSchoolInScope(user, row.schoolId ?? null);
 
     if (!OVERSIGHT_ROLES.includes(user.role) && row.requestedById !== user.id) {
       throw new ForbiddenException('You can only view your own requests');
@@ -144,7 +145,7 @@ export class FundRequestsService {
 
   // ── Step 1: Head of School approves an HOD-initiated request ───────────────
   async schoolApprove(id: string, dto: ApproveFundRequestDto, user: RequestUser) {
-    const existing = await this.requireStatus(id, [FundRequestStatus.SUBMITTED], 'approve at school level');
+    const existing = await this.requireStatus(id, [FundRequestStatus.SUBMITTED], 'approve at school level', user);
     const row = await this.prisma.fundRequest.update({
       where: { id },
       data: {
@@ -173,7 +174,7 @@ export class FundRequestsService {
 
   // ── Step 2: Finance reviews and forwards to the Manager ────────────────────
   async financeReview(id: string, dto: ForwardFundRequestDto, user: RequestUser) {
-    const existing = await this.requireStatus(id, [FundRequestStatus.SCHOOL_APPROVED], 'review');
+    const existing = await this.requireStatus(id, [FundRequestStatus.SCHOOL_APPROVED], 'review', user);
     const row = await this.prisma.fundRequest.update({
       where: { id },
       data: {
@@ -202,7 +203,7 @@ export class FundRequestsService {
 
   // ── Step 3: Manager gives final approval ───────────────────────────────────
   async managerApprove(id: string, dto: ApproveFundRequestDto, user: RequestUser) {
-    const existing = await this.requireStatus(id, [FundRequestStatus.FINANCE_REVIEWED], 'approve');
+    const existing = await this.requireStatus(id, [FundRequestStatus.FINANCE_REVIEWED], 'approve', user);
     const row = await this.prisma.fundRequest.update({
       where: { id },
       data: {
@@ -233,6 +234,7 @@ export class FundRequestsService {
       id,
       [FundRequestStatus.SUBMITTED, FundRequestStatus.SCHOOL_APPROVED, FundRequestStatus.FINANCE_REVIEWED],
       'reject',
+      user,
     );
     const row = await this.prisma.fundRequest.update({
       where: { id },
@@ -264,7 +266,7 @@ export class FundRequestsService {
 
   // ── Finance disburses Manager-approved funds → creates an Expense atomically ─
   async disburse(id: string, dto: DisburseFundRequestDto, user: RequestUser) {
-    const existing = await this.requireStatus(id, [FundRequestStatus.MANAGER_APPROVED], 'disburse');
+    const existing = await this.requireStatus(id, [FundRequestStatus.MANAGER_APPROVED], 'disburse', user);
 
     const result = await this.prisma.$transaction(async (tx) => {
       const expense = await tx.expense.create({
@@ -332,6 +334,7 @@ export class FundRequestsService {
   async cancel(id: string, dto: CancelFundRequestDto, user: RequestUser) {
     const existing = await this.prisma.fundRequest.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Fund request not found');
+    assertSchoolInScope(user, existing.schoolId ?? null);
 
     const privileged: string[] = [ROLES.FINANCE, ROLES.SYSTEM_ADMIN];
     if (existing.requestedById !== user.id && !privileged.includes(user.role)) {
@@ -395,9 +398,10 @@ export class FundRequestsService {
   }
 
   // ── helpers ────────────────────────────────────────────────────────────────
-  private async requireStatus(id: string, allowed: FundRequestStatus[], action: string) {
+  private async requireStatus(id: string, allowed: FundRequestStatus[], action: string, user?: RequestUser) {
     const existing = await this.prisma.fundRequest.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Fund request not found');
+    assertSchoolInScope(user, existing.schoolId ?? null);
     if (!allowed.includes(existing.status as FundRequestStatus)) {
       throw new BadRequestException(`Cannot ${action} a request that is ${existing.status}`);
     }

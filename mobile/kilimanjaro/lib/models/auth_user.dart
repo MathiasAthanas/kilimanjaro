@@ -69,6 +69,7 @@ class AuthUser {
     this.lastLoginAt,
     this.bio,
     this.mustChangePassword = false,
+    this.schoolIds = const [],
   });
 
   final String id;
@@ -85,6 +86,9 @@ class AuthUser {
   /// True on first login with a default password (e.g. parent accounts
   /// created during enrolment) — the app must force a password change.
   final bool mustChangePassword;
+
+  /// Schools this account is a member of (empty for legacy/group accounts).
+  final List<String> schoolIds;
 
   factory AuthUser.fromJson(Map<String, dynamic> json) {
     final first = json['firstName'] as String? ?? '';
@@ -108,6 +112,10 @@ class AuthUser {
       mustChangePassword: json['mustChangePassword'] as bool? ??
           json['requiresPasswordChange'] as bool? ??
           false,
+      schoolIds: (json['schoolIds'] as List<dynamic>? ?? const [])
+          .map((e) => e.toString())
+          .where((e) => e != '*')
+          .toList(),
     );
   }
 }

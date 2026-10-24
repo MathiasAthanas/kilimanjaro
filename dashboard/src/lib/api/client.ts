@@ -10,6 +10,34 @@ export const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+// A refresh token is rotated by the auth service. When a dashboard route starts
+// several protected queries at once, they must share one refresh request rather
+// than racing to use the same token and falsely logging the user out.
+let refreshInFlight: Promise<string> | null = null;
+
+async function refreshAccessToken(refreshToken: string, sessionAccessToken: string): Promise<string> {
+  if (!refreshInFlight) {
+    refreshInFlight = axios
+      .post(`${api.defaults.baseURL}${endpoints.auth.refresh}`, { refreshToken })
+      .then((response) => {
+        const payload = response.data?.data ?? response.data;
+        if (!payload?.accessToken) throw new Error('Refresh response did not include an access token.');
+        const current = useAuthStore.getState().session;
+        // Do not overwrite a newer login/session that happened while this request ran.
+        if (current?.accessToken === sessionAccessToken) {
+          useAuthStore.getState().setSession({
+            ...current,
+            accessToken: payload.accessToken,
+            refreshToken: payload.refreshToken ?? current.refreshToken,
+          }, true);
+        }
+        return String(payload.accessToken);
+      })
+      .finally(() => { refreshInFlight = null; });
+  }
+  return refreshInFlight;
+}
+
 api.interceptors.request.use((config) => {
   const session = useAuthStore.getState().session;
   config.headers.set('x-correlation-id', crypto.randomUUID());
@@ -27,21 +55,26 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    const original = error.config;
+    const original = error.config as (typeof error.config & { _retry?: boolean });
     const session = useAuthStore.getState().session;
 
     if (error.response?.status === 401 && session?.refreshToken && !original?._retry) {
       original._retry = true;
       try {
-        const response = await axios.post(`${api.defaults.baseURL}${endpoints.auth.refresh}`, {
-          refreshToken: session.refreshToken,
-        });
-        const payload = response.data?.data ?? response.data;
-        useAuthStore.getState().setSession({ ...session, accessToken: payload.accessToken }, true);
-        original.headers.Authorization = `Bearer ${payload.accessToken}`;
+        const current = useAuthStore.getState().session;
+        // Another request may already have refreshed the token before this
+        // interceptor runs. Retry with that newer token without refreshing again.
+        const accessToken = current?.accessToken && current.accessToken !== session.accessToken
+          ? current.accessToken
+          : await refreshAccessToken(session.refreshToken, session.accessToken);
+        original.headers.set('Authorization', `Bearer ${accessToken}`);
         return api(original);
       } catch (refreshError) {
-        useAuthStore.getState().logout();
+        // Only clear the session if it is still the session that failed. A
+        // concurrent successful refresh or fresh login must remain intact.
+        if (useAuthStore.getState().session?.accessToken === session.accessToken) {
+          useAuthStore.getState().logout();
+        }
         return Promise.reject(normalizeApiError(refreshError));
       }
     }

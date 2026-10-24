@@ -20,9 +20,9 @@ class ParentAttendanceOverviewScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final children =
-        ref.watch(parentChildrenProvider).value ?? const <ChildSummary>[];
+        ref.watch(parentChildrenProvider).valueOrNull ?? const <ChildSummary>[];
     final activeId = ref.watch(activeParentChildIdProvider);
-    final child = ref.watch(activeParentChildProvider).value;
+    final child = ref.watch(activeParentChildProvider).valueOrNull;
     final recordsAsync = ref.watch(activeParentAttendanceProvider);
 
     return Scaffold(
@@ -66,7 +66,7 @@ class ParentAttendanceOverviewScreen extends ConsumerWidget {
                     .where((item) => item.status == AttendanceStatus.absent)
                     .take(3)
                     .toList();
-                final currentMonth = DateTime(2026, 3);
+                final currentMonth = DateTime(DateTime.now().year, DateTime.now().month);
 
                 return ParentSurface(
                   children: [

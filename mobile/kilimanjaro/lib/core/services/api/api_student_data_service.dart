@@ -11,27 +11,18 @@ import '../../../models/performance_trend_model.dart';
 import '../../../models/receipt_model.dart';
 import '../../../models/report_card_model.dart';
 import '../../../models/term_result_model.dart';
-import '../../config/app_config.dart';
+import '../../network/api_client.dart';
+import '../../network/api_failure.dart';
 import '../interfaces/student_service_interface.dart';
 
 class ApiStudentDataService implements IStudentService {
-  ApiStudentDataService(this._storage) : _dio = _buildDio();
+  ApiStudentDataService(this._storage)
+      : _dio = buildApiClient(_storage, pathPrefix: '/api/v1');
 
   final FlutterSecureStorage _storage;
   final Dio _dio;
   String? _cachedStudentId;
   Map<String, dynamic>? _cachedPerformanceProfile;
-
-  static Dio _buildDio() {
-    return Dio(
-      BaseOptions(
-        baseUrl: '${AppConfig.apiBaseUrl}/api/v1',
-        connectTimeout: const Duration(seconds: 15),
-        receiveTimeout: const Duration(seconds: 30),
-        headers: {'Content-Type': 'application/json'},
-      ),
-    );
-  }
 
   Future<Options> _auth() async {
     final token = await _storage.read(key: 'access_token');
@@ -138,8 +129,9 @@ class ApiStudentDataService implements IStudentService {
       final reportCard = data['reportCard'] as Map<String, dynamic>?;
       if (reportCard == null) return null;
       return ReportCardModel.fromJson(reportCard);
-    } on DioException {
-      return null;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) return null;
+      throw ApiFailure.fromDio(e);
     }
   }
 
@@ -147,7 +139,7 @@ class ApiStudentDataService implements IStudentService {
 
   @override
   Future<List<AttendanceRecordModel>> getAttendanceRecords() async {
-    final list = await _getList('/students/attendance');
+    final list = await _getList('/students/attendance', params: {'limit': 400});
     return list
         .cast<Map<String, dynamic>>()
         .map(AttendanceRecordModel.fromJson)
@@ -175,8 +167,9 @@ class ApiStudentDataService implements IStudentService {
       );
       _cachedPerformanceProfile = resp.data;
       return _cachedPerformanceProfile;
-    } on DioException {
-      return null;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) return null;
+      throw ApiFailure.fromDio(e);
     }
   }
 
@@ -268,8 +261,9 @@ class ApiStudentDataService implements IStudentService {
         options: opts,
       );
       return ReceiptModel.fromJson(resp.data!);
-    } on DioException {
-      return null;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) return null;
+      throw ApiFailure.fromDio(e);
     }
   }
 

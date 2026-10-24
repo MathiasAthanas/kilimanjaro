@@ -1,3 +1,5 @@
+import 'json_num.dart';
+
 // E-Learning domain models matching the elearning-service Prisma schema.
 
 class ElearningCourseModel {
@@ -53,7 +55,7 @@ class ElearningCourseModel {
         subjectName: json['subjectName'] as String? ?? '',
         className: json['className'] as String? ?? '',
         educationStage: json['educationStage'] as String?,
-        classLevel: (json['classLevel'] as num?)?.toInt(),
+        classLevel: numOf(json['classLevel'])?.toInt(),
         combinationId: json['combinationId'] as String?,
         description: json['description'] as String?,
         coverColor: json['coverColor'] as String?,
@@ -62,7 +64,7 @@ class ElearningCourseModel {
         publishedAt: json['publishedAt'] != null
             ? DateTime.tryParse(json['publishedAt'] as String)
             : null,
-        enrolledCount: (json['enrolledCount'] as num?)?.toInt() ?? 0,
+        enrolledCount: numOf(json['enrolledCount'])?.toInt() ?? 0,
         lessons: (json['lessons'] as List<dynamic>? ?? [])
             .map((l) => ElearningLessonModel.fromJson(l as Map<String, dynamic>))
             .toList(),
@@ -119,13 +121,13 @@ class ElearningLessonModel {
         courseSpaceId: json['courseSpaceId'] as String? ?? '',
         title: json['title'] as String? ?? '',
         description: json['description'] as String?,
-        orderIndex: (json['orderIndex'] as num?)?.toInt() ?? 0,
-        weekNumber: (json['weekNumber'] as num?)?.toInt(),
+        orderIndex: numOf(json['orderIndex'])?.toInt() ?? 0,
+        weekNumber: numOf(json['weekNumber'])?.toInt(),
         status: json['status'] as String? ?? 'DRAFT',
         publishedAt: json['publishedAt'] != null
             ? DateTime.tryParse(json['publishedAt'] as String)
             : null,
-        estimatedMinutes: (json['estimatedMinutes'] as num?)?.toInt(),
+        estimatedMinutes: numOf(json['estimatedMinutes'])?.toInt(),
         materials: (json['materials'] as List<dynamic>? ?? [])
             .map((m) =>
                 ElearningMaterialModel.fromJson(m as Map<String, dynamic>))
@@ -178,15 +180,15 @@ class ElearningMaterialModel {
         title: json['title'] as String? ?? '',
         type: json['type'] as String? ?? 'NOTE',
         status: json['status'] as String? ?? 'DRAFT',
-        orderIndex: (json['orderIndex'] as num?)?.toInt() ?? 0,
+        orderIndex: numOf(json['orderIndex'])?.toInt() ?? 0,
         body: json['body'] as String?,
         fileKey: json['fileKey'] as String?,
         fileOriginalName: json['fileOriginalName'] as String?,
         fileMimeType: json['fileMimeType'] as String?,
-        fileSizeBytes: (json['fileSizeBytes'] as num?)?.toInt(),
+        fileSizeBytes: numOf(json['fileSizeBytes'])?.toInt(),
         externalUrl: json['externalUrl'] as String?,
         downloadable: json['downloadable'] as bool? ?? true,
-        viewCount: (json['viewCount'] as num?)?.toInt() ?? 0,
+        viewCount: numOf(json['viewCount'])?.toInt() ?? 0,
       );
 
   bool get isPdf => type == 'PDF' || (fileMimeType?.contains('pdf') ?? false);
@@ -248,12 +250,12 @@ class ElearningAssignmentModel {
         title: json['title'] as String? ?? '',
         instructions: json['instructions'] as String? ?? '',
         type: json['type'] as String? ?? 'BOTH',
-        maxScore: (json['maxScore'] as num?)?.toDouble(),
+        maxScore: numOf(json['maxScore'])?.toDouble(),
         dueAt: json['dueAt'] != null
             ? DateTime.tryParse(json['dueAt'] as String)
             : null,
         allowLateSubmission: json['allowLateSubmission'] as bool? ?? true,
-        latePenaltyPercent: (json['latePenaltyPercent'] as num?)?.toDouble(),
+        latePenaltyPercent: numOf(json['latePenaltyPercent'])?.toDouble(),
         status: json['status'] as String? ?? 'DRAFT',
         publishedAt: json['publishedAt'] != null
             ? DateTime.tryParse(json['publishedAt'] as String)
@@ -324,8 +326,8 @@ class ElearningSubmissionModel {
             : null,
         isLate: json['isLate'] as bool? ?? false,
         status: json['status'] as String? ?? 'DRAFT',
-        score: (json['score'] as num?)?.toDouble(),
-        maxScore: (json['maxScore'] as num?)?.toDouble(),
+        score: numOf(json['score'])?.toDouble(),
+        maxScore: numOf(json['maxScore'])?.toDouble(),
         feedback: json['feedback'] as String?,
         gradedAt: json['gradedAt'] != null
             ? DateTime.tryParse(json['gradedAt'] as String)
@@ -379,9 +381,9 @@ class ElearningQuizModel {
         lessonId: json['lessonId'] as String?,
         title: json['title'] as String? ?? '',
         instructions: json['instructions'] as String?,
-        timeLimitMinutes: (json['timeLimitMinutes'] as num?)?.toInt(),
-        maxAttempts: (json['maxAttempts'] as num?)?.toInt() ?? 1,
-        passingScore: (json['passingScore'] as num?)?.toDouble(),
+        timeLimitMinutes: numOf(json['timeLimitMinutes'])?.toInt(),
+        maxAttempts: numOf(json['maxAttempts'])?.toInt() ?? 1,
+        passingScore: numOf(json['passingScore'])?.toDouble(),
         status: json['status'] as String? ?? 'DRAFT',
         publishedAt: json['publishedAt'] != null
             ? DateTime.tryParse(json['publishedAt'] as String)
@@ -389,7 +391,7 @@ class ElearningQuizModel {
         closedAt: json['closedAt'] != null
             ? DateTime.tryParse(json['closedAt'] as String)
             : null,
-        totalPoints: (json['totalPoints'] as num?)?.toDouble() ?? 0,
+        totalPoints: numOf(json['totalPoints'])?.toDouble() ?? 0,
         questions: (json['questions'] as List<dynamic>? ?? [])
             .map((q) => ElearningQuizQuestionModel.fromJson(
                 q as Map<String, dynamic>))
@@ -429,8 +431,8 @@ class ElearningQuizQuestionModel {
         quizId: json['quizId'] as String? ?? '',
         type: json['type'] as String? ?? 'MULTIPLE_CHOICE',
         prompt: json['prompt'] as String? ?? '',
-        points: (json['points'] as num?)?.toDouble() ?? 1.0,
-        orderIndex: (json['orderIndex'] as num?)?.toInt() ?? 0,
+        points: numOf(json['points'])?.toDouble() ?? 1.0,
+        orderIndex: numOf(json['orderIndex'])?.toInt() ?? 0,
         explanation: json['explanation'] as String?,
         correctAnswer: json['correctAnswer'] as String?,
         options: (json['options'] as List<dynamic>? ?? [])
@@ -458,7 +460,7 @@ class ElearningQuizOptionModel {
         id: json['id'] as String,
         questionId: json['questionId'] as String? ?? '',
         text: json['text'] as String? ?? '',
-        orderIndex: (json['orderIndex'] as num?)?.toInt() ?? 0,
+        orderIndex: numOf(json['orderIndex'])?.toInt() ?? 0,
       );
 }
 
@@ -499,16 +501,16 @@ class ElearningQuizAttemptModel {
         quizId: json['quizId'] as String? ?? '',
         studentId: json['studentId'] as String? ?? '',
         courseSpaceId: json['courseSpaceId'] as String? ?? '',
-        attemptNumber: (json['attemptNumber'] as num?)?.toInt() ?? 1,
+        attemptNumber: numOf(json['attemptNumber'])?.toInt() ?? 1,
         startedAt:
             DateTime.tryParse(json['startedAt'] as String? ?? '') ?? DateTime.now(),
         submittedAt: json['submittedAt'] != null
             ? DateTime.tryParse(json['submittedAt'] as String)
             : null,
         status: json['status'] as String? ?? 'IN_PROGRESS',
-        totalScore: (json['totalScore'] as num?)?.toDouble(),
-        maxScore: (json['maxScore'] as num?)?.toDouble(),
-        percentScore: (json['percentScore'] as num?)?.toDouble(),
+        totalScore: numOf(json['totalScore'])?.toDouble(),
+        maxScore: numOf(json['maxScore'])?.toDouble(),
+        percentScore: numOf(json['percentScore'])?.toDouble(),
         isPassed: json['isPassed'] as bool?,
         answers: (json['answers'] as List<dynamic>? ?? [])
             .map((a) => ElearningQuizAnswerModel.fromJson(
@@ -550,7 +552,7 @@ class ElearningQuizAnswerModel {
         selectedOptionId: json['selectedOptionId'] as String?,
         textAnswer: json['textAnswer'] as String?,
         isCorrect: json['isCorrect'] as bool?,
-        scoreAwarded: (json['scoreAwarded'] as num?)?.toDouble(),
+        scoreAwarded: numOf(json['scoreAwarded'])?.toDouble(),
       );
 }
 
@@ -583,14 +585,14 @@ class ElearningProgressModel {
       ElearningProgressModel(
         courseId: json['courseId'] as String? ?? '',
         studentId: json['studentId'] as String? ?? '',
-        lessons: (json['lessons'] as num?)?.toInt() ?? 0,
-        materials: (json['materials'] as num?)?.toInt() ?? 0,
-        viewed: (json['viewed'] as num?)?.toInt() ?? 0,
-        assignments: (json['assignments'] as num?)?.toInt() ?? 0,
-        submissions: (json['submissions'] as num?)?.toInt() ?? 0,
-        quizzes: (json['quizzes'] as num?)?.toInt() ?? 0,
-        attempts: (json['attempts'] as num?)?.toInt() ?? 0,
-        completionPercent: (json['completionPercent'] as num?)?.toInt() ?? 0,
+        lessons: numOf(json['lessons'])?.toInt() ?? 0,
+        materials: numOf(json['materials'])?.toInt() ?? 0,
+        viewed: numOf(json['viewed'])?.toInt() ?? 0,
+        assignments: numOf(json['assignments'])?.toInt() ?? 0,
+        submissions: numOf(json['submissions'])?.toInt() ?? 0,
+        quizzes: numOf(json['quizzes'])?.toInt() ?? 0,
+        attempts: numOf(json['attempts'])?.toInt() ?? 0,
+        completionPercent: numOf(json['completionPercent'])?.toInt() ?? 0,
       );
 }
 
@@ -610,9 +612,9 @@ class ElearningStudentSummaryModel {
   factory ElearningStudentSummaryModel.fromJson(Map<String, dynamic> json) =>
       ElearningStudentSummaryModel(
         enrolledCount: (json['courses'] as List<dynamic>? ?? []).length,
-        pendingAssignments: (json['pendingAssignments'] as num?)?.toInt() ?? 0,
-        availableQuizzes: (json['availableQuizzes'] as num?)?.toInt() ?? 0,
-        unviewedMaterials: (json['unviewedMaterials'] as num?)?.toInt() ?? 0,
+        pendingAssignments: numOf(json['pendingAssignments'])?.toInt() ?? 0,
+        availableQuizzes: numOf(json['availableQuizzes'])?.toInt() ?? 0,
+        unviewedMaterials: numOf(json['unviewedMaterials'])?.toInt() ?? 0,
       );
 }
 

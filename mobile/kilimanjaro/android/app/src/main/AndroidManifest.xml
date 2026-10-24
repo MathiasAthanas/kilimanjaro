@@ -1,4 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Required for all network/API calls in release builds. Without this the
+         debug/profile manifests grant INTERNET but the release build does not,
+         leaving the production app with no network access. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Android 13+ push notification permission (used once FCM is enabled). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
         android:label="Kilimanjaro Schools"
         android:name="${applicationName}"

@@ -38,7 +38,7 @@ class _KSAttendanceCalendarState extends State<KSAttendanceCalendar> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return TableCalendar<AttendanceStatus>(
       firstDay: DateTime(2025, 1, 1),
-      lastDay: DateTime(2026, 12, 31),
+      lastDay: DateTime(DateTime.now().year + 1, 12, 31),
       focusedDay: _focusedDay,
       headerVisible: false,
       selectedDayPredicate: (day) =>

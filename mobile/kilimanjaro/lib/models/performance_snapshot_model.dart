@@ -1,3 +1,5 @@
+import 'json_num.dart';
+
 enum PerformanceAlertType {
   suddenDecline,
   atRisk,
@@ -106,14 +108,14 @@ class PerformanceSnapshotModel {
   final int totalStudents;
 
   factory PerformanceSnapshotModel.fromJson(Map<String, dynamic> json) {
-    final current = (json['currentScore'] as num?)?.toDouble() ?? (json['score'] as num?)?.toDouble() ?? 0.0;
-    final previous = (json['previousScore'] as num?)?.toDouble() ?? 0.0;
+    final current = numOf(json['currentScore'])?.toDouble() ?? numOf(json['score'])?.toDouble() ?? 0.0;
+    final previous = numOf(json['previousScore'])?.toDouble() ?? 0.0;
     return PerformanceSnapshotModel(
       subjectId: json['subjectId'] as String? ?? '',
       subjectName: json['subjectName'] as String? ?? '',
       currentScore: current,
       previousScore: previous,
-      trendDelta: (json['trendDelta'] as num?)?.toDouble() ?? (current - previous),
+      trendDelta: numOf(json['trendDelta'])?.toDouble() ?? (current - previous),
       rank: json['rank'] as int? ?? 0,
       totalStudents: json['totalStudentsInClass'] as int? ?? json['totalStudents'] as int? ?? 0,
     );

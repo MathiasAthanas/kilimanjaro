@@ -78,7 +78,7 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final user = ref.watch(currentUserProvider).value;
+    final user = ref.watch(currentUserProvider).valueOrNull;
     final matches = _confirm.text.isNotEmpty && _next.text == _confirm.text;
 
     return Scaffold(

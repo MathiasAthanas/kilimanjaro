@@ -86,7 +86,7 @@ TeacherAnnouncement _toTeacherAnnouncement(AnnouncementModel a) {
 // ─── Public providers (same names screens use) ───────────────────────────────
 
 final teacherClassesProvider = Provider<List<TeacherClassSubject>>((ref) {
-  return ref.watch(_teacherClassesLoader).value
+  return ref.watch(_teacherClassesLoader).valueOrNull
       ?? (AppConfig.useMockData ? _classes : const []);
 });
 
@@ -96,7 +96,7 @@ final teacherClassByIdProvider = Provider.family<TeacherClassSubject?, String>((
 
 final teacherStudentsForClassProvider =
     Provider.family<List<TeacherStudent>, String>((ref, classSubjectId) {
-  return ref.watch(_teacherStudentsLoader(classSubjectId)).value
+  return ref.watch(_teacherStudentsLoader(classSubjectId)).valueOrNull
       ?? (AppConfig.useMockData ? _studentsByClass[classSubjectId] ?? const [] : const []);
 });
 
@@ -111,7 +111,7 @@ final teacherStudentByIdProvider = Provider.family<TeacherStudent?, String>((ref
 });
 
 final teacherAssessmentsProvider = Provider<List<TeacherAssessment>>((ref) {
-  return ref.watch(_teacherAssessmentsLoader).value
+  return ref.watch(_teacherAssessmentsLoader).valueOrNull
       ?? (AppConfig.useMockData ? _assessments : const []);
 });
 
@@ -172,7 +172,7 @@ final teacherMarksControllerProvider =
 
 final teacherAttendanceSessionsProvider =
     Provider<List<TeacherAttendanceSession>>((ref) {
-  return ref.watch(_teacherAttendanceSessionsLoader).value
+  return ref.watch(_teacherAttendanceSessionsLoader).valueOrNull
       ?? (AppConfig.useMockData ? _attendanceSessions : const []);
 });
 
@@ -225,6 +225,11 @@ class TeacherAttendanceController
   }
 }
 
+/// Re-fetches today's attendance sessions (e.g. after a class register is saved).
+void refreshTeacherAttendanceSessions(WidgetRef ref) {
+  ref.invalidate(_teacherAttendanceSessionsLoader);
+}
+
 final teacherAttendanceControllerProvider =
     StateNotifierProvider<
       TeacherAttendanceController,
@@ -236,7 +241,7 @@ final teacherAttendanceControllerProvider =
 // ─── Alerts, pairings, timetable, syllabus, announcements ─────────────────────
 
 final teacherAlertsProvider = Provider<List<TeacherPerformanceAlert>>((ref) {
-  return ref.watch(_teacherAlertsLoader).value
+  return ref.watch(_teacherAlertsLoader).valueOrNull
       ?? (AppConfig.useMockData ? _alerts : const []);
 });
 
@@ -246,7 +251,7 @@ final teacherAlertByIdProvider =
 });
 
 final teacherPairingsProvider = Provider<List<TeacherPairing>>((ref) {
-  return ref.watch(_teacherPairingsLoader).value
+  return ref.watch(_teacherPairingsLoader).valueOrNull
       ?? (AppConfig.useMockData ? _pairings : const []);
 });
 
@@ -255,17 +260,17 @@ final teacherPairingByIdProvider = Provider.family<TeacherPairing?, String>((ref
 });
 
 final teacherTimetableProvider = Provider<List<TeacherTimetableSlot>>((ref) {
-  return ref.watch(_teacherTimetableLoader).value
+  return ref.watch(_teacherTimetableLoader).valueOrNull
       ?? (AppConfig.useMockData ? _timetable : const []);
 });
 
 final teacherSyllabusProvider = Provider<List<TeacherSyllabusProgress>>((ref) {
-  return ref.watch(_teacherSyllabusLoader).value
+  return ref.watch(_teacherSyllabusLoader).valueOrNull
       ?? (AppConfig.useMockData ? _syllabus : const []);
 });
 
 final teacherAnnouncementsProvider = Provider<List<TeacherAnnouncement>>((ref) {
-  return ref.watch(_teacherAnnouncementsLoader).value
+  return ref.watch(_teacherAnnouncementsLoader).valueOrNull
       ?? (AppConfig.useMockData ? _announcements : const []);
 });
 

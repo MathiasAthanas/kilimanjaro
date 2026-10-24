@@ -32,7 +32,10 @@ export class AccessControlService {
 
     const payload = await this.studentClient.get<any>(`/students/internal/guardian-by-auth/${authUserId}`);
     const data = this.unwrap<any>(payload);
-    const ids = data?.studentIds || [];
+    // guardian-by-auth returns one summary per child: [{ id, ... }]
+    const ids: string[] = Array.isArray(data)
+      ? data.map((child: { id?: string }) => child?.id).filter((id): id is string => !!id)
+      : data?.studentIds || [];
     await this.redis.set(cacheKey, ids, 300);
     return ids;
   }

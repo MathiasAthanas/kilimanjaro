@@ -20,7 +20,7 @@ class PaymentHistoryScreen extends ConsumerWidget {
     final paymentsAsync = ref.watch(parentReceiptsProvider);
     final selectedChild = ref.watch(_paymentFilterProvider);
     final children =
-        ref.watch(parentChildrenProvider).value ?? const <ChildSummary>[];
+        ref.watch(parentChildrenProvider).valueOrNull ?? const <ChildSummary>[];
 
     return Scaffold(
       appBar: const KSAppBar(
@@ -46,7 +46,7 @@ class PaymentHistoryScreen extends ConsumerWidget {
                     .where((item) => item.childId == selectedChild)
                     .toList();
           final academicYearPayments = filtered
-              .where((item) => item.receipt.date.year == 2026)
+              .where((item) => item.receipt.date.year == DateTime.now().year)
               .toList();
           if (filtered.isEmpty) {
             return const KSEmptyState(title: 'No payments recorded yet');

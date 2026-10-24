@@ -18,6 +18,7 @@ import { BulkPromoteStudentsDto } from './dto/bulk-promote-students.dto';
 import { ListStudentsDto } from './dto/list-students.dto';
 import { RequestUser } from '../common/interfaces/request-user.interface';
 import { paginate, buildPageMeta } from '../common/helpers/pagination.helper';
+import { resolveOrderBy } from '../common/helpers/sort.helper';
 import {
   formatRegistrationNumber,
   formatRegistrationNumberWithStage,
@@ -285,12 +286,24 @@ export class StudentsService {
         : {}),
     };
 
+    const orderBy = resolveOrderBy<Prisma.StudentOrderByWithRelationInput | Prisma.StudentOrderByWithRelationInput[]>(
+      query.sortBy,
+      query.sortDir,
+      {
+        name: (dir) => [{ firstName: dir }, { lastName: dir }],
+        registrationNumber: (dir) => ({ registrationNumber: dir }),
+        status: (dir) => ({ status: dir }),
+        createdAt: (dir) => ({ createdAt: dir }),
+      },
+      { createdAt: 'desc' },
+    );
+
     const [items, total] = await this.prisma.$transaction([
       this.prisma.student.findMany({
         where,
         skip: pagination.skip,
         take: pagination.take,
-        orderBy: { createdAt: 'desc' },
+        orderBy,
         include: this.buildStudentProfileInclude(),
       }),
       this.prisma.student.count({ where }),

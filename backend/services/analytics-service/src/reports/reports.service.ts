@@ -170,7 +170,9 @@ export class ReportsService {
 
     if (user) {
       if (groupSuperRoles.includes(user.role) || user.scope === 'GROUP') {
-        // Group-scoped or super roles see all reports — no extra filter.
+        // Group-scoped or super roles see all reports — but when they have a
+        // school selected, narrow to that school so the view matches the switcher.
+        if (user.activeSchoolId) where.schoolId = user.activeSchoolId;
       } else if (schoolPrivilegedRoles.includes(user.role) && user.scope === 'SCHOOL') {
         // School-scoped privileged roles see all reports generated for their school(s).
         where.OR = [

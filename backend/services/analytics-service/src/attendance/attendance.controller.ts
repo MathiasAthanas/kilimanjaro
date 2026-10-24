@@ -4,6 +4,7 @@ import { ROLES } from '../common/constants/roles';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RequestUser } from '../common/interfaces/request-user.interface';
+import { resolveScopeSchoolId } from '../common/helpers/school-scope.helper';
 import { AttendanceService } from './attendance.service';
 
 @ApiTags('Analytics - Attendance')
@@ -15,8 +16,8 @@ export class AttendanceController {
   @Get('overview')
   @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA, ROLES.MANAGING_DIRECTOR)
   @ApiOperation({ summary: 'Attendance overview analytics' })
-  overview(@Query('termId') termId?: string, @Query('academicYearId') academicYearId?: string, @Query('classId') classId?: string) {
-    return this.service.getOverview(termId, academicYearId, classId);
+  overview(@Query('termId') termId?: string, @Query('academicYearId') academicYearId?: string, @Query('classId') classId?: string, @CurrentUser() user?: RequestUser) {
+    return this.service.getOverview(termId, academicYearId, classId, resolveScopeSchoolId(user));
   }
 
   @Get('student/:studentId')

@@ -17,7 +17,19 @@ backend/_invalid_scaffold/
 # Archives & binary dumps
 *.rar
 *.zip
+*.tar
+*.tar.gz
+*.dump
 dump.rdb
+
+# Local data exports and source spreadsheets
+exports/
+kilimanjaro classes/
+
+# Local runtime configuration
+backend/ecosystem.scratch.config.js
+mobile/kilimanjaro/.env.production
+mobile/kilimanjaro/.env.staging
 
 # Generated runtime artifacts (report PDFs, uploads)
 backend/services/*/storage/

@@ -29,6 +29,26 @@ export function schoolScopeFilter(user?: RequestUser): { schoolId?: { in: string
   return { schoolId: { in: ids.length ? ids : ['__none__'] } };
 }
 
+/**
+ * The single school a read should be scoped to, as a plain id (or null = all
+ * schools). Use this for aggregate/analytics endpoints that take a `schoolId`
+ * argument rather than a Prisma `where` fragment.
+ *
+ * - active school selected (gateway already validated it is in the caller's
+ *   scope) → that school, for GROUP and SCHOOL users alike;
+ * - school-scoped user with no explicit selection → their (single) membership
+ *   school, so they never see the whole group;
+ * - group user with no selection → null (all schools).
+ */
+export function resolveScopeSchoolId(user?: RequestUser): string | null {
+  if (!user) return null;
+  if (user.activeSchoolId) return user.activeSchoolId;
+  if (user.scope === 'SCHOOL') {
+    return (user.schoolIds ?? []).find((id) => id && id !== '*') ?? null;
+  }
+  return null;
+}
+
 export function schoolInScope(user: RequestUser | undefined, schoolId: string | null | undefined): boolean {
   if (isGroupScope(user)) return true;
   if (!schoolId) return false;

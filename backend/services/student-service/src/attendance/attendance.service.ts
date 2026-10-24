@@ -5,6 +5,8 @@ import { RabbitMqService } from '../rabbitmq/rabbitmq.service';
 import { MarkAttendanceDto } from './dto/mark-attendance.dto';
 import { AttendanceFilterDto } from './dto/attendance-filter.dto';
 import { paginate, buildPageMeta } from '../common/helpers/pagination.helper';
+import { RequestUser } from '../common/interfaces/request-user.interface';
+import { schoolScopeFilter } from '../common/helpers/school-scope.helper';
 
 @Injectable()
 export class AttendanceService {
@@ -15,6 +17,10 @@ export class AttendanceService {
 
   async mark(dto: MarkAttendanceDto, markedById: string): Promise<unknown> {
     const date = new Date(dto.date);
+
+    // Stamp the class's school on each record so attendance stays school-scoped.
+    const klass = await this.prisma.class.findUnique({ where: { id: dto.classId }, select: { schoolId: true } });
+    const schoolId = klass?.schoolId ?? null;
 
     const records = await this.prisma.$transaction(
       dto.records.map((record) =>
@@ -34,6 +40,7 @@ export class AttendanceService {
             status: record.status,
             note: record.note,
             markedById,
+            schoolId,
           },
           update: {
             status: record.status,
@@ -59,7 +66,19 @@ export class AttendanceService {
     return records;
   }
 
-  async list(filters: AttendanceFilterDto, currentUser?: { id: string; role: string }): Promise<unknown> {
+  async list(inputFilters: AttendanceFilterDto, currentUser?: RequestUser): Promise<unknown> {
+    let filters = inputFilters;
+    if (currentUser?.role === 'STUDENT') {
+      // Students may only ever read their own attendance.
+      const own = await this.prisma.student.findFirst({
+        where: { authUserId: currentUser.id },
+        select: { id: true },
+      });
+      if (!own) {
+        throw new ForbiddenException('Student record not found');
+      }
+      filters = { ...inputFilters, studentId: own.id };
+    }
     if (currentUser?.role === 'PARENT') {
       if (!filters.studentId) {
         throw new ForbiddenException('Parent must provide studentId');
@@ -79,6 +98,7 @@ export class AttendanceService {
     const pagination = paginate(filters.page, filters.limit);
 
     const where: Prisma.AttendanceRecordWhereInput = {
+      ...schoolScopeFilter(currentUser),
       studentId: filters.studentId,
       classId: filters.classId,
       termId: filters.termId,

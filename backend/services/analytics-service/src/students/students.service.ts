@@ -4,6 +4,7 @@ import { createHash } from 'crypto';
 import { applyRoleFilter } from '../common/helpers/role-filter.helper';
 import { mean, percentileRank } from '../common/helpers/statistics.helper';
 import { RequestUser } from '../common/interfaces/request-user.interface';
+import { assertSchoolInScope } from '../common/helpers/school-scope.helper';
 import { DownstreamService } from '../downstream/downstream.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
@@ -74,6 +75,11 @@ export class StudentsService {
 
     const student = await this.prisma.student.findUnique({ where: { id: studentId } });
     if (!student) throw new NotFoundException('Student not found');
+    // Staff may only open a profile for a student within their school scope
+    // (parents/students are already gated by canAccessStudent above).
+    if (user && !['PARENT', 'STUDENT'].includes(user.role)) {
+      assertSchoolInScope(user, (student as { schoolId?: string | null }).schoolId ?? null);
+    }
 
     const [enrolments, classes, terms, reportCards, termResults, trends, alerts, pairings, attendance, discipline, invoices, payments, interventions] =
       await Promise.all([
@@ -470,13 +476,13 @@ export class StudentsService {
     isOverdue?: string;
     page: number;
     limit: number;
-  }) {
-    const hash = createHash('sha1').update(JSON.stringify(params)).digest('hex');
+  }, schoolId?: string | null) {
+    const hash = createHash('sha1').update(JSON.stringify({ ...params, schoolId: schoolId || 'group' })).digest('hex');
     const key = `analytics:students:list:${hash}`;
     const cached = await this.redis.get<any>(key);
     if (cached) return cached;
 
-    const where: any = {};
+    const where: any = schoolId ? { schoolId } : {};
     if (params.search) {
       where.OR = [
         { firstName: { contains: params.search, mode: 'insensitive' } },
@@ -557,9 +563,13 @@ export class StudentsService {
     return result;
   }
 
-  async atRisk(classId?: string) {
+  async atRisk(classId?: string, schoolId?: string | null) {
+    // PerformanceAlert has no schoolId — scope via the school's student ids.
+    const studentScope: Record<string, unknown> = schoolId
+      ? { studentId: { in: ((await this.prisma.student.findMany({ where: { schoolId }, select: { id: true } })).map((s) => s.id)) as string[] } }
+      : {};
     const alerts = await this.prisma.performanceAlert.findMany({
-      where: { isResolved: false, severity: { in: ['CRITICAL', 'HIGH'] } },
+      where: { isResolved: false, severity: { in: ['CRITICAL', 'HIGH'] }, ...studentScope },
       orderBy: { createdAt: 'desc' },
       take: 300,
     });
@@ -590,10 +600,10 @@ export class StudentsService {
       .filter((row) => !classId || row.className === classId);
   }
 
-  async topPerformers(classId?: string, subjectId?: string, termId?: string, limit = 10) {
+  async topPerformers(classId?: string, subjectId?: string, termId?: string, limit = 10, schoolId?: string | null) {
     try {
       const rows = await this.prisma.termResult.findMany({
-        where: { termId: termId || undefined, subjectId: subjectId || undefined, isPublished: true },
+        where: { termId: termId || undefined, subjectId: subjectId || undefined, isPublished: true, ...(schoolId ? { schoolId } : {}) },
         orderBy: { weightedTotal: 'desc' },
         take: 500,
       });
@@ -629,7 +639,7 @@ export class StudentsService {
     }
   }
 
-  async mostImproved(classId?: string, subjectId?: string, _termId?: string) {
+  async mostImproved(classId?: string, subjectId?: string, _termId?: string, schoolId?: string | null) {
     const trends = await this.prisma.performanceTrend.findMany({
       where: { subjectId: subjectId || undefined },
       orderBy: { trendSlope: 'desc' },
@@ -638,12 +648,15 @@ export class StudentsService {
 
     const studentIds = [...new Set(trends.map((row) => row.studentId))];
     const [students, enrolments, classes] = await Promise.all([
-      this.prisma.student.findMany({ where: { id: { in: studentIds } } }),
+      this.prisma.student.findMany({ where: { id: { in: studentIds }, ...(schoolId ? { schoolId } : {}) } }),
       this.prisma.enrolment.findMany({ where: { studentId: { in: studentIds }, isActive: true } }),
       this.prisma.class.findMany(),
     ]);
 
+    const inScope = new Set(students.map((s) => s.id));
     return trends
+      // When a school is active, keep only trends for students in that school.
+      .filter((trend) => !schoolId || inScope.has(trend.studentId))
       .map((trend) => {
         const student = students.find((row) => row.id === trend.studentId);
         const enrolment = enrolments.find((row) => row.studentId === trend.studentId);

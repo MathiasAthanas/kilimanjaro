@@ -1103,6 +1103,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         ),
       ),
       GoRoute(
+        path: '/hod/announcements/create',
+        pageBuilder: (context, state) => AppTransitions.utility(
+          key: state.pageKey,
+          child: const teacher_screens.CreateAnnouncementScreen(asHod: true),
+        ),
+      ),
+      GoRoute(
         path: '/teacher/interventions/create',
         pageBuilder: (context, state) => AppTransitions.utility(
           key: state.pageKey,

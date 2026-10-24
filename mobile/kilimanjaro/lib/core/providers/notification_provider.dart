@@ -30,7 +30,7 @@ final notificationsStreamProvider = StreamProvider<List<NotificationModel>>((ref
 });
 
 final notificationGroupsProvider = Provider<List<NotificationGroup>>((ref) {
-  final items = ref.watch(notificationsStreamProvider).value ?? const <NotificationModel>[];
+  final items = ref.watch(notificationsStreamProvider).valueOrNull ?? const <NotificationModel>[];
   if (items.isEmpty) return const [];
 
   final now = DateTime.now();
@@ -65,7 +65,7 @@ final notificationGroupsProvider = Provider<List<NotificationGroup>>((ref) {
 });
 
 final unreadCountProvider = Provider<int>((ref) {
-  final items = ref.watch(notificationsStreamProvider).value ?? const <NotificationModel>[];
+  final items = ref.watch(notificationsStreamProvider).valueOrNull ?? const <NotificationModel>[];
   return items.where((item) => !item.isRead).length;
 });
 

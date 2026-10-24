@@ -395,7 +395,18 @@ export class AuthService {
     if (!ids.length) return { users: [] };
     const users = await this.prisma.user.findMany({
       where: { id: { in: ids } },
-      select: { id: true, role: true, firstName: true, lastName: true, email: true },
+      select: {
+        id: true,
+        role: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        isActive: true,
+        schoolMemberships: {
+          where: { isActive: true },
+          select: { schoolId: true },
+        },
+      },
     });
     return {
       users: users.map((u) => ({
@@ -404,6 +415,8 @@ export class AuthService {
         firstName: u.firstName,
         lastName: u.lastName,
         fullName: `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email,
+        isActive: u.isActive,
+        schoolIds: [...new Set(u.schoolMemberships.map((membership) => membership.schoolId).filter((id): id is string => Boolean(id)))],
       })),
     };
   }

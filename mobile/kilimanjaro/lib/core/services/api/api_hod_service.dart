@@ -3,8 +3,10 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../../models/announcement_model.dart';
 import '../../../models/hod_models.dart';
-import '../../config/app_config.dart';
+import '../../network/api_client.dart';
+import '../../network/api_failure.dart';
 import '../interfaces/hod_service_interface.dart';
+import '../../../models/json_num.dart';
 
 String _buildName(Map<String, dynamic> json) {
   final first = json['firstName'] as String? ?? '';
@@ -24,21 +26,11 @@ String _buildNameFromNested(Map<String, dynamic>? nested, String? fallback) {
 }
 
 class ApiHodService implements IHodService {
-  ApiHodService(this._storage) : _dio = _buildDio();
+  ApiHodService(this._storage)
+      : _dio = buildApiClient(_storage, pathPrefix: '/api/v1');
 
   final FlutterSecureStorage _storage;
   final Dio _dio;
-
-  static Dio _buildDio() {
-    return Dio(
-      BaseOptions(
-        baseUrl: '${AppConfig.apiBaseUrl}/api/v1',
-        connectTimeout: const Duration(seconds: 15),
-        receiveTimeout: const Duration(seconds: 30),
-        headers: {'Content-Type': 'application/json'},
-      ),
-    );
-  }
 
   Future<Options> _auth() async {
     final token = await _storage.read(key: 'access_token');
@@ -58,10 +50,11 @@ class ApiHodService implements IHodService {
           if (m[key] is List) return m[key] as List<dynamic>;
         }
       }
-    } on DioException {
-      return [];
+      return const [];
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) return const [];
+      throw ApiFailure.fromDio(e);
     }
-    return [];
   }
 
   // ─── Approvals ────────────────────────────────────────────────────────────
@@ -82,7 +75,7 @@ class ApiHodService implements IHodService {
     final marks = json['marks'] as List<dynamic>? ?? [];
     final scores = marks
         .cast<Map<String, dynamic>>()
-        .map((m) => (m['score'] as num?)?.toDouble() ?? 0.0)
+        .map((m) => numOf(m['score'])?.toDouble() ?? 0.0)
         .toList();
 
     // Build score distribution buckets
@@ -105,10 +98,10 @@ class ApiHodService implements IHodService {
           _buildNameFromNested(json['teacher'] as Map<String, dynamic>?, null),
       submittedAgo: json['submittedAgo'] as String? ?? json['submittedAt'] as String? ?? '',
       studentCount: json['studentCount'] as int? ?? scores.length,
-      maxScore: (json['maxScore'] as num?)?.toDouble() ?? 100.0,
-      classAverage: (json['classAverage'] as num?)?.toDouble() ?? classAverage,
-      highest: (json['highest'] as num?)?.toDouble() ?? highest,
-      lowest: (json['lowest'] as num?)?.toDouble() ?? lowest,
+      maxScore: numOf(json['maxScore'])?.toDouble() ?? 100.0,
+      classAverage: numOf(json['classAverage'])?.toDouble() ?? classAverage,
+      highest: numOf(json['highest'])?.toDouble() ?? highest,
+      lowest: numOf(json['lowest'])?.toDouble() ?? lowest,
       distribution: json['distribution'] != null
           ? Map<String, int>.from(json['distribution'] as Map)
           : distribution,
@@ -154,7 +147,7 @@ class ApiHodService implements IHodService {
         return HodClassAnalytics(
           classLabel: c['classLabel'] as String? ?? '',
           teacherName: c['teacherName'] as String? ?? '',
-          average: (c['average'] as num?)?.toDouble() ?? 0.0,
+          average: numOf(c['average'])?.toDouble() ?? 0.0,
           studentCount: c['studentCount'] as int? ?? 0,
         );
       }).toList();
@@ -162,8 +155,8 @@ class ApiHodService implements IHodService {
       return HodSubjectAnalytics(
         id: json['id'] as String? ?? '',
         name: json['name'] as String? ?? json['subjectName'] as String? ?? '',
-        average: (json['average'] as num?)?.toDouble() ?? 0.0,
-        syllabusCompletion: (json['syllabusCompletion'] as num?)?.toDouble() ?? 0.0,
+        average: numOf(json['average'])?.toDouble() ?? 0.0,
+        syllabusCompletion: numOf(json['syllabusCompletion'])?.toDouble() ?? 0.0,
         atRiskStudents: json['atRiskStudents'] as int? ?? 0,
         classes: classes,
       );
@@ -178,9 +171,9 @@ class ApiHodService implements IHodService {
         id: json['id'] as String? ?? '',
         name: _buildName(json),
         subjects: json['subjects'] as String? ?? '',
-        onTimeRate: (json['onTimeRate'] as num?)?.toDouble() ?? 0.0,
-        averageScore: (json['averageScore'] as num?)?.toDouble() ?? 0.0,
-        syllabusCompletion: (json['syllabusCompletion'] as num?)?.toDouble() ?? 0.0,
+        onTimeRate: numOf(json['onTimeRate'])?.toDouble() ?? 0.0,
+        averageScore: numOf(json['averageScore'])?.toDouble() ?? 0.0,
+        syllabusCompletion: numOf(json['syllabusCompletion'])?.toDouble() ?? 0.0,
       );
     }).toList();
   }
@@ -273,8 +266,11 @@ class ApiHodService implements IHodService {
 
   @override
   Future<void> createIntervention(Map<String, dynamic> data) async {
-    final opts = await _auth();
-    await _dio.post<void>('/academics/interventions', data: data, options: opts);
+    await _dio.post<void>(
+      '/academics/interventions',
+      data: data,
+      options: idempotentWrite(),
+    );
   }
 
   // ─── Announcements ────────────────────────────────────────────────────────
@@ -283,5 +279,15 @@ class ApiHodService implements IHodService {
   Future<List<AnnouncementModel>> getAnnouncements() async {
     final list = await _getList('/hod/announcements');
     return list.cast<Map<String, dynamic>>().map(AnnouncementModel.fromJson).toList();
+  }
+
+  @override
+  Future<void> createAnnouncement(Map<String, dynamic> data) async {
+    // Persists to the same endpoint the web dashboard uses.
+    await _dio.post<void>(
+      '/notifications/announcements',
+      data: data,
+      options: idempotentWrite(),
+    );
   }
 }

@@ -4,7 +4,9 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { NumberSequenceService } from '../common/helpers/number-sequence.service';
 import { RequestUser } from '../common/interfaces/request-user.interface';
-import { schoolScopeFilter } from '../common/helpers/school-scope.helper';
+// NOTE: the Asset model has no `schoolId` column — fixed assets are tracked
+// group-wide (central ownership), so no school-scope filter is applied here.
+// (If per-school assets are ever required, add `schoolId` to the Asset model.)
 
 @Injectable()
 export class AssetsService {
@@ -101,7 +103,6 @@ export class AssetsService {
 
     const rows = await this.prisma.asset.findMany({
       where: {
-        ...schoolScopeFilter(user),
         category: filters.category,
         type: filters.type,
         condition: filters.condition,
@@ -124,7 +125,7 @@ export class AssetsService {
     return Promise.all(rows.map((row) => this.withRollup(row)));
   }
 
-  async byId(id: string) {
+  async byId(id: string, user?: RequestUser) {
     const row = await this.prisma.asset.findUnique({
       where: { id },
       include: { childAssets: { orderBy: { createdAt: 'asc' } }, parentAsset: true },
@@ -134,7 +135,7 @@ export class AssetsService {
   }
 
   async update(id: string, dto: any, user: RequestUser) {
-    const existing = await this.byId(id);
+    const existing = await this.byId(id, user);
     const { warrantyExpiry, purchaseDate, purchaseCost, currentValue, quantity, unitCost, isGroup, ...rest } = dto;
     const qty = this.decimal(quantity);
     const unit = this.decimal(unitCost);
@@ -169,7 +170,7 @@ export class AssetsService {
   }
 
   async dispose(id: string, dto: any, user: RequestUser) {
-    const existing = await this.byId(id);
+    const existing = await this.byId(id, user);
     const row = await this.prisma.asset.update({
       where: { id },
       data: {
@@ -194,8 +195,8 @@ export class AssetsService {
     return row;
   }
 
-  async summary(user?: RequestUser) {
-    const scope = schoolScopeFilter(user);
+  async summary(_user?: RequestUser) {
+    const scope = {};
     const [totalAssets, groupedAssets, componentAssets, byCategory, byCondition, byType, sums, rootRows] = await Promise.all([
       this.prisma.asset.count({ where: { ...scope, status: { not: 'DISPOSED' } } }),
       this.prisma.asset.count({ where: { ...scope, isGroup: true, status: { not: 'DISPOSED' } } }),
@@ -234,9 +235,9 @@ export class AssetsService {
     };
   }
 
-  async fixedAssetRegister(user?: RequestUser) {
+  async fixedAssetRegister(_user?: RequestUser) {
     const rows = await this.prisma.asset.findMany({
-      where: { ...schoolScopeFilter(user), parentAssetId: null, status: { not: 'DISPOSED' } },
+      where: { parentAssetId: null, status: { not: 'DISPOSED' } },
       orderBy: { name: 'asc' },
       include: { childAssets: { orderBy: { name: 'asc' } } },
     });

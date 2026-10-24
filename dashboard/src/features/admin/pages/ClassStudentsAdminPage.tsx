@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useParams, NavLink } from 'react-router-dom';
-import { Download, KeyRound, UserPlus, X } from 'lucide-react';
+import { useNavigate, useParams, NavLink } from 'react-router-dom';
+import { Download, KeyRound, ShieldAlert, UserPlus, X } from 'lucide-react';
 import { AdminShell } from '../components/AdminConsole';
 import { Button } from '../../../components/common/Button';
 import { toast } from '../../../lib/toast';
@@ -15,6 +15,7 @@ import {
   useUnlinkGuardianMutation,
   useResetUserPwMutation,
 } from '../api/admin.hooks';
+import { StudentLifecycleDialog } from '../components/StudentLifecycleDialog';
 
 interface GuardianSummary { name: string; phoneNumber: string; isPrimary: boolean; hasLoginAccount: boolean }
 interface ClassStudentRow {
@@ -52,9 +53,10 @@ function Stat({ label, value, tone = 'slate' }: { label: string; value: number; 
 
 export function ClassStudentsAdminPage() {
   const { classId } = useParams<{ classId: string }>();
+  const navigate = useNavigate();
   const [filters, setFilters] = useState<Record<string, string>>({});
   const [search, setSearch] = useState('');
-  const { data, isLoading, isError } = useClassStudents(classId, { ...filters, search: search || undefined, limit: 200 });
+  const { data, isLoading, isError, error } = useClassStudents(classId, { ...filters, search: search || undefined, limit: 200 });
   const addGuardian = useAddGuardianMutation();
   const unlinkGuardian = useUnlinkGuardianMutation();
   const resetPw = useResetUserPwMutation();
@@ -63,6 +65,16 @@ export function ClassStudentsAdminPage() {
   const [gForm, setGForm] = useState({ firstName: '', lastName: '', phoneNumber: '', relationship: 'GUARDIAN' });
   const [resetResult, setResetResult] = useState<{ name: string; password: string } | null>(null);
   const [manageStudent, setManageStudent] = useState<ClassStudentRow | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [lifecycleOpen, setLifecycleOpen] = useState(false);
+
+  // A cleanup may finish in another tab, or a user may revisit a bookmarked
+  // class route. Do not leave either case on a permanently invalid screen.
+  useEffect(() => {
+    if ((error as any)?.response?.status !== 404) return;
+    toast('This class no longer exists. Returning to Class Management.', 'warning');
+    navigate('/admin/classes', { replace: true });
+  }, [error, navigate]);
 
   // Classes in scope, for the transfer control inside the manage drawer.
   const activeSchoolKey = useSchoolStore((s) => s.activeSchool?.id ?? '__group__');
@@ -81,6 +93,12 @@ export function ClassStudentsAdminPage() {
 
   const students = report?.students ?? [];
   const ov = report?.overview ?? {};
+  const selectedSet = new Set(selectedIds);
+  const allVisibleSelected = students.length > 0 && students.every((student) => selectedSet.has(student.id));
+  const toggleStudent = (id: string) => setSelectedIds((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id]);
+  const toggleAllVisible = () => setSelectedIds(allVisibleSelected
+    ? (current) => current.filter((id) => !students.some((student) => student.id === id))
+    : (current) => [...new Set([...current, ...students.map((student) => student.id)])]);
 
   const setFilter = (key: string, value: string) => setFilters((f) => { const n = { ...f }; if (value) n[key] = value; else delete n[key]; return n; });
 
@@ -171,8 +189,11 @@ export function ClassStudentsAdminPage() {
           <div className="ml-auto flex gap-2">
             <Button variant="secondary" className="rounded-lg px-3 py-2 text-xs" onClick={() => exportCsv(false)}><Download className="h-3.5 w-3.5" /> Export</Button>
             <Button variant="secondary" className="rounded-lg px-3 py-2 text-xs" onClick={() => exportCsv(true)}><Download className="h-3.5 w-3.5" /> Missing report</Button>
+            <Button variant="secondary" className="rounded-lg border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 hover:bg-amber-100" onClick={() => setLifecycleOpen(true)}><ShieldAlert className="h-3.5 w-3.5" /> Cleanup</Button>
           </div>
         </div>
+
+        {selectedIds.length > 0 && <div className="flex items-center justify-between rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm"><span className="font-black text-indigo-900">{selectedIds.length} student{selectedIds.length === 1 ? '' : 's'} selected</span><button onClick={() => setSelectedIds([])} className="font-bold text-indigo-700 hover:underline">Clear selection</button></div>}
 
         {/* Table */}
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -180,14 +201,16 @@ export function ClassStudentsAdminPage() {
             <table className="min-w-full text-left text-sm" style={{ minWidth: 1000 }}>
               <thead className="bg-[#1E1B4B] text-[11px] font-black uppercase tracking-widest text-white">
                 <tr>
+                  <th className="w-10 px-3 py-3"><input aria-label="Select all visible students" type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} className="h-3.5 w-3.5 rounded border-white/50" /></th>
                   {['Reg / Admission', 'Name', 'Gender', 'Guardian', 'Login', 'Status', 'Actions'].map((h) => <th key={h} className="px-4 py-3">{h}</th>)}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {isLoading && <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-400">Loading…</td></tr>}
-                {!isLoading && students.length === 0 && <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-400">No students match.</td></tr>}
+                {isLoading && <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-400">Loading…</td></tr>}
+                {!isLoading && students.length === 0 && <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-400">No students match.</td></tr>}
                 {students.map((s) => (
                   <tr key={s.id} className="hover:bg-slate-50">
+                    <td className="px-3 py-3"><input aria-label={`Select ${s.fullName}`} type="checkbox" checked={selectedSet.has(s.id)} onChange={() => toggleStudent(s.id)} className="h-4 w-4 rounded border-slate-300 text-indigo-600" /></td>
                     <td className="px-4 py-3">
                       <p className="font-mono text-xs font-black text-slate-700">{s.registrationNumber}</p>
                       {s.legacyAdmissionNumber && <p className="text-[11px] text-slate-400">Adm {s.legacyAdmissionNumber}</p>}
@@ -223,6 +246,20 @@ export function ClassStudentsAdminPage() {
           classes={allClasses}
           academicYearId={(report?.class as any)?.academicYearId ?? ''}
           onClose={() => setManageStudent(null)}
+        />
+      )}
+
+      {lifecycleOpen && classId && (
+        <StudentLifecycleDialog
+          classId={classId}
+          className={title}
+          students={students.map((student) => ({ id: student.id, fullName: student.fullName, registrationNumber: student.registrationNumber }))}
+          selectedIds={selectedIds}
+          onClose={() => setLifecycleOpen(false)}
+          onCompleted={(result: any) => {
+            setSelectedIds([]);
+            if (result?.deletedClass) navigate('/admin/classes', { replace: true });
+          }}
         />
       )}
 

@@ -906,9 +906,9 @@ class HodAnnouncementsScreen extends StatelessWidget {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Announcement composer ready for API.')),
-        ),
+        // Opens the shared announcement composer, which persists to
+        // POST /notifications/announcements (backend authorizes by HOD role).
+        onPressed: () => context.push('/hod/announcements/create'),
         icon: const Icon(Icons.campaign_rounded),
         label: const Text('Compose'),
       ),

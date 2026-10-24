@@ -27,7 +27,7 @@ final studentTermsProvider = FutureProvider<List<TermResultModel>>((ref) async {
 });
 
 final currentStudentTermProvider = Provider<TermResultModel?>((ref) {
-  final terms = ref.watch(studentTermsProvider).value ?? const <TermResultModel>[];
+  final terms = ref.watch(studentTermsProvider).valueOrNull ?? const <TermResultModel>[];
   return terms.where((item) => item.isCurrent).firstOrNull;
 });
 
@@ -46,7 +46,7 @@ final sortedSubjectsForTermProvider =
 
 final subjectByIdProvider =
     Provider.family<SubjectResultModel?, String>((ref, subjectId) {
-  final terms = ref.watch(studentTermsProvider).value ?? const <TermResultModel>[];
+  final terms = ref.watch(studentTermsProvider).valueOrNull ?? const <TermResultModel>[];
   for (final term in terms) {
     final match = term.subjects.where((item) => item.id == subjectId).firstOrNull;
     if (match != null) return match;
@@ -66,7 +66,7 @@ final studentAttendanceProvider = FutureProvider<List<AttendanceRecordModel>>((r
 });
 
 final attendanceSummaryProvider = Provider<Map<AttendanceStatus, int>>((ref) {
-  final records = ref.watch(studentAttendanceProvider).value ?? const <AttendanceRecordModel>[];
+  final records = ref.watch(studentAttendanceProvider).valueOrNull ?? const <AttendanceRecordModel>[];
   final summary = <AttendanceStatus, int>{};
   for (final record in records) {
     summary.update(record.status, (value) => value + 1, ifAbsent: () => 1);
@@ -79,7 +79,7 @@ final studentAlertsProvider = FutureProvider<List<PerformanceAlertModel>>((ref) 
 });
 
 final primaryStudentAlertProvider = Provider<PerformanceAlertModel?>((ref) {
-  final alerts = ref.watch(studentAlertsProvider).value ?? const <PerformanceAlertModel>[];
+  final alerts = ref.watch(studentAlertsProvider).valueOrNull ?? const <PerformanceAlertModel>[];
   final critical = alerts.where((item) => !item.isResolved && item.severity != PerformanceAlertSeverity.low);
   if (critical.isNotEmpty) return critical.first;
   final positive = alerts.where((item) => item.type == PerformanceAlertType.consistentExcellence);
@@ -106,14 +106,15 @@ final announcementFilterProvider =
     StateProvider<AnnouncementPriority?>((ref) => null);
 
 final filteredAnnouncementsProvider = Provider<List<AnnouncementModel>>((ref) {
-  final items = ref.watch(announcementsProvider).value ?? const <AnnouncementModel>[];
+  final items = ref.watch(announcementsProvider).valueOrNull ?? const <AnnouncementModel>[];
   final filter = ref.watch(announcementFilterProvider);
   if (filter == null) return items;
   return items.where((item) => item.priority == filter).toList();
 });
 
 final selectedAttendanceMonthProvider =
-    StateProvider<DateTime>((ref) => DateTime(2026, 3));
+    StateProvider<DateTime>(
+        (ref) => DateTime(DateTime.now().year, DateTime.now().month));
 
 final selectedAttendanceDateProvider = StateProvider<DateTime?>((ref) => null);
 

@@ -1,3 +1,5 @@
+import 'json_num.dart';
+
 class ChildSummary {
   const ChildSummary({
     required this.id,
@@ -28,21 +30,49 @@ class ChildSummary {
   final String? combinationCode;
 
   factory ChildSummary.fromJson(Map<String, dynamic> json) {
-    final profile = json['profile'] as Map<String, dynamic>? ?? json;
-    final performance = json['performance'] as Map<String, dynamic>?;
-    final attendanceSummary = json['attendanceSummary'] as Map<String, dynamic>?;
-    final invoices = json['invoices'] as List<dynamic>?;
+    // The child record ({classLabel, academicYear, ...}) is merged with the
+    // dashboard profile (the full student row); keep fields from both.
+    final rawProfile = json['profile'];
+    final profile = rawProfile is Map<String, dynamic>
+        ? <String, dynamic>{...json, ...rawProfile}
+        : json;
 
+    final enrolments = profile['enrolments'];
+    final enrolment = enrolments is List && enrolments.isNotEmpty && enrolments.first is Map
+        ? Map<String, dynamic>.from(enrolments.first as Map)
+        : const <String, dynamic>{};
+    final enrolledClass = enrolment['class'] is Map
+        ? Map<String, dynamic>.from(enrolment['class'] as Map)
+        : const <String, dynamic>{};
+
+    final currentTermId = profile['currentTermId'] as String? ??
+        json['currentTermId'] as String? ??
+        enrolment['termId'] as String? ??
+        '';
+
+    final performance = json['performance'] is Map
+        ? Map<String, dynamic>.from(json['performance'] as Map)
+        : null;
+    final score = _overallScore(performance, currentTermId) ??
+        numOf(json['overallScore'])?.toDouble() ??
+        0.0;
+
+    final invoices = json['invoices'] as List<dynamic>?;
     final outstandingBalance = invoices != null
         ? invoices.fold<double>(0.0, (sum, inv) {
             final m = inv as Map<String, dynamic>;
             return sum + (double.tryParse((m['outstandingBalance'] ?? '0').toString()) ?? 0.0);
           })
-        : (json['outstandingBalance'] as num?)?.toDouble() ?? 0.0;
+        : numOf(json['outstandingBalance'])?.toDouble() ?? 0.0;
 
     final first = profile['firstName'] as String? ?? '';
     final last = profile['lastName'] as String? ?? '';
     final combinedName = '$first $last'.trim();
+
+    final stream = enrolledClass['stream'] as String?;
+    final enrolledClassLabel = enrolledClass['name'] is String
+        ? '${enrolledClass['name']}${stream != null && stream.isNotEmpty ? ' $stream' : ''}'
+        : null;
 
     return ChildSummary(
       id: profile['id'] as String? ?? '',
@@ -50,16 +80,75 @@ class ChildSummary {
           ? combinedName
           : (profile['name'] as String? ?? profile['fullName'] as String? ?? ''),
       registrationNumber: profile['registrationNumber'] as String? ?? profile['regNumber'] as String? ?? '',
-      classLabel: (profile['class'] as Map<String, dynamic>?)?['name'] as String? ?? profile['classLabel'] as String? ?? '',
-      academicYear: (profile['academicYear'] as Map<String, dynamic>?)?['name'] as String? ?? profile['academicYear'] as String? ?? '',
-      overallScore: (performance?['overallScore'] as num?)?.toDouble() ?? (json['overallScore'] as num?)?.toDouble() ?? 0.0,
-      overallGrade: performance?['overallGrade'] as String? ?? json['overallGrade'] as String? ?? '',
-      attendanceRate: (attendanceSummary?['attendanceRate'] as num?)?.toDouble() ?? (json['attendanceRate'] as num?)?.toDouble() ?? 0.0,
+      classLabel: _labelOf(profile['classLabel']) ??
+          enrolledClassLabel ??
+          _labelOf(profile['class']) ??
+          '',
+      academicYear: _labelOf(enrolment['academicYear']) ?? _labelOf(profile['academicYear']) ?? '',
+      overallScore: score,
+      overallGrade: performance?['overallGrade'] as String? ??
+          json['overallGrade'] as String? ??
+          (score > 0 ? _gradeFor(score) : ''),
+      attendanceRate: _attendanceRate(json['attendanceSummary'], currentTermId) ??
+          numOf(json['attendanceRate'])?.toDouble() ??
+          0.0,
       outstandingBalance: outstandingBalance,
-      currentTermId: profile['currentTermId'] as String? ?? json['currentTermId'] as String? ?? '',
-      educationStage: profile['educationStage'] as String? ?? json['educationStage'] as String?,
+      currentTermId: currentTermId,
+      educationStage: profile['educationStage'] as String? ??
+          enrolledClass['educationStage'] as String? ??
+          json['educationStage'] as String?,
       combinationCode: profile['combinationCode'] as String? ?? json['combinationCode'] as String?,
     );
+  }
+
+  /// Attendance summary arrives either as one object or as a list of
+  /// per-term summaries; prefer the current term.
+  static double? _attendanceRate(Object? summary, String currentTermId) {
+    if (summary is Map) return numOf(summary['attendanceRate'])?.toDouble();
+    if (summary is List && summary.isNotEmpty) {
+      final rows = summary.whereType<Map>().toList();
+      final match = rows.where((r) => r['termId'] == currentTermId).firstOrNull ?? rows.firstOrNull;
+      return numOf(match?['attendanceRate'])?.toDouble();
+    }
+    return null;
+  }
+
+  static double? _overallScore(Map<String, dynamic>? performance, String currentTermId) {
+    if (performance == null) return null;
+    final direct = numOf(performance['overallScore']);
+    if (direct != null) return direct.toDouble();
+    final summary = performance['overallSummary'];
+    if (summary is Map) {
+      final avg = numOf(summary['overallAverage'] ?? summary['average']);
+      if (avg != null) return avg.toDouble();
+    }
+    final history = performance['academicHistory'];
+    if (history is List && history.isNotEmpty) {
+      final rows = history.whereType<Map>().toList();
+      final termRows = rows.where((r) => r['termId'] == currentTermId).toList();
+      final used = termRows.isNotEmpty ? termRows : rows;
+      final scores = used
+          .map((r) => numOf(r['weightedTotal'] ?? r['score'])?.toDouble())
+          .whereType<double>()
+          .toList();
+      if (scores.isNotEmpty) return scores.reduce((a, b) => a + b) / scores.length;
+    }
+    return null;
+  }
+
+  static String _gradeFor(double score) {
+    if (score >= 80) return 'A';
+    if (score >= 70) return 'B';
+    if (score >= 60) return 'C';
+    if (score >= 50) return 'D';
+    return 'F';
+  }
+
+  /// A label that the backend sends either as a plain string or as `{name}`.
+  static String? _labelOf(Object? value) {
+    if (value is String) return value;
+    if (value is Map) return value['name'] as String?;
+    return null;
   }
 
   String get firstName => name.split(' ').first;

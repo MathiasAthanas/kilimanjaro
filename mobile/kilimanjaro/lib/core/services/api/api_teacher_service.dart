@@ -3,8 +3,10 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../../models/announcement_model.dart';
 import '../../../models/teacher_models.dart';
-import '../../config/app_config.dart';
+import '../../network/api_client.dart';
+import '../../network/api_failure.dart';
 import '../interfaces/teacher_service_interface.dart';
+import '../../../models/json_num.dart';
 
 String _buildName(Map<String, dynamic> json) {
   final first = json['firstName'] as String? ?? '';
@@ -16,21 +18,11 @@ String _buildName(Map<String, dynamic> json) {
 }
 
 class ApiTeacherService implements ITeacherService {
-  ApiTeacherService(this._storage) : _dio = _buildDio();
+  ApiTeacherService(this._storage)
+      : _dio = buildApiClient(_storage, pathPrefix: '/api/v1');
 
   final FlutterSecureStorage _storage;
   final Dio _dio;
-
-  static Dio _buildDio() {
-    return Dio(
-      BaseOptions(
-        baseUrl: '${AppConfig.apiBaseUrl}/api/v1',
-        connectTimeout: const Duration(seconds: 15),
-        receiveTimeout: const Duration(seconds: 30),
-        headers: {'Content-Type': 'application/json'},
-      ),
-    );
-  }
 
   Future<Options> _auth() async {
     final token = await _storage.read(key: 'access_token');
@@ -39,6 +31,9 @@ class ApiTeacherService implements ITeacherService {
     );
   }
 
+  /// Fetches a list, unwrapping the common `{items|data|results|raw: [...]}`
+  /// envelopes. Failures throw a typed [ApiFailure] so the UI can distinguish
+  /// "no data" from "could not load" — they are never swallowed into `[]`.
   Future<List<dynamic>> _getList(String path, {Map<String, dynamic>? params}) async {
     final opts = await _auth();
     try {
@@ -46,14 +41,14 @@ class ApiTeacherService implements ITeacherService {
       if (resp.data is List) return resp.data as List<dynamic>;
       if (resp.data is Map) {
         final m = resp.data as Map<String, dynamic>;
-        for (final key in ['items', 'data', 'results', 'raw']) {
+        for (final key in ['items', 'data', 'results', 'rows', 'raw']) {
           if (m[key] is List) return m[key] as List<dynamic>;
         }
       }
-    } on DioException {
-      return [];
+      return const [];
+    } on DioException catch (e) {
+      throw ApiFailure.fromDio(e);
     }
-    return [];
   }
 
   // ─── Classes ──────────────────────────────────────────────────────────────
@@ -69,16 +64,16 @@ class ApiTeacherService implements ITeacherService {
       id: json['id'] as String? ?? '',
       subject: json['subject'] as String? ?? (json['subjectName'] as String? ?? ''),
       classLabel: json['classLabel'] as String? ?? (json['class'] as Map<String, dynamic>?)?['name'] as String? ?? '',
-      studentCount: json['studentCount'] as int? ?? 0,
-      averageScore: (json['averageScore'] as num?)?.toDouble() ?? 0.0,
-      attendanceRate: (json['attendanceRate'] as num?)?.toDouble() ?? 0.0,
+      studentCount: numOf(json['studentCount'])?.toInt() ?? 0,
+      averageScore: numOf(json['averageScore'])?.toDouble() ?? 0.0,
+      attendanceRate: numOf(json['attendanceRate'])?.toDouble() ?? 0.0,
       nextLesson: json['nextLesson'] as String? ?? '',
     );
   }
 
   @override
   Future<List<TeacherStudent>> getStudentsForClass(String classSubjectId) async {
-    final list = await _getList('/students/classes/$classSubjectId/students');
+    final list = await _getList('/teacher/class-subjects/$classSubjectId/students');
     return list.cast<Map<String, dynamic>>().map(_studentFromJson).toList();
   }
 
@@ -88,9 +83,9 @@ class ApiTeacherService implements ITeacherService {
       name: _buildName(json),
       registrationNumber: json['registrationNumber'] as String? ?? '',
       classLabel: json['classLabel'] as String? ?? (json['class'] as Map<String, dynamic>?)?['name'] as String? ?? '',
-      averageScore: (json['averageScore'] as num?)?.toDouble() ?? 0.0,
-      attendanceRate: (json['attendanceRate'] as num?)?.toDouble() ?? 0.0,
-      currentMark: (json['currentMark'] as num?)?.toDouble(),
+      averageScore: numOf(json['averageScore'])?.toDouble() ?? 0.0,
+      attendanceRate: numOf(json['attendanceRate'])?.toDouble() ?? 0.0,
+      currentMark: numOf(json['currentMark'])?.toDouble(),
     );
   }
 
@@ -108,11 +103,11 @@ class ApiTeacherService implements ITeacherService {
       id: json['id'] as String? ?? '',
       classSubjectId: json['classSubjectId'] as String? ?? '',
       title: json['title'] as String? ?? json['name'] as String? ?? '',
-      maxScore: (json['maxScore'] as num?)?.toDouble() ?? 100.0,
+      maxScore: numOf(json['maxScore'])?.toDouble() ?? 100.0,
       status: _parseAssessmentStatus(json['status'] as String? ?? ''),
       dueLabel: json['dueLabel'] as String? ?? json['dueDate'] as String? ?? '',
-      enteredCount: json['enteredCount'] as int? ?? 0,
-      totalStudents: json['totalStudents'] as int? ?? 0,
+      enteredCount: numOf(json['enteredCount'])?.toInt() ?? 0,
+      totalStudents: numOf(json['totalStudents'])?.toInt() ?? 0,
     );
   }
 
@@ -122,8 +117,13 @@ class ApiTeacherService implements ITeacherService {
         return TeacherAssessmentStatus.draft;
       case 'OPEN':
         return TeacherAssessmentStatus.open;
+      case 'MARKS_ENTERED':
+        return TeacherAssessmentStatus.open;
+      case 'REJECTED':
+        return TeacherAssessmentStatus.open;
       case 'SUBMITTED':
         return TeacherAssessmentStatus.submitted;
+      case 'HOD_APPROVED':
       case 'APPROVED':
         return TeacherAssessmentStatus.approved;
       case 'LOCKED':
@@ -137,10 +137,11 @@ class ApiTeacherService implements ITeacherService {
   Future<List<TeacherMarkEntry>> getMarkSheet(String assessmentId) async {
     final list = await _getList('/academics/assessments/$assessmentId/marks/sheet');
     return list.cast<Map<String, dynamic>>().map((json) {
-      final student = json['student'] as Map<String, dynamic>? ?? json;
+      final raw = json['student'] as Map<String, dynamic>? ?? json;
+      final student = {...raw, 'id': raw['id'] ?? raw['studentId'] ?? ''};
       return TeacherMarkEntry(
         student: _studentFromJson(student),
-        score: (json['score'] as num?)?.toDouble(),
+        score: numOf(json['score'])?.toDouble(),
         isAbsent: json['isAbsent'] as bool? ?? false,
       );
     }).toList();
@@ -148,16 +149,16 @@ class ApiTeacherService implements ITeacherService {
 
   @override
   Future<void> submitMarks(String assessmentId, List<TeacherMarkEntry> entries) async {
-    final opts = await _auth();
     final marks = entries.map((e) => {
       'studentId': e.student.id,
       'score': e.isAbsent ? null : e.score,
       'isAbsent': e.isAbsent,
     }).toList();
+    // Idempotent: a retried marks submission must not double-post.
     await _dio.post<void>(
       '/academics/assessments/$assessmentId/marks/bulk',
       data: {'marks': marks},
-      options: opts,
+      options: idempotentWrite(),
     );
   }
 
@@ -189,15 +190,16 @@ class ApiTeacherService implements ITeacherService {
 
   @override
   Future<void> markAttendance(String classSubjectId, DateTime date, List<Map<String, dynamic>> entries) async {
-    final opts = await _auth();
+    // Idempotent: a retried attendance post for the same session must not
+    // create duplicate records.
     await _dio.post<void>(
-      '/students/attendance',
+      '/teacher/attendance',
       data: {
         'classSubjectId': classSubjectId,
         'date': date.toIso8601String().split('T').first,
         'records': entries,
       },
-      options: opts,
+      options: idempotentWrite(),
     );
   }
 
@@ -216,8 +218,8 @@ class ApiTeacherService implements ITeacherService {
         type: json['alertType'] as String? ?? json['type'] as String? ?? '',
         message: json['message'] as String? ?? '',
         severity: _parseAlertSeverity(json['severity'] as String? ?? ''),
-        previousScore: (json['previousScore'] as num?)?.toDouble() ?? 0.0,
-        currentScore: (json['currentScore'] as num?)?.toDouble() ?? 0.0,
+        previousScore: numOf(json['previousScore'])?.toDouble() ?? 0.0,
+        currentScore: numOf(json['currentScore'])?.toDouble() ?? 0.0,
       );
     }).toList();
   }
@@ -306,8 +308,8 @@ class ApiTeacherService implements ITeacherService {
       return TeacherSyllabusProgress(
         classSubjectId: json['classSubjectId'] as String? ?? json['id'] as String? ?? '',
         title: json['title'] as String? ?? json['subject'] as String? ?? '',
-        covered: json['covered'] as int? ?? json['completedTopics'] as int? ?? 0,
-        total: json['total'] as int? ?? json['totalTopics'] as int? ?? 0,
+        covered: numOf(json['covered'])?.toInt() ?? numOf(json['coveredTopics'])?.toInt() ?? 0,
+        total: numOf(json['total'])?.toInt() ?? numOf(json['totalTopics'])?.toInt() ?? 0,
         nextTopic: json['nextTopic'] as String? ?? '',
       );
     }).toList();
@@ -317,8 +319,8 @@ class ApiTeacherService implements ITeacherService {
   Future<void> updateSyllabusProgress(String classSubjectId, int covered) async {
     final opts = await _auth();
     await _dio.patch<void>(
-      '/academics/syllabus/$classSubjectId',
-      data: {'completedTopics': covered},
+      '/teacher/syllabus/$classSubjectId',
+      data: {'coveredTopics': covered},
       options: opts,
     );
   }
@@ -329,5 +331,24 @@ class ApiTeacherService implements ITeacherService {
   Future<List<AnnouncementModel>> getAnnouncements() async {
     final list = await _getList('/teacher/announcements');
     return list.cast<Map<String, dynamic>>().map(AnnouncementModel.fromJson).toList();
+  }
+
+  @override
+  Future<void> createAnnouncement(Map<String, dynamic> data) async {
+    // Persists to the same endpoint the web dashboard uses.
+    await _dio.post<void>(
+      '/notifications/announcements',
+      data: data,
+      options: idempotentWrite(),
+    );
+  }
+
+  @override
+  Future<void> createIntervention(Map<String, dynamic> data) async {
+    await _dio.post<void>(
+      '/academics/interventions',
+      data: data,
+      options: idempotentWrite(),
+    );
   }
 }

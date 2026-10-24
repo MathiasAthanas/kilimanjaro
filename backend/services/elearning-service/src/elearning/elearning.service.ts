@@ -28,6 +28,31 @@ export class ElearningService {
     private readonly rabbitmq: RabbitMqService,
   ) {}
 
+  /** Internal preflight used before irreversible student cleanup. */
+  async lifecycleUsage(studentIds: string[]) {
+    if (!studentIds.length) {
+      return { protectedStudentIds: [], counts: { courseEnrollments: 0, submissions: 0, quizAttempts: 0, materialProgress: 0, lessonProgress: 0 } };
+    }
+    const where = { studentId: { in: studentIds } };
+    const [enrollments, submissions, attempts, materialProgress, lessonProgress] = await Promise.all([
+      this.prisma.courseEnrollment.findMany({ where, distinct: ['studentId'], select: { studentId: true } }),
+      this.prisma.submission.findMany({ where, distinct: ['studentId'], select: { studentId: true } }),
+      this.prisma.quizAttempt.findMany({ where, distinct: ['studentId'], select: { studentId: true } }),
+      this.prisma.materialProgress.findMany({ where, distinct: ['studentId'], select: { studentId: true } }),
+      this.prisma.lessonProgress.findMany({ where, distinct: ['studentId'], select: { studentId: true } }),
+    ]);
+    return {
+      protectedStudentIds: [...new Set([...enrollments, ...submissions, ...attempts, ...materialProgress, ...lessonProgress].map((item) => item.studentId))],
+      counts: {
+        courseEnrollments: enrollments.length,
+        submissions: submissions.length,
+        quizAttempts: attempts.length,
+        materialProgress: materialProgress.length,
+        lessonProgress: lessonProgress.length,
+      },
+    };
+  }
+
   async listCourses(user: RequestUser, query: Record<string, string>) {
     const where: Prisma.CourseSpaceWhereInput = {};
     if (query.status) where.status = query.status.toUpperCase() as never;

@@ -17,8 +17,10 @@ import {
   useAdminReportJobs,
   useAdminStudents,
   useAdminStudentsPage,
+  useClassStudents,
   useAdminSubjects,
   useAdminUsers,
+  useAdminUsersPage,
   useAcademicYears,
   useTerms,
   useAssessmentTypes,
@@ -109,6 +111,7 @@ import { assessmentWeightsTotal, roleRisk } from '../utils/adminValidation';
 import { useSchools } from '../../manager/api/manager.hooks';
 import { DataError } from '../../../components/feedback/DataError';
 import { EmptyState } from '../../../components/feedback/EmptyState';
+import { useTableControls, TableToolbar, SortHeader, DataPagination } from '../../../components/common/table';
 import { SkeletonTable } from '../../../components/common/SkeletonTable';
 
 // â"€â"€â"€ Home â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
@@ -191,14 +194,19 @@ export function AdminUsersPage() {
 }
 
 function UsersTable() {
-  const { data: apiUsers = [] as typeof adminUsers, isLoading, isError, refetch } = useAdminUsers() as unknown as { data: typeof adminUsers; isLoading: boolean; isError: boolean; refetch: () => void };
+  const t = useTableControls({ initialLimit: 20 });
+  const { data, isLoading, isError, refetch } = useAdminUsersPage(t.params) as unknown as {
+    data?: { users: typeof adminUsers; meta?: { total?: number } };
+    isLoading: boolean;
+    isError: boolean;
+    refetch: () => void;
+  };
+  const apiUsers = data?.users ?? ([] as typeof adminUsers);
+  const total = Number(data?.meta?.total ?? apiUsers.length);
   const deactivateMutation = useDeactivateUserMutation();
   const activateMutation = useActivateUserMutation();
   const resetPwMutation = useResetUserPwMutation();
   const [pending, setPending] = useState<Record<string, string>>({});
-  const [userSearch, setUserSearch] = useState('');
-  const [page, setPage] = useState(1);
-  const PAGE_SIZE = 20;
   const [resetResult, setResetResult] = useState<{ name: string; email: string; password: string } | null>(null);
 
   const handleToggle = (id: string, currentStatus: string) => {
@@ -231,25 +239,50 @@ function UsersTable() {
     });
   };
 
-  const visibleUsers = userSearch.trim().length > 0
-    ? apiUsers.filter((u) => {
-        const q = userSearch.toLowerCase();
-        return u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q) || u.role.toLowerCase().includes(q);
-      })
-    : apiUsers;
+  const pageUsers = apiUsers;
 
-  // Reset to first page whenever the filter changes or the result set shrinks
-  // below the current page (e.g. after switching schools).
-  useEffect(() => { setPage(1); }, [userSearch]);
-  const pageCount = Math.max(1, Math.ceil(visibleUsers.length / PAGE_SIZE));
-  useEffect(() => { if (page > pageCount) setPage(1); }, [page, pageCount]);
-  const pageUsers = visibleUsers.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const toolbar = (
+    <TableToolbar
+      search={t.search}
+      onSearch={t.setSearch}
+      placeholder="Search by name, email or reg. no…"
+      total={total}
+      unit="users"
+    >
+      <select
+        value={t.filters.role ?? ''}
+        onChange={(e) => t.setFilter('role', e.target.value)}
+        className="h-10 cursor-pointer rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-bold text-slate-600 outline-none transition hover:border-slate-300 focus:border-[#4338CA]"
+      >
+        <option value="">All roles</option>
+        {Object.entries(ROLE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+      </select>
+      <select
+        value={t.filters.isActive ?? ''}
+        onChange={(e) => t.setFilter('isActive', e.target.value)}
+        className="h-10 cursor-pointer rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-bold text-slate-600 outline-none transition hover:border-slate-300 focus:border-[#4338CA]"
+      >
+        <option value="">Any status</option>
+        <option value="true">Active</option>
+        <option value="false">Inactive</option>
+      </select>
+    </TableToolbar>
+  );
 
-  if (isLoading) return <SkeletonTable cols={7} />;
-  if (isError) return <DataError onRetry={refetch} />;
-  if (!apiUsers.length) return <EmptyState title="No users found" description="Create the first user account to get started." />;
   return (
     <div className="space-y-4">
+      {toolbar}
+      {isLoading ? (
+        <SkeletonTable cols={7} />
+      ) : isError ? (
+        <DataError onRetry={refetch} />
+      ) : !apiUsers.length ? (
+        <EmptyState
+          title={t.debouncedSearch || t.filters.role || t.filters.isActive ? 'No matching users' : 'No users found'}
+          description={t.debouncedSearch || t.filters.role || t.filters.isActive ? 'Try a different search or filter.' : 'Create the first user account to get started.'}
+        />
+      ) : (
+      <>
       {resetResult && (
         <div className="flex items-start gap-4 rounded-2xl border border-amber-200 bg-amber-50 p-5">
           <div className="flex-1">
@@ -269,7 +302,21 @@ function UsersTable() {
           <button onClick={() => setResetResult(null)} className="shrink-0 text-amber-400 hover:text-amber-600">✕</button>
         </div>
       )}
-      <AdminDataTable columns={['Name', 'Email', 'Role', 'Status', 'Linked Entity', 'Last Login', 'Actions']} onSearch={setUserSearch}>
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm" style={{ minWidth: 980 }}>
+            <thead className="sticky top-0 bg-[#1E1B4B] text-[11px] font-black uppercase tracking-widest text-white">
+              <tr>
+                <SortHeader label="Name" column="name" activeSortBy={t.sortBy} sortDir={t.sortDir} onSort={t.toggleSort} />
+                <SortHeader label="Email" column="email" activeSortBy={t.sortBy} sortDir={t.sortDir} onSort={t.toggleSort} />
+                <SortHeader label="Role" column="role" activeSortBy={t.sortBy} sortDir={t.sortDir} onSort={t.toggleSort} />
+                <SortHeader label="Status" column="status" activeSortBy={t.sortBy} sortDir={t.sortDir} onSort={t.toggleSort} />
+                <th className="px-5 py-4">Linked Entity</th>
+                <SortHeader label="Last Login" column="lastLoginAt" activeSortBy={t.sortBy} sortDir={t.sortDir} onSort={t.toggleSort} />
+                <th className="px-5 py-4">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
         {pageUsers.map((user) => (
           <tr key={user.id} className="hover:bg-slate-50">
             <Td>
@@ -307,8 +354,20 @@ function UsersTable() {
             </Td>
           </tr>
         ))}
-      </AdminDataTable>
-      <TablePagination page={page} pageSize={PAGE_SIZE} total={visibleUsers.length} onPageChange={setPage} />
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <DataPagination
+        page={t.page}
+        pageSize={t.limit}
+        total={total}
+        onPageChange={t.setPage}
+        onPageSizeChange={t.setLimit}
+        unit="users"
+      />
+      </>
+      )}
     </div>
   );
 }
@@ -2516,15 +2575,23 @@ export function ClassesPage() {
 
 export function ClassDetailPage() {
   const { classId } = useParams();
+  const navigate = useNavigate();
   const { data: apiClasses = [] as typeof adminClasses, isLoading: classLoading } = useAdminClasses() as unknown as { data: typeof adminClasses; isLoading: boolean };
-  const { data: allStudents = [] as typeof adminStudents, isLoading: studentsLoading } = useAdminStudents() as unknown as { data: typeof adminStudents; isLoading: boolean };
+  const { data: classRoster, isLoading: rosterLoading, error: rosterError } = useClassStudents(classId, { limit: 50 }) as { data?: { overview?: { total?: number }; students?: Array<Record<string, unknown>> }; isLoading: boolean; error?: unknown };
   const { data: allUsers = [] as typeof adminUsers } = useAdminUsers() as unknown as { data: typeof adminUsers };
 
-  if (classLoading || studentsLoading) return <AdminShell title="Loading…" eyebrow="Class detail"><SkeletonTable cols={4} /></AdminShell>;
+  useEffect(() => {
+    if ((rosterError as any)?.response?.status !== 404) return;
+    toast('This class no longer exists. Returning to Class Management.', 'warning');
+    navigate('/admin/classes', { replace: true });
+  }, [navigate, rosterError]);
+
+  if (classLoading || rosterLoading) return <AdminShell title="Loading…" eyebrow="Class detail"><SkeletonTable cols={4} /></AdminShell>;
   const klass = apiClasses.find((c) => c.id === classId) ?? null;
   if (!klass) return <AdminShell title="Not Found" eyebrow="Class detail"><EmptyState title="Class not found" description="This class does not exist." /></AdminShell>;
 
-  const classStudents = allStudents.filter((s: any) => s.classId === classId || s.className === klass.name || s.class === klass.name);
+  const classStudents = classRoster?.students ?? [];
+  const enrolledCount = classRoster?.overview?.total ?? Number((klass as any).students ?? 0);
   const classTeacher = allUsers.find((u: any) => u.id === (klass as any).classTeacherId);
 
   return (
@@ -2560,7 +2627,7 @@ export function ClassDetailPage() {
           </div>
           <div>
             <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">Enrolled</p>
-            <p className="mt-1 font-black text-[#4338CA]">{classStudents.length}</p>
+            <p className="mt-1 font-black text-[#4338CA]">{enrolledCount}</p>
           </div>
         </div>
         <div className="mt-4 flex flex-wrap gap-3">
@@ -2575,6 +2642,12 @@ export function ClassDetailPage() {
             className="inline-flex items-center gap-2 rounded-xl bg-[#4338CA] px-4 py-2.5 text-sm font-black text-white shadow-sm hover:bg-[#3730a3]"
           >
             <Plus className="h-4 w-4" /> Enrol Student
+          </NavLink>
+          <NavLink
+            to={`/admin/classes/${classId}/students`}
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-black text-slate-700 shadow-sm hover:bg-slate-50"
+          >
+            Student Roster
           </NavLink>
         </div>
       </AdminFormSection>
@@ -2603,15 +2676,15 @@ export function ClassDetailPage() {
               <tbody className="divide-y divide-slate-50">
                 {classStudents.map((s: any) => (
                   <tr key={s.id} className="transition hover:bg-slate-50">
-                    <td className="px-4 py-3 font-mono text-xs text-slate-500">{s.admissionNumber ?? s.regNo ?? '—'}</td>
-                    <td className="px-4 py-3 font-black text-slate-900">{s.name}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-slate-500">{String(s.registrationNumber ?? s.legacyAdmissionNumber ?? '—')}</td>
+                    <td className="px-4 py-3 font-black text-slate-900">{String(s.fullName ?? '—')}</td>
                     <td className="px-4 py-3">
                       <Badge tone={s.status === 'ACTIVE' ? 'emerald' : 'amber'}>{String(s.status ?? 'ACTIVE')}</Badge>
                     </td>
                     <td className="px-4 py-3">
-                      <Badge tone={s.riskLevel === 'HIGH' ? 'rose' : s.riskLevel === 'MEDIUM' ? 'amber' : 'emerald'}>{String(s.riskLevel ?? 'LOW')}</Badge>
+                      <Badge tone={s.profileComplete ? 'emerald' : 'amber'}>{s.profileComplete ? 'COMPLETE' : 'INCOMPLETE'}</Badge>
                     </td>
-                    <td className="px-4 py-3 font-mono text-sm text-slate-700">{s.balance != null ? `TSh ${Number(s.balance).toLocaleString()}` : '—'}</td>
+                    <td className="px-4 py-3 font-mono text-sm text-slate-700">—</td>
                     <td className="px-4 py-3">
                       <NavLink to={`/admin/students/${s.id}`} className="text-xs font-black text-[#4338CA] hover:underline">Open →</NavLink>
                     </td>
@@ -3284,10 +3357,18 @@ export function StudentsPage({ basePath = '/admin' }: { basePath?: string } = {}
   );
 }
 
+const STUDENT_STATUS_OPTIONS = [
+  { value: '', label: 'All statuses' },
+  { value: 'ACTIVE', label: 'Active' },
+  { value: 'GRADUATED', label: 'Graduated' },
+  { value: 'TRANSFERRED', label: 'Transferred' },
+  { value: 'SUSPENDED', label: 'Suspended' },
+  { value: 'WITHDRAWN', label: 'Withdrawn' },
+];
+
 function StudentsTable({ basePath = '/admin' }: { basePath?: string }) {
-  const [page, setPage] = useState(1);
-  const limit = 20;
-  const { data, isLoading, isError, refetch } = useAdminStudentsPage({ page, limit }) as unknown as {
+  const t = useTableControls({ initialLimit: 20 });
+  const { data, isLoading, isError, refetch } = useAdminStudentsPage(t.params) as unknown as {
     data?: { students: typeof adminStudents; meta?: { page?: number; limit?: number; total?: number; totalPages?: number } };
     isLoading: boolean;
     isError: boolean;
@@ -3296,50 +3377,92 @@ function StudentsTable({ basePath = '/admin' }: { basePath?: string }) {
   const apiStudents = data?.students ?? [];
   const meta = data?.meta;
   const total = Number(meta?.total ?? apiStudents.length);
-  const totalPages = Math.max(1, Number(meta?.totalPages ?? Math.ceil(total / limit)));
-  const from = total === 0 ? 0 : (page - 1) * limit + 1;
-  const to = Math.min(total, (page - 1) * limit + apiStudents.length);
-  if (isLoading) return <SkeletonTable cols={10} />;
-  if (isError) return <DataError onRetry={refetch} />;
-  if (!apiStudents.length) return <EmptyState title="No students enrolled" description="Enrol students individually or import a CSV file." />;
+
+  // Filters/search live above the table so they stay visible across empty/loading states.
+  const toolbar = (
+    <TableToolbar
+      search={t.search}
+      onSearch={t.setSearch}
+      placeholder="Search by name or reg. no…"
+      total={total}
+      unit="students"
+    >
+      <select
+        value={t.filters.status ?? ''}
+        onChange={(e) => t.setFilter('status', e.target.value)}
+        className="h-10 cursor-pointer rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-bold text-slate-600 outline-none transition hover:border-slate-300 focus:border-[#4338CA]"
+      >
+        {STUDENT_STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    </TableToolbar>
+  );
+
   return (
     <div className="space-y-3">
-      <AdminDataTable columns={['Reg. No.', 'Name', 'School', 'Class', 'Stage', 'Status', 'Guardians', 'Balance', 'Risk', 'Actions']}>
-        {apiStudents.map((student) => (
-          <tr key={student.id} className="hover:bg-slate-50">
-            <Td className="font-mono text-xs text-slate-500">{student.registration}</Td>
-            <Td><p className="font-black text-slate-900">{student.name}</p></Td>
-            <Td>{(student as any).schoolName || <span className="text-slate-400">Unassigned</span>}</Td>
-            <Td>{student.className || <span className="text-slate-400">No active class</span>}</Td>
-            <Td><Badge tone={student.stage === 'Primary' ? 'emerald' : student.stage === 'A-Level' ? 'amber' : 'blue'}>{student.stage}</Badge></Td>
-            <Td><Badge tone="emerald">{student.status}</Badge></Td>
-            <Td>{student.guardians}</Td>
-            <Td className="font-mono text-xs">TZS {Number(student.balance ?? 0).toLocaleString('en-US')}</Td>
-            <Td>
-              <Badge tone={student.risk === 'CRITICAL' ? 'rose' : student.risk === 'WATCH' ? 'amber' : 'emerald'}>
-                {student.risk}
-              </Badge>
-            </Td>
-            <Td>
-              <NavLink className="text-xs font-black text-[#4338CA] hover:underline" to={`${basePath}/students/${student.id}`}>Open</NavLink>
-            </Td>
-          </tr>
-        ))}
-      </AdminDataTable>
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
-        <p className="text-xs font-semibold text-slate-500">
-          Showing {from}-{to} of {total} students
-        </p>
-        <div className="flex items-center gap-2">
-          <Button variant="secondary" className="rounded-lg px-3 py-1.5 text-xs" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
-            Previous
-          </Button>
-          <span className="text-xs font-black text-slate-600">Page {page} of {totalPages}</span>
-          <Button variant="secondary" className="rounded-lg px-3 py-1.5 text-xs" disabled={page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>
-            Next
-          </Button>
-        </div>
-      </div>
+      {toolbar}
+      {isLoading ? (
+        <SkeletonTable cols={10} />
+      ) : isError ? (
+        <DataError onRetry={refetch} />
+      ) : !apiStudents.length ? (
+        <EmptyState
+          title={t.debouncedSearch || t.filters.status ? 'No matching students' : 'No students enrolled'}
+          description={t.debouncedSearch || t.filters.status ? 'Try a different search or filter.' : 'Enrol students individually or import a CSV file.'}
+        />
+      ) : (
+        <>
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm" style={{ minWidth: 980 }}>
+                <thead className="sticky top-0 bg-[#1E1B4B] text-[11px] font-black uppercase tracking-widest text-white">
+                  <tr>
+                    <SortHeader label="Reg. No." column="registrationNumber" activeSortBy={t.sortBy} sortDir={t.sortDir} onSort={t.toggleSort} />
+                    <SortHeader label="Name" column="name" activeSortBy={t.sortBy} sortDir={t.sortDir} onSort={t.toggleSort} />
+                    <th className="px-5 py-4">School</th>
+                    <th className="px-5 py-4">Class</th>
+                    <th className="px-5 py-4">Stage</th>
+                    <SortHeader label="Status" column="status" activeSortBy={t.sortBy} sortDir={t.sortDir} onSort={t.toggleSort} />
+                    <th className="px-5 py-4">Guardians</th>
+                    <th className="px-5 py-4">Balance</th>
+                    <th className="px-5 py-4">Risk</th>
+                    <th className="px-5 py-4">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {apiStudents.map((student) => (
+                    <tr key={student.id} className="hover:bg-slate-50">
+                      <Td className="font-mono text-xs text-slate-500">{student.registration}</Td>
+                      <Td><p className="font-black text-slate-900">{student.name}</p></Td>
+                      <Td>{(student as any).schoolName || <span className="text-slate-400">Unassigned</span>}</Td>
+                      <Td>{student.className || <span className="text-slate-400">No active class</span>}</Td>
+                      <Td><Badge tone={student.stage === 'Primary' ? 'emerald' : student.stage === 'A-Level' ? 'amber' : 'blue'}>{student.stage}</Badge></Td>
+                      <Td><Badge tone="emerald">{student.status}</Badge></Td>
+                      <Td>{student.guardians}</Td>
+                      <Td className="font-mono text-xs">TZS {Number(student.balance ?? 0).toLocaleString('en-US')}</Td>
+                      <Td>
+                        <Badge tone={student.risk === 'CRITICAL' ? 'rose' : student.risk === 'WATCH' ? 'amber' : 'emerald'}>
+                          {student.risk}
+                        </Badge>
+                      </Td>
+                      <Td>
+                        <NavLink className="text-xs font-black text-[#4338CA] hover:underline" to={`${basePath}/students/${student.id}`}>Open</NavLink>
+                      </Td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <DataPagination
+            page={t.page}
+            pageSize={t.limit}
+            total={total}
+            onPageChange={t.setPage}
+            onPageSizeChange={t.setLimit}
+            unit="students"
+          />
+        </>
+      )}
     </div>
   );
 }

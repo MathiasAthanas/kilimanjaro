@@ -15,6 +15,22 @@ export class AcademicService {
     return (await this.prisma.term.findFirst({ where: { academicYearId, isCurrent: true } }))?.id;
   }
 
+  /**
+   * Alerts/pairings/interventions carry only `studentId` (no schoolId/relation),
+   * so to scope them to a school we match the set of that school's student ids.
+   */
+  private async studentIdScope(schoolId?: string | null): Promise<Record<string, unknown>> {
+    if (!schoolId) return {};
+    const ids = (await this.prisma.student.findMany({ where: { schoolId }, select: { id: true } })).map((s) => s.id);
+    return { studentId: { in: ids.length ? ids : ['__none__'] } };
+  }
+
+  /** ClassSubject has no schoolId in the analytics read-model — scope via class ids. */
+  private async classIdList(schoolId?: string | null): Promise<string[] | null> {
+    if (!schoolId) return null;
+    return (await this.prisma.class.findMany({ where: { schoolId }, select: { id: true } })).map((c) => c.id);
+  }
+
   private gradeDistribution(results: { grade: string }[]) {
     const base = { A: 0, B: 0, C: 0, D: 0, F: 0 };
     for (const result of results) {
@@ -26,14 +42,19 @@ export class AcademicService {
     return base;
   }
 
-  async getOverview(academicYearId?: string, termId?: string) {
+  async getOverview(academicYearId?: string, termId?: string, schoolId?: string | null) {
     const yearId = academicYearId || (await this.currentYearId());
     const scopedTermId = termId || (await this.currentTermId(yearId));
-    const key = `analytics:academic:overview:${yearId || 'current'}:${scopedTermId || 'current'}`;
+    const key = `analytics:academic:overview:${schoolId || 'group'}:${yearId || 'current'}:${scopedTermId || 'current'}`;
     const cached = await this.redis.get<any>(key);
     if (cached) return cached;
 
+    const schoolFilter = schoolId ? { schoolId } : {};
+    const studentScope = await this.studentIdScope(schoolId);
+    const classIds = await this.classIdList(schoolId);
+    const classSubjectScope = classIds ? { classId: { in: classIds.length ? classIds : ['__none__'] } } : {};
     const where = {
+      ...schoolFilter,
       academicYearId: yearId || undefined,
       termId: scopedTermId || undefined,
       isPublished: true,
@@ -41,13 +62,14 @@ export class AcademicService {
 
     const [results, classes, classSubjects, alerts, terms] = await Promise.all([
       this.prisma.termResult.findMany({ where, select: { studentId: true, subjectId: true, subjectName: true, weightedTotal: true, isPassing: true, grade: true } }),
-      this.prisma.class.findMany({ where: { academicYearId: yearId || undefined }, select: { id: true, name: true, stream: true } }),
-      this.prisma.classSubject.findMany({ where: { academicYearId: yearId || undefined }, select: { id: true, classId: true, subjectId: true, teacherId: true } }),
-      this.prisma.performanceAlert.findMany({ where: { isResolved: false }, select: { studentId: true, severity: true } }),
+      this.prisma.class.findMany({ where: { academicYearId: yearId || undefined, ...schoolFilter }, select: { id: true, name: true, stream: true } }),
+      this.prisma.classSubject.findMany({ where: { academicYearId: yearId || undefined, ...classSubjectScope }, select: { id: true, classId: true, subjectId: true, teacherId: true } }),
+      this.prisma.performanceAlert.findMany({ where: { isResolved: false, ...studentScope }, select: { studentId: true, severity: true } }),
       this.prisma.term.findMany({ where: { academicYearId: yearId || undefined }, orderBy: { name: 'asc' }, take: 4 }),
     ]);
     const assessments = await this.prisma.assessment
       .findMany({
+        // Bounded by the already school-scoped classSubject ids above (Assessment has no schoolId).
         where: { termId: scopedTermId || undefined, classSubjectId: { in: classSubjects.map((item) => item.id).length ? classSubjects.map((item) => item.id) : ['__none__'] } },
         select: { classSubjectId: true, status: true },
       })
@@ -87,7 +109,7 @@ export class AcademicService {
         const studentIds = [...new Set(classResults.map((entry) => entry.studentId))];
         const topStudent = studentIds.length
           ? await this.prisma.student.findFirst({
-              where: { id: { in: studentIds } },
+              where: { id: { in: studentIds }, ...schoolFilter },
               orderBy: { firstName: 'asc' },
               select: { firstName: true, lastName: true },
             })
@@ -121,7 +143,7 @@ export class AcademicService {
     const termOverTermComparison = await Promise.all(
       terms.map(async (term) => {
         const termResults = await this.prisma.termResult.findMany({
-          where: { academicYearId: yearId || undefined, termId: term.id, isPublished: true },
+          where: { academicYearId: yearId || undefined, termId: term.id, isPublished: true, ...schoolFilter },
           select: { studentId: true, weightedTotal: true, isPassing: true },
         });
 
@@ -385,19 +407,21 @@ export class AcademicService {
     return data;
   }
 
-  async getPerformanceEngine(academicYearId?: string, termId?: string) {
+  async getPerformanceEngine(academicYearId?: string, termId?: string, schoolId?: string | null) {
     const scopedTermId = termId || (await this.currentTermId(academicYearId));
-    const key = `analytics:academic:engine:${academicYearId || 'current'}:${scopedTermId || 'current'}`;
+    const key = `analytics:academic:engine:${schoolId || 'group'}:${academicYearId || 'current'}:${scopedTermId || 'current'}`;
     const cached = await this.redis.get<any>(key);
     if (cached) return cached;
 
+    const schoolFilter = schoolId ? { schoolId } : {};
+    const studentScope = await this.studentIdScope(schoolId);
     try {
       const [alerts, pairings, interventions, students, classes] = await Promise.all([
-        this.prisma.performanceAlert.findMany(),
-        this.prisma.peerPairing.findMany(),
-        this.prisma.academicIntervention.findMany(),
-        this.prisma.student.findMany({ select: { id: true, firstName: true, lastName: true } }),
-        this.prisma.class.findMany({ select: { id: true, name: true } }),
+        this.prisma.performanceAlert.findMany({ where: studentScope }),
+        this.prisma.peerPairing.findMany({ where: studentScope }),
+        this.prisma.academicIntervention.findMany({ where: studentScope }),
+        this.prisma.student.findMany({ where: schoolFilter, select: { id: true, firstName: true, lastName: true } }),
+        this.prisma.class.findMany({ where: schoolFilter, select: { id: true, name: true } }),
       ]);
 
     const byType = alerts.reduce<Record<string, number>>((acc, row) => {

@@ -24,9 +24,9 @@ class ParentHomeScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final user = ref.watch(currentUserProvider).value;
+    final user = ref.watch(currentUserProvider).valueOrNull;
     final children =
-        ref.watch(parentChildrenProvider).value ?? const <ChildSummary>[];
+        ref.watch(parentChildrenProvider).valueOrNull ?? const <ChildSummary>[];
     final activeChildId = ref.watch(activeParentChildIdProvider);
     final activeChildAsync = ref.watch(activeParentChildProvider);
     final activeChild = activeChildAsync.value;
@@ -115,14 +115,14 @@ class _ParentHomeContent extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final alerts =
-        ref.watch(activeParentAlertsProvider).value ??
+        ref.watch(activeParentAlertsProvider).valueOrNull ??
         const <PerformanceAlertModel>[];
     final weekly =
-        ref.watch(parentWeeklyAttendanceProvider).value ??
+        ref.watch(parentWeeklyAttendanceProvider).valueOrNull ??
         const <ParentWeekDayStatus>[];
     final announcements =
-        ref.watch(parentAnnouncementsProvider).value ?? const [];
-    final secondChild = ref.watch(parentSecondChildProvider).value;
+        ref.watch(parentAnnouncementsProvider).valueOrNull ?? const [];
+    final secondChild = ref.watch(parentSecondChildProvider).valueOrNull;
     final activeAlert = alerts
         .where(
           (item) =>
@@ -443,7 +443,7 @@ class _WeekBox extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final today = DateTime(2026, 3, 21);
+    final today = DateTime.now();
     final isToday =
         item.date.day == today.day &&
         item.date.month == today.month &&

@@ -32,19 +32,24 @@ export class AttendanceService {
     };
   }
 
-  async getOverview(termId?: string, academicYearId?: string, classId?: string) {
+  async getOverview(termId?: string, academicYearId?: string, classId?: string, schoolId?: string | null) {
     const scopedTerm = termId || (await this.currentTermId(academicYearId));
-    const cacheKey = `analytics:attendance:${scopedTerm || 'current'}:${classId || 'all'}`;
+    const cacheKey = `analytics:attendance:${schoolId || 'group'}:${scopedTerm || 'current'}:${classId || 'all'}`;
     const cached = await this.redis.get<any>(cacheKey);
     if (cached) return cached;
 
-    const where = { termId: scopedTerm || undefined, classId: classId || undefined };
+    const schoolFilter = schoolId ? { schoolId } : {};
+    // PerformanceAlert has no schoolId — scope it via the school's student ids.
+    const studentScope: Record<string, unknown> = schoolId
+      ? { studentId: { in: ((await this.prisma.student.findMany({ where: { schoolId }, select: { id: true } })).map((s) => s.id)) as string[] } }
+      : {};
+    const where = { ...schoolFilter, termId: scopedTerm || undefined, classId: classId || undefined };
     const [records, classes, students, reportCards, alerts] = await Promise.all([
       this.prisma.attendanceRecord.findMany({ where, select: { studentId: true, classId: true, date: true, status: true } }),
-      this.prisma.class.findMany({ where: { id: classId || undefined }, select: { id: true, name: true, stream: true } }),
-      this.prisma.student.findMany({ select: { id: true, firstName: true, lastName: true } }),
-      this.prisma.reportCard.findMany({ where: { termId: scopedTerm || undefined, isPublished: true }, select: { studentId: true, overallAverage: true } }),
-      this.prisma.performanceAlert.findMany({ where: { isResolved: false, alertType: 'ATTENDANCE_IMPACT' }, select: { studentId: true } }),
+      this.prisma.class.findMany({ where: { id: classId || undefined, ...schoolFilter }, select: { id: true, name: true, stream: true } }),
+      this.prisma.student.findMany({ where: schoolFilter, select: { id: true, firstName: true, lastName: true } }),
+      this.prisma.reportCard.findMany({ where: { termId: scopedTerm || undefined, isPublished: true, ...schoolFilter }, select: { studentId: true, overallAverage: true } }),
+      this.prisma.performanceAlert.findMany({ where: { isResolved: false, alertType: 'ATTENDANCE_IMPACT', ...studentScope }, select: { studentId: true } }),
     ]);
 
     const school = this.attendanceStats(records);

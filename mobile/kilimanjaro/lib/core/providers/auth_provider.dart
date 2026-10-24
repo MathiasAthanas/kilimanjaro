@@ -9,8 +9,18 @@ import '../services/interfaces/auth_service_interface.dart';
 import '../services/mock/mock_auth_service.dart';
 
 final secureStorageProvider = Provider<FlutterSecureStorage>((ref) {
-  return const FlutterSecureStorage();
+  // Every API service and cached read is built on top of this provider, so
+  // tying it to the signed-in user discards all per-user state (and the
+  // per-service caches) on login, logout and account switches.
+  ref.watch(sessionEpochProvider);
+  // A fresh instance each time so dependents are notified (a const value would
+  // compare equal and silently skip the rebuild).
+  // ignore: prefer_const_constructors
+  return FlutterSecureStorage();
 });
+
+/// Bumped whenever the signed-in user changes (login, logout, session expiry).
+final sessionEpochProvider = StateProvider<int>((ref) => 0);
 
 final authServiceProvider = Provider<IAuthService>((ref) {
   final storage = ref.watch(secureStorageProvider);
@@ -58,9 +68,12 @@ class AuthController extends Notifier<AuthState> {
   Future<AuthResult?> login(String identifier, String password) async {
     state = const AuthLoading();
     try {
+      await ref.read(secureStorageProvider).delete(key: 'active_school_id');
+      await ref.read(secureStorageProvider).delete(key: 'user_schools_json');
       final result = await ref
           .read(authServiceProvider)
           .login(identifier: identifier, password: password);
+      ref.read(sessionEpochProvider.notifier).state++;
       state = AuthAuthenticated(result.user);
       return result;
     } catch (error) {
@@ -71,6 +84,9 @@ class AuthController extends Notifier<AuthState> {
 
   Future<void> logout() async {
     await ref.read(authServiceProvider).logout();
+    await ref.read(secureStorageProvider).delete(key: 'active_school_id');
+      await ref.read(secureStorageProvider).delete(key: 'user_schools_json');
+    ref.read(sessionEpochProvider.notifier).state++;
     state = const AuthUnauthenticated();
   }
 }

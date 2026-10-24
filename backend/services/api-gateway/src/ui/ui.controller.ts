@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, NotFoundException, Param, Patch, Post, Query } from '@nestjs/common';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { GatewayUser, UiApiService, UiEnvelope } from './ui-api.service';
@@ -16,6 +16,17 @@ const LEADERSHIP_ROLES = ['SYSTEM_ADMIN', 'PRINCIPAL', 'ACADEMIC_QA', 'HEAD_OF_D
 @Controller(['', 'api/v1'])
 export class UiController {
   constructor(private readonly ui: UiApiService) {}
+
+  /// Schools the signed-in user can work in (id + name), for the mobile school switcher.
+  @Get('mobile/schools')
+  async mobileSchools(@CurrentUser() user: GatewayUser): Promise<UiEnvelope> {
+    const ids = (user.schoolIds ?? []).filter((id) => id && id !== '*');
+    const res = await this.ui.tryGet({ service: 'student', path: '/schools' }, [], this.asService(user));
+    const schools = (this.ui.asArray(res.data) as Record<string, any>[])
+      .filter((sc) => user.scope === 'GROUP' || ids.includes(String(sc.id)))
+      .map((sc) => ({ id: sc.id, name: sc.name, code: sc.code ?? null }));
+    return this.ui.envelope({ schools }, this.warning(res));
+  }
 
   @Get('mobile/student/dashboard')
   @Roles(...STUDENT_ROLES)
@@ -54,7 +65,7 @@ export class UiController {
     const studentId = await this.resolveStudentId(user);
     const { data, warnings } = await this.ui.collect({
       terms: { service: 'student', path: '/students/terms', fallback: [] },
-      results: { service: 'academic', path: '/academics/results', fallback: [] },
+      results: { service: 'academic', path: '/academics/results', params: { studentId }, fallback: [] },
       reportCards: { service: 'academic', path: `/academics/report-cards/student/${studentId}`, fallback: [] },
     }, user);
     return this.ui.envelope({ studentId, ...data }, warnings);
@@ -115,9 +126,9 @@ export class UiController {
       invoices: { service: 'finance', path: `/finance/invoices/student/${studentId}`, fallback: [] },
       balance: { service: 'finance', path: `/finance/internal/student/${studentId}/balance`, fallback: null },
       receipts: { service: 'finance', path: '/finance/receipts', params: { studentId }, fallback: [] },
-      payments: { service: 'finance', path: '/finance/payments', params: { studentId }, fallback: [] },
     }, user);
-    return this.ui.envelope({ studentId, ...data }, warnings);
+    // /finance/payments is staff-only; a student's confirmed payments are exactly their receipts.
+    return this.ui.envelope({ studentId, ...data, payments: this.ui.asArray(data.receipts) }, warnings);
   }
 
   @Get('mobile/parent/children')
@@ -144,6 +155,109 @@ export class UiController {
     return this.ui.envelope({ childId, ...data }, warnings);
   }
 
+  @Get('mobile/parent/children/:childId/school-contact')
+  @Roles(...PARENT_ROLES)
+  async mobileParentSchoolContact(
+    @CurrentUser() user: GatewayUser,
+    @Param('childId') childId: string,
+  ): Promise<UiEnvelope> {
+    const profile = await this.ui.tryGet(
+      { service: 'student', path: `/students/${childId}` },
+      null,
+      user,
+    );
+    const schoolId = this.pickId(profile.data, ['school']);
+    if (!schoolId) {
+      return this.ui.envelope(
+        { childId, schoolName: '', address: '', openHours: '', emergencyPhone: '', actions: [], teachers: [], faqItems: [] },
+        this.warning(profile),
+      );
+    }
+    // The parent is authorized (PARENT_ROLES) and the schoolId was derived from
+    // their own child's profile. The school-details endpoint is staff-scoped, so
+    // the gateway — the trust boundary — reads it as a trusted service and
+    // returns only non-sensitive contact fields below.
+    const school = await this.ui.tryGet(
+      { service: 'student', path: `/schools/${schoolId}` },
+      null,
+      this.asService(user),
+    );
+    const s = (school.data as unknown as Record<string, unknown>) ?? {};
+    const phone = (s.phone as string) ?? '';
+    const email = (s.email as string) ?? '';
+    const address = (s.address as string) ?? '';
+    const actions: Array<Record<string, string>> = [];
+    if (phone) actions.push({ type: 'PHONE', label: 'Call school', value: phone });
+    if (email) actions.push({ type: 'EMAIL', label: 'Email school', value: email });
+    if (address) actions.push({ type: 'MAPS', label: 'View on map', value: address });
+    return this.ui.envelope(
+      {
+        childId,
+        schoolName: (s.name as string) ?? '',
+        address,
+        openHours: '',
+        emergencyPhone: phone,
+        actions,
+        teachers: [],
+        faqItems: [],
+      },
+      [...this.warning(profile), ...this.warning(school)],
+    );
+  }
+
+  @Get('mobile/parent/children/:childId/class-averages')
+  @Roles(...PARENT_ROLES)
+  async mobileParentClassAverages(
+    @CurrentUser() user: GatewayUser,
+    @Param('childId') childId: string,
+    @Query('termId') termId?: string,
+  ): Promise<UiEnvelope> {
+    const profile = await this.ui.tryGet(
+      { service: 'student', path: `/students/${childId}` },
+      null,
+      user,
+    );
+    // The active class lives on the most recent enrolment, not the top-level
+    // student record, so resolve it from there (falling back to any top-level
+    // classId a leaner student payload might expose).
+    const profileObj = (profile.data as unknown as Record<string, unknown>) ?? {};
+    const enrolments = this.ui.asArray(profileObj.enrolments ?? profileObj.enrollments);
+    const firstEnrolment = (enrolments[0] as Record<string, unknown>) ?? {};
+    const classId =
+      this.pickId(firstEnrolment, ['class']) ?? this.pickId(profile.data, ['class']);
+    if (!classId) {
+      return this.ui.envelope({ childId, averages: {} }, this.warning(profile));
+    }
+    // classId derives from the parent's own child; the class-analytics endpoint
+    // is staff-scoped, so the gateway reads it as a trusted service and exposes
+    // ONLY aggregated per-subject averages below — never any individual student
+    // identity or result.
+    const analytics = await this.ui.tryGet(
+      {
+        service: 'analytics',
+        path: `/analytics/academic/class/${classId}`,
+        params: termId ? { termId } : undefined,
+      },
+      null,
+      this.asService(user),
+    );
+    const subjects = this.ui.asArray(
+      (analytics.data as unknown as Record<string, unknown> | null)?.subjects,
+    );
+    const averages: Record<string, number> = {};
+    for (const entry of subjects) {
+      const row = entry as Record<string, unknown>;
+      const name = row.subjectName as string;
+      const avg = Number(row.classAverage);
+      // Aggregated only — no individual student identities or results exposed.
+      if (name && Number.isFinite(avg)) averages[name] = avg;
+    }
+    return this.ui.envelope(
+      { childId, averages },
+      [...this.warning(profile), ...this.warning(analytics)],
+    );
+  }
+
   @Get('teacher/dashboard')
   @Roles(...TEACHER_ROLES)
   async teacherDashboard(@CurrentUser() user: GatewayUser): Promise<UiEnvelope> {
@@ -163,7 +277,204 @@ export class UiController {
   async teacherResource(@CurrentUser() user: GatewayUser, @Param('resource') resource: string): Promise<UiEnvelope> {
     const route = this.teacherRoute(resource, user);
     const result = await this.ui.tryGet(route, [], user);
-    return this.ui.envelope({ resource, items: this.ui.asArray(result.data), raw: result.data }, this.warning(result));
+    const warnings = this.warning(result);
+    const items = await this.shapeTeacherItems(resource, this.ui.asArray(result.data) as Record<string, any>[], user, warnings);
+    return this.ui.envelope({ resource, items, raw: result.data }, warnings);
+  }
+
+  /// Students of one class-subject, shaped for the mobile roster/marks screens.
+  @Get('teacher/class-subjects/:classSubjectId/students')
+  @Roles(...TEACHER_ROLES)
+  async teacherClassStudents(@CurrentUser() user: GatewayUser, @Param('classSubjectId') classSubjectId: string): Promise<UiEnvelope> {
+    const warnings: string[] = [];
+    // The mobile app may also pass a class id directly.
+    const classId: string = (await this.resolveClassId(user, classSubjectId)) ?? classSubjectId;
+    const labels = await this.classLabels(user);
+    const students = await this.ui.tryGet(
+      { service: 'student', path: '/students', params: { classId, limit: 1000, page: 1 } },
+      [],
+      user,
+    );
+    warnings.push(...this.warning(students));
+    const items = (this.ui.asArray(students.data) as Record<string, any>[]).map((st) => ({
+      id: st.id,
+      firstName: st.firstName,
+      lastName: st.lastName,
+      name: `${st.firstName ?? ''} ${st.lastName ?? ''}`.trim(),
+      registrationNumber: st.registrationNumber,
+      classLabel: labels.get(classId)?.label ?? '',
+    }));
+    return this.ui.envelope({ resource: 'students', items, raw: items }, warnings);
+  }
+
+  /// Records a class's attendance for a day; resolves class and current term from the class-subject.
+  @Post('teacher/attendance')
+  @Roles(...TEACHER_ROLES)
+  async teacherMarkAttendance(
+    @CurrentUser() user: GatewayUser,
+    @Body() body: { classSubjectId?: string; classId?: string; date?: string; records?: Array<{ studentId: string; status: string; note?: string }> },
+  ): Promise<UiEnvelope> {
+    if (!Array.isArray(body?.records) || body.records.length === 0) {
+      throw new BadRequestException('Attendance records are required');
+    }
+    let classId = body.classId;
+    if (!classId && body.classSubjectId) {
+      classId = await this.resolveClassId(user, body.classSubjectId);
+    }
+    if (!classId) throw new BadRequestException('classId could not be resolved');
+    const terms = this.ui.asArray(await this.ui.get('student', '/students/terms', user)) as Record<string, any>[];
+    const current = terms.find((t) => t.isCurrent) ?? terms[0];
+    if (!current) throw new BadRequestException('No active term is configured');
+    const date = (body.date ?? new Date().toISOString()).slice(0, 10);
+    const result = await this.ui.post('student', '/students/attendance', {
+      classId,
+      termId: current.id,
+      date,
+      records: body.records,
+    }, user);
+    return this.ui.envelope(result);
+  }
+
+  /// Updates a teacher's syllabus coverage for one class-subject.
+  @Patch('teacher/syllabus/:classSubjectId')
+  @Roles(...TEACHER_ROLES)
+  async teacherUpdateSyllabus(
+    @CurrentUser() user: GatewayUser,
+    @Param('classSubjectId') classSubjectId: string,
+    @Body() body: { coveredTopics?: number },
+  ): Promise<UiEnvelope> {
+    const list = await this.ui.get('academic', '/academics/syllabus', user, { teacherId: user.id });
+    const record = (this.ui.asArray(list) as Record<string, any>[]).find((r) => r.classSubjectId === classSubjectId);
+    if (!record) throw new NotFoundException('Syllabus record not found for this class subject');
+    const updated = await this.ui.patch('academic', `/academics/syllabus/${record.id}`, { coveredTopics: Number(body?.coveredTopics ?? 0) }, user);
+    return this.ui.envelope(updated);
+  }
+
+  /// class-subjects have no by-id route; look the id up in the caller's own list.
+  private async resolveClassId(user: GatewayUser, classSubjectId: string): Promise<string | undefined> {
+    const params = ['TEACHER', 'HEAD_OF_DEPARTMENT'].includes(user.role) ? { teacherId: user.id } : undefined;
+    const list = await this.ui.tryGet({ service: 'academic', path: '/academics/class-subjects', params }, [], user);
+    const match = (this.ui.asArray(list.data) as Record<string, any>[]).find((cs) => String(cs.id) === classSubjectId);
+    return match?.classId;
+  }
+
+  private async classLabels(user: GatewayUser): Promise<Map<string, { label: string; studentCount: number }>> {
+    const res = await this.ui.tryGet({ service: 'student', path: '/students/classes', params: { limit: 500 } }, [], user);
+    const map = new Map<string, { label: string; studentCount: number }>();
+    for (const c of this.ui.asArray(res.data) as Record<string, any>[]) {
+      map.set(String(c.id), {
+        label: `${c.name ?? ''}${c.stream ? ` ${c.stream}` : ''}`.trim(),
+        studentCount: Number(c.studentCount ?? c._count?.enrolments ?? 0),
+      });
+    }
+    return map;
+  }
+
+  /// Converts raw downstream rows into the shapes the mobile teacher screens render.
+  private async shapeTeacherItems(
+    resource: string,
+    rows: Record<string, any>[],
+    user: GatewayUser,
+    warnings: string[],
+  ): Promise<unknown[]> {
+    if (!['classes', 'assessments', 'attendance', 'alerts', 'timetable', 'syllabus'].includes(resource)) return rows;
+
+    const labels = await this.classLabels(user);
+    const labelOf = (classId?: string) => (classId ? labels.get(classId)?.label ?? '' : '');
+    const classSubjects: Record<string, any>[] = resource === 'classes'
+      ? rows
+      : (this.ui.asArray(
+          (await this.ui.tryGet({ service: 'academic', path: '/academics/class-subjects', params: { teacherId: user.id } }, [], user)).data,
+        ) as Record<string, any>[]);
+    const csById = new Map(classSubjects.map((cs) => [String(cs.id), cs]));
+
+    switch (resource) {
+      case 'classes':
+        return rows.map((cs) => ({
+          ...cs,
+          subject: cs.subject?.name ?? '',
+          subjectName: cs.subject?.name ?? '',
+          classLabel: labelOf(cs.classId),
+          studentCount: labels.get(String(cs.classId))?.studentCount ?? 0,
+          averageScore: 0,
+          attendanceRate: 0,
+          nextLesson: '',
+        }));
+      case 'assessments':
+        return rows.map((a) => ({
+          ...a,
+          title: a.name,
+          dueLabel: a.date ? String(a.date).slice(0, 10) : '',
+          totalStudents: labels.get(String(a.classId))?.studentCount ?? 0,
+          // Anything past OPEN has had its marks entered for the whole class.
+          enteredCount: ['SUBMITTED', 'HOD_APPROVED', 'APPROVED', 'LOCKED', 'MARKS_ENTERED'].includes(String(a.status))
+            ? labels.get(String(a.classId))?.studentCount ?? 0
+            : Number(a._count?.marks ?? 0),
+        }));
+      case 'attendance': {
+        const today = new Date().toISOString().slice(0, 10);
+        const marked = await this.ui.tryGet(
+          { service: 'student', path: '/students/attendance', params: { startDate: today, endDate: today, limit: 1000 } },
+          [],
+          user,
+        );
+        warnings.push(...this.warning(marked));
+        const markedClasses = new Set((this.ui.asArray(marked.data) as Record<string, any>[]).map((r) => String(r.classId)));
+        const seen = new Set<string>();
+        const sessions: unknown[] = [];
+        for (const cs of classSubjects) {
+          const classId = String(cs.classId);
+          if (seen.has(classId)) continue;
+          seen.add(classId);
+          const done = markedClasses.has(classId);
+          sessions.push({
+            id: cs.id,
+            classSubjectId: cs.id,
+            classId,
+            title: labelOf(classId) || 'Class',
+            timeLabel: 'Today',
+            statusLabel: done ? 'MARKED' : 'PENDING',
+            isUrgent: !done,
+          });
+        }
+        return sessions;
+      }
+      case 'alerts':
+        return rows.map((al) => ({
+          ...al,
+          studentName: `${al.student?.firstName ?? ''} ${al.student?.lastName ?? ''}`.trim(),
+          classLabel: '',
+          subject: al.subjectName ?? '',
+          type: al.alertType,
+          previousScore: Number(al.currentScore ?? 0) - Number(al.trendSlope ?? 0),
+          currentScore: Number(al.currentScore ?? 0),
+        }));
+      case 'timetable':
+        return rows.map((slot) => {
+          const day = String(slot.dayOfWeek ?? '');
+          return {
+            ...slot,
+            day: day ? day.charAt(0) + day.slice(1).toLowerCase() : '',
+            time: `${slot.startTime ?? ''} - ${slot.endTime ?? ''}`,
+            title: `${slot.subject?.name ?? ''} · ${labelOf(slot.classId)}`.trim(),
+            classSubjectId: '',
+            room: slot.room ?? '',
+          };
+        });
+      case 'syllabus':
+        return rows.map((r) => {
+          const cs = csById.get(String(r.classSubjectId));
+          return {
+            ...r,
+            title: `${cs?.subject?.name ?? 'Subject'} · ${labelOf(cs?.classId)}`.trim(),
+            covered: Number(r.coveredTopics ?? 0),
+            total: Number(r.totalTopics ?? 0),
+            nextTopic: r.notes ?? '',
+          };
+        });
+      default:
+        return rows;
+    }
   }
 
   @Get('hod/dashboard')
@@ -194,9 +505,137 @@ export class UiController {
   @Get('hod/:resource')
   @Roles(...HOD_ROLES)
   async hodResource(@CurrentUser() user: GatewayUser, @Param('resource') resource: string): Promise<UiEnvelope> {
-    const route = this.hodRoute(resource);
-    const result = await this.ui.tryGet(route, [], user);
-    return this.ui.envelope({ resource, items: this.ui.asArray(result.data), raw: result.data }, this.warning(result));
+    const warnings: string[] = [];
+    let items: unknown[];
+    if (resource === 'department' || resource === 'teachers') {
+      items = await this.hodDepartment(resource, user, warnings);
+    } else {
+      const route = this.hodRoute(resource);
+      const result = await this.ui.tryGet(route, [], user);
+      warnings.push(...this.warning(result));
+      items = await this.shapeHodItems(resource, this.ui.asArray(result.data) as Record<string, any>[], user);
+    }
+    return this.ui.envelope({ resource, items, raw: items }, warnings);
+  }
+
+  private async staffDirectory(user: GatewayUser): Promise<Map<string, { name: string; department: string | null }>> {
+    const res = await this.ui.tryGet(
+      { service: 'auth', path: '/auth/internal/users-by-role', params: { roles: 'TEACHER,HEAD_OF_DEPARTMENT' } },
+      { users: [] } as { users?: Record<string, any>[] },
+      user,
+    );
+    const users = (Array.isArray(res.data) ? res.data : (res.data as { users?: Record<string, any>[] })?.users ?? []) as Record<string, any>[];
+    const map = new Map<string, { name: string; department: string | null }>();
+    for (const u of users) {
+      map.set(String(u.id), {
+        name: `${u.firstName ?? ''} ${u.lastName ?? ''}`.trim() || String(u.email ?? ''),
+        department: u.department ?? null,
+      });
+    }
+    return map;
+  }
+
+  private async subjectNames(user: GatewayUser): Promise<Map<string, string>> {
+    const res = await this.ui.tryGet({ service: 'academic', path: '/academics/subjects', params: { limit: 500 } }, [], user);
+    return new Map((this.ui.asArray(res.data) as Record<string, any>[]).map((sub) => [String(sub.id), String(sub.name)]));
+  }
+
+  /// Department view for a head of department: subjects and teachers of their own department.
+  private async hodDepartment(resource: string, user: GatewayUser, warnings: string[]): Promise<unknown[]> {
+    const staff = await this.staffDirectory(user);
+    const myDepartment = staff.get(user.id)?.department ?? null;
+    const inDepartment = (teacherId: string) => {
+      const member = staff.get(teacherId);
+      return !!member && (!myDepartment || member.department === myDepartment);
+    };
+    const classSubjectsRes = await this.ui.tryGet({ service: 'academic', path: '/academics/class-subjects', params: { limit: 1000 } }, [], user);
+    warnings.push(...this.warning(classSubjectsRes));
+    const classSubjects = (this.ui.asArray(classSubjectsRes.data) as Record<string, any>[]).filter((cs) => inDepartment(String(cs.teacherId)));
+    const names = await this.subjectNames(user);
+
+    if (resource === 'teachers') {
+      const byTeacher = new Map<string, Set<string>>();
+      for (const cs of classSubjects) {
+        const set = byTeacher.get(String(cs.teacherId)) ?? new Set<string>();
+        set.add(names.get(String(cs.subjectId)) ?? cs.subject?.name ?? 'Subject');
+        byTeacher.set(String(cs.teacherId), set);
+      }
+      return [...byTeacher.entries()].map(([id, subjects]) => ({
+        id,
+        name: staff.get(id)?.name ?? id,
+        subjects: [...subjects].join(', '),
+        onTimeRate: 0,
+        averageScore: 0,
+        syllabusCompletion: 0,
+      }));
+    }
+
+    const subjectIds = [...new Set(classSubjects.map((cs) => String(cs.subjectId)))].slice(0, 8);
+    // Analytics scopes by the active school, so query each subject within the school that teaches it.
+    const schoolOfSubject = new Map(classSubjects.map((cs) => [String(cs.subjectId), cs.schoolId as string | undefined]));
+    const analytics = await Promise.all(
+      subjectIds.map((id) =>
+        this.ui.tryGet<Record<string, any> | null>(
+          { service: 'analytics', path: `/analytics/department/${id}` },
+          null,
+          { ...user, activeSchoolId: schoolOfSubject.get(id) ?? user.activeSchoolId },
+        ),
+      ),
+    );
+    const teacherName = (raw?: string) => {
+      const id = String(raw ?? '').replace(/^Teacher\s+/, '');
+      return staff.get(id)?.name ?? (raw ?? '');
+    };
+    return subjectIds.map((id, i) => {
+      const a = analytics[i].data ?? {};
+      if (analytics[i].warning) warnings.push(analytics[i].warning as string);
+      return {
+        id,
+        name: a.subjectName ?? names.get(id) ?? 'Subject',
+        average: Number(a.overallAverage ?? 0),
+        syllabusCompletion: Number(a.syllabusCompletionAverage ?? 0),
+        atRiskStudents: Array.isArray(a.atRiskStudents) ? a.atRiskStudents.length : 0,
+        classes: (Array.isArray(a.byClass) ? a.byClass : []).map((c: Record<string, any>) => ({
+          classLabel: `${c.className ?? ''} ${c.stream ?? ''}`.trim(),
+          teacherName: teacherName(c.teacherName),
+          average: Number(c.average ?? 0),
+          studentCount: 0,
+        })),
+      };
+    });
+  }
+
+  private async shapeHodItems(resource: string, rows: Record<string, any>[], user: GatewayUser): Promise<unknown[]> {
+    if (!['approvals', 'performance'].includes(resource)) return rows;
+    const labels = await this.classLabels(user);
+    const names = await this.subjectNames(user);
+    const staff = await this.staffDirectory(user);
+    if (resource === 'performance') {
+      return rows.map((al) => {
+        const studentName = `${al.student?.firstName ?? ''} ${al.student?.lastName ?? ''}`.trim();
+        return {
+          ...al,
+          title: `${studentName || 'Student'} - ${al.subjectName ?? ''}`.trim(),
+          subject: al.subjectName ?? '',
+          classLabel: '',
+          isEscalated: al.severity === 'CRITICAL',
+        };
+      });
+    }
+    const daysAgo = (iso?: string) => {
+      if (!iso) return '';
+      const days = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000));
+      return days === 0 ? 'Today' : days === 1 ? '1 day ago' : `${days} days ago`;
+    };
+    return rows.map((a) => ({
+      ...a,
+      subject: names.get(String(a.subjectId)) ?? '',
+      classLabel: labels.get(String(a.classId))?.label ?? '',
+      assessmentType: a.name ?? '',
+      teacherName: staff.get(String(a.submittedById ?? ''))?.name ?? '',
+      submittedAgo: daysAgo(a.submittedAt),
+      studentCount: labels.get(String(a.classId))?.studentCount ?? 0,
+    }));
   }
 
   @Get('aqa/dashboard')
@@ -431,15 +870,40 @@ export class UiController {
     return this.idFrom(student.data) || user.id;
   }
 
+  /// by-auth lookups return `{ studentId, ... }`; full records return `{ id, ... }`.
   private idFrom(value: unknown): string | undefined {
-    if (value && typeof value === 'object' && 'id' in value) {
-      return String((value as { id: string }).id);
-    }
-    return undefined;
+    if (!value || typeof value !== 'object') return undefined;
+    const obj = value as { id?: unknown; studentId?: unknown };
+    const id = obj.id ?? obj.studentId;
+    return typeof id === 'string' && id ? id : undefined;
   }
 
   private warning(result: { warning?: string }): string[] {
     return result.warning ? [result.warning] : [];
+  }
+
+  /// Returns a copy of the user with an elevated role for a trusted, read-only
+  /// downstream call the gateway has already authorized. The original school
+  /// scope is preserved, so cross-school data can never be reached this way —
+  /// only the role gate is satisfied.
+  private asService(user: GatewayUser): GatewayUser {
+    return { ...user, role: 'SYSTEM_ADMIN' };
+  }
+
+  /// Resolves an id from a downstream record, tolerating either a flat
+  /// `<key>Id` string or a nested `{ <key>: { id } }` relation object.
+  private pickId(source: unknown, keys: string[]): string | null {
+    if (!source || typeof source !== 'object') return null;
+    const obj = source as Record<string, unknown>;
+    for (const key of keys) {
+      const flat = obj[`${key}Id`] ?? obj[key];
+      if (typeof flat === 'string' && flat) return flat;
+      if (flat && typeof flat === 'object') {
+        const nested = (flat as Record<string, unknown>).id;
+        if (typeof nested === 'string' && nested) return nested;
+      }
+    }
+    return null;
   }
 
   private withCounts(data: Record<string, unknown>, keys: string[]): Record<string, unknown> {

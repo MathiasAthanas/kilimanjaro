@@ -18,7 +18,7 @@ class PerformanceTrendsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final child = ref.watch(activeParentChildProvider).value;
+    final child = ref.watch(activeParentChildProvider).valueOrNull;
     final snapshotsAsync = ref.watch(activeParentSnapshotsProvider);
 
     return Scaffold(

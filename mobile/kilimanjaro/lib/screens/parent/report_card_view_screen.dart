@@ -18,7 +18,7 @@ class ParentReportCardViewScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final cardAsync = ref.watch(parentReportCardByIdProvider(termId));
     final termAsync = ref.watch(parentTermByIdProvider(termId));
-    final child = ref.watch(activeParentChildProvider).value;
+    final child = ref.watch(activeParentChildProvider).valueOrNull;
 
     return Scaffold(
       appBar: KSAppBar(

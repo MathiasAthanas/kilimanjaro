@@ -11,10 +11,18 @@ export class DepartmentService {
     return this.prisma.term.findFirst({ where: { academicYearId, isCurrent: true } });
   }
 
-  async getDepartmentSubjectAnalytics(subjectId: string, academicYearId?: string, termId?: string) {
+  async getDepartmentSubjectAnalytics(subjectId: string, academicYearId?: string, termId?: string, schoolId?: string | null) {
     const term = termId ? await this.prisma.term.findUnique({ where: { id: termId } }) : await this.currentTerm(academicYearId);
+    // ClassSubject has no schoolId in the analytics read-model — scope via class ids.
+    const classIds = schoolId
+      ? (await this.prisma.class.findMany({ where: { schoolId }, select: { id: true } })).map((c) => c.id)
+      : null;
     const classSubjects = await this.prisma.classSubject.findMany({
-      where: { subjectId, academicYearId: academicYearId || undefined },
+      where: {
+        subjectId,
+        academicYearId: academicYearId || undefined,
+        ...(classIds ? { classId: { in: classIds.length ? classIds : ['__none__'] } } : {}),
+      },
     });
 
     const [subject, classes, results, alerts, pairings, interventions, syllabus] = await Promise.all([

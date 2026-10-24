@@ -288,11 +288,19 @@ async function seedStudentStructure() {
     const classId = uuid(`class-${key}`);
     ids.classes[key] = { id: classId, key, name, level, stream, stage, capacity };
     ids.classStudents[classId] = [];
-    await students.class.upsert({
-      where: { name_stream_academicYearId: { name, stream, academicYearId: SCHOOL_YEAR_ID } },
-      update: { level, educationStage: stage, curriculumCode, terminalYear: key.includes('std7') || key.includes('form4') || key.includes('form6'), classTeacherId: classTeacher.id, capacity, sortOrder: i },
-      create: { id: classId, name, level, stream, educationStage: stage, curriculumCode, terminalYear: key.includes('std7') || key.includes('form4') || key.includes('form6'), academicYearId: SCHOOL_YEAR_ID, classTeacherId: classTeacher.id, capacity, sortOrder: i },
-    });
+    const classTerminal = key.includes('std7') || key.includes('form4') || key.includes('form6');
+    const existingClass = await students.class.findFirst({ where: { schoolId: null, name, stream, academicYearId: SCHOOL_YEAR_ID } });
+    if (existingClass) {
+      await students.class.update({
+        where: { id: existingClass.id },
+        data: { level, educationStage: stage, curriculumCode, terminalYear: classTerminal, classTeacherId: classTeacher.id, capacity, sortOrder: i },
+      });
+      ids.classes[key].id = existingClass.id;
+    } else {
+      await students.class.create({
+        data: { id: classId, name, level, stream, educationStage: stage, curriculumCode, terminalYear: classTerminal, academicYearId: SCHOOL_YEAR_ID, classTeacherId: classTeacher.id, capacity, sortOrder: i },
+      });
+    }
   }
   for (let i = 0; i < classSpecs.length - 1; i++) {
     const from = ids.classes[classSpecs[i][0]];

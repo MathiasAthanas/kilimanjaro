@@ -85,7 +85,7 @@ final hodApprovalHistoryProvider = Provider<List<HodApproval>>((ref) {
       .watch(hodApprovalsControllerProvider)
       .where((item) => item.status != HodApprovalStatus.pending)
       .toList();
-  final serverHistory = ref.watch(_hodApprovalHistoryLoader).value
+  final serverHistory = ref.watch(_hodApprovalHistoryLoader).valueOrNull
       ?? (AppConfig.useMockData ? _approvalHistory : const []);
   return [...actioned, ...serverHistory];
 });
@@ -97,7 +97,7 @@ final hodApprovalByIdProvider = Provider.family<HodApproval?, String>((ref, id) 
 // ─── Subjects & teachers ──────────────────────────────────────────────────────
 
 final hodSubjectsProvider = Provider<List<HodSubjectAnalytics>>((ref) {
-  return ref.watch(_hodSubjectsLoader).value
+  return ref.watch(_hodSubjectsLoader).valueOrNull
       ?? (AppConfig.useMockData ? _subjects : const []);
 });
 
@@ -106,7 +106,7 @@ final hodSubjectByIdProvider = Provider.family<HodSubjectAnalytics?, String>((re
 });
 
 final hodTeachersProvider = Provider<List<HodTeacherSummary>>((ref) {
-  return ref.watch(_hodTeachersLoader).value
+  return ref.watch(_hodTeachersLoader).valueOrNull
       ?? (AppConfig.useMockData ? _teachers : const []);
 });
 

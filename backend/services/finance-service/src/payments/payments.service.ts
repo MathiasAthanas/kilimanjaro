@@ -19,7 +19,7 @@ import { NumberSequenceService } from '../common/helpers/number-sequence.service
 import { AuditService } from '../audit/audit.service';
 import { RabbitMqService } from '../rabbitmq/rabbitmq.service';
 import { RequestUser } from '../common/interfaces/request-user.interface';
-import { schoolScopeFilter } from '../common/helpers/school-scope.helper';
+import { schoolScopeFilter, assertSchoolInScope } from '../common/helpers/school-scope.helper';
 import { ReceiptsService } from '../receipts/receipts.service';
 import { CreateManualPaymentDto } from './dto/create-manual-payment.dto';
 
@@ -253,6 +253,7 @@ export class PaymentsService {
   async approve(approvalId: string, user: RequestUser) {
     const approval = await this.prisma.manualPaymentApproval.findUnique({ where: { id: approvalId }, include: { payment: true } });
     if (!approval) throw new NotFoundException('Approval record not found');
+    assertSchoolInScope(user, approval.payment?.schoolId ?? null);
     if (approval.decision !== null) {
       throw new BadRequestException(`Approval already ${approval.decision.toLowerCase()}`);
     }
@@ -297,6 +298,7 @@ export class PaymentsService {
   async reject(approvalId: string, rejectionReason: string, user: RequestUser) {
     const approval = await this.prisma.manualPaymentApproval.findUnique({ where: { id: approvalId }, include: { payment: true } });
     if (!approval) throw new NotFoundException('Approval record not found');
+    assertSchoolInScope(user, approval.payment?.schoolId ?? null);
     if (approval.decision !== null) {
       throw new BadRequestException(`Approval already ${approval.decision.toLowerCase()}`);
     }
@@ -344,6 +346,7 @@ export class PaymentsService {
   async refund(paymentId: string, refundReason: string, user: RequestUser) {
     const payment = await this.prisma.payment.findUnique({ where: { id: paymentId } });
     if (!payment) throw new NotFoundException('Payment not found');
+    assertSchoolInScope(user, payment.schoolId ?? null);
     if (payment.status !== PaymentStatus.CONFIRMED) {
       throw new BadRequestException('Only confirmed payments can be refunded');
     }
@@ -391,6 +394,7 @@ export class PaymentsService {
   async addNote(paymentId: string, note: string, user: RequestUser) {
     const payment = await this.prisma.payment.findUnique({ where: { id: paymentId } });
     if (!payment) throw new NotFoundException('Payment not found');
+    assertSchoolInScope(user, payment.schoolId ?? null);
 
     const updated = await this.prisma.payment.update({
       where: { id: paymentId },
