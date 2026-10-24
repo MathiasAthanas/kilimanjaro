@@ -91,11 +91,11 @@ final drawerSectionsByRole = <UserRole, List<DrawerSection>>{
   // Web-primary desk roles: mobile is a companion (pulse + notifications +
   // profile); the full workspace lives in the web dashboard.
   UserRole.academicQa: _deskRoleSections('aqa'),
-  UserRole.manager: _deskRoleSections('principal'),
-  UserRole.headOfSchool: _deskRoleSections('principal'),
+  UserRole.manager: _principalSections(),
+  UserRole.headOfSchool: _principalSections(),
   UserRole.headOfFinance: _deskRoleSections('finance'),
   UserRole.superAdmin: _deskRoleSections('admin'),
-  UserRole.principal: _deskRoleSections('principal'),
+  UserRole.principal: _principalSections(),
   UserRole.finance: _deskRoleSections('finance'),
   UserRole.admin: _deskRoleSections('admin'),
 };
@@ -108,6 +108,21 @@ List<DrawerSection> _deskRoleSections(String prefix) => [
       _section([
         _item('Settings', 'settings.svg', route: '/shell/$prefix/settings'),
         _item('My Profile', 'user-circle.svg', route: '/shell/$prefix/profile'),
+      ], title: 'Account'),
+      _section([_item('Logout', 'logout.svg', destructive: true)]),
+    ];
+
+List<DrawerSection> _principalSections() => [
+      _section([
+        _item('Overview', 'analytics.svg', route: '/shell/principal/home'),
+        _item('Marks Approval', 'clipboard-check.svg', route: '/shell/principal/approvals'),
+        _item('Finance', 'banknotes.svg', route: '/shell/principal/finance'),
+        _item('At-Risk Learners', 'alert-circle.svg', route: '/shell/principal/at-risk'),
+      ], title: 'School'),
+      _section([
+        _item('Notifications', 'bell.svg', route: '/shell/principal/notifications'),
+        _item('Settings', 'settings.svg', route: '/shell/principal/settings'),
+        _item('My Profile', 'user-circle.svg', route: '/shell/principal/profile'),
       ], title: 'Account'),
       _section([_item('Logout', 'logout.svg', destructive: true)]),
     ];

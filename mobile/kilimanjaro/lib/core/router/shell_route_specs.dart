@@ -129,8 +129,9 @@ const shellRouteSpecs = <ShellRouteSpec>[
     ],
   ),
   // ── Web-primary desk roles ──────────────────────────────────────────────
-  // Principal, AQA, Finance and System Admin run their day in the web
-  // dashboard. Mobile gives them a read-only pulse + notifications + profile.
+  // AQA, Finance and System Admin run their day in the web dashboard. Mobile
+  // gives them a read-only pulse + notifications + profile. (The principal has
+  // a full mobile workspace: approvals, finance decisions and at-risk learners.)
   ShellRouteSpec(
     prefix: 'aqa',
     role: UserRole.academicQa,
@@ -148,10 +149,13 @@ const shellRouteSpecs = <ShellRouteSpec>[
   ShellRouteSpec(
     prefix: 'principal',
     role: UserRole.principal,
-    tab2: 'notifications',
-    tab3: 'profile',
-    tab4: 'settings',
+    tab2: 'approvals',
+    tab3: 'finance',
+    tab4: 'at-risk',
     extras: [
+      'notifications',
+      'profile',
+      'settings',
       'notification-preferences',
       'change-password',
       'edit-profile',

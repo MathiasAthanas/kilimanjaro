@@ -166,11 +166,11 @@ final navConfig = <UserRole, List<NavItem>>{
   ],
   // Web-primary desk roles: read-only pulse + notifications + profile only.
   UserRole.academicQa: _deskRoleNav('aqa'),
-  UserRole.manager: _deskRoleNav('principal'),
-  UserRole.headOfSchool: _deskRoleNav('principal'),
+  UserRole.manager: _principalNav(),
+  UserRole.headOfSchool: _principalNav(),
   UserRole.headOfFinance: _deskRoleNav('finance'),
   UserRole.superAdmin: _deskRoleNav('admin'),
-  UserRole.principal: _deskRoleNav('principal'),
+  UserRole.principal: _principalNav(),
   UserRole.finance: _deskRoleNav('finance'),
   UserRole.admin: _deskRoleNav('admin'),
 };
@@ -199,6 +199,39 @@ List<NavItem> _deskRoleNav(String prefix) => [
         iconAsset: '$_icons/cog-6-tooth.svg',
         iconActiveAsset: '$_icons/cog-6-tooth_filled.svg',
         route: '/shell/$prefix/settings',
+      ),
+      NavItem(
+        label: 'More',
+        iconAsset: '$_icons/grid-dots.svg',
+        iconActiveAsset: '$_icons/grid-dots_filled.svg',
+        isMore: true,
+      ),
+    ];
+
+List<NavItem> _principalNav() => [
+      NavItem(
+        label: 'Home',
+        iconAsset: '$_icons/home.svg',
+        iconActiveAsset: '$_icons/home_filled.svg',
+        route: '/shell/principal/home',
+      ),
+      NavItem(
+        label: 'Approvals',
+        iconAsset: '$_icons/clipboard-check.svg',
+        iconActiveAsset: '$_icons/clipboard-check_filled.svg',
+        route: '/shell/principal/approvals',
+      ),
+      NavItem(
+        label: 'Finance',
+        iconAsset: '$_icons/banknotes.svg',
+        iconActiveAsset: '$_icons/banknotes_filled.svg',
+        route: '/shell/principal/finance',
+      ),
+      NavItem(
+        label: 'At-Risk',
+        iconAsset: '$_icons/alert-circle.svg',
+        iconActiveAsset: '$_icons/alert-circle.svg',
+        route: '/shell/principal/at-risk',
       ),
       NavItem(
         label: 'More',

@@ -62,6 +62,7 @@ import '../../screens/teacher/elearning/teacher_elearning_screens.dart'
 import '../../screens/teacher/teacher_screens.dart' as teacher_screens;
 import '../../screens/admissions/admissions_screens.dart';
 import '../../screens/staff/staff_overview_screen.dart';
+import '../../screens/principal/principal_screens.dart';
 import '../../screens/utility/force_update_screen.dart';
 import '../../screens/utility/shell_demo_screen.dart';
 import '../../widgets/shell/app_shell.dart';
@@ -328,10 +329,26 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       }
     }
 
+    // The principal has a working mobile workspace.
+    if (role == UserRole.principal) {
+      final Widget? screen = switch (path) {
+        '/shell/principal/home' => const PrincipalHomeScreen(),
+        '/shell/principal/approvals' => const PrincipalApprovalsScreen(),
+        '/shell/principal/finance' => const PrincipalFinanceScreen(),
+        '/shell/principal/at-risk' => const PrincipalAtRiskScreen(),
+        _ => null,
+      };
+      if (screen != null) {
+        return GoRoute(
+          path: path,
+          pageBuilder: (context, state) => NoTransitionPage(key: state.pageKey, child: screen),
+        );
+      }
+    }
+
     // Web-primary desk roles get a real read-only landing instead of a demo.
     const deskRoles = [
       UserRole.academicQa,
-      UserRole.principal,
       UserRole.finance,
       UserRole.admin,
     ];
@@ -520,6 +537,22 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                   : const AnnouncementsListScreen(),
               state,
             );
+          case 'finance':
+            return page(
+              role == UserRole.parent
+                  ? const ParentFinanceOverviewScreen()
+                  : const FinanceOverviewScreen(),
+              state,
+            );
+          case 'attendance':
+            return page(
+              role == UserRole.parent
+                  ? const ParentAttendanceOverviewScreen()
+                  : const AttendanceOverviewScreen(),
+              state,
+            );
+          case 'marks':
+            return page(const teacher_screens.AssessmentListScreen(), state);
           case 'contact-school':
             return page(const ContactSchoolScreen(), state);
           case 'children':
