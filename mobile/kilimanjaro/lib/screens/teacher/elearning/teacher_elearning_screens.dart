@@ -331,7 +331,7 @@ class TeacherAssignmentDetailScreen extends ConsumerWidget {
           subtitle: assignment != null ? '${assignment.status} · $dueText · ${assignment.type}' : 'Assignment detail',
           children: [
             _MetricGrid(values: [
-              ('Max score', '${assignment?.maxScore?.toStringAsFixed(0) ?? "—"}'),
+              ('Max score', assignment?.maxScore?.toStringAsFixed(0) ?? '—'),
               ('Status', assignment?.status ?? '—'),
               ('Late OK', assignment?.allowLateSubmission == true ? 'Yes' : 'No'),
             ]),

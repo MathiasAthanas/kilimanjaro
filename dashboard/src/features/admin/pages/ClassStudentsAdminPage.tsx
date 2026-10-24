@@ -156,6 +156,10 @@ export function ClassStudentsAdminPage() {
     <AdminShell eyebrow="Class Student Management" title={title} subtitle={subtitle}>
       <div className="space-y-6">
         <NavLink to="/admin/classes" className="text-xs font-black text-[#4338CA] hover:underline">← Back to Classes</NavLink>
+        <div className="flex flex-wrap gap-3 text-xs font-black text-ks-blue">
+          <NavLink to={`/admin/classes/${classId}`} className="hover:underline">Class overview</NavLink>
+          <NavLink to={`/admin/classes/${classId}/subjects`} className="hover:underline">Subjects &amp; teachers</NavLink>
+        </div>
 
         {isError && <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">Failed to load class students (or class is outside your school scope).</div>}
 

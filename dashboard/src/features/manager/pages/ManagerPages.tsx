@@ -2,16 +2,16 @@ import { useMemo, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   AlertTriangle, ArrowRight, BadgeCheck, Banknote, ChevronRight,
-  Globe2, LayoutGrid, Table2, TrendingDown, TrendingUp, UserCheck,
+  LayoutGrid, Table2, TrendingDown, TrendingUp, UserCheck,
 } from 'lucide-react';
 import { Badge } from '../../../components/common/Badge';
 import { Button } from '../../../components/common/Button';
 import { DataError } from '../../../components/feedback/DataError';
-import { EmptyState } from '../../../components/feedback/EmptyState';
 import { SkeletonTable } from '../../../components/common/SkeletonTable';
 import { toast } from '../../../lib/toast';
 import { useAuthStore } from '../../../lib/auth/authStore';
 import { useSchoolStore } from '../../../lib/school/schoolStore';
+import { canSelectSchool } from '../../../components/layout/schoolScope';
 import {
   formatTZS,
   SCHOOL_GENDER_LABELS,
@@ -57,11 +57,11 @@ export function ManagerWorkspaceShell({
               <div className="mt-1 h-full w-1 self-stretch rounded-full bg-[#00334f]" />
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#d59a1b]">{eyebrow}</p>
-                <h1 className="mt-1 font-display text-[38px] font-black leading-tight tracking-[-0.025em] text-[#00334f]">{title}</h1>
+                <h1 className="mt-1 break-words font-display text-2xl font-black leading-tight tracking-[-0.025em] text-[#00334f] sm:text-[38px]">{title}</h1>
                 <p className="mt-1 text-sm font-semibold text-[#64748b]">{userName} · Group Command</p>
               </div>
             </div>
-            <div className="flex shrink-0 items-start gap-2 xl:pt-1">
+            <div className="flex flex-wrap items-start gap-2 xl:pt-1">
               <HeaderStat label="Schools" value={String(totals?.schools ?? '—')} />
               <HeaderStat label="Students" value={String(totals?.students ?? '—')} />
               <HeaderStat label="Collection" value={totals?.collectionRate != null ? `${totals.collectionRate}%` : '—'} danger={(totals?.collectionRate ?? 100) < 70} />
@@ -103,13 +103,13 @@ export function ManagerBreadcrumb({ crumbs }: { crumbs: Array<{ label: string; t
 }
 
 /** Entering a school = set the active-school scope, then use the Head-of-School portal. */
-export function useEnterSchool() {
+export function useEnterSchool(destination = '/principal') {
   const navigate = useNavigate();
   const setActiveSchool = useSchoolStore((s) => s.setActiveSchool);
   return (school: Pick<SchoolScorecard, 'id' | 'name' | 'code' | 'type' | 'gender'>) => {
     setActiveSchool({ id: school.id, name: school.name, code: school.code, type: school.type, gender: school.gender });
     toast(`Now viewing ${school.name}`, 'success');
-    navigate('/principal');
+    navigate(destination);
   };
 }
 
@@ -120,13 +120,15 @@ export function ManagerGalleryPage() {
   const enterSchool = useEnterSchool();
   const setActiveSchool = useSchoolStore((s) => s.setActiveSchool);
   const { data, isLoading, isError, refetch } = useGroupOverview();
+  const session = useAuthStore((s) => s.session);
+  const visibleSchools = data?.schools.filter((school) => canSelectSchool(session?.user.scope, session?.user.schoolIds ?? [], school.id)) ?? [];
 
   return (
     <ManagerWorkspaceShell title="Kilimanjaro Schools Group" eyebrow="Choose where to work today">
       <ManagerBreadcrumb crumbs={[{ label: 'Group' }, { label: 'Schools' }]} />
       {isLoading ? <SkeletonTable cols={4} /> : isError || !data ? <DataError onRetry={refetch} /> : (
         <SchoolGallery
-          schools={data.schools}
+          schools={visibleSchools}
           groupStats={{ students: data.totals.students, collectionRate: data.totals.collectionRate, academicMean: data.totals.academicMean }}
           onOpenGroup={() => { setActiveSchool(null); navigate('/manager/overview'); }}
           onOpenSchool={enterSchool}
@@ -209,6 +211,9 @@ function CompareBars({ schools }: { schools: SchoolScorecard[] }) {
 export function ManagerOverviewPage() {
   const { data, isLoading, isError, refetch } = useGroupOverview();
   const enterSchool = useEnterSchool();
+  const session = useAuthStore((s) => s.session);
+  const visibleSchools = data?.schools.filter((school) => canSelectSchool(session?.user.scope, session?.user.schoolIds ?? [], school.id)) ?? [];
+  const visibleAttention = data?.attention.filter((item) => visibleSchools.some((school) => school.id === item.id)) ?? [];
 
   return (
     <ManagerWorkspaceShell title="Group Dashboard" eyebrow="Every school at a glance"
@@ -224,18 +229,18 @@ export function ManagerOverviewPage() {
           </div>
 
           <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_380px]">
-            <CompareBars schools={data.schools} />
+            <CompareBars schools={visibleSchools} />
             <section className="rounded-lg border border-[#d5dde6] bg-white p-6">
               <p className="text-[10px] font-black uppercase tracking-widest text-[#64748b]">Schools Needing Attention</p>
-              {data.attention.length === 0 ? (
+              {visibleAttention.length === 0 ? (
                 <div className="mt-6 flex items-center gap-3 rounded-xl border border-emerald-200 bg-[#f0fdf9] p-4">
                   <BadgeCheck className="h-5 w-5 text-[#10b981]" />
                   <p className="text-sm font-bold text-emerald-800">Every school is healthy. Nothing needs you right now.</p>
                 </div>
               ) : (
                 <div className="mt-4 space-y-3">
-                  {data.attention.map((item) => {
-                    const school = data.schools.find((s) => s.id === item.id);
+                  {visibleAttention.map((item) => {
+                    const school = visibleSchools.find((s) => s.id === item.id);
                     return (
                       <div key={item.id} className="rounded-xl border border-[#e2e8f0] p-4">
                         <div className="flex items-center justify-between gap-2">
@@ -262,7 +267,7 @@ export function ManagerOverviewPage() {
             </section>
           </div>
 
-          <ScorecardTable schools={data.schools} />
+          <ScorecardTable schools={visibleSchools} />
         </>
       )}
     </ManagerWorkspaceShell>
@@ -294,8 +299,11 @@ function ScorecardTable({ schools }: { schools: SchoolScorecard[] }) {
             <tr>
               <th className="border-b border-[#d5dde6] px-4 py-3 text-[10px] font-black uppercase tracking-widest text-[#00334f]">School</th>
               {headers.map(([label, key]) => (
-                <th key={label} className="cursor-pointer border-b border-[#d5dde6] px-4 py-3 text-[10px] font-black uppercase tracking-widest text-[#00334f] hover:text-[#0284c7]" onClick={() => setSortKey(key)}>
-                  {label}{sortKey === key ? ' ↓' : ''}
+                <th key={label} className="border-b border-[#d5dde6] px-4 py-3 text-[10px] font-black uppercase tracking-widest text-[#00334f]">
+                  <button type="button" onClick={() => setSortKey(key)} aria-label={`Sort schools by ${label}`}
+                    className="text-left hover:text-[#0284c7] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0284c7]">
+                    {label}{sortKey === key ? ' ↓' : ''}
+                  </button>
                 </th>
               ))}
               <th className="border-b border-[#d5dde6] px-4 py-3 text-[10px] font-black uppercase tracking-widest text-[#00334f]">Health</th>
@@ -303,9 +311,9 @@ function ScorecardTable({ schools }: { schools: SchoolScorecard[] }) {
           </thead>
           <tbody className="divide-y divide-[#e2e8f0]">
             {sorted.map((s) => (
-              <tr key={s.id} className="cursor-pointer bg-white transition even:bg-[#f7f9fb] hover:bg-[#eef5f8]" onClick={() => enterSchool(s)}>
+              <tr key={s.id} className="bg-white transition even:bg-[#f7f9fb] hover:bg-[#eef5f8]">
                 <td className="px-4 py-3">
-                  <p className="font-black text-[#00334f]">{s.name}</p>
+                  <button type="button" onClick={() => enterSchool(s)} className="text-left font-black text-[#00334f] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0284c7]">{s.name}</button>
                   <p className="text-[11px] font-bold text-[#64748b]">{SCHOOL_TYPE_LABELS[s.type]} · {SCHOOL_GENDER_LABELS[s.gender]}</p>
                 </td>
                 <td className="px-4 py-3 font-mono font-black tabular-nums">{s.students}</td>
@@ -327,11 +335,12 @@ function ScorecardTable({ schools }: { schools: SchoolScorecard[] }) {
 
 export function ManagerSchoolsPage() {
   const { data, isLoading, isError, refetch } = useGroupOverview();
+  const session = useAuthStore((s) => s.session);
   return (
     <ManagerWorkspaceShell title="School Scorecards" eyebrow="Compare every school side by side">
       <ManagerBreadcrumb crumbs={[{ label: 'Group', to: '/manager' }, { label: 'Scorecards' }]} />
       {isLoading ? <SkeletonTable cols={8} /> : isError || !data ? <DataError onRetry={refetch} /> : (
-        <ScorecardTable schools={data.schools} />
+        <ScorecardTable schools={data.schools.filter((school) => canSelectSchool(session?.user.scope, session?.user.schoolIds ?? [], school.id))} />
       )}
     </ManagerWorkspaceShell>
   );
@@ -341,8 +350,11 @@ export function ManagerSchoolsPage() {
 
 export function GroupFinancePage() {
   const { data, isLoading, isError, refetch } = useGroupFinance();
+  const { data: schools = [] } = useSchools();
+  const enterSchoolFinance = useEnterSchool('/finance/invoices');
   const session = useAuthStore((s) => s.session);
   const isManager = session?.user.role === 'MANAGER' || session?.user.role === 'SUPER_ADMIN';
+  const visibleSchoolFinance = data?.bySchool.filter((school) => canSelectSchool(session?.user.scope, session?.user.schoolIds ?? [], school.id)) ?? [];
 
   return (
     <ManagerWorkspaceShell title="Group Finance" eyebrow="Every shilling, every school">
@@ -377,26 +389,34 @@ export function GroupFinancePage() {
               <div className="border-b border-[#eef2f6] px-5 py-3.5">
                 <h2 className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-[#00334f]"><Banknote className="h-3.5 w-3.5" /> Per-School Finance</h2>
               </div>
-              <table className="w-full text-left text-sm">
+              <div className="overflow-x-auto"><table className="w-full min-w-[680px] text-left text-sm">
                 <thead className="bg-[#eef5f8]">
                   <tr>
-                    {['School', 'Invoiced', 'Collected', 'Outstanding', 'Rate'].map((h) => (
+                    {['School', 'Invoiced', 'Collected', 'Outstanding', 'Rate', 'Next step'].map((h) => (
                       <th key={h} className="border-b border-[#d5dde6] px-4 py-3 text-[10px] font-black uppercase tracking-widest text-[#00334f]">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#e2e8f0]">
-                  {data.bySchool.map((s) => (
+                  {visibleSchoolFinance.map((s) => (
                     <tr key={s.id} className="bg-white even:bg-[#f7f9fb]">
                       <td className="px-4 py-3 font-black text-[#00334f]">{s.name}</td>
                       <td className="px-4 py-3 font-mono tabular-nums">{formatTZS(s.invoiced)}</td>
                       <td className="px-4 py-3 font-mono tabular-nums text-[#10b981]">{formatTZS(s.collected)}</td>
                       <td className="px-4 py-3 font-mono tabular-nums text-[#d97706]">{formatTZS(s.outstanding)}</td>
                       <td className="px-4 py-3 font-mono font-black tabular-nums">{s.collectionRate != null ? `${s.collectionRate}%` : '—'}</td>
+                      <td className="px-4 py-3">
+                        {schools.find((school) => school.id === s.id) ? (
+                          <button type="button" onClick={() => enterSchoolFinance(schools.find((school) => school.id === s.id)!)}
+                            className="whitespace-nowrap text-xs font-black text-[#00334f] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0284c7]">
+                            Open school finance →
+                          </button>
+                        ) : <span className="text-xs font-semibold text-[#64748b]">Select school above</span>}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </table></div>
             </section>
           </div>
 

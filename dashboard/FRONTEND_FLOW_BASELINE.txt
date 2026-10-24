@@ -1,0 +1,364 @@
+FRONTEND ROUTE AND ACTION BASELINE — PHASE 0
+Captured: 2026-10-21. Scope: dashboard/ only.
+Source of truth: src/app/router.tsx, src/components/layout/RoleSidebar.tsx,
+src/lib/auth/permissions.ts, and the feature page/API hook implementations.
+The route list below is mechanical, including public, protected, nested and
+fallback routes. It does not replace the code's route guard.
+
+ROLES AND AUTHORIZATION
+Default homes: TEACHER /teacher; HOD /hod; AQA /aqa; FINANCE /finance;
+PRINCIPAL and HEAD_OF_SCHOOL /principal; ADMIN /admin; ADMISSIONS /admissions;
+MANAGER /manager; SUPER_ADMIN /superadmin; HEAD_OF_FINANCE /finance-group;
+STUDENT and PARENT /app/mobile-guidance.
+ProtectedRoute uses canAccessRoute for all authenticated paths. Prefix checks
+in permissions.ts govern /teacher, /hod, /aqa, /finance, /principal,
+/admissions, /admin, /reports, /academics, /exams, /analytics and /timetables.
+RoleSidebar adds role-specific discoverability, not additional authorization.
+ADMIN is not automatically group-scoped: session.user.scope === 'GROUP' is
+authoritative in SchoolContextBar. Single-school users auto-select their one
+visible school; multi-school users may select only assigned schools; group
+users can return to All Schools. Selecting a school from a group-only route
+opens /principal; changing school within school-scoped routes keeps the route.
+
+EXISTING PEOPLE / SETUP ACTION AND PAYLOAD BASELINE
+Users: /admin/users uses useAdminUsers; create, detail, edit, activate/lock,
+password reset, membership and school move, deactivate/delete, and CSV import.
+CreateUserPage sends email, role, firstName, lastName, phoneNumber, department
+and isActive to useCreateUserMutation. The role/department selection, typed
+danger confirmation, and password-reset feedback must survive.
+Students: /admin/students and /admissions/students use useAdminStudentsPage;
+pagination uses page/limit and existing GET /students supports search. Enrol
+has six steps (Identity, Admission, Class, Guardians, Portal, Review). Submit
+sends authUserId, names, dateOfBirth, gender, nationality, admissionDate,
+classId, academicYearId and guardians through useCreateStudentMutation.
+Admission number, intake stream, previous school and entry level are UI fields
+but were not in that payload at baseline; this refactor must not silently
+alter that contract. Student detail has identity, guardians, portal,
+attendance, performance, finance, discipline and audit panels. Import uses
+existing /students/import preview/commit and class assignment payload.
+Admissions: inquiry, applicant search/directory, profile, assessment/offer,
+stage transitions, conversion, student registry/enrolment and analytics are
+separate from the admin user directory. Existing mutations in
+admissions.hooks.ts retain their bodies (applicant body, {toStage,note},
+assessment/offer body, {decision,note}, {admissionDate}).
+Academic setup: /admin/academic/setup links years, terms, classes, subjects,
+class-subject/teacher assignments, grading, assessment types, stage config,
+cross-stage promotion; departments has an existing route too.
+Other major families: teacher, HOD, AQA, finance, principal, manager,
+superadmin, e-learning, exams, reports, analytics, timetables, shared app.
+Their route components and actions remain in the code and are not rewritten
+by phases 1-3.
+
+BASELINE USABILITY FINDINGS
+1. The old sidebar mixed directories with create/import actions, and long
+   sections competed for attention.
+2. UsersTable supplied onSearch, but AdminDataTable did not render the input.
+3. Student Registry had pagination but no search control despite the existing
+   GET /students search query.
+4. Admissions Student Registry pointed Import Students at a missing
+   /admissions/students/import route, although the backend allows ADMISSIONS
+   to use the same import endpoint.
+5. Academic Setup cards were flat, without dependency orientation.
+6. The top bar's term button was a static label that implied interactivity.
+7. AdminShell's environment/status header uses static display values; these
+   are not live backend health indicators and require separate product work
+   if real-time status is desired.
+
+ROUTE INVENTORY (293 route declarations parsed)
+Columns: router line | URL pattern | component | exact sidebar labels.
+"in-page / deep link" means there is no exact RoleSidebar item; the route
+may still be linked from a page, contextual action, search, or direct URL.
+
+308 | / | LandingPage | in-page / deep link
+309 | /login | LoginPage | in-page / deep link
+310 | /forgot-password | ForgotPasswordPage | in-page / deep link
+311 | /reset-password | ResetPasswordPage | in-page / deep link
+312 | /auth/callback | AuthCallbackPage | in-page / deep link
+313 | /privacy-policy | PrivacyPolicyPage | in-page / deep link
+314 | /terms-of-service | TermsOfServicePage | in-page / deep link
+315 | /account-deletion | AccountDeletionPage | in-page / deep link
+316 | /support | SupportPage | in-page / deep link
+317 | /legal | LegalLinksPage | in-page / deep link
+328 | /admin/system-status | AdminSystemStatusPage | in-page / deep link
+339 | /app | RoleRedirect | in-page / deep link
+340 | /app/change-password | ChangePasswordRequiredPage | in-page / deep link
+341 | /app/mobile-guidance | RoleRedirect | in-page / deep link
+342 | /app/profile | ProfilePage | Workspace Home
+343 | /app/settings | SettingsPage | in-page / deep link
+344 | /app/security | SecurityPage | in-page / deep link
+345 | /app/notifications | NotificationsPage | Notifications
+346 | /app/notifications/:id | NotificationDetailPage | in-page / deep link
+347 | /app/announcements | AnnouncementsPage | Announcements; School Announcements
+348 | /app/announcements/:id | AnnouncementDetailPage | in-page / deep link
+349 | /app/search | GlobalSearchPage | Global Search
+350 | /app/help | HelpPage | in-page / deep link
+351 | /app/about | AboutPage | in-page / deep link
+352 | /app/403 | ForbiddenPage | in-page / deep link
+353 | /app/404 | NotFoundPage | in-page / deep link
+354 | /app/error | AppErrorPage | in-page / deep link
+355 | /teacher | TeacherHomePage | Home Dashboard; Teacher Dashboard
+356 | /teacher/classes | TeacherClassesPage | My Classes
+357 | /teacher/classes/:classSubjectId/students | ClassStudentsPage | in-page / deep link
+358 | /teacher/classes/:classSubjectId/analytics | ClassAnalyticsPage | in-page / deep link
+359 | /teacher/classes/:classSubjectId | ClassWorkspacePage | in-page / deep link
+360 | /teacher/assessments | AssessmentListPage | Assessments; Marks Entry; My Assessments
+361 | /teacher/assessments/:assessmentId/marks | MarksEntryPage | in-page / deep link
+362 | /teacher/assessments/:assessmentId/submit | AssessmentSubmitPage | in-page / deep link
+363 | /teacher/assessments/:assessmentId/review | MarksReviewPage | in-page / deep link
+364 | /teacher/attendance | AttendancePage | Attendance
+365 | /teacher/attendance/history | AttendanceHistoryPage | in-page / deep link
+366 | /teacher/performance/alerts | PerformanceAlertsPage | Performance Alerts
+367 | /teacher/performance/alerts/:id | AlertDetailPage | in-page / deep link
+368 | /teacher/performance/pairings | PeerPairingsPage | Peer Pairings
+369 | /teacher/performance/pairings/create | CreatePairingPage | in-page / deep link
+370 | /teacher/performance/pairings/:id | PairingDetailPage | in-page / deep link
+371 | /teacher/students/:studentId/performance | StudentPerformancePage | in-page / deep link
+372 | /teacher/timetable | TimetablePage | Timetable
+373 | /teacher/syllabus | SyllabusPage | Syllabus Tracker
+374 | /teacher/announcements | TeacherAnnouncementsPage | Announcements
+375 | /teacher/announcements/create | CreateTeacherAnnouncementPage | Create Announcement
+376 | /teacher/interventions/create | CreateInterventionPage | Create Intervention
+377 | /teacher/analytics | TeacherAnalyticsPage | My Analytics
+378 | /teacher/report-remarks | TeacherReportRemarksPage | Report Card Remarks
+379 | /teacher/exams | TeacherExamWindowsPage | Exam Windows
+380 | /teacher/exams/marks/:assessmentId | TeacherExamMarksPage | in-page / deep link
+381 | /teacher/exports | TeacherExportsPage | Export Center
+382 | /teacher/elearning | TeacherCoursesPage | E-Learning Center
+383 | /teacher/elearning/courses/new | CourseBuilderPage | in-page / deep link
+384 | /teacher/elearning/courses/:courseId/overview | CourseBuilderPage | in-page / deep link
+385 | /teacher/elearning/courses/:courseId/lessons | LessonPlannerPage | in-page / deep link
+386 | /teacher/elearning/courses/:courseId/lessons/new | LessonEditorPage | in-page / deep link
+387 | /teacher/elearning/courses/:courseId/lessons/:lessonId/materials/new | MaterialStudioPage | in-page / deep link
+388 | /teacher/elearning/courses/:courseId/lessons/:lessonId/materials/:materialId/edit | MaterialStudioPage | in-page / deep link
+389 | /teacher/elearning/courses/:courseId/assignments/new | AssignmentsPage | in-page / deep link
+390 | /teacher/elearning/courses/:courseId/assignments/:assignmentId/submissions/:submissionId/grade | SubmissionGradingDeskPage | in-page / deep link
+391 | /teacher/elearning/courses/:courseId | CourseBuilderPage | in-page / deep link
+392 | /teacher/elearning/courses/:courseId/lessons/:lessonId | LessonEditorPage | in-page / deep link
+393 | /teacher/elearning/courses/:courseId/assignments | AssignmentsPage | in-page / deep link
+394 | /teacher/elearning/courses/:courseId/assignments/:assignmentId | AssignmentDetailPage | in-page / deep link
+395 | /teacher/elearning/courses/:courseId/assignments/:assignmentId/submissions | SubmissionsGradingPage | in-page / deep link
+396 | /teacher/elearning/courses/:courseId/quizzes/new | QuizBuilderPage | in-page / deep link
+397 | /teacher/elearning/courses/:courseId/quizzes/:quizId/builder | QuizBuilderPage | in-page / deep link
+398 | /teacher/elearning/courses/:courseId/quizzes/:quizId/results | QuizResultsPage | in-page / deep link
+399 | /teacher/elearning/courses/:courseId/quizzes/:quizId/manual-marking | ManualMarkingPage | in-page / deep link
+400 | /teacher/elearning/courses/:courseId/engagement | CourseEngagementPage | in-page / deep link
+401 | /teacher/elearning/courses/:courseId/communication | CourseCommunicationPage | in-page / deep link
+402 | /hod | HodHomePage | Command Center; Academic Affairs
+403 | /hod/approvals | PendingApprovalsPage | Pending Approvals
+404 | /hod/approvals/history | ApprovalHistoryPage | Approval History
+405 | /hod/approvals/:assessmentId | MarksApprovalReviewPage | in-page / deep link
+406 | /hod/department | DepartmentOverviewPage | Department Overview
+407 | /hod/assignments | ClassSubjectsPage | Subject Assignments
+408 | /hod/department/subjects/:subjectId | SubjectDetailPage | in-page / deep link
+409 | /hod/teachers | TeacherPerformanceListPage | Teacher Matrix
+410 | /hod/teachers/:teacherId | TeacherDetailPage | in-page / deep link
+411 | /hod/performance | DepartmentAlertsPage | Risk Alerts
+412 | /hod/performance/pairings | DepartmentPairingsPage | Peer Pairings
+413 | /hod/performance/pairings/:pairingId | HodPairingDetailPage | in-page / deep link
+414 | /hod/students/:studentId | HodStudentPerformancePage | in-page / deep link
+415 | /hod/interventions | HodInterventionsPage | Interventions
+416 | /hod/fund-requests | HodFundRequestsPage | Fund Requests
+417 | /hod/fund-requests/:id | HodFundRequestDetailPage | in-page / deep link
+418 | /hod/announcements | HodAnnouncementsPage | Announcements
+419 | /hod/announcements/create | CreateHodAnnouncementPage | Create Announcement
+420 | /hod/analytics | HodAnalyticsPage | Dept Analytics
+421 | /hod/exports | HodExportsPage | Export Center
+422 | /hod/audit | HodAuditPage | Audit Trail
+423 | /hod/elearning | HodElearningOverviewPage | Dept. Overview; Course Browser
+424 | /hod/elearning/courses/:courseId | HodCourseDetailPage | in-page / deep link
+425 | /aqa | AqaHomePage | Command Center
+426 | /aqa/performance | PerformanceCommandCenterPage | Performance Center
+427 | /aqa/performance/alerts/:id | AqaAlertDetailPage | in-page / deep link
+428 | /aqa/performance/pairings | PairingsOverviewPage | Peer Pairings
+429 | /aqa/performance/engine | EngineControlPage | Engine Control
+430 | /aqa/performance/engine/config | EngineConfigPage | Engine Config
+431 | /aqa/analytics | AcademicAnalyticsPage | Academic Radar
+432 | /aqa/analytics/overview | AqaAnalyticsPage | Analytics Intelligence
+433 | /aqa/analytics/classes/:classId | AqaClassAnalyticsPage | in-page / deep link
+434 | /aqa/students/at-risk | AtRiskStudentsPage | At-Risk Students
+435 | /aqa/students/:studentId | AqaStudentProfilePage | in-page / deep link
+436 | /aqa/interventions | AqaInterventionsPage | Interventions
+437 | /aqa/interventions/create | CreateAqaInterventionPage | in-page / deep link
+438 | /aqa/reports | AqaReportsPage | Reports Hub
+439 | /aqa/announcements | AqaAnnouncementsPage | Announcements
+440 | /aqa/announcements/create | CreateAqaAnnouncementPage | Create Announcement
+441 | /aqa/exports | AqaExportsPage | Export Center
+442 | /aqa/audit | AqaAuditPage | E-Learning Audit; Audit Trail
+443 | /aqa/elearning | AqaElearningAuditPage | Quality Audit; Standards Check
+444 | /finance | FinanceHomePage | Finance Home; Finance Hub
+445 | /finance/invoices | InvoiceListPage | Invoice Ledger
+446 | /finance/invoices/generate | GenerateInvoicesPage | Generate Invoices
+447 | /finance/invoices/:id | InvoiceDetailPage | in-page / deep link
+448 | /finance/students/:studentId | StudentLedgerPage | in-page / deep link
+449 | /finance/payments/cash | RecordCashPaymentPage | Cash Payment
+450 | /finance/payments/bank | RecordBankTransferPage | Bank Transfer
+451 | /finance/payments | PaymentListPage | Payment Ledger; Payments
+452 | /finance/payments/pending | PendingPaymentApprovalsPage | Pending Approvals
+453 | /finance/payments/:id | PaymentDetailPage | in-page / deep link
+454 | /finance/receipts | ReceiptListPage | Receipts
+455 | /finance/receipts/:id | ReceiptDetailPage | in-page / deep link
+456 | /finance/fee-categories | FeeCategoriesPage | Fee Categories
+457 | /finance/fee-categories/create | CreateFeeCategoryPage | in-page / deep link
+458 | /finance/fee-categories/:id/edit | EditFeeCategoryPage | in-page / deep link
+459 | /finance/fee-structures | FeeStructuresPage | Fee Structures
+460 | /finance/fee-structures/matrix | FeeMatrixPage | Fee Matrix
+461 | /finance/fee-structures/create | CreateFeeStructurePage | in-page / deep link
+462 | /finance/fee-assignments | FeeAssignmentsPage | Fee Assignments
+463 | /finance/assets | AssetsListPage | Assets Ledger
+464 | /finance/assets/create | CreateAssetPage | in-page / deep link
+465 | /finance/assets/:id/edit | EditAssetPage | in-page / deep link
+466 | /finance/assets/:id | AssetDetailPage | in-page / deep link
+467 | /finance/fund-requests | BursarFundRequestsPage | Fund Requests
+468 | /finance/fund-requests/:id | BursarFundRequestDetailPage | in-page / deep link
+469 | /finance/expenses | ExpensesPage | Expenditure
+470 | /finance/store | StorePage | Store & Inventory
+471 | /finance/reports | FinancialReportsPage | Reports Hub
+472 | /finance/reports/statement | FinancialStatementPage | Financial Statement
+473 | /finance/reports/collection | CollectionSummaryReportPage | in-page / deep link
+474 | /finance/reports/outstanding | OutstandingBalancesReportPage | in-page / deep link
+475 | /finance/reports/daily-collections | DailyCollectionsReportPage | in-page / deep link
+476 | /finance/reports/fee-defaulters | FeeDefaultersReportPage | Fee Defaulters
+477 | /finance/audit | FinancialAuditLogPage | Audit Log
+478 | /finance/exports | FinanceExportsPage | Export Center
+479 | /principal | PrincipalHomePage | Decision Room; Headmaster Command
+480 | /principal/approvals | MarksFinalApprovalPage | Marks Approval
+481 | /principal/approvals/marks/:assessmentId | PrincipalMarksReviewPage | in-page / deep link
+482 | /principal/results/publish | ResultsPublishingPage | Publish Results
+483 | /principal/report-cards | ReportCardsManagementPage | Report Cards
+484 | /principal/report-cards/:id | PrincipalReportCardDetailPage | in-page / deep link
+485 | /principal/finance | FinanceOversightPage | Finance Oversight
+486 | /principal/finance/approvals | PaymentApprovalsPage | Payment Approval
+487 | /principal/finance/approvals/:id | PaymentApprovalDetailPage | in-page / deep link
+488 | /principal/finance/invoices | PrincipalInvoiceManagementPage | Invoice View
+489 | /principal/finance/fund-approvals | PrincipalFundApprovalsPage | Fund Approvals
+490 | /principal/finance/statement | PrincipalFinancialStatementPage | Financial Statement
+491 | /principal/performance | PrincipalPerformanceOverviewPage | Performance
+492 | /principal/students | PrincipalStudentsPage | Students
+493 | /principal/students/:studentId | PrincipalStudentProfilePage | in-page / deep link
+494 | /principal/discipline | DisciplineOverviewPage | Discipline
+495 | /principal/staff | StaffOverviewPage | Staff
+496 | /principal/announcements | PrincipalAnnouncementsPage | Announcements
+497 | /principal/announcements/create | CreatePrincipalAnnouncementPage | in-page / deep link
+498 | /principal/analytics | PrincipalAnalyticsPageNew | Analytics; Adoption Analytics
+499 | /principal/reports | PrincipalReportsPage | Reports; Learning Report
+500 | /principal/settings/school | SchoolSettingsPage | School Settings
+501 | /principal/audit | PrincipalAuditPage | Decision Audit
+502 | /principal/exports | PrincipalExportsPage | Exports
+503 | /principal/elearning | PrincipalElearningPage | School Overview
+504 | /manager | ManagerGalleryPage | School Gallery
+505 | /manager/overview | ManagerOverviewPage | Group Dashboard
+506 | /manager/schools | ManagerSchoolsPage | Scorecards
+507 | /manager/reports | ManagerReportsPage | Report Studio
+508 | /manager/fund-approvals | ManagerFundApprovalsPage | Fund Approvals
+509 | /manager/fund-approvals/:id | ManagerFundApprovalDetailPage | in-page / deep link
+510 | /manager/finance | GroupFinancePage | Group Finance
+511 | /finance-group | GroupFinancePage | Consolidated Finance
+512 | /superadmin | SuperAdminHomePage | Schools
+513 | /superadmin/schools/new | SchoolFormPage | New School
+514 | /superadmin/schools/:schoolId/edit | SchoolFormPage | in-page / deep link
+515 | /admissions | AdmissionsHomePage | Pipeline Board; Admissions
+516 | /admissions/applicants | AdmissionsApplicantsPage | Applicant Directory
+517 | /admissions/applicants/:applicantId | AdmissionsApplicantProfilePage | in-page / deep link
+518 | /admissions/analytics | AdmissionsAnalyticsPage | Admissions Analytics
+519 | /admissions/intake | AdmissionsIntakePage | New Inquiry
+520 | /admissions/students | AdmissionsStudentsPage | Students
+521 | /admissions/students/import | ClassImportPage | Import Students
+522 | /admissions/students/enrol | AdmissionsEnrolStudentPage | Enrol Student
+523 | /admissions/students/:id | AdmissionsStudentProfilePage | in-page / deep link
+524 | /admin | AdminHomePage | System Center; Admin Settings
+525 | /admin/users | AdminUsersPage | Users
+526 | /admin/users/create | CreateUserPage | Register User
+527 | /admin/users/:id | UserDetailPage | in-page / deep link
+528 | /admin/users/:id/edit | EditUserPage | in-page / deep link
+529 | /admin/academic/setup | AcademicSetupHubPage | Academic Setup
+530 | /admin/academic/years | AcademicYearsPage | in-page / deep link
+531 | /admin/academic/terms | TermsPage | in-page / deep link
+532 | /admin/academic/class-subjects | ClassSubjectsPage | Teaching Assignments
+533 | /admin/academic/stage-config | StageConfigPage | Stage Config
+534 | /admin/academic/promotion/cross-stage | CrossStagePromotionPage | Cross-Stage Promotion
+535 | /admin/classes | ClassesPage | Classes
+536 | /admin/classes/:classId/subjects | ClassSubjectsPage | in-page / deep link
+537 | /admin/classes/:classId | AdminClassDetailPage | in-page / deep link
+538 | /admin/classes/:classId/students | ClassStudentsAdminPage | in-page / deep link
+539 | /admin/subjects | SubjectsPage | Subjects
+540 | /admin/subjects/:subjectId | AdminSubjectDetailPage | in-page / deep link
+541 | /admin/grading | GradingPage | Grading
+542 | /admin/grading/create | CreateGradingScalePage | in-page / deep link
+543 | /admin/assessment-types | AssessmentTypesPage | Assessment Types
+544 | /admin/students | StudentsPage | Students
+545 | /admin/students/import | ClassImportPage | Import Students
+546 | /admin/students/enrol | EnrolStudentPage | in-page / deep link
+547 | /admin/students/:id | StudentAdminProfilePage | in-page / deep link
+548 | /admin/finance/fee-categories | AdminFeeCategoriesPage | Fee Categories
+549 | /admin/performance/engine | PerformanceEngineAdminPage | Performance Engine
+550 | /admin/notifications/templates | NotificationTemplatesPage | Notification Events; Templates
+551 | /admin/notifications/templates/:id | NotificationTemplateDetailPage | in-page / deep link
+552 | /admin/notifications/send | SendManualNotificationPage | Manual Send; Manual Notification
+553 | /admin/notifications/logs | NotificationLogsPage | Notification Logs
+554 | /admin/analytics | AdminAnalyticsPage | Academic Analytics
+555 | /admin/reports | AdminReportsPage | Any Report
+556 | /admin/reports/:id | AdminReportDetailPage | in-page / deep link
+557 | /admin/audit/finance | FinanceAuditAdminPage | Audit Log
+558 | /admin/audit/system | SystemAuditPage | E-Learning Audit; System Audit
+559 | /admin/settings/system | SystemSettingsPage | Storage & Policy; System Settings
+560 | /admin/announcements | AdminAnnouncementsPage | Announcements Admin
+561 | /admin/announcements/create | CreateAnnouncementAdminPage | in-page / deep link
+562 | /admin/departments | DepartmentsPage | Departments
+563 | /admin/import | BulkImportPage | Bulk Import
+564 | /admin/elearning | AdminElearningPage | Administration
+565 | /admin/timetable | TimetableHubPage | Timetable Hub; Timetable
+566 | /admin/timetable/venues | VenuesPage | Venues
+567 | /admin/timetable/activities | TimetableActivitiesPage | Activity Types
+568 | /admin/timetable/sheets | TimetableSheetsPage | All Sheets
+569 | /admin/timetable/sheets/new | CreateTimetableSheetPage | New Sheet
+570 | /admin/timetable/builder/:id | TimetableBuilderPage | in-page / deep link
+571 | /admin/timetable/print/:id | TimetablePrintPage | in-page / deep link
+572 | /reports | ReportsHomePage | Shared Reports; Reports
+573 | /reports/builder | ReportBuilderPage | in-page / deep link
+574 | /reports/jobs | ReportJobsPage | in-page / deep link
+575 | /reports/jobs/:id | ReportJobDetailPage | in-page / deep link
+576 | /reports/downloads | DownloadCenterPage | in-page / deep link
+577 | /reports/scheduled | ScheduledReportsPage | in-page / deep link
+578 | /reports/templates | ReportTemplatesPage | in-page / deep link
+579 | /reports/audit | ReportAccessAuditPage | in-page / deep link
+580 | /exams | ExamWindowsListPage | Exam Windows
+581 | /exams/types | ExamTypesPage | Exam Types
+582 | /exams/compose | ComposeReportCardsPage | Compose Report Cards
+583 | /exams/:id | ExamWindowDetailPage | in-page / deep link
+584 | /academics/marks/bulk | BulkMarksWorkspacePage | in-page / deep link
+585 | /academics/marks/bulk/:assessmentId | BulkMarksSheetPage | in-page / deep link
+586 | /academics/marks/review/:assessmentId | MarksReviewWorkspacePage | in-page / deep link
+587 | /academics/results | ResultsWorkspacePage | in-page / deep link
+588 | /academics/results/class/:classId/term/:termId | ClassResultsReviewPage | in-page / deep link
+589 | /academics/results/publish | ResultsPublishingSupportPage | in-page / deep link
+590 | /academics/report-cards | ReportCardGenerationCenterPage | in-page / deep link
+591 | /academics/report-cards/:classId/:termId | ReportCardPreviewPage | in-page / deep link
+592 | /analytics | AnalyticsWorkspacePage | in-page / deep link
+593 | /analytics/academic | AcademicAnalyticsOpsPage | in-page / deep link
+594 | /analytics/academic/classes/:classId | OpsClassAnalyticsDetailPage | in-page / deep link
+595 | /analytics/academic/subjects/:subjectId | SubjectAnalyticsDetailPage | in-page / deep link
+596 | /analytics/academic/teachers/:teacherId | TeacherAnalyticsDetailPage | in-page / deep link
+597 | /analytics/students | StudentAnalyticsDirectoryPage | in-page / deep link
+598 | /analytics/students/:studentId | StudentAnalyticsProfilePage | in-page / deep link
+599 | /analytics/finance | FinanceAnalyticsOpsPage | in-page / deep link
+600 | /analytics/enrolment | EnrolmentAnalyticsPage | in-page / deep link
+601 | /student/analytics | StudentAnalyticsPage | Progress
+602 | /student/elearning | StudentElearningPage | My Learning
+603 | /student/elearning/courses/:courseId | StudentCourseViewPage | in-page / deep link
+604 | /student/elearning/courses/:courseId/lessons/:lessonId | StudentLessonViewPage | in-page / deep link
+605 | /student/elearning/courses/:courseId/assignments/:assignmentId | StudentAssignmentPage | in-page / deep link
+606 | /student/elearning/courses/:courseId/quizzes/:quizId/attempt | StudentQuizPage | in-page / deep link
+607 | /student/elearning/courses/:courseId/quizzes/:quizId/result/:attemptId | StudentQuizResultPage | in-page / deep link
+608 | /parent/analytics | ParentAnalyticsPage | Progress
+609 | /parent/elearning | ParentElearningPage | Learning Summary
+610 | /parent/elearning/:childId | ParentElearningPage | in-page / deep link
+611 | /timetables | TimetableWorkspacePage | in-page / deep link
+612 | /timetables/classes/:classId | ClassTimetablePage | in-page / deep link
+613 | /timetables/teachers/:teacherId | TeacherTimetablePage | in-page / deep link
+614 | /timetables/create | CreateTimetableEntryPage | in-page / deep link
+615 | /reports/finance/collection-summary | FinanceReportPage | in-page / deep link
+616 | /reports/finance/daily-collections | FinanceReportPage | in-page / deep link
+617 | /reports/finance/outstanding-balances | FinanceReportPage | in-page / deep link
+618 | /reports/finance/fee-defaulters | FinanceReportPage | in-page / deep link
+619 | /reports/finance/student-statement/:studentId | StudentStatementReportPage | in-page / deep link
+622 | * | NotFoundPage | in-page / deep link

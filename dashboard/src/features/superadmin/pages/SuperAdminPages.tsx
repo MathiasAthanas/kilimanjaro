@@ -23,13 +23,16 @@ import {
 } from '../../manager/api/manager.hooks';
 import { ManagerBreadcrumb, ManagerWorkspaceShell, useEnterSchool } from '../../manager/pages/ManagerPages';
 import { SchoolGallery } from '../../manager/components/SchoolGallery';
+import { canSelectSchool } from '../../../components/layout/schoolScope';
+import { useAuthStore } from '../../../lib/auth/authStore';
 
 // ─── Landing: gallery + New School ───────────────────────────────────────────
 
 export function SuperAdminHomePage() {
-  const navigate = useNavigate();
   const enterSchool = useEnterSchool();
   const { data, isLoading, isError, refetch } = useGroupOverview();
+  const session = useAuthStore((s) => s.session);
+  const visibleSchools = data?.schools.filter((school) => canSelectSchool(session?.user.scope, session?.user.schoolIds ?? [], school.id)) ?? [];
 
   return (
     <ManagerWorkspaceShell
@@ -43,15 +46,17 @@ export function SuperAdminHomePage() {
     >
       <ManagerBreadcrumb crumbs={[{ label: 'Super Admin' }, { label: 'Schools' }]} />
       <SystemAdministratorsPanel />
-      {isLoading ? <SkeletonTable cols={4} /> : isError || !data ? <DataError onRetry={refetch} /> : data.schools.length === 0 ? (
-        <EmptyState title="Create your first school" description="Schools are the foundation of the group — every student, class and invoice lives inside one." action={{ label: 'New School', href: '/superadmin/schools/new' }} />
-      ) : (
+      {isLoading ? <SkeletonTable cols={4} /> : isError || !data ? <DataError onRetry={refetch} /> : (
         <>
-          <SchoolGallery
-            schools={data.schools}
-            groupStats={{ students: data.totals.students, collectionRate: data.totals.collectionRate, academicMean: data.totals.academicMean }}
-            onOpenSchool={enterSchool}
-          />
+          {visibleSchools.length === 0 ? (
+            <EmptyState title="No schools available" description="Create a school to begin school setup." action={{ label: 'New School', href: '/superadmin/schools/new' }} />
+          ) : (
+            <SchoolGallery
+              schools={visibleSchools}
+              groupStats={{ students: data.totals.students, collectionRate: data.totals.collectionRate, academicMean: data.totals.academicMean }}
+              onOpenSchool={enterSchool}
+            />
+          )}
           <SchoolAdminTable />
         </>
       )}
@@ -143,6 +148,7 @@ function SystemAdministratorsPanel() {
 
 function SchoolAdminTable() {
   const { data: schools = [], isLoading } = useSchools();
+  const session = useAuthStore((s) => s.session);
   const setStatus = useSetSchoolStatusMutation();
   if (isLoading) return <SkeletonTable cols={6} />;
   return (
@@ -150,7 +156,7 @@ function SchoolAdminTable() {
       <div className="border-b border-[#eef2f6] px-5 py-3.5">
         <h2 className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-[#00334f]"><Building2 className="h-3.5 w-3.5" /> School Administration</h2>
       </div>
-      <table className="w-full text-left text-sm">
+      <div className="overflow-x-auto"><table className="w-full min-w-[680px] text-left text-sm">
         <thead className="bg-[#eef5f8]">
           <tr>
             {['School', 'Code', 'Type', 'Gender', 'Status', 'Actions'].map((h) => (
@@ -159,7 +165,7 @@ function SchoolAdminTable() {
           </tr>
         </thead>
         <tbody className="divide-y divide-[#e2e8f0]">
-          {schools.map((s) => (
+          {schools.filter((school) => canSelectSchool(session?.user.scope, session?.user.schoolIds ?? [], school.id)).map((s) => (
             <tr key={s.id} className="bg-white even:bg-[#f7f9fb]">
               <td className="px-4 py-3 font-black text-[#00334f]">{s.name}</td>
               <td className="px-4 py-3 font-mono">{s.code}</td>
@@ -185,7 +191,7 @@ function SchoolAdminTable() {
             </tr>
           ))}
         </tbody>
-      </table>
+      </table></div>
     </section>
   );
 }

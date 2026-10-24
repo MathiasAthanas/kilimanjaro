@@ -3501,7 +3501,7 @@ function safeDate(value: string, fallback: string) {
   return value || fallback;
 }
 
-export function EnrolStudentPage() {
+export function EnrolStudentPage({ basePath: _basePath = '/admin' }: { basePath?: string } = {}) {
   const subtitle = useConsoleSubtitle();
   const { data: enrolClasses = [] as typeof adminClasses } = useAdminClasses() as unknown as { data: typeof adminClasses };
   const { data: academicYears = [] } = useAcademicYears();

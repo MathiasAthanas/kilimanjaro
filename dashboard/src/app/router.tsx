@@ -518,6 +518,7 @@ export const router = createBrowserRouter([
       { path: '/admissions/analytics', element: <AdmissionsAnalyticsPage /> },
       { path: '/admissions/intake', element: <AdmissionsIntakePage /> },
       { path: '/admissions/students', element: <AdmissionsStudentsPage /> },
+      { path: '/admissions/students/import', element: <ClassImportPage /> },
       { path: '/admissions/students/enrol', element: <AdmissionsEnrolStudentPage /> },
       { path: '/admissions/students/:id', element: <AdmissionsStudentProfilePage /> },
       { path: '/admin', element: <AdminHomePage /> },

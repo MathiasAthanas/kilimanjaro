@@ -1,0 +1,437 @@
+KILIMANJARO DASHBOARD — FRONTEND USABILITY AND FLOW REFACTOR
+Version: 2026-10-21
+Status: planning document; no implementation is authorized by this file itself.
+
+PURPOSE
+Make the existing Kilimanjaro web dashboard easier to navigate and operate, using
+the task flow observed in the owner's hosted KEMS/Zeraki Analytics app as a UX
+reference. This is NOT a clone, rebrand, feature expansion, data migration, or
+backend project. The useful reference pattern is: choose the school, find a
+record in a list, open the record, perform a clearly named action, and see the
+related tasks in a local context menu. The hosted app's visual design, data
+model, and permissions are not specifications for Kilimanjaro.
+
+HOW TO USE THIS FILE
+1. Work through phases 0-9 in order. Copy ONE complete "PROMPT" block at a
+   time into a new coding request. Do not ask an agent to implement the whole
+   plan in one pass.
+2. At the end of each phase, review its acceptance checklist and the agent's
+   route/role parity report before starting the next phase. Stop if a feature,
+   access rule, color, or existing action disappears.
+3. No phase implicitly authorizes work on the next phase. If a phase exposes a
+   backend problem, document it; do not edit backend code or the database.
+4. Where the prompts say "existing", inspect the repository at execution time.
+   This plan describes the code as observed on 2026-10-21; later changes may
+   supersede individual file locations.
+5. Keep ordinary commits/PRs clean: no demo seed data, credentials, screenshots
+   of private school data, generated browser profiles, or local environment
+   files. Never place the hosted-app login credentials in code or this plan.
+
+NON-NEGOTIABLE CONTRACT FOR EVERY PHASE
+- Edit dashboard/ only. Do not modify backend/, API contracts, database schema,
+  seeds, Docker, PM2, environment files, or authentication behavior.
+- Preserve every existing feature, business rule, field, validation, status,
+  permission, route, deep link, mutation, export, import, report, and role
+  workflow. Reorganizing a link must not remove access to its destination.
+- Preserve the existing Kilimanjaro color values, typography, icon language,
+  and branding. Use dashboard/tailwind.config.ts and
+  dashboard/src/styles/tokens.css as the color source of truth. Do not copy the
+  hosted app's palette or add a new palette. Layout and spacing may change.
+- Keep server-provided school scope authoritative. ADMIN may be school-scoped;
+  do not infer group access from its label. Preserve the All Schools/group view,
+  school switcher, multi-school membership, and existing route authorization.
+- STUDENT and PARENT remain mobile-primary in the current web app. Do not
+  invent a new web experience or reroute them away from mobile guidance.
+- Favor existing components, hooks, routes, and API calls. Add frontend-only
+  presentation helpers where needed. No fake data, no dead buttons, no hidden
+  forms, and no action that silently changes semantics.
+- On every screen: clear title and school/term context where already available;
+  list/search first for record management; one primary action; secondary tasks
+  grouped locally; breadcrumbs/back path; loading/empty/error states; clear
+  success/error feedback. Do not require extra clicks for frequent tasks merely
+  to imitate the reference app.
+- Preserve accessibility: keyboard navigation, visible focus, semantic
+  headings, labeled controls, active navigation indication, responsive layout.
+- Compare before/after route and action inventories. Run the relevant tests,
+  typecheck, lint, and build. Report commands and results, including failures.
+- Stop after the requested phase and report changed files, route/action parity,
+  tests, risks, and what the next phase should tackle.
+
+REFERENCE OBSERVATIONS (not requirements to copy pixel-for-pixel)
+- Hosted KEMS displayed a narrow main navigation, a school selector, and
+  horizontal task tabs inside a section. The current Kilimanjaro app already
+  has a sidebar and school selector; improve their relationship rather than
+  replacing their functionality.
+- Classes: list first (class, boys, girls, students, supervisor), then Manage
+  for streams and Class list for roster; Add New Class is a contextual task.
+- Students: Search Student and Add Student are adjacent; new-student details
+  are staged in a visible wizard; spreadsheet upload is an alternate path.
+- Teachers: directory first, Add New Teacher nearby, and spreadsheet entry is
+  an alternate path. Kilimanjaro's existing user/staff model must remain intact.
+- Subjects: related setup tasks (departments, subject groupings, compulsory
+  subjects) are discoverable together. Do not add a KEMS-only data concept if
+  Kilimanjaro has no equivalent existing feature.
+
+CURRENT CODE MAP AND ROLE MATRIX
+Shared shell and navigation: dashboard/src/components/layout/AppShell.tsx,
+RoleSidebar.tsx, TopCommandBar.tsx, SchoolContextBar.tsx; router at
+dashboard/src/app/router.tsx; authorization/default routes at
+dashboard/src/lib/auth/permissions.ts. RoleSidebar contains repeated labels
+and even multiple labels pointing at one route; count unique destinations AND
+user-visible tasks when testing parity. Current SchoolContextBar uses
+session.user.scope (not just role) to determine group visibility.
+
+Role              Existing home           Workflow that must stay reachable
+TEACHER           /teacher                classes, assessments/marks, attendance,
+                                        exams, syllabus, timetable, remarks,
+                                        performance support, e-learning,
+                                        analytics, announcements, exports
+HOD               /hod                    teacher desk, department/assignments,
+                                        approvals, teacher matrix, risk,
+                                        interventions, finance requests,
+                                        e-learning, analytics, records
+AQA               /aqa                    performance, exams/types/report cards,
+                                        engine, analytics, risk/interventions,
+                                        e-learning audit, records
+FINANCE           /finance                invoices, payments and approval,
+                                        receipts, fee setup, fund requests,
+                                        expenses, inventory, assets, reporting
+PRINCIPAL         /principal              academic decisions, results, finance
+HEAD_OF_SCHOOL    /principal              oversight, students/staff, discipline,
+                                        e-learning, reporting, settings/audit
+ADMIN             /admin                  users/staff, students, academic setup,
+                                        classes, subjects, departments, grading,
+                                        exams, notifications, timetable,
+                                        e-learning, settings, reports/audit
+ADMISSIONS        /admissions             pipeline, inquiry, applicants, student
+                                        directory/enrolment, analytics
+MANAGER           /manager                group and school views, finance,
+                                        academic decisions, people, setup,
+                                        communications and reports
+SUPER_ADMIN       /superadmin             group school structure; authorized
+                                        manager and school drill-down paths
+HEAD_OF_FINANCE   /finance-group          consolidated/group finance and
+                                        authorized school-finance drill-down
+STUDENT           /app/mobile-guidance    existing mobile-primary guidance;
+                                        existing learning/notification links
+PARENT            /app/mobile-guidance    existing mobile-primary guidance;
+                                        existing child/notification links
+
+This matrix is a starting inventory, not a replacement for enumerating every
+route, sidebar item, button, and authorized role from the live code.
+
+TARGET INFORMATION ARCHITECTURE
+Global layer: school/group context, current role, global search, notifications,
+profile/help, and the major work areas actually available to that role.
+Section layer: a small set of task tabs/links that reflect the active area;
+the same concept should work as a compact menu on narrow screens.
+Record layer: list/search -> detail -> related work -> clear return path.
+Setup layer: a dependency-aware "where do I start?" explanation using only
+existing actions: school/year/term context -> departments/subjects -> classes,
+streams/combinations/pathways -> class subjects/teaching assignments -> people
+and enrolment -> day-to-day academic/finance operations. This is orientation,
+not a new required sequence or new backend validation.
+Role layer: show the steps a role is allowed to perform; preserve authorized
+cross-role links and existing approvals. Never show an unauthorized action and
+never remove an authorized one.
+
+PHASE 0 — BASELINE, INVENTORY, AND TEST GUARDRAILS
+PROMPT START
+Work only in dashboard/. This phase is an audit and regression-safety phase,
+not a visual redesign. Read dashboard/USABILITY_FLOW_REFACTOR_PLAN.txt and
+inspect the current router, RoleSidebar, permissions/default routes,
+SchoolContextBar, major workspace shells, package scripts, and existing tests.
+Do not change backend, seeds, data, business rules, role access, or colors.
+
+Create a versioned frontend route/action inventory that maps every route to its
+page, allowed roles, sidebar/contextual entry point, and principal actions;
+include deep links, duplicate-label-to-one-route cases, and routes reachable
+only from within pages. For each role, record the current landing route and
+which shared/cross-role workspaces it can open. Document the current school
+scope behavior (group, single-school, multi-school, school switching). Capture
+the current state of list/search/create/detail flows for users/teachers,
+students, classes, subjects, academic setup, admissions, finance, exams,
+e-learning, notifications, timetable, analytics, reports and audits. Inventory
+fields, actions, CSV/import/export paths, and approval/publish actions; identify
+which actions are risky and must retain confirmation.
+
+Add small, maintainable frontend regression tests or assertions for the role
+home routes, route access, and navigation destination parity if the current
+test architecture supports them. Do not create brittle snapshot tests of the
+whole application. Record any pre-existing test/typecheck/lint/build failures
+without "fixing" unrelated code. Provide a concise issue list ranked by the
+number of clicks/confusing relationships, with no implementation yet.
+
+Acceptance: every role and existing route is accounted for; the existing
+student/parent mobile guidance and school-scope logic are explicitly covered;
+baseline checks and their exact results are reported. Stop after this phase.
+PROMPT END
+
+PHASE 1 — SHARED NAVIGATION AND PAGE HIERARCHY
+PROMPT START
+Implement only Phase 1 of dashboard/USABILITY_FLOW_REFACTOR_PLAN.txt. Edit
+dashboard/ only. Keep every existing feature, destination, access rule,
+business operation, field, color value, and brand element; do not touch backend
+or data. Use the Phase 0 route/action inventory as a parity gate.
+
+Refactor AppShell/RoleSidebar and existing navigation components to create a
+clear two-level information hierarchy. The persistent sidebar should show
+role-relevant work areas instead of mixing list, create, import, and detail
+actions as equal top-level destinations. Within each work area, show existing
+contextual tasks as tabs or a compact task menu (for example Students: Registry,
+Enrol, Import; Classes: List, teaching/subject assignments when allowed).
+Contextual items must be derived from authorized routes and current role, not
+from a new permission model. Preserve every current sidebar destination either
+as a sidebar item or an obvious contextual action; preserve direct URLs and
+back/forward navigation. Handle duplicate routes with different labels without
+losing the user-visible tasks. Keep active state and breadcrumbs correct for
+create, detail, edit, and nested routes. Make the menu usable by keyboard and
+on narrow screens. Keep the existing Kilimanjaro tokens, typography, icons, and
+color values; this is alignment and hierarchy, not a new design system.
+
+Add/adjust tests for navigation parity, role filtering, active state and a
+nested route. Run typecheck, relevant tests, lint, build; report failures.
+Acceptance: all baseline destinations remain reachable and authorized; users
+can tell their current area and next task; student/parent guidance is unchanged;
+no page content or backend code is rewritten. Stop after this phase.
+PROMPT END
+
+PHASE 2 — SCHOOL CONTEXT AND ACADEMIC SETUP WAYFINDING
+PROMPT START
+Implement only Phase 2 of dashboard/USABILITY_FLOW_REFACTOR_PLAN.txt, using
+Phase 0/1 inventories. Edit dashboard/ only; preserve all existing colors,
+features, forms, validation, routes, role permissions, school-scope behavior,
+and API semantics. Do not modify backend, database or seeds.
+
+Make the existing SchoolContextBar and top-of-page context clearer: show whether
+the user is in All Schools/group scope or one school; make the current school
+visually unambiguous on every relevant page. Preserve session.user.scope as the
+authority, the existing group-home behavior, single-school auto-scope,
+multi-school filtering, and school switcher navigation. Do not replace the
+current term control with fabricated live data; either keep its exact behavior
+or, if misleading, label it clearly as the existing UI does and document the
+limitation without adding an API.
+
+Reorganize the existing Academic Setup hub and related links into a simple
+orientation sequence: years/terms; departments/subjects and stage settings;
+classes/streams/pathways/combinations; class-subjects/teaching assignments;
+grading/assessment types; cross-stage promotion. Keep every card/action,
+including any advanced or exceptional setup route, and do not turn guidance
+into a forced wizard. Contextual links and explanatory dependencies may change
+only presentation. Show helpful empty states that link to the already-existing
+prerequisite screen when data is absent, without inventing a prerequisite or
+blocking an action previously allowed.
+
+Test group, school-scoped, and multi-school rendering/switching with existing
+fixtures; verify each setup destination still works and retains its action.
+Run typecheck, tests, lint, build; report results. Stop after this phase.
+PROMPT END
+
+PHASE 3 — PEOPLE: USERS/TEACHERS, STUDENTS, AND ADMISSIONS
+PROMPT START
+Implement only Phase 3 of dashboard/USABILITY_FLOW_REFACTOR_PLAN.txt. Edit
+dashboard/ only. Keep existing Kilimanjaro colors, routes, fields, forms,
+validation, data sources, role permissions, mutations, import/export formats,
+and school scoping. No backend, seed or database edits. Use the Phase 0 inventory
+as a mandatory action-parity checklist.
+
+Make people-management flows list-first. For ADMIN and authorized group roles,
+the existing Users area should read as a staff/user directory, with clear
+existing tasks for register, inspect, edit, activate/deactivate, reset password,
+membership/school assignment and CSV operations. Make teachers/staff easy to
+find via existing user-role data or an existing staff page; do not introduce a
+second teacher record type or new API. Keep any sensitive actions and their
+confirmation/permission logic unchanged. Student Registry should open as a
+searchable list, with existing Enrol and Import actions clearly adjacent.
+Student detail should expose its already-implemented guardians, attendance,
+performance, finance, discipline and portal actions without burying them.
+Preserve the complete six-step enrolment data/validation flow (Identity,
+Admission, Class, Guardians, Portal, Review), but improve its visible progress,
+back/next/save-or-exit orientation only where those actions already exist.
+Do not add a spreadsheet flow unless the existing import route already provides
+it. Keep existing bulk import and student import reachable; distinguish them.
+
+The ADMISSIONS role must retain its separate inquiry -> applicant directory /
+pipeline -> student/enrolment flow, analytics, and permissions. Connect the
+navigation labels and return paths to the same people hierarchy without
+merging applicant and enrolled-student records or changing status transitions.
+PRINCIPAL/HEAD_OF_SCHOOL staff/student oversight links remain read-only or
+actionable exactly as they currently are. Test normal, empty, loading, error,
+and direct-link states for each list, create, and detail page, plus role parity.
+Run typecheck, tests, lint, build. Stop after this phase.
+PROMPT END
+
+PHASE 4 — ACADEMIC MASTER DATA: SUBJECTS AND CONFIGURATION
+PROMPT START
+Implement only Phase 4 of dashboard/USABILITY_FLOW_REFACTOR_PLAN.txt. Work in
+dashboard/ only; preserve all features, colors, routes, data shapes, validation,
+permissions, forms, and API actions. Do not change backend, seeds or database.
+
+Make the existing subjects page list-first: show the subject directory/search
+before the add/edit form, and place existing Create Subject as a clear local
+action. Keep subject detail/edit/delete and related class assignment paths
+reachable. Group existing academic configuration destinations contextually:
+Departments and HOD assignment, Subjects, Stage Config, Class Subjects and
+Teaching Assignments, Grading, Assessment Types, Exam Types, Years/Terms,
+Pathways/Combinations and Cross-Stage Promotion. Organize them according to
+their actual relationships, without adding KEMS-specific subject groupings or
+compulsory-subject features that Kilimanjaro does not already implement.
+
+Keep all present field-level rules, protected actions, and empty/error states.
+Where an existing screen requires a selected school/class/term, display that
+requirement clearly and link to the existing selection path; do not make up
+new data or silently pick the wrong school. Validate list -> create -> detail ->
+edit -> related class assignment navigation and deep links under ADMIN,
+MANAGER/SUPER_ADMIN where authorized, and other roles that can view these
+routes. Run typecheck, tests, lint, build; report parity. Stop after this phase.
+PROMPT END
+
+PHASE 5 — CLASSES, STREAMS, ROSTERS, AND TEACHING ASSIGNMENTS
+PROMPT START
+Implement only Phase 5 of dashboard/USABILITY_FLOW_REFACTOR_PLAN.txt. Edit
+dashboard/ only. Preserve all existing Kilimanjaro colors, permissions, routes,
+API behavior, class data, validation, fields, and create/edit/delete semantics.
+No backend, database or seed work. Use the Phase 0 action/route inventory.
+
+Change the ADMIN Classes experience from form-first to list-first. Make the
+existing class list the entry point, with a clear Add Class action that opens
+the current class setup form/wizard without removing any of its fields or
+options. On a class row/detail, make the existing class-specific tasks easy to
+find: class overview, streams or combinations/pathways where supported,
+student roster, class subjects, teaching/teacher assignments, and edit/delete.
+Keep `/admin/classes/:classId`, `/admin/classes/:classId/students`, and
+`/admin/classes/:classId/subjects` working as deep links. Avoid implying that
+all schools use the same stream/pathway model; show only what the current school
+and backend data already support. Do not create new class-management operations
+to mimic hosted KEMS.
+
+Ensure a clear return path from class detail and assignment screens back to
+the class list, maintaining current school/class context. Preserve teacher My
+Classes and HOD department/teacher assignment work as separate role-specific
+views, but align their labels/paths to the same mental model. Test list,
+create, detail, roster, subjects, assignment, empty/error, and authorized-role
+flows. Run typecheck, tests, lint, build; report parity. Stop after this phase.
+PROMPT END
+
+PHASE 6 — TEACHING, QUALITY, EXAMS, AND LEARNING WORKSPACES
+PROMPT START
+Implement only Phase 6 of dashboard/USABILITY_FLOW_REFACTOR_PLAN.txt. Work in
+dashboard/ only. This is navigation and page-flow alignment, not an academic
+logic rewrite. Preserve the existing colors, assessment calculations, statuses,
+roles, approvals, publish rules, APIs, fields, routes, exports, and audits.
+Never modify backend, seeds or database.
+
+For TEACHER, connect My Classes -> attendance / assessments and marks -> exam
+windows / syllabus / timetable / remarks -> performance alerts, pairings and
+interventions, while keeping announcements, analytics, exports and e-learning
+reachable. For HOD, keep teaching access plus department overview, subject
+assignments, teacher matrix, approval queue/history, risk/interventions,
+fund requests and records, with local next-step links. For AQA, clarify the
+path from performance and at-risk students to exam windows/types, report-card
+composition, engine/configuration, analytics and quality/audit tools. For
+PRINCIPAL/HEAD_OF_SCHOOL, clarify marks approval -> report-card composition ->
+publish results -> report-card review, without changing who can approve or
+publish. Align e-learning entry points for ADMIN, TEACHER, HOD, AQA, PRINCIPAL,
+STUDENT and PARENT only where those routes already exist. Keep analytics,
+notifications, exports, and audit trails visible to their authorized roles.
+
+This phase may improve headers, breadcrumbs, contextual task links, and
+list/detail orientation; it must not add automation or change assessment
+business rules. Verify at least one full read-only navigation journey per
+role and automated route/action parity, plus empty/loading/error states.
+Run typecheck, tests, lint, build; stop after reporting this phase.
+PROMPT END
+
+PHASE 7 — FINANCE, OPERATIONS, COMMUNICATIONS, AND REPORTING
+PROMPT START
+Implement only Phase 7 of dashboard/USABILITY_FLOW_REFACTOR_PLAN.txt. Edit
+dashboard/ only. Retain every existing feature, Kilimanjaro color, financial
+rule, approval boundary, route, role restriction, API call, export format and
+audit action. Do not touch backend, seeds or database.
+
+Make the FINANCE workspace task-oriented without removing its breadth:
+invoice ledger/generation; payments by cash, bank and pending approval;
+receipts; fee categories/structures/matrix/assignments; fund requests,
+expenses, store/inventory and assets; financial statements, defaulters,
+reports, exports and audit. Put creation/posting tasks next to the relevant
+ledger and expose status/next action, keeping confirmation and existing error
+handling. For PRINCIPAL, preserve finance oversight and its own approval
+screens; do not transform oversight into cashier access. Preserve HOD fund
+requests and authorized manager/head-of-finance drill-downs. Keep any
+administrative fee setup path reachable.
+
+Apply the same contextual grouping to existing ADMIN timetable (hub, sheets,
+new sheet, venues, activity types), notification templates/manual send/logs,
+announcements, system audit and shared reports; retain role-specific
+communications, reporting, exports and audit routes elsewhere. Do not add
+notification channels or schedule behaviors. Confirm all sensitive finance
+operations remain behind the same permission and confirmation controls.
+Test ledger -> detail/action -> return, setup -> use, approval queues,
+responsive navigation, empty/error states and role parity. Run typecheck,
+tests, lint, build; stop after this phase.
+PROMPT END
+
+PHASE 8 — GROUP ROLES, SCHOOL DRILL-DOWN, AND EDGE WORKFLOWS
+PROMPT START
+Implement only Phase 8 of dashboard/USABILITY_FLOW_REFACTOR_PLAN.txt. Work in
+dashboard/ only. Preserve all existing colors, group/school scope rules,
+permissions, routes, features, data calls, and operations. No backend, seeds,
+database, or auth changes.
+
+For MANAGER, clarify the flow from school gallery/group overview/scorecards
+to one selected school's authorized finance, academics, people, setup and
+reports; retain return-to-group. For SUPER_ADMIN, preserve Schools/New School
+and authorized manager/school drill-down. For HEAD_OF_FINANCE, preserve
+consolidated finance and authorized school-finance drill-down. Test the
+distinction between the role name ADMIN and true GROUP session.scope, and
+between All Schools totals and a selected school. Keep the current behavior
+when switching schools while in a school-scoped section. Do not display a
+school that the user is not assigned to or broaden a route guard.
+
+Audit the less-frequent and shared flows for discoverability under the new
+navigation: cross-stage promotion, performance engine, inventory/assets,
+discipline, notifications, announcements, global search, help/profile,
+exports, audit, reporting, student/parent mobile guidance. If any was lost in
+Phases 1-7, restore its authorized entry point now. Do not invent a new
+dashboard for student/parent. Test group -> school -> same section / back to
+group, multi-school membership, direct links, and unauthorized access.
+Run typecheck, tests, lint, build; report role/route parity. Stop here.
+PROMPT END
+
+PHASE 9 — END-TO-END USABILITY PASS AND RELEASE GATE
+PROMPT START
+Perform only Phase 9 of dashboard/USABILITY_FLOW_REFACTOR_PLAN.txt. Work in
+dashboard/ only. Do not change backend, database, seeds, colors, business rules,
+permissions or API contracts. Use the Phase 0 inventory as the full parity
+baseline; do not assume that passing a build proves workflow completeness.
+
+Review the entire web frontend across desktop and narrow viewports. Normalize
+spacing, alignment, title hierarchy, contextual tabs, list/action placement,
+breadcrumb labels, back paths, focus states, accessible names, keyboard use,
+empty/loading/error states and action feedback. Keep the current Kilimanjaro
+palette and existing role-specific personality. Fix small frontend-only
+regressions discovered in this review; record any issue that needs backend or
+new product decisions instead of implementing it. Verify key journeys for
+every role listed in this file, including student/parent mobile guidance and
+group/school switching. Compare every baseline route, sidebar task, deep link,
+field, action and import/export path against the final app. Check that no
+seed/demo data or hosted-app credentials have entered tracked files.
+
+Run `npm run typecheck`, `npm run lint`, `npm test`, and `npm run build` from
+dashboard/ (or document why a command cannot run). Report a final parity
+matrix by role and area, tested journeys, exact test outcomes, screenshots or
+screen descriptions without private data, outstanding known issues, and a
+frontend-only changed-file list. Do not push or deploy unless separately
+requested. Stop after the release-gate report.
+PROMPT END
+
+FINAL DEFINITION OF DONE
+- A user can tell which school, role, section, record and task they are in.
+- For master data, the common path is directory/list -> add/import or open ->
+  detail -> related task -> back; the existing forms and results are intact.
+- Different roles see an appropriate path to their existing work; no role gains
+  or loses access, and group/school boundaries are preserved.
+- Every Phase 0 route and action remains functional and discoverable, including
+  long-tail features and direct URLs.
+- Kilimanjaro branding, all color values, domain logic, API contracts and
+  backend remain untouched. Tests and human walkthroughs support this claim.

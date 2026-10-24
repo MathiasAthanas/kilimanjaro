@@ -1,0 +1,137 @@
+KILIMANJARO FRONTEND USABILITY RELEASE GATE — PHASES 7–9
+Date: 2026-10-22. Scope: dashboard/ only. No push or deployment.
+
+RESULT
+The navigation and page-flow implementation for Phases 7 and 8 is in place.
+Phase 9 checks pass for route parity, typecheck, tests and build. The repository
+wide lint gate is not green (718 errors, 31 warnings); a live authenticated
+walkthrough of all roles was not available. Treat this as implementation-ready
+for a human role walkthrough, not as a fully cleared production release.
+
+PHASE 7 — FINANCE AND OPERATIONS
+- FINANCE navigation now starts at invoice, payment and receipt ledgers. Existing
+  generate, cash, bank, pending-approval, fee setup, spending, stores, assets,
+  reporting, export and audit routes remain discoverable. Ledger header actions
+  link to existing posting/setup pages; detail and form headers return to their
+  directories. No posting, approval, refund, void or export handlers changed.
+- PRINCIPAL retains its separate finance oversight and approval navigation.
+  HOD fund requests and manager finance/fund approval paths remain in place.
+- ADMIN timetable hub/sheets/new sheet/venues/activity types, notification
+  templates/send/logs, announcements, reports and system audit remain grouped
+  through existing sidebar and contextual tasks. Notification template/log
+  screens now state loading, error and empty conditions; manual-send wording
+  no longer implies a scheduling feature and has a deterministic cancel path.
+
+PHASE 8 — GROUP AND SCHOOL SCOPE
+- Group school lists and school switching honor session.scope and assigned
+  schoolIds. ADMIN with SCHOOL scope is not treated as a group user. Group-only
+  routes clear selected-school context; changing schools inside a school route
+  keeps the current section. Group roles see school-specific work links after
+  selecting a school and retain Back to Group.
+- Head of Finance selection from /finance-group now opens that school's
+  invoice ledger, rather than the principal portal. The group finance table
+  exposes an authorized school-finance next step. Super Admin retains the
+  school administration table, including schools absent from the scorecards.
+- Cross-stage promotion, performance engine, stores and assets remain reachable
+  in manager navigation. Shared notifications, announcements, search, profile,
+  help, exports and audit entry points remain present for their prior roles.
+
+PARITY BY ROLE AND AREA
+Role(s)                     Route/task verification
+FINANCE                     Ledger, payment, fee setup, spending, reporting,
+                            exports and audit links retained; utility tests pass.
+PRINCIPAL, HEAD_OF_SCHOOL   Executive, academic approvals, finance oversight,
+                            decisions and learning routes retained; 23 page
+                            render smoke tests pass.
+HOD                        Teaching, department, approvals, fund requests and
+                            records links retained; utility tests pass.
+ADMIN                      School-scoped academic, people, timetable,
+                            notifications, reports and audit links retained.
+MANAGER                    Group gallery/overview/scorecards to selected school
+                            and return path tested with route/scope tests.
+SUPER_ADMIN                Schools/new school and group drill-down retained;
+                            authorized navigation checks pass.
+HEAD_OF_FINANCE            Group totals -> selected school finance -> group
+                            return and same-section switching tested.
+TEACHER                    My Classes and related learning/academic/records
+                            links retained; 22 page render smoke tests pass.
+AQA                        Performance, exams, engine, learning and records
+                            links retained; utility tests pass.
+ADMISSIONS                 Pipeline, applicants, enrolment/import and analytics
+                            links retained in automated navigation checks.
+STUDENT, PARENT             Mobile-guidance default routes retained; no new
+                            dashboard or route permissions introduced.
+
+PHASE 0 ROUTE/ACTION REVIEW
+- Parsed Phase 0 inventory and current router: 293 / 293 route declarations,
+  zero removed and zero added. Role sidebar routes passed canAccessRoute checks.
+- Ledger -> detail/form -> directory, group -> school -> group, assigned-school
+  switching, true GROUP vs SCHOOL scope and role-specific navigation have
+  automated checks. These are route/navigation checks, not live API posting or
+  approval tests. Existing mutation bodies, role guards and API contracts were
+  left unchanged. Import/export destinations remain in the route inventory.
+- No new palette values were introduced in the navigation changes. Desktop
+  and 390px login screenshots were visually inspected: no overflow or clipped
+  controls on the public login page. Protected pages were checked by component
+  tests and source review; no authenticated browser screenshot was captured.
+
+COMMANDS RUN FROM dashboard/
+- npm run typecheck: PASS.
+- npm test: PASS, 18 files and 129 tests. Earlier HOD/AQA failures were stale
+  tests that depended on now-empty sample arrays; the tests now use local
+  in-test records. No academic utility logic changed. jsdom emitted harmless
+  network AggregateError messages after some smoke tests, without failures.
+- npm run build: PASS (Vite 6.4.2, 2598 modules). Existing large-bundle warning
+  remains: main asset about 2.86 MB uncompressed.
+- npm run lint: FAIL, 718 errors and 31 warnings repository-wide. Most errors
+  are existing no-explicit-any and unused-variable violations in large feature
+  files. Focused lint of new navigation/scope/test files passed. The manager
+  page file has one existing Fast Refresh export warning.
+- git diff --check -- dashboard: PASS.
+
+OUTSTANDING RELEASE ISSUES
+1. Repository-wide lint debt blocks a clean release gate. It needs a separate
+   cleanup pass because it spans existing feature implementations.
+2. Development-only quick-fill email/password pairs were removed from
+   dashboard/src/features/auth/LoginPage.tsx before publishing this branch.
+   The hosted KEMS credential from the discussion was not found in dashboard
+   source or the plan/report files.
+3. Full authenticated desktop/mobile journeys, API posting/approval responses,
+   screen-reader checks and every deep-link/import/export action still need a
+   human or browser session with real role accounts. Only the public login
+   layout was viewed in Chromium at desktop and narrow width; no screenshots
+   containing private data were saved in the repository.
+
+FRONTEND CHANGED FILES (worktree, including earlier Phases 0–6)
+dashboard/package-lock.json
+dashboard/FRONTEND_FLOW_BASELINE.txt
+dashboard/USABILITY_FLOW_REFACTOR_PLAN.txt
+dashboard/USABILITY_RELEASE_REPORT.txt
+dashboard/src/app/router.tsx
+dashboard/src/components/layout/AppShell.tsx
+dashboard/src/components/layout/RoleSidebar.tsx
+dashboard/src/components/layout/SchoolContextBar.tsx
+dashboard/src/components/layout/TopCommandBar.tsx
+dashboard/src/components/layout/AcademicWorkflowBar.tsx
+dashboard/src/components/layout/ContextTaskBar.tsx
+dashboard/src/components/layout/SchoolWorkBar.tsx
+dashboard/src/components/layout/academicWorkflow.ts
+dashboard/src/components/layout/academicWorkflow.test.ts
+dashboard/src/components/layout/contextFlow.test.tsx
+dashboard/src/components/layout/navigationFlow.test.ts
+dashboard/src/components/layout/schoolScope.ts
+dashboard/src/components/layout/schoolScope.test.ts
+dashboard/src/features/admin/api/admin.hooks.ts
+dashboard/src/features/admin/components/AdminConsole.tsx
+dashboard/src/features/admin/pages/AdminPages.tsx
+dashboard/src/features/admin/pages/ClassStudentsAdminPage.tsx
+dashboard/src/features/admissions/components/AdmissionsWorkspaceShell.tsx
+dashboard/src/features/admissions/pages/AdmissionsPages.tsx
+dashboard/src/features/auth/LoginPage.tsx
+dashboard/src/features/finance/components/FinanceWorkspaceShell.tsx
+dashboard/src/features/finance/components/financeHeaderLinks.ts
+dashboard/src/features/finance/components/financeHeaderLinks.test.ts
+dashboard/src/features/manager/pages/ManagerPages.tsx
+dashboard/src/features/superadmin/pages/SuperAdminPages.tsx
+dashboard/src/features/hod/utils/hodReview.test.ts
+dashboard/src/features/aqa/utils/aqaEngine.test.ts

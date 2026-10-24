@@ -30,6 +30,7 @@ kilimanjaro classes/
 backend/ecosystem.scratch.config.js
 mobile/kilimanjaro/.env.production
 mobile/kilimanjaro/.env.staging
+mobile/kilimanjaro/tool/dbg.dart
 
 # Generated runtime artifacts (report PDFs, uploads)
 backend/services/*/storage/

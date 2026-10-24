@@ -72,7 +72,7 @@ class ReportCardModel {
   final DateTime? generatedAt;
 
   factory ReportCardModel.fromJson(Map<String, dynamic> json) {
-    DateTime? _parseDate(dynamic v) {
+    DateTime? parseDate(dynamic v) {
       if (v == null) return null;
       try { return DateTime.parse(v as String); } catch (_) { return null; }
     }
@@ -96,7 +96,7 @@ class ReportCardModel {
       combinationCode: json['combinationCode'] as String?,
       reportTemplateCode: json['reportTemplateCode'] as String?,
       divisionSummary: json['divisionSummary']?.toString(),
-      generatedAt: _parseDate(json['generatedAt'] ?? json['createdAt']),
+      generatedAt: parseDate(json['generatedAt'] ?? json['createdAt']),
     );
   }
 
