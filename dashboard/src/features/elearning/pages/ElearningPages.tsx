@@ -56,6 +56,8 @@ import {
   useDeleteQuestion,
   useElearningAnnouncements,
   useElearningAssignment,
+  assignmentStateLabel,
+  quizStateLabel,
   useElearningAssignments,
   useElearningCourse,
   useElearningCourses,
@@ -2455,8 +2457,8 @@ export function StudentCourseViewPage() {
 
   const progressPct = (progress as Record<string, unknown> | undefined)?.completionPercent as number | undefined ?? 0;
   const publishedLessons = lessons.filter((l) => l.status === 'PUBLISHED');
-  const publishedAssignments = assignments.filter((a) => a.status === 'PUBLISHED');
-  const publishedQuizzes = quizzes.filter((q) => q.status === 'PUBLISHED');
+  const publishedAssignments = assignments.filter((a) => a.status === 'PUBLISHED' || a.status === 'CLOSED');
+  const publishedQuizzes = quizzes.filter((q) => q.status === 'PUBLISHED' || q.status === 'CLOSED');
   const pinnedAnnouncements = announcements.filter((a) => (a as unknown as Record<string, unknown>).isPinned);
   const latestAnnouncements = [...pinnedAnnouncements, ...announcements.filter((a) => !(a as unknown as Record<string, unknown>).isPinned)].slice(0, 3);
 
@@ -2527,7 +2529,7 @@ export function StudentCourseViewPage() {
                   <p className="font-black text-ks-slate">{a.title}</p>
                   <p className="text-xs text-ks-muted">Due {fmtDate(a.dueAt)} · Max {a.maxScore ?? '—'} marks</p>
                 </div>
-                <span className="text-xs font-semibold text-[#6C63FF]">Submit &rarr;</span>
+                <span className="text-xs font-semibold text-[#6C63FF]">{assignmentStateLabel(a)} &rarr;</span>
               </button>
             ))}
           </div>
@@ -2546,7 +2548,7 @@ export function StudentCourseViewPage() {
                   <p className="font-black text-ks-slate">{q.title}</p>
                   <p className="text-xs text-ks-muted">{q.questions.length} questions · {q.timeLimitMinutes ? `${q.timeLimitMinutes} min` : 'No time limit'} · Max {q.maxAttempts} attempt{q.maxAttempts !== 1 ? 's' : ''}</p>
                 </div>
-                <span className="text-xs font-semibold text-[#6C63FF]">Attempt &rarr;</span>
+                <span className="text-xs font-semibold text-[#6C63FF]">{quizStateLabel(q)} &rarr;</span>
               </button>
             ))}
           </div>
@@ -2860,6 +2862,12 @@ export function StudentAssignmentPage() {
   );
 }
 
+function apiMessage(error: unknown, fallback: string): string {
+  const message = (error as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
+  if (Array.isArray(message)) return message.join('. ');
+  return message && String(message).trim() ? String(message) : fallback;
+}
+
 export function StudentQuizPage() {
   const { courseId, quizId } = useParams();
   const navigate = useNavigate();
@@ -2892,8 +2900,10 @@ export function StudentQuizPage() {
 
   useEffect(() => {
     if (!started || !quiz?.timeLimitMinutes || !activeAttempt?.startedAt) return;
-    const elapsed = Math.round((Date.now() - new Date(activeAttempt.startedAt).getTime()) / 1000);
-    const remaining = quiz.timeLimitMinutes * 60 - elapsed;
+    const deadline = activeAttempt.expiresAt
+      ? new Date(activeAttempt.expiresAt).getTime()
+      : new Date(activeAttempt.startedAt).getTime() + quiz.timeLimitMinutes * 60_000;
+    const remaining = Math.round((deadline - Date.now()) / 1000);
     setTimeLeft(Math.max(0, remaining));
     const timer = setInterval(() => {
       setTimeLeft((prev) => {
@@ -2905,14 +2915,14 @@ export function StudentQuizPage() {
       });
     }, 1000);
     return () => clearInterval(timer);
-  }, [started, quiz?.timeLimitMinutes, activeAttempt?.startedAt]);
+  }, [started, quiz?.timeLimitMinutes, activeAttempt?.startedAt, activeAttempt?.expiresAt]);
 
   useEffect(() => {
     if (timeLeft === 0 && attemptId) {
       toast('Time is up! Submitting…', 'warning');
       submitMut.mutate(attemptId, {
         onSuccess: (result) => { const id = (result as { id?: string })?.id ?? attemptId; navigate(`/student/elearning/courses/${courseId}/quizzes/${quizId}/result/${id}`); },
-        onError: () => toast('Failed to auto-submit — please submit manually', 'error'),
+        onError: (e) => toast(apiMessage(e, 'Failed to auto-submit — please submit manually'), 'error'),
       });
     }
   }, [timeLeft]);
@@ -2936,7 +2946,7 @@ export function StudentQuizPage() {
         setStarted(true);
         toast('Quiz started — good luck!', 'success');
       },
-      onError: () => toast('Could not start the quiz. Try again.', 'error'),
+      onError: (e) => toast(apiMessage(e, 'Could not start the quiz. Try again.'), 'error'),
     });
   }
 
@@ -2944,18 +2954,22 @@ export function StudentQuizPage() {
     if (!currentQuestion || !attemptId) return;
     const updated = { ...answers[currentQuestion.id], [field]: value };
     setAnswers((prev) => ({ ...prev, [currentQuestion.id]: updated }));
-    saveAnswerMut.mutate({ attemptId, questionId: currentQuestion.id, ...updated });
+    saveAnswerMut.mutate({ attemptId, questionId: currentQuestion.id, ...updated }, {
+      onError: (e) => toast(apiMessage(e, 'Could not save that answer'), 'error'),
+    });
   }
 
   function handleSubmitQuiz() {
     if (!attemptId) return;
+    const unanswered = questions.filter((q) => !(answers[q.id]?.selectedOptionId || answers[q.id]?.textAnswer?.trim())).length;
+    if (unanswered > 0 && !window.confirm(`You have ${unanswered} unanswered question${unanswered === 1 ? '' : 's'}. You cannot change your answers after submitting. Submit anyway?`)) return;
     submitMut.mutate(attemptId, {
       onSuccess: (result) => {
         const id = (result as { id?: string })?.id ?? attemptId;
         toast('Quiz submitted!', 'success');
         navigate(`/student/elearning/courses/${courseId}/quizzes/${quizId}/result/${id}`);
       },
-      onError: () => toast('Failed to submit quiz', 'error'),
+      onError: (e) => toast(apiMessage(e, 'Failed to submit quiz'), 'error'),
     });
   }
 
@@ -3115,7 +3129,9 @@ export function StudentQuizResultPage() {
   if (isLoading) return <ElearningShell title="Quiz Result" eyebrow="Loading…"><LoadingPlaceholder /></ElearningShell>;
   if (!attempt) return <ElearningShell title="Quiz Result" eyebrow="Not found"><p className="text-sm text-ks-muted">Result not found.</p></ElearningShell>;
 
-  const totalScore = attempt.score ?? 0;
+  const totalScore = attempt.score ?? (attempt as unknown as { totalScore?: number }).totalScore ?? 0;
+  const awaitingMarking = attempt.status === 'SUBMITTED';
+  const reviewByQuestion = new Map((attempt.review ?? []).map((r) => [r.questionId, r]));
   const maxScore = attempt.maxScore ?? 0;
   const pct = attempt.percentScore != null ? Math.round(attempt.percentScore) : maxScore > 0 ? Math.round((totalScore / maxScore) * 100) : 0;
   const timeTaken = (attempt as unknown as Record<string, unknown>).timeTakenSeconds as number | undefined;
@@ -3127,7 +3143,9 @@ export function StudentQuizResultPage() {
           {pct}%
         </p>
         <p className="mt-2 text-xl font-black text-ks-slate">{totalScore} / {maxScore} marks</p>
-        {attempt.isPassed != null && (
+        {awaitingMarking ? (
+          <p className="mt-3 text-sm font-black text-amber-700">Your teacher still has to mark your written answers. This score may go up.</p>
+        ) : attempt.isPassed != null && (
           <p className={`mt-3 text-lg font-black ${attempt.isPassed ? 'text-green-700' : 'text-red-600'}`}>
             {attempt.isPassed ? 'PASSED' : 'DID NOT PASS'}
           </p>
@@ -3136,7 +3154,16 @@ export function StudentQuizResultPage() {
           <p className="mt-2 text-sm text-ks-muted">Completed in {Math.floor(timeTaken / 60)}m {timeTaken % 60}s</p>
         )}
       </div>
-      {attempt.answers && attempt.answers.length > 0 && (
+      {!attempt.reveal && (
+        <p className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm font-semibold text-ks-muted">
+          {quiz?.showCorrectAfter === 'NEVER'
+            ? 'Your teacher keeps the correct answers hidden for this quiz.'
+            : quiz?.showCorrectAfter === 'IMMEDIATELY'
+              ? 'Correct answers will appear here.'
+              : 'Correct answers are shown after the quiz closes.'}
+        </p>
+      )}
+      {attempt.reveal && attempt.answers && attempt.answers.length > 0 && (
         <Panel title="Question Breakdown" icon={<ShieldCheck />}>
           <div className="space-y-4">
             {attempt.answers.map((a, i) => {
@@ -3151,9 +3178,9 @@ export function StudentQuizResultPage() {
                     </span>
                   </div>
                   {a.textAnswer && <p className="mt-2 text-xs text-ks-muted">Your answer: <span className="font-semibold text-ks-slate">{a.textAnswer}</span></p>}
-                  {q?.correctAnswer && correct === false && <p className="mt-1 text-xs text-green-700">Correct: <span className="font-semibold">{q.correctAnswer}</span></p>}
+                  {reviewByQuestion.get(a.questionId)?.correctAnswer && correct !== true && a.questionType !== 'SHORT_ANSWER' && <p className="mt-1 text-xs text-green-700">Correct: <span className="font-semibold">{reviewByQuestion.get(a.questionId)?.correctAnswer}</span></p>}
                   {a.feedback && <p className="mt-2 text-xs text-[#6C63FF] font-semibold">Feedback: {a.feedback}</p>}
-                  {q?.explanation && <p className="mt-1 text-xs text-ks-muted italic">{q.explanation}</p>}
+                  {(reviewByQuestion.get(a.questionId)?.explanation ?? q?.explanation) && <p className="mt-1 text-xs text-ks-muted italic">{reviewByQuestion.get(a.questionId)?.explanation ?? q?.explanation}</p>}
                 </div>
               );
             })}

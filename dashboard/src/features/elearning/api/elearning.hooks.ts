@@ -105,6 +105,19 @@ export interface ElearningAssignment {
   attachmentKey?: string;
   attachmentName?: string;
   createdAt: string;
+  /** For learners: only their own submission is included. */
+  submissions?: Array<{ status: string; score?: number | null; maxScore?: number | null; isLate?: boolean; feedback?: string | null }>;
+}
+
+export function assignmentStateLabel(a: ElearningAssignment): string {
+  const sub = a.submissions?.[0];
+  if (sub?.status === 'GRADED') return sub.score != null && sub.maxScore != null ? `Graded ${sub.score}/${sub.maxScore}` : 'Graded';
+  if (sub?.status === 'RETURNED') return 'Returned — fix & resubmit';
+  if (sub?.status === 'SUBMITTED') return sub.isLate ? 'Handed in late' : 'Handed in';
+  if (a.status === 'CLOSED') return 'Closed';
+  const overdue = a.dueAt ? new Date(a.dueAt).getTime() < Date.now() : false;
+  if (sub?.status === 'DRAFT') return overdue ? 'Draft — overdue' : 'Draft';
+  return overdue ? 'Overdue — submit' : 'Submit';
 }
 
 export interface ElearningSubmission {
@@ -154,8 +167,23 @@ export interface ElearningQuiz {
   maxAttempts: number;
   passingScore?: number;
   status: string;
+  showCorrectAfter?: 'IMMEDIATELY' | 'AFTER_CLOSE' | 'NEVER';
   questions: ElearningQuizQuestion[];
   createdAt: string;
+  /** For learners: their own attempts only. */
+  attempts?: Array<{ status: string; percentScore?: number | null }>;
+}
+
+export function quizStateLabel(q: ElearningQuiz): string {
+  const attempts = q.attempts ?? [];
+  if (attempts.some((a) => a.status === 'IN_PROGRESS')) return 'Continue';
+  const finished = attempts.filter((a) => a.status !== 'IN_PROGRESS');
+  const best = finished.reduce<number | null>((m, a) => (a.percentScore != null && (m == null || a.percentScore > m) ? a.percentScore : m), null);
+  if (finished.length >= q.maxAttempts) return best != null ? `Done · best ${Math.round(best)}%` : 'Done';
+  if (q.status === 'CLOSED') return best != null ? `Closed · best ${Math.round(best)}%` : 'Closed';
+  if (best != null) return `Best ${Math.round(best)}% · try again`;
+  if (finished.length) return 'Awaiting marking';
+  return 'Attempt';
 }
 
 export interface ElearningQuizAttempt {
@@ -171,6 +199,21 @@ export interface ElearningQuizAttempt {
   startedAt: string;
   submittedAt?: string;
   manualMarksPending?: number;
+  /** Server deadline for timed quizzes (null when untimed or finished). */
+  expiresAt?: string | null;
+  /** True when the learner may see the answer key. */
+  reveal?: boolean;
+  passingScore?: number | null;
+  attemptNumber?: number;
+  review?: Array<{
+    questionId: string;
+    prompt: string;
+    type: string;
+    points: number;
+    explanation?: string | null;
+    correctAnswer?: string | null;
+    correctOptionId?: string | null;
+  }>;
 }
 
 export interface SubmissionSummary {
@@ -385,8 +428,8 @@ function normaliseCourse(raw: Record<string, unknown>): ElearningCourse {
     classSubjectId: String(raw.classSubjectId ?? raw.class_subject_id ?? raw.classId ?? ''),
     subjectName: resolve(raw.subjectName ?? raw.subject ?? raw.subjectId),
     className: resolve(raw.className ?? raw.class ?? raw.class_name),
-    term: resolve(raw.termName ?? raw.term) || String(raw.termId ?? ''),
-    academicYear: String(raw.academicYearName ?? raw.academicYear ?? raw.academic_year ?? raw.academicYearId ?? ''),
+    term: resolve(raw.termName ?? raw.term) || 'Current term',
+    academicYear: String(raw.academicYearName ?? raw.academicYear ?? raw.academic_year ?? '') || 'Current year',
     status: String(raw.status ?? ''),
     teacherId: String(raw.teacherId ?? raw.teacher_id ?? ''),
     enrolledCount: Number(raw.enrolledCount ?? raw.enrolled_count ?? raw.students ?? 0),
