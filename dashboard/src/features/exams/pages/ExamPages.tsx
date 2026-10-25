@@ -49,6 +49,24 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 const inputCls = 'rounded-lg border border-ks-line px-3 py-2 text-sm focus:border-ks-blue focus:outline-none';
 
+function ExamTaskNavigation({ active }: { active: 'windows' | 'types' | 'composition' }) {
+  const items = [
+    { key: 'windows', to: '/exams', label: 'Exam windows' },
+    { key: 'types', to: '/exams/types', label: 'Exam types' },
+    { key: 'composition', to: '/exams/compose', label: 'Report-card composition' },
+  ] as const;
+  return (
+    <nav aria-label="Exam tasks" className="mb-5 flex flex-wrap gap-2 border-b border-ks-line pb-3">
+      {items.map((item) => (
+        <Link key={item.key} to={item.to} aria-current={active === item.key ? 'page' : undefined}
+          className={`rounded-lg px-3 py-2 text-sm font-bold transition ${active === item.key ? 'bg-ks-blue text-white' : 'bg-ks-mist/30 text-ks-navy hover:bg-ks-mist/60'}`}>
+          {item.label}
+        </Link>
+      ))}
+    </nav>
+  );
+}
+
 function Banner({ tone, children }: { tone: 'emerald' | 'rose' | 'amber'; children: React.ReactNode }) {
   const map = { emerald: 'bg-ks-emerald/10 text-ks-emerald border-ks-emerald/30', rose: 'bg-ks-rose/10 text-ks-rose border-ks-rose/30', amber: 'bg-ks-amber/10 text-[#7a5200] border-ks-amber/30' };
   return <div className={`rounded-lg border px-4 py-3 text-sm font-semibold ${map[tone]}`}>{children}</div>;
@@ -75,6 +93,7 @@ export function ExamWindowsListPage() {
           </div>
         }
       />
+      <ExamTaskNavigation active="windows" />
 
       {showCreate && <CreateWindowForm onDone={() => setShowCreate(false)} />}
 
@@ -241,12 +260,15 @@ function CreateWindowForm({ onDone }: { onDone: () => void }) {
 export function ExamWindowDetailPage() {
   const { id = '' } = useParams();
   const win = useExamWindow(id);
+  const reference = useExamReference();
   const action = useWindowAction();
   const [tab, setTab] = useState<'overview' | 'merit' | 'edits'>('overview');
   const [msg, setMsg] = useState<string>('');
 
   const w = win.data;
   const status = S(w?.status);
+  const academicYear = (reference.data?.years ?? []).find((year) => S(year.id) === S(w?.academicYearId));
+  const term = (reference.data?.terms ?? []).find((item) => S(item.id) === S(w?.termId));
 
   const runAction = async (act: string) => {
     setMsg('');
@@ -266,9 +288,10 @@ export function ExamWindowDetailPage() {
       <Link to="/exams" className="mb-3 inline-flex items-center gap-1 text-sm font-bold text-ks-blue"><ArrowLeft className="h-4 w-4" /> All windows</Link>
       <WorkspaceHeader
         title={S(w.name)}
-        description={`${S((w.examType as any)?.name)} · ${N(w.assessmentCount)} subjects across ${N(w.classCount)} classes`}
+        description={`${S((w.examType as any)?.name)} · ${S(academicYear?.name ?? academicYear?.year, 'Academic year unavailable')} · ${S(term?.name, 'Term unavailable')} · ${N(w.assessmentCount)} subject assessments across ${N(w.classCount)} classes`}
         action={<Badge tone={statusTone(status)}>{status}</Badge>}
       />
+      <ExamTaskNavigation active="windows" />
 
       {/* Lifecycle actions */}
       <Card className="mb-5 flex flex-wrap items-center gap-2 p-4">
@@ -289,14 +312,14 @@ export function ExamWindowDetailPage() {
         ))}
       </div>
 
-      {tab === 'overview' && <WindowSubjects w={w} />}
+      {tab === 'overview' && <WindowSubjects w={w} classes={reference.data?.classes ?? []} />}
       {tab === 'merit' && <MeritListPanel windowId={id} status={status} />}
       {tab === 'edits' && <EditRequestsPanel windowId={id} />}
     </div>
   );
 }
 
-function WindowSubjects({ w }: { w: Record<string, unknown> }) {
+function WindowSubjects({ w, classes }: { w: Record<string, unknown>; classes: Record<string, unknown>[] }) {
   const assessments = (w.assessments ?? []) as Record<string, unknown>[];
   if (!assessments.length) return <EmptyState title="No subjects yet" message="Open the window to fan out one marks sheet per class-subject in scope." />;
   return (
@@ -310,7 +333,10 @@ function WindowSubjects({ w }: { w: Record<string, unknown> }) {
             {assessments.map((a) => (
               <tr key={S(a.id)}>
                 <td className="px-4 py-3 font-semibold text-ks-navy">{S((a.classSubject as any)?.subject?.name)}</td>
-                <td className="px-4 py-3 text-ks-muted">{S(a.classId).slice(0, 8)}</td>
+                <td className="px-4 py-3 text-ks-muted">{(() => {
+                  const klass = classes.find((item) => S(item.id) === S(a.classId));
+                  return klass ? `${S(klass.name)}${klass.stream ? ` · ${S(klass.stream)}` : ''}` : 'Class context unavailable';
+                })()}</td>
                 <td className="px-4 py-3"><Badge tone={S(a.status) === 'LOCKED' ? 'emerald' : S(a.status) === 'SUBMITTED' || S(a.status) === 'HOD_APPROVED' ? 'amber' : 'slate'}>{S(a.status)}</Badge></td>
                 <td className="px-4 py-3">{N(a.maxScore)}</td>
               </tr>
@@ -464,11 +490,13 @@ export function ExamTypesPage() {
   const [form, setForm] = useState<Record<string, any>>({ defaultWeight: 100 });
   const set = (k: string, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
   const [msg, setMsg] = useState('');
+  const [showCreate, setShowCreate] = useState(false);
 
   const submit = async () => {
     if (!form.name || !form.code) return;
     await create.mutateAsync({ name: form.name, code: form.code, defaultWeight: N(form.defaultWeight, 100), educationStage: form.educationStage || undefined });
     setForm({ defaultWeight: 100 });
+    setShowCreate(false);
   };
 
   return (
@@ -477,11 +505,15 @@ export function ExamTypesPage() {
       <WorkspaceHeader
         title="Exam Types"
         description="The catalogue of exam types (Weekly, Monthly, Midterm, Terminal…). The weight is used when composing report cards."
-        action={<Button variant="secondary" onClick={async () => { const r: any = await migrate.mutateAsync(); setMsg(`Imported ${N(r?.created)} type(s) from legacy assessment types.`); }} loading={migrate.isPending}><RefreshCw className="h-4 w-4" /> Import legacy</Button>}
+        action={<div className="flex flex-wrap gap-2">
+          <Button variant="secondary" onClick={async () => { const r: any = await migrate.mutateAsync(); setMsg(`Imported ${N(r?.created)} type(s) from legacy assessment types.`); }} loading={migrate.isPending}><RefreshCw className="h-4 w-4" /> Import legacy</Button>
+          <Button onClick={() => setShowCreate((visible) => !visible)}><Plus className="h-4 w-4" /> {showCreate ? 'Close' : 'Add Exam Type'}</Button>
+        </div>}
       />
+      <ExamTaskNavigation active="types" />
       {msg && <div className="mb-4"><Banner tone="emerald">{msg}</Banner></div>}
 
-      <Card className="mb-6 p-5">
+      {showCreate && <Card className="mb-6 p-5">
         <div className="grid gap-4 md:grid-cols-4">
           <Field label="Name"><input className={inputCls} value={form.name ?? ''} onChange={(e) => set('name', e.target.value)} placeholder="Terminal Exam" /></Field>
           <Field label="Code"><input className={inputCls} value={form.code ?? ''} onChange={(e) => set('code', e.target.value)} placeholder="TERM" /></Field>
@@ -489,10 +521,10 @@ export function ExamTypesPage() {
           <div className="flex items-end"><Button onClick={submit} loading={create.isPending} disabled={!form.name || !form.code}><Plus className="h-4 w-4" /> Add type</Button></div>
         </div>
         {create.isError && <div className="mt-3"><Banner tone="rose">{S((create.error as any)?.message)}</Banner></div>}
-      </Card>
+      </Card>}
 
       {types.isLoading && <Card className="p-6 text-center text-ks-muted">Loading…</Card>}
-      {types.data && types.data.length === 0 && <EmptyState title="No exam types" message="Add one above, or import from legacy assessment types." />}
+      {types.data && types.data.length === 0 && <EmptyState title="No exam types" message="Use Add Exam Type above, or import from legacy assessment types." />}
       {types.data && types.data.length > 0 && (
         <Card className="overflow-hidden">
           <table className="w-full text-sm">
@@ -552,6 +584,7 @@ export function ComposeReportCardsPage() {
     <div>
       <Link to="/exams" className="mb-3 inline-flex items-center gap-1 text-sm font-bold text-ks-blue"><ArrowLeft className="h-4 w-4" /> Windows</Link>
       <WorkspaceHeader title="Compose Report Cards" description="Choose which exam windows make up the term report card and how much each weighs." />
+      <ExamTaskNavigation active="composition" />
 
       <Card className="mb-5 p-5">
         <div className="grid gap-4 md:grid-cols-3">
@@ -618,9 +651,13 @@ export function ComposeReportCardsPage() {
 // ═══════════════════════════════════════════════════════════════════════════
 export function TeacherExamWindowsPage() {
   const windows = useTeacherExamWindows();
+  const reference = useExamReference();
   return (
     <div>
       <WorkspaceHeader title="Exam Windows" description="Open exams awaiting your marks. Download a template or enter marks on screen." />
+      <div className="mb-5 flex flex-wrap items-center gap-2 rounded-lg border border-ks-line bg-ks-paper/40 px-4 py-3 text-sm font-semibold text-ks-navy" aria-label="Exam work path">
+        <span className="rounded-md bg-white px-3 py-1.5">My exam windows</span><span aria-hidden="true">→</span><span>Assigned class subjects</span><span aria-hidden="true">→</span><span>Enter, save, or submit marks</span>
+      </div>
       {windows.isLoading && <Card className="p-8 text-center text-ks-muted">Loading…</Card>}
       {windows.isError && <ErrorState title="Could not load" message={S((windows.error as any)?.message)} onRetry={() => windows.refetch()} />}
       {windows.data && windows.data.length === 0 && <EmptyState title="No open exam windows" message="When an exam window is opened for your class, it will appear here." />}
@@ -628,14 +665,20 @@ export function TeacherExamWindowsPage() {
         {(windows.data ?? []).map((w) => (
           <Card key={S(w.id)} className="p-5">
             <div className="mb-3 flex items-center justify-between">
-              <div><h3 className="font-display text-lg font-bold text-ks-navy">{S(w.name)}</h3><p className="text-xs text-ks-muted">{S((w.examType as any)?.name)}</p></div>
+              <div><h3 className="font-display text-lg font-bold text-ks-navy">{S(w.name)}</h3><p className="text-xs text-ks-muted">{S((w.examType as any)?.name)}{w.termId ? ` · ${S(reference.data?.terms.find((term) => S(term.id) === S(w.termId))?.name, 'Term unavailable')}` : ''}</p></div>
               <Badge tone={statusTone(S(w.status))}>{S(w.status)}</Badge>
             </div>
             <div className="space-y-2">
               {((w.mySubjects ?? []) as any[]).map((s) => (
                 <Link key={S(s.assessmentId)} to={`/teacher/exams/marks/${S(s.assessmentId)}`}
                   className="flex items-center justify-between rounded-lg border border-ks-line p-3 hover:border-ks-blue hover:bg-ks-blue/5">
-                  <div><span className="font-semibold text-ks-navy">{S(s.subjectName)}</span></div>
+                  <div>
+                    <span className="font-semibold text-ks-navy">{S(s.subjectName)}</span>
+                    <span className="mt-0.5 block text-xs text-ks-muted">{(() => {
+                      const klass = reference.data?.classes.find((item) => S(item.id) === S(s.classId));
+                      return klass ? `${S(klass.name)}${klass.stream ? ` · ${S(klass.stream)}` : ''}` : 'Class context unavailable';
+                    })()}</span>
+                  </div>
                   <div className="flex items-center gap-2 text-xs text-ks-muted">
                     <span>{N(s.marksEntered)} entered</span><Badge tone={S(s.status) === 'LOCKED' ? 'emerald' : S(s.status) === 'SUBMITTED' ? 'amber' : 'blue'}>{S(s.status)}</Badge>
                   </div>
@@ -655,6 +698,7 @@ export function TeacherExamWindowsPage() {
 export function TeacherExamMarksPage() {
   const { assessmentId = '' } = useParams();
   const tpl = useMarksTemplate(assessmentId);
+  const reference = useExamReference();
   const upload = useUploadMarks();
   const submit = useSubmitAssessment();
   const editReq = useCreateEditRequest();
@@ -665,6 +709,9 @@ export function TeacherExamMarksPage() {
 
   const data = tpl.data as any;
   const assessment = data?.assessment;
+  const classInfo = reference.data?.classes.find((klass) => S(klass.id) === S(assessment?.classId));
+  const yearInfo = reference.data?.years.find((year) => S(year.id) === S(assessment?.examWindow?.academicYearId));
+  const termInfo = reference.data?.terms.find((term) => S(term.id) === S(assessment?.examWindow?.termId));
   const maxScore = N(assessment?.maxScore, 100);
   const status = S(assessment?.status);
   const locked = ['LOCKED', 'SUBMITTED', 'HOD_APPROVED', 'APPROVED'].includes(status);
@@ -700,7 +747,7 @@ export function TeacherExamMarksPage() {
       <Link to="/teacher/exams" className="mb-3 inline-flex items-center gap-1 text-sm font-bold text-ks-blue"><ArrowLeft className="h-4 w-4" /> My exam windows</Link>
       <WorkspaceHeader
         title={`${S(assessment?.subjectName)} — Marks`}
-        description={`${S(assessment?.examWindow?.name)} · out of ${maxScore}`}
+        description={`${S(classInfo?.name, 'Class context unavailable')}${classInfo?.stream ? ` · ${S(classInfo.stream)}` : ''} · ${S(assessment?.examWindow?.name)} · ${S(yearInfo?.name ?? yearInfo?.year, 'Academic year unavailable')} · ${S(termInfo?.name, 'Term unavailable')} · out of ${maxScore}`}
         action={<Badge tone={statusTone(status === 'OPEN' ? 'OPEN' : status)}>{status}</Badge>}
       />
 

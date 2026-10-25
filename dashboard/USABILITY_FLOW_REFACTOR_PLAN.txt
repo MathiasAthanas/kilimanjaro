@@ -435,3 +435,207 @@ FINAL DEFINITION OF DONE
   long-tail features and direct URLs.
 - Kilimanjaro branding, all color values, domain logic, API contracts and
   backend remain untouched. Tests and human walkthroughs support this claim.
+
+
+FOLLOW-ON FLOW REFINEMENT — PHASES 10–13
+Status: user approved; implementation completed locally. The code changes and
+automated checks are reported in the assistant handoff. Human role-by-role and
+responsive walkthroughs remain pending. Phases 0–9 above remain the original
+plan.
+
+REFERENCE LIMITATION
+The authenticated Zeraki Analytics URL could not be opened by the available
+browser tool during preparation of this addendum. Do not describe the prompts
+below as a verified screen-by-screen reproduction of that private workspace.
+They apply the task-flow pattern already described in this plan and the user's
+request: directory/list -> selected record -> contextual tasks -> clear return.
+The publicly available Zeraki product overview describes school management,
+teacher use, and exam-result entry, but does not document the private UI
+journeys. Never save or repeat hosted-app credentials in this file, source
+code, logs, or screenshots. The user should confirm any Zeraki-specific detail
+that is not represented in Kilimanjaro's current routes/data.
+
+IMPLEMENTATION GUARDRAILS FOR ALL FOLLOW-ON PHASES
+- Implement only the one approved phase at a time, in dashboard/ only.
+- Preserve every Kilimanjaro color, feature, route/deep link, API payload,
+  validation rule, status transition, role/permission, school boundary,
+  confirmation, export/import and audit action. Do not modify backend, seeds,
+  database, authentication or API contracts.
+- The goal is clearer task sequence and contextual navigation, not a Zeraki
+  clone. Do not copy Zeraki palette, terminology where it changes domain
+  meaning, business rules, or unsupported features.
+- Use the existing route/action baseline plus a fresh inventory of current code.
+  Do not assume line numbers or behavior from the 2026-10-21 snapshot remain
+  current.
+- Keep ADMIN user/teacher accounts in the existing user model. Do not add a
+  second teacher entity or import path. HOD teacher matrix and teacher portal
+  remain distinct role-specific workflows.
+- A class's assigned subjects must remain distinct from the global subject
+  directory. A class-specific view may expose the existing subject/teacher
+  assignment actions for that exact class; do not infer or silently assign
+  subjects, teachers, streams, combinations, terms, or schools.
+- Keep responsive, keyboard-accessible controls and existing loading, empty,
+  error, success, and protected-action feedback. No dead links or fake data.
+- At each phase end, report changed files, route/action/role parity, checks,
+  known gaps, and stop. Do not push or deploy.
+
+PHASE 10 — CLASS DIRECTORY, CLASS WORKSPACE, ROSTER AND SUBJECTS
+PROMPT START
+Implement only Phase 10 of the Follow-on Flow Refinement in
+dashboard/USABILITY_FLOW_REFACTOR_PLAN.txt. Work in dashboard/ only. Preserve
+all current class fields, setup options, data, API calls, payloads, validation,
+role authorization, school/year scope, colors, and operations. No backend,
+database, seed, auth, or API-contract changes.
+
+Make the existing ADMIN Classes area task-oriented and list-first. The class
+directory should be the entry point, with the existing create/setup wizard as
+a clear Add Class action rather than the first/only dominant task. Keep its
+existing fields and advanced setup paths reachable. Preserve supported
+pre-primary/nursery, primary, O-Level and A-Level class distinctions; display
+only streams, combinations, pathways, and class data that the selected school
+already has.
+
+Make each class's existing detail workspace the local hub. Present its current
+overview and make its existing Student Roster and Manage Subjects tasks easy
+to find together, along with existing class edit/delete and teacher/class
+assignment paths. This is the key class relationship: users should be able to
+manage the roster and the subjects assigned to that same selected class from
+the class context, with the class identity visible throughout. Keep
+`/admin/classes/:classId`, `/admin/classes/:classId/students`, and
+`/admin/classes/:classId/subjects` working as direct links. A class-specific
+subjects link must preserve the class ID and must not silently fall back to a
+different class or school.
+
+On the class-subject page, make the assignments already belonging to the
+selected class the primary content, and place existing add/assign, teacher
+selection, edit, and protected remove actions in that local context. If reached
+through the general Teaching Assignments route, retain its class-selection
+path and clearly identify the selected school, academic year, class, stream or
+combination where available. Do not change which stage-compatible subjects or
+authorized teachers may be assigned. Do not invent compulsory-subject rules or
+new class-subject operations.
+
+Keep class setup and class operations separate but connected: class list ->
+class detail -> roster or assigned subjects -> action -> return to the same
+class/detail/list. Preserve existing role-specific class views for TEACHER,
+HOD and other authorized roles; do not broaden route guards. Verify ADMIN and
+authorized MANAGER/SUPER_ADMIN behavior against current permissions, plus
+loading/empty/error, unauthorized, school-switch, narrow viewport and direct
+deep-link cases. Run dashboard typecheck and the relevant light checks; do not
+run an unrelated full test campaign unless requested. Stop after Phase 10.
+PROMPT END
+
+PHASE 11 — TEACHER DIRECTORY AND CLASS/SUBJECT ASSIGNMENT CONTEXT
+PROMPT START
+Implement only Phase 11 of the Follow-on Flow Refinement in
+dashboard/USABILITY_FLOW_REFACTOR_PLAN.txt. Work in dashboard/ only. Preserve
+the existing user/staff model, all registration/edit forms, role assignment,
+fields, validation, CSV behavior, password/security actions, routes, API
+payloads, confirmations, permissions and colors. Never change backend, seeds,
+database, auth or API contracts.
+
+Clarify the ADMIN teacher-management journey using existing user accounts:
+staff directory -> find/filter teacher accounts -> inspect/edit the existing
+user -> connect to existing class/subject assignment tasks where authorized ->
+return to the same directory. Put the current Register New User action beside
+the directory and make its existing role selection path to TEACHER easy to
+find. If the existing CSV staff import supports teachers, keep it adjacent and
+explain its current scope; do not add a new spreadsheet importer or change its
+payload. Do not create duplicate teacher records or imply that class teacher
+and subject teacher are the same assignment when the data model distinguishes
+them.
+
+Connect teacher records to existing class/subject assignment pages only where
+those routes and permissions already allow it. Make it clear which existing
+class, subject, school and academic year an assignment belongs to; provide a
+local return path. Keep the class detail's assigned teacher information
+reachable. Preserve the HOD department teacher matrix, teacher performance
+detail, and TEACHER's own My Classes as distinct role-specific workspaces; do
+not turn HOD oversight into ADMIN account management or give a teacher access
+to admin staff controls.
+
+Retain every current staff action, including activate/deactivate, reset
+password, edit, school membership/scope, CSV import, and any confirmation or
+error path. Test directory -> teacher profile -> existing class/subject tasks
+-> return; role and school-scope parity; empty/loading/error; mobile/narrow
+viewport; keyboard access; direct URLs. Run dashboard typecheck and relevant
+light checks, report parity, then stop after Phase 11.
+PROMPT END
+
+PHASE 12 — EXAM AND RESULTS JOURNEY BY ROLE
+PROMPT START
+Implement only Phase 12 of the Follow-on Flow Refinement in
+dashboard/USABILITY_FLOW_REFACTOR_PLAN.txt. Work in dashboard/ only. This is a
+navigation and orientation pass, not an exam or assessment logic rewrite.
+Preserve all existing exam types/windows, class-subject coverage, fields,
+marks calculations, status transitions, approval/publish authority, edit
+requests, APIs/payloads, exports, reports, audit actions, route guards, colors,
+and role behavior. Do not modify backend, database, seeds, or authentication.
+
+Clarify the existing end-to-end exam journey using local next-step links and
+visible context: academic year/term and exam type -> create/open the existing
+exam window for its configured scope -> teacher sees the assigned subject
+assessments -> marks entry/save/submit -> existing review/approval and edit
+request paths -> close/compute -> authorized publish -> report-card
+composition and review. This is a wayfinding map only. Do not add steps,
+automate transitions, change assessment inclusion, or imply that a role can
+perform an action it cannot currently perform.
+
+For ADMIN/AQA and other roles authorized by current routes, make exam windows,
+exam types, composition, performance/analytics, and their existing detail
+pages discoverable from their natural neighboring tasks. For TEACHER, connect
+Exam Windows -> the teacher's own assigned subject marks sheet -> save/submit
+and back to that window/list. For HOD, preserve department-limited teaching,
+review/approval and history paths. For PRINCIPAL/HEAD_OF_SCHOOL, preserve the
+existing marks-review/approval and report-card review/publish boundaries. Keep
+group/manager drill-down scope as currently implemented.
+
+Where data is selected, visibly retain the actual school, year, term, exam
+window, class, subject, and status when those values are already available.
+In particular, replace opaque IDs with existing display names when the API
+already returns the relation; do not fabricate missing labels or change
+response shapes. Place related create/setup actions near their existing
+directories, retain empty/loading/error states, confirmations and exports, and
+make return/back paths restore relevant filters/context when feasible without
+changing behavior.
+
+Verify the role-specific read/navigation journeys and every existing exam
+route/deep link in the baseline, including draft/open/closed/published display
+and protected actions. Run dashboard typecheck and relevant light checks;
+report every tested route, role and outstanding API/data limitation. Stop
+after Phase 12.
+PROMPT END
+
+PHASE 13 — CLASS-TO-EXAM CROSS-FLOW REVIEW AND ACCEPTANCE GATE
+PROMPT START
+Perform only Phase 13 of the Follow-on Flow Refinement in
+dashboard/USABILITY_FLOW_REFACTOR_PLAN.txt. Work in dashboard/ only. Do not
+change backend, database, seeds, colors, permissions, domain rules, API
+contracts, or exam operations. This is a focused usability and parity
+pass for Phases 10–12, not authorization to build new features.
+
+Walk the integrated existing journeys and fix only small presentation or
+navigation regressions: class directory -> selected class -> roster; that same
+class -> assigned subjects/teachers -> return; teacher directory -> existing
+teacher account -> authorized assignment context; configured class/subject ->
+exam window -> teacher marks entry/submit -> authorized review/approval ->
+compute/publish -> report-card composition/review. Exercise each route under
+the roles that already have access, with at least one unauthorized-role check
+and one group/school-context check. Confirm the selected class, subject,
+academic year/term, exam window, role, and school do not silently drift when
+navigating or switching schools.
+
+Compare current routes, sidebar entries, in-page links, deep links, fields,
+mutations, imports/exports, confirmations, and statuses to the Phase 0
+inventory and current code. Check keyboard/focus behavior, narrow viewport
+navigation, and empty/loading/error/success feedback. Do not claim a hosted
+Zeraki screen was replicated unless the user supplied a verifiable walkthrough
+or screenshots; report observed Kilimanjaro behavior separately from reference
+assumptions. Do not capture or store private school data or credentials.
+
+Run `npm run typecheck`, relevant tests, `npm run lint`, and `npm run build`
+from dashboard/ (or document why a check cannot run). Provide a role/area
+parity matrix, tested journeys, exact check outcomes, outstanding known issues,
+and dashboard-only changed-file list. Do not push or deploy. Stop after this
+acceptance report.
+PROMPT END

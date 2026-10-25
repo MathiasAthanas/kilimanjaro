@@ -1,7 +1,7 @@
 ﻿import { AlertTriangle, ArrowLeft, CheckCircle2, ChevronDown, Database, Download, Edit2, Key, Lock, Play, Plus, Shield, Trash2, Unlock, UserPlus, X } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from 'react';
 import { downloadReportWhenReady } from '../../operations/api/operations.hooks';
-import { NavLink, useNavigate, useParams } from 'react-router-dom';
+import { NavLink, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { toast } from '../../../lib/toast';
 import { Badge } from '../../../components/common/Badge';
 import { Button } from '../../../components/common/Button';
@@ -176,10 +176,12 @@ export function AdminHomePage() {
 // â"€â"€â"€ Users â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 export function AdminUsersPage() {
+  const [searchParams] = useSearchParams();
+  const roleFilter = searchParams.get('role') === 'TEACHER' ? 'TEACHER' : '';
   return (
-    <AdminShell title="User Management" eyebrow="Accounts, roles, security">
+    <AdminShell title={roleFilter ? 'Teacher Directory' : 'Staff Directory'} eyebrow="Accounts, roles, security">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm font-semibold text-ks-muted">Manage all staff accounts, roles, and access permissions.</p>
+        <p className="text-sm font-semibold text-ks-muted">Find staff accounts, open their profile, and continue to the existing role-specific tasks.</p>
         <NavLink
           to="/admin/users/create"
           className="inline-flex items-center gap-2 rounded-xl bg-[#4338CA] px-4 py-2.5 text-sm font-black text-white shadow-sm transition hover:bg-[#3730a3]"
@@ -188,14 +190,26 @@ export function AdminUsersPage() {
           Register New User
         </NavLink>
       </div>
+      <nav aria-label="Staff directory views" className="my-4 flex flex-wrap gap-2">
+        <NavLink
+          to="/admin/users"
+          end
+          className={({ isActive }) => `rounded-xl border px-4 py-2 text-sm font-black ${isActive && !roleFilter ? 'border-[#4338CA] bg-indigo-50 text-[#4338CA]' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}
+        >All staff</NavLink>
+        <NavLink
+          to="/admin/users?role=TEACHER"
+          className={() => `rounded-xl border px-4 py-2 text-sm font-black ${roleFilter ? 'border-[#4338CA] bg-indigo-50 text-[#4338CA]' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}
+        >Teachers</NavLink>
+      </nav>
+      {roleFilter && <p className="mb-3 text-xs font-semibold text-slate-500">The Teachers view filters the directory only. The existing staff CSV import supports a role column and remains shared across supported staff roles.</p>}
       <CsvImportZone entity="staff user" />
-      <UsersTable />
+      <UsersTable key={roleFilter || 'all'} initialRole={roleFilter} />
     </AdminShell>
   );
 }
 
-function UsersTable() {
-  const t = useTableControls({ initialLimit: 20 });
+function UsersTable({ initialRole = '' }: { initialRole?: string }) {
+  const t = useTableControls({ initialLimit: 20, initialFilters: initialRole ? { role: initialRole } : {} });
   const { data, isLoading, isError, refetch } = useAdminUsersPage(t.params) as unknown as {
     data?: { users: typeof adminUsers; meta?: { total?: number } };
     isLoading: boolean;
@@ -336,7 +350,7 @@ function UsersTable() {
             <Td className="text-xs text-slate-400">{String(user.lastLogin ?? '').slice(0, 10)}</Td>
             <Td>
               <div className="flex items-center gap-3">
-                <NavLink className="text-xs font-black text-[#4338CA] hover:underline" to={`/admin/users/${user.id}`}>Edit</NavLink>
+                <NavLink className="text-xs font-black text-[#4338CA] hover:underline" to={`/admin/users/${user.id}`}>Open</NavLink>
                 <button
                   disabled={!!pending[user.id]}
                   onClick={() => handleToggle(user.id, user.status)}
@@ -705,6 +719,14 @@ export function UserDetailPage() {
             >
               <Edit2 className="h-4 w-4" /> Edit User
             </NavLink>
+            {String(user.role).toUpperCase() === 'TEACHER' && (
+              <NavLink
+                to={`/admin/academic/class-subjects?teacherId=${encodeURIComponent(user.id)}`}
+                className="mt-4 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-black text-slate-700 shadow-sm transition hover:bg-slate-50 sm:ml-2"
+              >
+                <Database className="h-4 w-4" /> Assign Class Subjects
+              </NavLink>
+            )}
           </AdminFormSection>
 
           {/* Security Actions */}
@@ -1305,12 +1327,14 @@ export function TermsPage() {
 
 export function ClassSubjectsPage() {
   const { classId: routeClassId } = useParams();
+  const [searchParams] = useSearchParams();
+  const teacherContextId = searchParams.get('teacherId') ?? '';
   const session = useAuthStore((state) => state.session);
   const activeSchool = useSchoolStore((state) => state.activeSchool);
   const currentUser = session?.user as any;
   const isHodUser = String(currentUser?.role ?? '').toUpperCase() === 'HOD' || String(currentUser?.role ?? '').toUpperCase() === 'HEAD_OF_DEPARTMENT';
   const { data: myDept } = useDepartmentByUser(isHodUser ? currentUser?.id : undefined);
-  const { data: apiClasses = [] as typeof adminClasses } = useAdminClasses() as unknown as { data: typeof adminClasses };
+  const { data: apiClasses = [] as typeof adminClasses, isLoading: classesLoading } = useAdminClasses() as unknown as { data: typeof adminClasses; isLoading: boolean };
   const { data: apiSubjects = [] as typeof adminSubjects } = useAdminSubjects() as unknown as { data: typeof adminSubjects };
   const { data: apiTeachingStaff = [] } = useTeachingStaff() as unknown as { data: Array<any> };
   const { data: apiYears = [] } = useAcademicYears();
@@ -1322,6 +1346,12 @@ export function ClassSubjectsPage() {
   const [pendingUnassignId, setPendingUnassignId] = useState<string | null>(null);
   const [assignSubjectId, setAssignSubjectId] = useState('');
   const [assignTeacherId, setAssignTeacherId] = useState('');
+
+  useEffect(() => {
+    setSelectedClassId(routeClassId ?? '');
+    setAssignSubjectId('');
+    setAssignTeacherId('');
+  }, [routeClassId]);
 
   const scopedClasses = activeSchool
     ? (apiClasses as any[]).filter((klass: any) => String(klass.schoolId ?? '') === String(activeSchool.id))
@@ -1335,6 +1365,7 @@ export function ClassSubjectsPage() {
   const selectedClass = scopedClasses.find((c: any) => String(c.id) === selectedClassId);
   const currentYear = (apiYears as any[]).find((y: any) => y.isCurrent) ?? (apiYears as any[])[0];
   const selectedAcademicYearId = String((selectedClass as any)?.academicYearId ?? (currentYear as any)?.id ?? '');
+  const selectedAcademicYear = (apiYears as Array<{ id: string; name?: string; year?: string | number }>).find((year) => String(year.id) === selectedAcademicYearId);
   const teacherOptions = (apiTeachingStaff as any[])
     .sort((a: any, b: any) => String(a.name ?? '').localeCompare(String(b.name ?? '')))
     .map((user: any) => {
@@ -1355,12 +1386,20 @@ export function ClassSubjectsPage() {
     });
 
   useEffect(() => {
-    if (selectedClassId && !scopedClasses.some((klass: any) => String(klass.id) === selectedClassId)) {
+    if (!classesLoading && selectedClassId && !scopedClasses.some((klass: any) => String(klass.id) === selectedClassId)) {
       setSelectedClassId('');
       setAssignSubjectId('');
       setAssignTeacherId('');
     }
-  }, [activeSchool?.id, selectedClassId, scopedClasses]);
+  }, [activeSchool?.id, selectedClassId, scopedClasses, classesLoading]);
+
+  useEffect(() => {
+    if (teacherContextId && apiTeachingStaff.some((user) => String(user.id) === teacherContextId) && assignTeacherId !== teacherContextId) {
+      setAssignTeacherId(teacherContextId);
+    }
+  }, [teacherContextId, apiTeachingStaff, assignTeacherId]);
+
+  const teacherContext = apiTeachingStaff.find((user) => String(user.id) === teacherContextId);
 
   const allStageSubjects = selectedClass
     ? (apiSubjects as any[]).filter((s: any) => {
@@ -1415,7 +1454,25 @@ export function ClassSubjectsPage() {
   };
 
   return (
-    <AdminShell title="Teaching Assignments" eyebrow="Academic Setup">
+    <AdminShell title={selectedClass && routeClassId ? `${selectedClass.name} · Subjects & Teachers` : 'Teaching Assignments'} eyebrow={routeClassId ? 'Class Workspace' : 'Academic Setup'}>
+      {routeClassId && selectedClass && (
+        <div className="mb-4 flex flex-wrap items-center gap-3">
+          <NavLink to="/admin/classes" className="text-sm font-black text-[#4338CA] hover:underline">← Classes</NavLink>
+          <span className="text-slate-300">/</span>
+          <NavLink to={`/admin/classes/${routeClassId}`} className="text-sm font-black text-[#4338CA] hover:underline">Class overview</NavLink>
+          <NavLink to={`/admin/classes/${routeClassId}/students`} className="text-sm font-black text-[#4338CA] hover:underline">Student roster</NavLink>
+        </div>
+      )}
+      {teacherContext && !routeClassId && (
+        <div className="mb-4 rounded-xl border border-indigo-100 bg-indigo-50 px-4 py-3 text-sm font-semibold text-indigo-900">
+          Assigning classes/subjects for <span className="font-black">{teacherContext.name}</span>. Choose a class to review its current assignments or assign this teacher to another subject.
+        </div>
+      )}
+      {teacherContextId && !teacherContext && !routeClassId && (
+        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">
+          This teacher is not available for assignment in the selected school. Check the school context and account status, or choose an active teacher.
+        </div>
+      )}
       <AdminFormSection title="Assign Subjects to Teachers" subtitle="Select a class, then assign each subject to any active teacher in the selected school. Reassign a subject at any time.">
         {!activeSchool ? (
           <div className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm font-semibold text-amber-900">
@@ -1439,6 +1496,10 @@ export function ClassSubjectsPage() {
                 {String(selectedClass.stage ?? selectedClass.educationStage ?? '')}
               </Badge>
             </div>
+            <p className="text-xs font-semibold text-slate-500">
+              {[activeSchool?.name, selectedAcademicYear?.name ?? selectedAcademicYear?.year, (selectedClass as any).combinationCode]
+                .filter(Boolean).join(' · ')}
+            </p>
 
             {/* Assigned subjects table */}
             {classSubjects.length === 0 ? (
@@ -1761,7 +1822,9 @@ function isTerminalClass(stage: ClassWizardState['educationStage'], level: strin
 }
 
 export function ClassesPage() {
-  const { data: apiClasses = [] as typeof adminClasses } = useAdminClasses() as unknown as { data: typeof adminClasses };
+  const { data: apiClasses = [] as typeof adminClasses, isLoading: classesLoading, isError: classesError, refetch: refetchClasses } = useAdminClasses() as unknown as {
+    data: typeof adminClasses; isLoading: boolean; isError: boolean; refetch: () => void;
+  };
   const { data: apiPathways = [] as typeof classPathways } = useClassPathways() as unknown as { data: typeof classPathways };
   const { data: apiCombinations = [] as typeof subjectCombinations } = useSubjectCombinations() as unknown as { data: typeof subjectCombinations };
   const { data: apiSubjects = [] as typeof adminSubjects } = useAdminSubjects() as unknown as { data: typeof adminSubjects };
@@ -1780,6 +1843,8 @@ export function ClassesPage() {
   const [classEditForm, setClassEditForm] = useState<{ stream: string; capacity: string; classTeacherId: string }>({ stream: '', capacity: '', classTeacherId: '' });
   const [pendingDeleteClassId, setPendingDeleteClassId] = useState<string | null>(null);
   const [deleteClassError, setDeleteClassError] = useState<string | null>(null);
+  const [showClassWizard, setShowClassWizard] = useState(false);
+  const [classSearch, setClassSearch] = useState('');
 
   // â"€â"€ Streams (O-Level / Primary): frontend-only custom labels â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
   const [customStreams, setCustomStreams] = useState<string[]>([]);
@@ -2116,6 +2181,11 @@ export function ClassesPage() {
     acc[item.stage] = (acc[item.stage] ?? 0) + 1;
     return acc;
   }, {});
+  const visibleClasses = apiClasses.filter((item) => {
+    const query = classSearch.trim().toLowerCase();
+    return !query || [item.name, item.stage, item.stream, item.teacher, item.pathway, item.curriculum]
+      .some((value) => String(value ?? '').toLowerCase().includes(query));
+  });
 
   return (
     <AdminShell title="Class Management" eyebrow="Classes, rosters, assigned subjects">
@@ -2125,10 +2195,31 @@ export function ClassesPage() {
         { label: 'O-Level Classes', value: String((byStage.O_LEVEL ?? 0) + (byStage['O-Level'] ?? 0)), detail: 'Form 1 to Form 4', tone: 'blue' },
         { label: 'A-Level Streams', value: String((byStage.A_LEVEL ?? 0) + (byStage['A-Level'] ?? 0)), detail: 'Form 5/6 combinations', tone: 'amber' },
       ]} />
-      <AdminFormSection
-        title="Class Setup Wizard"
-        subtitle="Create Early Childhood, Primary, O-Level and A-Level classes for the selected academic year."
-      >
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div>
+          <h2 className="font-display text-lg font-black text-slate-900">Class directory</h2>
+          <p className="mt-0.5 text-sm font-semibold text-slate-500">Open a class to manage its roster, assigned subjects, and teachers.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="secondary" className="rounded-xl" onClick={() => document.getElementById('manage-streams-combinations')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
+            Manage streams &amp; combinations
+          </Button>
+          <Button className="rounded-xl bg-[#4338CA]" onClick={() => setShowClassWizard((visible) => !visible)}>
+            <Plus className="h-4 w-4" /> {showClassWizard ? 'Close Class Setup' : 'Add Class'}
+          </Button>
+        </div>
+      </div>
+      <div className="mb-4 max-w-lg">
+        <label htmlFor="class-directory-search" className="sr-only">Search classes</label>
+        <input
+          id="class-directory-search"
+          value={classSearch}
+          onChange={(event) => setClassSearch(event.target.value)}
+          placeholder="Search class, stage, stream, teacher…"
+          className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none focus:border-[#4338CA]"
+        />
+      </div>
+      {showClassWizard && <AdminFormSection title="Class Setup Wizard" subtitle="Create Early Childhood, Primary, O-Level and A-Level classes for the selected academic year.">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <SelectField key={`stage-${classForm.educationStage}`} label="Education Stage" value={classForm.educationStage} onChange={setClassValue('educationStage')} options={EDUCATION_STAGE_OPTIONS} />
           <SelectField key={`level-${classForm.educationStage}-${classForm.level}`} label="Class/Form Level" value={classForm.level} onChange={setClassValue('level')} options={STAGE_LEVEL_OPTIONS[classForm.educationStage]} />
@@ -2154,18 +2245,24 @@ export function ClassesPage() {
           <Button className="rounded-xl bg-[#4338CA]" loading={createClassMutation.isPending} onClick={submitClass}>
             Create Class
           </Button>
-          <button
-            type="button"
-            className="text-sm font-black text-[#4338CA] hover:underline"
-            onClick={() => document.getElementById('manage-streams-combinations')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-          >
+          <button type="button" className="text-sm font-black text-[#4338CA] hover:underline" onClick={() => document.getElementById('manage-streams-combinations')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
             Manage streams &amp; combinations ↓
           </button>
         </div>
-      </AdminFormSection>
+      </AdminFormSection>}
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
         <AdminDataTable columns={['Class', 'Stage', 'Stream', 'Students', 'Teacher', 'Pathway', 'Actions']}>
-          {apiClasses.map((item) => {
+          {classesLoading ? (
+            <tr><td colSpan={7} className="px-5 py-10 text-center text-sm font-semibold text-slate-500">Loading classes…</td></tr>
+          ) : classesError ? (
+            <tr><td colSpan={7} className="px-5 py-10 text-center text-sm font-semibold text-rose-700">
+              Could not load classes. <button type="button" onClick={() => refetchClasses()} className="font-black underline">Retry</button>
+            </td></tr>
+          ) : visibleClasses.length === 0 ? (
+            <tr><td colSpan={7} className="px-5 py-10 text-center text-sm font-semibold text-slate-500">
+              {classSearch ? 'No classes match your search.' : 'No classes configured for this school yet.'}
+            </td></tr>
+          ) : visibleClasses.map((item) => {
             const isEditing = editingClassId === String(item.id);
             const isDeleting = pendingDeleteClassId === String(item.id);
             return (
@@ -2205,6 +2302,8 @@ export function ClassesPage() {
                         <NavLink className="text-xs font-black text-[#4338CA] hover:underline" to={`/admin/classes/${item.id}`}>Open</NavLink>
                         <span className="text-slate-300">·</span>
                         <NavLink className="text-xs font-black text-emerald-600 hover:underline" to={`/admin/classes/${item.id}/students`}>Students</NavLink>
+                        <span className="text-slate-300">·</span>
+                        <NavLink className="text-xs font-black text-indigo-600 hover:underline" to={`/admin/classes/${item.id}/subjects`}>Subjects</NavLink>
                         <span className="text-slate-300">·</span>
                         <button onClick={() => startClassEdit(item)} className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" title="Edit stream / capacity">
                           <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
