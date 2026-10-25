@@ -83,3 +83,21 @@ export function resolveScopeSchoolIds(user?: RequestUser): string[] | null {
   const ids = (user.schoolIds ?? []).filter((id) => id && id !== '*');
   return ids.length ? ids : ['__none__'];
 }
+
+/** Schools a read covers: null = every school, an id, or the list of a multi-school user. */
+export type SchoolScope = string | string[] | null;
+
+/** Value for a `schoolId` column filter (callers have already ruled out null). */
+export function scopeValue(scope: string | string[]): string | { in: string[] } {
+  return Array.isArray(scope) ? { in: scope } : scope;
+}
+
+/** Prisma `where` fragment for a scope: no filter for null, else the school or the list of schools. */
+export function schoolWhere(scope?: SchoolScope): { schoolId?: string | { in: string[] } } {
+  return scope ? { schoolId: scopeValue(scope) } : {};
+}
+
+export function scopeCacheKey(scope?: SchoolScope): string {
+  if (!scope) return 'group';
+  return Array.isArray(scope) ? [...scope].sort().join('+') : scope;
+}

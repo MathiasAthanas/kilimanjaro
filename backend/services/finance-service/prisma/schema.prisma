@@ -423,6 +423,24 @@ model FinancialAuditLog {
   @@schema("finance")
 }
 
+model DefaulterContact {
+  id             String    @id @default(uuid())
+  schoolId       String
+  studentId      String
+  status         String    @default("CONTACTED")
+  method         String    @default("OTHER")
+  note           String
+  followUpDate   DateTime?
+  createdById    String
+  createdByRole  String
+  createdByLabel String
+  createdAt      DateTime  @default(now())
+
+  @@index([schoolId, createdAt])
+  @@index([studentId, createdAt])
+  @@schema("finance")
+}
+
 model Asset {
   id                 String         @id @default(uuid())
   schoolId           String?

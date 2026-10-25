@@ -4,7 +4,7 @@ import { ROLES } from '../common/constants/roles';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RequestUser } from '../common/interfaces/request-user.interface';
-import { resolveScopeSchoolId } from '../common/helpers/school-scope.helper';
+import { resolveScopeSchoolIds } from '../common/helpers/school-scope.helper';
 import { StudentsService } from './students.service';
 
 @ApiTags('Analytics - Students')
@@ -38,25 +38,25 @@ export class StudentsController {
       isOverdue,
       page: Number(page),
       limit: Number(limit),
-    }, resolveScopeSchoolId(user));
+    }, resolveScopeSchoolIds(user));
   }
 
   @Get('at-risk')
   @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA, ROLES.HEAD_OF_DEPARTMENT, ROLES.TEACHER)
   atRisk(@Query('classId') classId?: string, @CurrentUser() user?: RequestUser) {
-    return this.service.atRisk(classId, resolveScopeSchoolId(user));
+    return this.service.atRisk(classId, resolveScopeSchoolIds(user));
   }
 
   @Get('top-performers')
   @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA, ROLES.HEAD_OF_DEPARTMENT)
   topPerformers(@Query('classId') classId?: string, @Query('subjectId') subjectId?: string, @Query('termId') termId?: string, @Query('limit') limit = '10', @CurrentUser() user?: RequestUser) {
-    return this.service.topPerformers(classId, subjectId, termId, Number(limit), resolveScopeSchoolId(user));
+    return this.service.topPerformers(classId, subjectId, termId, Number(limit), resolveScopeSchoolIds(user));
   }
 
   @Get('most-improved')
   @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA, ROLES.HEAD_OF_DEPARTMENT, ROLES.TEACHER, ROLES.FINANCE, ROLES.HEAD_OF_FINANCE)
   mostImproved(@Query('classId') classId?: string, @Query('subjectId') subjectId?: string, @Query('termId') termId?: string, @CurrentUser() user?: RequestUser) {
-    return this.service.mostImproved(classId, subjectId, termId, resolveScopeSchoolId(user));
+    return this.service.mostImproved(classId, subjectId, termId, resolveScopeSchoolIds(user));
   }
 
   @Get('my-dashboard')

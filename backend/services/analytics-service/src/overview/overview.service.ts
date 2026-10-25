@@ -3,6 +3,7 @@ import { Prisma } from '../../generated/prisma';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { mean } from '../common/helpers/statistics.helper';
+import { SchoolScope, schoolWhere, scopeCacheKey, scopeValue } from '../common/helpers/school-scope.helper';
 
 @Injectable()
 export class OverviewService {
@@ -12,9 +13,9 @@ export class OverviewService {
     return (await this.prisma.academicYear.findFirst({ where: { isCurrent: true } }))?.id;
   }
 
-  async getOverview(academicYearId?: string, schoolId?: string | null) {
+  async getOverview(academicYearId?: string, schoolId?: SchoolScope) {
     const yearId = academicYearId || (await this.currentYearId()) || undefined;
-    const scopeKey = schoolId || 'group';
+    const scopeKey = scopeCacheKey(schoolId);
     const cacheKey = `analytics:overview:v2:${scopeKey}:${yearId || 'current'}`;
     const cached = await this.redis.get<any>(cacheKey);
     if (cached) return cached;
@@ -22,12 +23,12 @@ export class OverviewService {
     // When a school is selected, restrict all queries to that school. Tables that
     // carry schoolId filter directly; those that only have studentId (alerts,
     // pairings, payments) are scoped via the set of that school's student ids.
-    const schoolFilter = schoolId ? { schoolId } : {};
-    const studentSchoolFilter = schoolId ? { schoolId } : {};
+    const schoolFilter = schoolWhere(schoolId);
+    const studentSchoolFilter = schoolWhere(schoolId);
     const studentScope: Record<string, unknown> = schoolId
       ? {
           studentId: {
-            in: ((await this.prisma.student.findMany({ where: { schoolId }, select: { id: true } })).map((s) => s.id)) as string[],
+            in: ((await this.prisma.student.findMany({ where: { schoolId: scopeValue(schoolId) }, select: { id: true } })).map((s) => s.id)) as string[],
           },
         }
       : {};
@@ -44,7 +45,7 @@ export class OverviewService {
       this.prisma.peerPairing.findMany({ where: { status: 'COMPLETED', ...studentScope }, select: { outcomeDelta: true } }),
       this.prisma.invoice.findMany({ where: { academicYearId: yearId, ...schoolFilter }, select: { totalAmount: true, paidAmount: true, outstandingBalance: true, status: true } }),
       this.prisma.payment.findMany({ where: { status: 'CONFIRMED', ...studentScope }, select: { method: true, amount: true } }),
-      this.prisma.attendanceRecord.findMany({ where: schoolId ? { schoolId } : {}, select: { status: true } }),
+      this.prisma.attendanceRecord.findMany({ where: schoolWhere(schoolId), select: { status: true } }),
       // Notification has no schoolId/studentId (recipientId only) — group-wide metric.
       this.prisma.notification.findMany({ where: { createdAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } }, select: { channel: true, status: true } }),
     ]);

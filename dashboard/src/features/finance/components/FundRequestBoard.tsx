@@ -23,6 +23,7 @@ import {
   useCancelFundRequestMutation,
   type FundRequestRow,
 } from '../api/financeOps.hooks';
+import { errorMessage } from '../../../lib/api/errors';
 
 // Approval chain: initiate (HOD / Head of School) → Head of School approval
 // → Finance review → Manager approval → Finance disburses.
@@ -689,7 +690,7 @@ function CreateForm({ userName, onDone }: { userName: string; onDone: () => void
           setForm({ title: '', description: '', category: 'ACADEMIC', amount: '', department: '', neededBy: '' });
           onDone();
         },
-        onError: (e: any) => toast(e?.response?.data?.message ?? 'Failed to submit request', 'error'),
+        onError: (e: unknown) => toast(errorMessage(e, 'Failed to submit request'), 'error'),
       },
     );
   };

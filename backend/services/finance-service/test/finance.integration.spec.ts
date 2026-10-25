@@ -39,7 +39,11 @@ async function apiPatch(token: string, path: string, body: unknown) {
 }
 
 
-describe("Finance API Integration", () => {
+// These talk to a running stack (API_BASE, default the gateway on :3000), so they only run on request:
+//   RUN_INTEGRATION=1 npm test
+const integration = process.env.RUN_INTEGRATION ? describe : describe.skip;
+
+integration("Finance API Integration", () => {
   let ft: string; // financeToken
 
   beforeAll(async () => {

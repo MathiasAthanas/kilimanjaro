@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { pearsonCorrelation } from '../common/helpers/statistics.helper';
 import { RequestUser } from '../common/interfaces/request-user.interface';
+import { SchoolScope, schoolWhere, scopeCacheKey, scopeValue } from '../common/helpers/school-scope.helper';
 
 @Injectable()
 export class AttendanceService {
@@ -32,16 +33,16 @@ export class AttendanceService {
     };
   }
 
-  async getOverview(termId?: string, academicYearId?: string, classId?: string, schoolId?: string | null) {
+  async getOverview(termId?: string, academicYearId?: string, classId?: string, schoolId?: SchoolScope) {
     const scopedTerm = termId || (await this.currentTermId(academicYearId));
-    const cacheKey = `analytics:attendance:${schoolId || 'group'}:${scopedTerm || 'current'}:${classId || 'all'}`;
+    const cacheKey = `analytics:attendance:${scopeCacheKey(schoolId)}:${scopedTerm || 'current'}:${classId || 'all'}`;
     const cached = await this.redis.get<any>(cacheKey);
     if (cached) return cached;
 
-    const schoolFilter = schoolId ? { schoolId } : {};
+    const schoolFilter = schoolWhere(schoolId);
     // PerformanceAlert has no schoolId — scope it via the school's student ids.
     const studentScope: Record<string, unknown> = schoolId
-      ? { studentId: { in: ((await this.prisma.student.findMany({ where: { schoolId }, select: { id: true } })).map((s) => s.id)) as string[] } }
+      ? { studentId: { in: ((await this.prisma.student.findMany({ where: { schoolId: scopeValue(schoolId) }, select: { id: true } })).map((s) => s.id)) as string[] } }
       : {};
     const where = { ...schoolFilter, termId: scopedTerm || undefined, classId: classId || undefined };
     const [records, classes, students, reportCards, alerts] = await Promise.all([

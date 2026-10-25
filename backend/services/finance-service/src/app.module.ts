@@ -27,6 +27,7 @@ import { StoreModule } from './store/store.module';
 import { InternalModule } from './internal/internal.module';
 import { JobsModule } from './jobs/jobs.module';
 import { AuditModule } from './audit/audit.module';
+import { DefaulterContactsModule } from './defaulter-contacts/defaulter-contacts.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { NumberSequenceService } from './common/helpers/number-sequence.service';
 import { validateEnv } from './config/env.validation';
@@ -49,6 +50,7 @@ import { validateEnv } from './config/env.validation';
     RabbitMqModule,
     StudentClientModule,
     AuditModule,
+    DefaulterContactsModule,
     HealthModule,
     FeeCategoriesModule,
     FeeStructuresModule,

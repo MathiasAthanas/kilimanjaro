@@ -2,17 +2,18 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { toChart } from '../common/helpers/chart-formatter.helper';
+import { SchoolScope, schoolWhere, scopeCacheKey, scopeValue } from '../common/helpers/school-scope.helper';
 
 @Injectable()
 export class EnrolmentService {
   constructor(private readonly prisma: PrismaService, private readonly redis: RedisService) {}
 
-  async enrolment(academicYearId?: string, termId?: string, schoolId?: string | null) {
-    const key = `analytics:enrolment:${schoolId || 'group'}:${academicYearId || 'all'}:${termId || 'all'}`;
+  async enrolment(academicYearId?: string, termId?: string, schoolId?: SchoolScope) {
+    const key = `analytics:enrolment:${scopeCacheKey(schoolId)}:${academicYearId || 'all'}:${termId || 'all'}`;
     const cached = await this.redis.get<any>(key);
     if (cached) return cached;
 
-    const schoolFilter = schoolId ? { schoolId } : {};
+    const schoolFilter = schoolWhere(schoolId);
     const students = await this.prisma.student.findMany({ where: schoolFilter });
     const byGender = students.reduce<Record<string, number>>((acc, s) => { acc[s.gender] = (acc[s.gender] || 0) + 1; return acc; }, {});
     const byStatus = students.reduce<Record<string, number>>((acc, s) => { acc[s.status] = (acc[s.status] || 0) + 1; return acc; }, {});
@@ -59,8 +60,8 @@ export class EnrolmentService {
     return result;
   }
 
-  async chart(schoolId?: string | null) {
-    const schoolFilter = schoolId ? { schoolId } : {};
+  async chart(schoolId?: SchoolScope) {
+    const schoolFilter = schoolWhere(schoolId);
     const years = await this.prisma.academicYear.findMany({ orderBy: { name: 'asc' } });
     const labels: string[] = [];
     const total: number[] = [];

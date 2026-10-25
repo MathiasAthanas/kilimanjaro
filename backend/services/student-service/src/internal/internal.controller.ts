@@ -46,7 +46,11 @@ export class InternalController {
   @Get('schools')
   @ApiOperation({ summary: 'School id, code and name for every school (used to prefix document numbers)' })
   async schools() {
-    return this.prisma.school.findMany({ select: { id: true, code: true, name: true, motto: true, address: true, phone: true, email: true }, orderBy: { name: 'asc' } });
+    const rows = await this.prisma.school.findMany({
+      select: { id: true, code: true, name: true, motto: true, address: true, phone: true, email: true, _count: { select: { students: true } } },
+      orderBy: { name: 'asc' },
+    });
+    return rows.map(({ _count, ...school }) => ({ ...school, studentCount: _count.students }));
   }
 
   @Get('terms')

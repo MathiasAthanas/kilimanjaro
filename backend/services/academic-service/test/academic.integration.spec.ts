@@ -39,7 +39,11 @@ async function apiPatch(token: string, path: string, body: unknown) {
 }
 
 
-describe("Academic API Integration", () => {
+// These talk to a running stack (API_BASE, default the gateway on :3000), so they only run on request:
+//   RUN_INTEGRATION=1 npm test
+const integration = process.env.RUN_INTEGRATION ? describe : describe.skip;
+
+integration("Academic API Integration", () => {
   let tt: string; let ht: string; let pt: string; let at: string;
 
   beforeAll(async () => {

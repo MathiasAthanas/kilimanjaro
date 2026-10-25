@@ -22,9 +22,13 @@ export class UiController {
   async mobileSchools(@CurrentUser() user: GatewayUser): Promise<UiEnvelope> {
     const ids = (user.schoolIds ?? []).filter((id) => id && id !== '*');
     const res = await this.ui.tryGet({ service: 'student', path: '/schools' }, [], this.asService(user));
+    // Biggest school first, so staff in several schools land where the data is (not an empty one).
+    const sizes = await this.ui.tryGet({ service: 'student', path: '/students/internal/schools' }, [], this.asService(user));
+    const studentCount = new Map((this.ui.asArray(sizes.data) as Record<string, any>[]).map((sc) => [String(sc.id), Number(sc.studentCount ?? 0)]));
     const schools = (this.ui.asArray(res.data) as Record<string, any>[])
       .filter((sc) => user.scope === 'GROUP' || ids.includes(String(sc.id)))
-      .map((sc) => ({ id: sc.id, name: sc.name, code: sc.code ?? null }));
+      .map((sc) => ({ id: sc.id, name: sc.name, code: sc.code ?? null }))
+      .sort((a, b) => (studentCount.get(String(b.id)) ?? 0) - (studentCount.get(String(a.id)) ?? 0) || String(a.name).localeCompare(String(b.name)));
     return this.ui.envelope({ schools }, this.warning(res));
   }
 

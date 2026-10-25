@@ -5,7 +5,7 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { RequestUser } from '../common/interfaces/request-user.interface';
 import { ROLES } from '../common/constants/roles';
 import { OverviewService } from './overview.service';
-import { resolveScopeSchoolId } from '../common/helpers/school-scope.helper';
+import { resolveScopeSchoolIds } from '../common/helpers/school-scope.helper';
 
 @ApiTags('Analytics - Overview')
 @Controller('analytics/overview')
@@ -17,7 +17,7 @@ export class OverviewController {
   get(@Query('academicYearId') academicYearId?: string, @CurrentUser() user?: RequestUser) {
     // Honour the selected school for group users too — a group admin who picks
     // a school must see that school's numbers, not the whole-group totals.
-    const schoolId = resolveScopeSchoolId(user);
+    const schoolId = resolveScopeSchoolIds(user);
     return this.service.getOverview(academicYearId, schoolId);
   }
 }

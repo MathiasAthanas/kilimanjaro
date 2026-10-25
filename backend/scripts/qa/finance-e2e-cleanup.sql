@@ -13,4 +13,7 @@ delete from finance."Expense" where description = 'QA expense';
 delete from finance."Asset" where name = 'QA Projector';
 delete from finance."StoreMovement" where "storeItemId" in (select id from finance."StoreItem" where name = 'QA Chalk');
 delete from finance."StoreItem" where name = 'QA Chalk';
+delete from finance."DefaulterContact" where note in ('QA follow-up call','sneaky');
+delete from finance."FundRequestEvent" where "fundRequestId" in (select id from finance."FundRequest" where description = 'QA fund request');
+delete from finance."FundRequest" where description = 'QA fund request';
 commit;

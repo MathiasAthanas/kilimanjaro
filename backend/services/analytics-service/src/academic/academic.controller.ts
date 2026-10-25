@@ -4,7 +4,7 @@ import { ROLES } from '../common/constants/roles';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RequestUser } from '../common/interfaces/request-user.interface';
-import { resolveScopeSchoolId } from '../common/helpers/school-scope.helper';
+import { resolveScopeSchoolIds } from '../common/helpers/school-scope.helper';
 import { AcademicService } from './academic.service';
 
 @ApiTags('Analytics - Academic')
@@ -18,7 +18,7 @@ export class AcademicController {
   @ApiOperation({ summary: 'School academic overview analytics' })
   @ApiResponse({ status: 200 })
   overview(@Query('academicYearId') academicYearId?: string, @Query('termId') termId?: string, @CurrentUser() user?: RequestUser) {
-    return this.service.getOverview(academicYearId, termId, resolveScopeSchoolId(user));
+    return this.service.getOverview(academicYearId, termId, resolveScopeSchoolIds(user));
   }
 
   @Get('subject/:subjectId')
@@ -59,6 +59,6 @@ export class AcademicController {
   @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA, ROLES.MANAGING_DIRECTOR)
   @ApiOperation({ summary: 'Performance engine effectiveness' })
   performanceEngine(@Query('academicYearId') academicYearId?: string, @Query('termId') termId?: string, @CurrentUser() user?: RequestUser) {
-    return this.service.getPerformanceEngine(academicYearId, termId, resolveScopeSchoolId(user));
+    return this.service.getPerformanceEngine(academicYearId, termId, resolveScopeSchoolIds(user));
   }
 }

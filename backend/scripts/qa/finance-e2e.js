@@ -261,7 +261,10 @@ const list = (d) => (Array.isArray(d) ? d : d?.items ?? []);
   const auditS = list(ok(await call(hosS, 'GET', '/finance/audit-logs?limit=100'), 'audit S'));
   check('audit trail is school-scoped (primary)', auditP.length > 0 && auditP.every((a) => a.schoolId === PRIMARY), `n=${auditP.length}`);
   check('audit trail is school-scoped (secondary)', auditS.length > 0 && auditS.every((a) => a.schoolId === SECONDARY), `n=${auditS.length}`);
-  const auditAll = list(ok(await call(finance, 'GET', '/finance/audit-logs?limit=100'), 'audit all'));
+  const auditAll = [];
+  for (let page = 1; page <= 15 && !(auditAll.some((a) => a.schoolId === PRIMARY) && auditAll.some((a) => a.schoolId === SECONDARY)); page++) {
+    auditAll.push(...list(ok(await call(finance, 'GET', `/finance/audit-logs?limit=100&page=${page}`), 'audit all')));
+  }
   check('group finance sees both schools in the audit trail', auditAll.some((a) => a.schoolId === PRIMARY) && auditAll.some((a) => a.schoolId === SECONDARY));
   const ledgerP = ok(await call(hosP, 'GET', '/finance/invoices?paged=1&limit=10&status=OVERDUE,PAID'), 'ledger P');
   check('paged invoice ledger returns totals, counts and facets', ledgerP.items.length > 0 && ledgerP.meta.total >= ledgerP.items.length && ledgerP.totals && ledgerP.counts.ALL >= ledgerP.meta.total && Array.isArray(ledgerP.facets.classes));
@@ -281,6 +284,42 @@ const list = (d) => (Array.isArray(d) ? d : d?.items ?? []);
   check('fee assignments carry student names and stay in school', asgn.every((a) => a.studentName !== undefined));
   const pdf = await fetch(`${BASE}/finance/receipts/${onePay.receiptId}/pdf`, { headers: { authorization: `Bearer ${hosS.token}` } });
   check('receipt pdf is drawn on demand', pdf.status === 200 && (pdf.headers.get('content-type') || '').includes('pdf'));
+
+  console.log('\n== Defaulter follow-up log');
+  const dfRow = ok(await call(hosP, 'GET', '/finance/invoices?paged=1&limit=1&status=OVERDUE'), 'overdue P').items[0];
+  const contact = ok(await call(hosP, 'POST', '/finance/defaulter-contacts', { studentId: dfRow.studentId, note: 'QA follow-up call', method: 'PHONE', status: 'PROMISED' }), 'contact');
+  check('contact is saved against the student school', contact.schoolId === PRIMARY && contact.status === 'PROMISED');
+  const logP = list(ok(await call(hosP, 'GET', '/finance/defaulter-contacts'), 'log P'));
+  const logS = list(ok(await call(hosS, 'GET', '/finance/defaulter-contacts'), 'log S'));
+  check('own school sees the contact, other school does not', logP.some((c) => c.id === contact.id) && !logS.some((c) => c.id === contact.id));
+  await expectStatus('other school cannot log a contact for this student', call(hosS, 'POST', '/finance/defaulter-contacts', { studentId: dfRow.studentId, note: 'sneaky' }), 403, 404);
+  await expectStatus('a contact needs a note', call(hosP, 'POST', '/finance/defaulter-contacts', { studentId: dfRow.studentId, note: '' }), 400);
+
+  console.log('\n== Fund request workflow');
+  const hod = await staff('hod-science@demo.kilimanjaro.test', 'Hod@Kili2026');
+  const fr = ok(await call(hod, 'POST', '/finance/fund-requests', { title: 'QA lab reagents', description: 'QA fund request', category: 'SUPPLIES', amount: '75000', department: 'Science' }, PRIMARY), 'create fund request');
+  check('fund request is stamped with the school and submitted', fr.schoolId === PRIMARY && fr.status === 'SUBMITTED', `${fr.status}`);
+  const frS = list(ok(await call(hosS, 'GET', '/finance/fund-requests?limit=100'), 'fr S'));
+  check('other school does not see the fund request', !frS.some((r) => r.id === fr.id));
+  await expectStatus('other school cannot open the fund request', call(hosS, 'GET', `/finance/fund-requests/${fr.id}`), 403, 404);
+  await expectStatus('finance cannot review before the school approves', call(finance, 'PATCH', `/finance/fund-requests/${fr.id}/finance-review`, { note: 'too early' }, PRIMARY), 400, 403, 409);
+  await expectStatus('other school head cannot approve', call(hosS, 'PATCH', `/finance/fund-requests/${fr.id}/school-approve`, { note: 'no' }), 403, 404);
+  const a1 = ok(await call(hosP, 'PATCH', `/finance/fund-requests/${fr.id}/school-approve`, { note: 'ok' }), 'school approve');
+  check('school approval moves it on', a1.status === 'SCHOOL_APPROVED', a1.status);
+  const a2 = ok(await call(finance, 'PATCH', `/finance/fund-requests/${fr.id}/finance-review`, { note: 'budget available' }, PRIMARY), 'finance review');
+  check('finance review moves it on', a2.status === 'FINANCE_REVIEWED', a2.status);
+  await expectStatus('cannot disburse before the manager approves', call(finance, 'PATCH', `/finance/fund-requests/${fr.id}/disburse`, { method: 'CASH' }, PRIMARY), 400, 409);
+  const a3 = ok(await call(manager, 'PATCH', `/finance/fund-requests/${fr.id}/manager-approve`, { note: 'approved' }), 'manager approve');
+  check('manager approval moves it on', a3.status === 'MANAGER_APPROVED', a3.status);
+  const a4 = ok(await call(finance, 'PATCH', `/finance/fund-requests/${fr.id}/disburse`, { method: 'BANK_TRANSFER', reference: 'QA-DISB-1' }, PRIMARY), 'disburse');
+  check('disbursement completes the request', a4.status === 'DISBURSED', a4.status);
+  await expectStatus('a disbursed request cannot be rejected', call(manager, 'PATCH', `/finance/fund-requests/${fr.id}/reject`, { reason: 'late' }), 400, 409);
+  const fr2 = ok(await call(hod, 'POST', '/finance/fund-requests', { title: 'QA reject me', description: 'QA fund request', category: 'OTHER', amount: '1000' }, PRIMARY), 'create fr2');
+  await expectStatus('rejecting needs a reason', call(hosP, 'PATCH', `/finance/fund-requests/${fr2.id}/reject`, {}), 400);
+  const r2 = ok(await call(hosP, 'PATCH', `/finance/fund-requests/${fr2.id}/reject`, { reason: 'not budgeted' }), 'reject');
+  check('rejection is recorded', r2.status === 'REJECTED', r2.status);
+  const sumP = ok(await call(hosP, 'GET', '/finance/fund-requests/summary'), 'fr summary');
+  check('fund request summary loads for a school head', sumP !== null && typeof sumP === 'object');
 
   console.log(`\n${results.filter((r) => r.pass).length}/${results.length} checks passed, ${failures} failed`);
   process.exit(failures ? 1 : 0);

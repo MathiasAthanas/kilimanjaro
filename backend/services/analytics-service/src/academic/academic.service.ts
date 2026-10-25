@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { mean, standardDeviation } from '../common/helpers/statistics.helper';
+import { SchoolScope, schoolWhere, scopeCacheKey, scopeValue } from '../common/helpers/school-scope.helper';
 
 @Injectable()
 export class AcademicService {
@@ -19,16 +20,16 @@ export class AcademicService {
    * Alerts/pairings/interventions carry only `studentId` (no schoolId/relation),
    * so to scope them to a school we match the set of that school's student ids.
    */
-  private async studentIdScope(schoolId?: string | null): Promise<Record<string, unknown>> {
+  private async studentIdScope(schoolId?: SchoolScope): Promise<Record<string, unknown>> {
     if (!schoolId) return {};
-    const ids = (await this.prisma.student.findMany({ where: { schoolId }, select: { id: true } })).map((s) => s.id);
+    const ids = (await this.prisma.student.findMany({ where: { schoolId: scopeValue(schoolId) }, select: { id: true } })).map((s) => s.id);
     return { studentId: { in: ids.length ? ids : ['__none__'] } };
   }
 
   /** ClassSubject has no schoolId in the analytics read-model — scope via class ids. */
-  private async classIdList(schoolId?: string | null): Promise<string[] | null> {
+  private async classIdList(schoolId?: SchoolScope): Promise<string[] | null> {
     if (!schoolId) return null;
-    return (await this.prisma.class.findMany({ where: { schoolId }, select: { id: true } })).map((c) => c.id);
+    return (await this.prisma.class.findMany({ where: { schoolId: scopeValue(schoolId) }, select: { id: true } })).map((c) => c.id);
   }
 
   private gradeDistribution(results: { grade: string }[]) {
@@ -42,14 +43,14 @@ export class AcademicService {
     return base;
   }
 
-  async getOverview(academicYearId?: string, termId?: string, schoolId?: string | null) {
+  async getOverview(academicYearId?: string, termId?: string, schoolId?: SchoolScope) {
     const yearId = academicYearId || (await this.currentYearId());
     const scopedTermId = termId || (await this.currentTermId(yearId));
-    const key = `analytics:academic:overview:${schoolId || 'group'}:${yearId || 'current'}:${scopedTermId || 'current'}`;
+    const key = `analytics:academic:overview:${scopeCacheKey(schoolId)}:${yearId || 'current'}:${scopedTermId || 'current'}`;
     const cached = await this.redis.get<any>(key);
     if (cached) return cached;
 
-    const schoolFilter = schoolId ? { schoolId } : {};
+    const schoolFilter = schoolWhere(schoolId);
     const studentScope = await this.studentIdScope(schoolId);
     const classIds = await this.classIdList(schoolId);
     const classSubjectScope = classIds ? { classId: { in: classIds.length ? classIds : ['__none__'] } } : {};
@@ -407,13 +408,13 @@ export class AcademicService {
     return data;
   }
 
-  async getPerformanceEngine(academicYearId?: string, termId?: string, schoolId?: string | null) {
+  async getPerformanceEngine(academicYearId?: string, termId?: string, schoolId?: SchoolScope) {
     const scopedTermId = termId || (await this.currentTermId(academicYearId));
-    const key = `analytics:academic:engine:${schoolId || 'group'}:${academicYearId || 'current'}:${scopedTermId || 'current'}`;
+    const key = `analytics:academic:engine:${scopeCacheKey(schoolId)}:${academicYearId || 'current'}:${scopedTermId || 'current'}`;
     const cached = await this.redis.get<any>(key);
     if (cached) return cached;
 
-    const schoolFilter = schoolId ? { schoolId } : {};
+    const schoolFilter = schoolWhere(schoolId);
     const studentScope = await this.studentIdScope(schoolId);
     try {
       const [alerts, pairings, interventions, students, classes] = await Promise.all([

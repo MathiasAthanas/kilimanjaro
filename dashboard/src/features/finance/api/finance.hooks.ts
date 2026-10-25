@@ -763,6 +763,49 @@ export function useDailyCollections() {
   });
 }
 
+export interface DefaulterContact {
+  id: string;
+  studentId: string;
+  status: 'CONTACTED' | 'PROMISED' | 'ESCALATED';
+  method: string;
+  note: string;
+  followUpDate: string;
+  createdAt: string;
+  by: string;
+}
+
+/** The saved follow-up log for families who owe fees (newest first), for the schools in scope. */
+export function useDefaulterContacts() {
+  return useQuery({
+    queryKey: [...financeKeys.all, 'defaulter-contacts'] as const,
+    queryFn: () =>
+      api.get('/finance/defaulter-contacts').then((r) =>
+        arrayFromApi(payloadOf(r), ['items']).map((raw): DefaulterContact => {
+          const c = raw as Loose;
+          return {
+            id: strOf(c.id),
+            studentId: strOf(c.studentId),
+            status: (strOf(c.status) || 'CONTACTED') as DefaulterContact['status'],
+            method: strOf(c.method) || 'OTHER',
+            note: strOf(c.note),
+            followUpDate: strOf(c.followUpDate),
+            createdAt: strOf(c.createdAt),
+            by: strOf(c.createdByLabel, c.createdByRole),
+          };
+        }),
+      ),
+  });
+}
+
+export function useAddDefaulterContactMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { studentId: string; note: string; method?: string; status?: string; followUpDate?: string }) =>
+      api.post('/finance/defaulter-contacts', body).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [...financeKeys.all, 'defaulter-contacts'] }),
+  });
+}
+
 /** Every overdue invoice in scope (server-side, biggest debt first), shaped like an invoice row. */
 export function useFeeDefaulters() {
   return useQuery({

@@ -7,7 +7,6 @@ import {
   Briefcase,
   Check,
   CheckCircle2,
-  ChevronLeft,
   ChevronRight,
   Clock,
   ChevronDown,
@@ -29,10 +28,8 @@ import {
   Search,
   Send,
   ShieldCheck,
-  TrendingDown,
   TrendingUp,
   User,
-  Users,
   WalletCards,
   X,
   Zap,
@@ -78,9 +75,7 @@ import {
   usePaymentLedger,
   useReceiptLedger,
   usePendingPaymentApprovals,
-  usePayments,
   usePayment,
-  useReceipts,
   useReceipt as useReceiptById,
   useStudentGroups,
   useCollectionSummary,
@@ -109,6 +104,8 @@ import {
   useAddPaymentNoteMutation,
   useDailyCollections,
   useFeeDefaulters,
+  useDefaulterContacts,
+  useAddDefaulterContactMutation,
 } from '../api/finance.hooks';
 import {
   ActionPanel,
@@ -118,20 +115,16 @@ import {
   AuditLogRow,
   CollectionRing,
   DenseBarChart,
-  FeeMatrixGrid,
   FinanceBreadcrumb,
   FinanceMetricStrip,
   FinanceStatusBadge,
   statusRail,
   FinanceTable,
   FinanceWorkspaceShell,
-  InvoiceTable,
   MiniColumnChart,
   PaymentTable,
-  ReadOnlyApprovalNotice,
   ReceiptList,
   ReceiptPreview,
-  ReportCard,
   Td,
   downloadReceiptPdf,
   downloadInvoicePdf,
@@ -149,6 +142,8 @@ import { DataError } from '../../../components/feedback/DataError';
 import { EmptyState } from '../../../components/feedback/EmptyState';
 import { SkeletonTable } from '../../../components/common/SkeletonTable';
 import { SkeletonCards } from '../../../components/common/SkeletonCards';
+import { errorMessage } from '../../../lib/api/errors';
+import type { Loose } from '../../../lib/loose';
 
 // Zero-value overview — shown when API hasn't returned data yet (no fake numbers)
 const EMPTY_OVERVIEW: typeof financeOverview = { totalInvoiced: 0, totalCollected: 0, outstanding: 0, collectionRate: 0, today: 0, overdueInvoices: 0 };
@@ -740,7 +735,7 @@ export function GenerateInvoicesPage() {
           const started = ((res as { data?: { jobId?: string } })?.data ?? res) as { jobId?: string } | undefined;
           if (started?.jobId) setJobId(started.jobId);
         },
-        onError: (err) => toast(err instanceof Error && err.message ? err.message : 'Failed to start invoice generation. Please try again.', 'error'),
+        onError: (err) => toast(errorMessage(err, 'Failed to start invoice generation. Please try again.'), 'error'),
       },
     );
   };
@@ -850,7 +845,7 @@ export function InvoiceDetailPage() {
   if (!apiInvoice) return <FinanceWorkspaceShell title="Not Found" eyebrow="Invoice detail"><EmptyState title="Invoice not found" description="This invoice does not exist or has been cancelled." /></FinanceWorkspaceShell>;
 
   const invoice = apiInvoice;
-  const embeddedPayments: Array<(typeof payments)[number]> = Array.isArray((invoice as any).payments) ? (invoice as any).payments : [];
+  const embeddedPayments: Array<(typeof payments)[number]> = Array.isArray((invoice as Loose).payments) ? (invoice as Loose).payments : [];
   const invoicePayments = embeddedPayments;
   const lastConfirmed = invoicePayments
     .filter((p) => String(p.status).toUpperCase() === 'CONFIRMED' && p.date)
@@ -877,7 +872,7 @@ export function InvoiceDetailPage() {
       { id: invoice.id, body: { discountAmount: String(amt), discountReason: discountForm.reason } },
       {
         onSuccess: () => { toast('Discount applied', 'success'); setActiveAction(null); setDiscountForm({ amount: '', reason: '' }); },
-        onError: () => toast('Failed to apply discount', 'error'),
+        onError: (e) => toast(errorMessage(e, 'Failed to apply discount'), 'error'),
       },
     );
   };
@@ -888,7 +883,7 @@ export function InvoiceDetailPage() {
       { id: invoice.id, body: { waiverReason: waiveForm.reason } },
       {
         onSuccess: () => { toast('Balance waived', 'warning'); setActiveAction(null); setWaiveForm({ reason: '' }); },
-        onError: () => toast('Failed to waive balance', 'error'),
+        onError: (e) => toast(errorMessage(e, 'Failed to waive balance'), 'error'),
       },
     );
   };
@@ -900,7 +895,7 @@ export function InvoiceDetailPage() {
       { id: invoice.id, body: { cancellationReason: cancelForm.reason } },
       {
         onSuccess: () => { toast('Invoice cancelled', 'warning'); navigate('/finance/invoices'); },
-        onError: () => toast('Failed to cancel invoice', 'error'),
+        onError: (e) => toast(errorMessage(e, 'Failed to cancel invoice'), 'error'),
       },
     );
   };
@@ -1142,7 +1137,7 @@ export function StudentLedgerPage() {
             const reportId = typeof job === 'string' ? job : String((job as Record<string, unknown>)?.id ?? (job as Record<string, unknown>)?.jobId ?? '');
             if (reportId) void downloadReportWhenReady(reportId, `student-statement-${studentId ?? 'student'}.pdf`);
           },
-          onError: () => toast('Failed to generate statement', 'error'),
+          onError: (e) => toast(errorMessage(e, 'Failed to generate statement'), 'error'),
         },
       );
     }
@@ -1447,7 +1442,7 @@ function SmartPaymentForm({ method }: { method: 'cash' | 'bank' }) {
     setUploadError('');
     uploadMutation.mutate(file, {
       onSuccess: (result) => setEvidenceFile((result as unknown as { file: UploadedFile }).file),
-      onError: (err) => setUploadError(err instanceof Error ? err.message : 'Upload failed'),
+      onError: (err) => setUploadError(errorMessage(err, 'Upload failed')),
     });
   };
 
@@ -1474,7 +1469,7 @@ function SmartPaymentForm({ method }: { method: 'cash' | 'bank' }) {
         toast(created?.requiresApproval === false ? `${label} recorded — receipt issued` : `${label} submitted for approval`, 'success');
         navigate('/finance/payments');
       },
-      onError: (e) => toast(e instanceof Error && e.message ? e.message : 'Failed to submit payment. Please try again.', 'error'),
+      onError: (e) => toast(errorMessage(e, 'Failed to submit payment. Please try again.'), 'error'),
     });
   };
 
@@ -1894,7 +1889,7 @@ export function PendingPaymentApprovalsPage() {
           setNoteText((prev) => ({ ...prev, [rowId]: '' }));
           toast('Note added', 'success');
         },
-        onError: () => toast('Failed to save note', 'error'),
+        onError: (e) => toast(errorMessage(e, 'Failed to save note'), 'error'),
       },
     );
   };
@@ -2171,7 +2166,7 @@ export function PaymentDetailPage() {
       { id: payment.id, body: { refundReason: refundReason.trim() } },
       {
         onSuccess: () => { toast('Payment refunded and receipt voided', 'warning'); setRefundOpen(false); setRefundReason(''); },
-        onError: (e) => toast(e instanceof Error ? e.message : 'Could not refund this payment', 'error'),
+        onError: (e) => toast(errorMessage(e, 'Could not refund this payment'), 'error'),
       },
     );
   };
@@ -2497,13 +2492,13 @@ export function FeeCategoriesPage() {
     if (!orderedCategories.length) { toast('No categories to reorder', 'warning'); return; }
     reorderMutation.mutate(orderedCategories.map((category) => category.id), {
       onSuccess: () => { toast('Category order saved', 'success'); setDeletePreview([]); },
-      onError: () => toast('Failed to save category order', 'error'),
+      onError: (e) => toast(errorMessage(e, 'Failed to save category order'), 'error'),
     });
   };
 
   const handleDeletePreview = () => {
     const preview = orderedCategories.map((category) => {
-      const row = category as any;
+      const row = category as Loose;
       const blockers = [
         row.usedByStructures ? `${row.usedByStructures} fee structures` : '',
         row.usedByAssignments ? `${row.usedByAssignments} student assignments` : '',
@@ -2573,7 +2568,7 @@ export function FeeCategoriesPage() {
               <Td>
                 <div className="text-xs font-bold text-[#334155]">
                   <div>{category.usedByStructures} structures</div>
-                  <div className="text-[#64748b]">{(category as any).usedByAssignments ?? 0} assignments / {(category as any).usedByInvoices ?? 0} invoices</div>
+                  <div className="text-[#64748b]">{(category as Loose).usedByAssignments ?? 0} assignments / {(category as Loose).usedByInvoices ?? 0} invoices</div>
                 </div>
               </Td>
               <Td><FinanceStatusBadge status={category.active ? 'ACTIVE' : 'INACTIVE'} /></Td>
@@ -2675,12 +2670,12 @@ function FeeCategoryForm({ title, mode }: { title: string; mode: 'create' | 'edi
     if (mode === 'create') {
       createMutation.mutate(body, {
         onSuccess: () => { toast('Fee category created', 'success'); navigate('/finance/fee-categories'); },
-        onError: () => toast('Failed to create category', 'error'),
+        onError: (e) => toast(errorMessage(e, 'Failed to create category'), 'error'),
       });
     } else if (id) {
       updateMutation.mutate({ id, body }, {
         onSuccess: () => { toast('Fee category updated', 'success'); navigate('/finance/fee-categories'); },
-        onError: () => toast('Failed to update category', 'error'),
+        onError: (e) => toast(errorMessage(e, 'Failed to update category'), 'error'),
       });
     }
   };
@@ -2755,7 +2750,7 @@ export function FeeStructuresPage() {
     setDeactivating(id);
     deactivateMutation.mutate(id, {
       onSuccess: () => { toast('Fee structure deactivated', 'warning'); setDeactivating(null); },
-      onError: () => { toast('Failed to deactivate structure', 'error'); setDeactivating(null); },
+      onError: (e) => { toast(errorMessage(e, 'Failed to deactivate structure'), 'error'); setDeactivating(null); },
     });
   };
   const { data: termList = [] } = useFinanceTerms();
@@ -3100,7 +3095,7 @@ export function FeeMatrixPage() {
                       <div className="flex flex-col items-center gap-0.5">
                         {groupMode && (
                           <input type="checkbox" checked={selCols.has(col.id)}
-                            onChange={() => setSelCols((p) => { const n = new Set(p); n.has(col.id) ? n.delete(col.id) : n.add(col.id); return n; })}
+                            onChange={() => setSelCols((p) => { const n = new Set(p); if (n.has(col.id)) n.delete(col.id); else n.add(col.id); return n; })}
                             className="mb-0.5 h-4 w-4 accent-[#00334f]"
                             onClick={(e) => e.stopPropagation()} />
                         )}
@@ -3548,7 +3543,7 @@ export function FeeAssignmentsPage() {
                   setRemoving(assignment.id);
                   removeMutation.mutate(assignment.id, {
                     onSuccess: () => { toast('Fee assignment removed', 'warning'); setRemoving(null); },
-                    onError: (e) => { toast(e instanceof Error && e.message ? e.message : 'Failed to remove assignment', 'error'); setRemoving(null); },
+                    onError: (e) => { toast(errorMessage(e, 'Failed to remove assignment'), 'error'); setRemoving(null); },
                   });
                 }}>
                 {removing === assignment.id ? '…' : 'Remove'}
@@ -3567,7 +3562,7 @@ export function FeeAssignmentsPage() {
 export function AssetsListPage() {
   const { data: apiAssets = [] as typeof assets, isLoading: assetsLoading, isError: assetsError, refetch: refetchAssets } = useAssets() as unknown as { data: typeof assets; isLoading: boolean; isError: boolean; refetch: () => void };
   const { data: apiAssetSummary } = useAssetSummary() as { data: Record<string, unknown> | undefined };
-  const { data: fixedRegister } = useFixedAssetRegister() as { data: any };
+  const { data: fixedRegister } = useFixedAssetRegister() as { data: Loose };
   const totalCost = (apiAssetSummary?.totalPurchaseCost as number | undefined) ?? 0;
   const currentValue = Number(apiAssetSummary?.fixedAssetValue ?? apiAssetSummary?.totalCurrentValue ?? 0);
   const groupedCount = Number(apiAssetSummary?.groupedAssets ?? 0);
@@ -3639,7 +3634,7 @@ export function AssetsListPage() {
           </div>
           {Array.isArray(fixedRegister.groups) && fixedRegister.groups.length > 0 && (
             <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {fixedRegister.groups.slice(0, 6).map((group: any) => (
+              {fixedRegister.groups.slice(0, 6).map((group: Loose) => (
                 <NavLink key={group.id} to={`/finance/assets/${group.id}`} className="rounded border border-[#e2e8f0] bg-[#f8fafc] p-3 transition hover:border-[#00334f]/30 hover:bg-white">
                   <p className="truncate text-sm font-black text-[#00334f]">{group.name}</p>
                   <p className="mt-1 text-xs font-semibold text-[#64748b]">{group.location || 'No location'} - {group.childCount ?? group.childAssets?.length ?? 0} items</p>
@@ -3678,7 +3673,7 @@ function AssetForm({ title, mode }: { title: string; mode: 'create' | 'edit' }) 
   const { id } = useParams();
   const [searchParams] = useSearchParams();
   const { data: apiAsset } = useAssetById(id ?? '') as { data: (typeof assets)[number] | undefined };
-  const { data: assetParents = [] } = useAssets() as unknown as { data: Array<any> };
+  const { data: assetParents = [] } = useAssets() as unknown as { data: Array<Loose> };
   const createMutation = useCreateAssetMutation();
   const updateMutation = useUpdateAssetMutation();
   const isPending = createMutation.isPending || updateMutation.isPending;
@@ -3727,12 +3722,12 @@ function AssetForm({ title, mode }: { title: string; mode: 'create' | 'edit' }) 
     if (mode === 'create') {
       createMutation.mutate(body, {
         onSuccess: () => { toast('Asset registered', 'success'); navigate('/finance/assets'); },
-        onError: () => toast('Failed to register asset', 'error'),
+        onError: (e) => toast(errorMessage(e, 'Failed to register asset'), 'error'),
       });
     } else if (id) {
       updateMutation.mutate({ id, body }, {
         onSuccess: () => { toast('Asset updated', 'success'); navigate('/finance/assets'); },
-        onError: () => toast('Failed to update asset', 'error'),
+        onError: (e) => toast(errorMessage(e, 'Failed to update asset'), 'error'),
       });
     }
   };
@@ -3871,8 +3866,8 @@ export function AssetDetailPage() {
   if (!apiAsset) return <FinanceWorkspaceShell title="Not Found" eyebrow="Asset profile"><EmptyState title="Asset not found" description="This asset does not exist or has been removed." /></FinanceWorkspaceShell>;
 
   const asset = apiAsset;
-  const childAssets = Array.isArray((asset as any).childAssets) ? (asset as any).childAssets : [];
-  const isGroup = (asset as any).isGroup === true;
+  const childAssets = Array.isArray((asset as Loose).childAssets) ? (asset as Loose).childAssets : [];
+  const isGroup = (asset as Loose).isGroup === true;
   return (
     <FinanceWorkspaceShell title={asset.name} eyebrow="Asset profile">
       <FinanceBreadcrumb crumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Assets', to: '/finance/assets' }, { label: asset.name }]} />
@@ -3902,7 +3897,7 @@ export function AssetDetailPage() {
                       <tr>{['Item', 'Category', 'Qty', 'Unit Cost', 'Total Cost', 'Current Value', 'Condition'].map((col) => <th key={col} className="px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-[#00334f]">{col}</th>)}</tr>
                     </thead>
                     <tbody className="divide-y divide-[#e2e8f0]">
-                      {childAssets.map((item: any) => (
+                      {childAssets.map((item: Loose) => (
                         <tr key={item.id} className="even:bg-[#f7f9fb]">
                           <td className="px-4 py-2.5 font-bold text-[#0f172a]">{item.name}</td>
                           <td className="px-4 py-2.5 text-[#475569]">{String(item.category ?? '').replaceAll('_', ' ')}</td>
@@ -3927,7 +3922,7 @@ export function AssetDetailPage() {
             <div className="mt-4 space-y-2">
               <NavLink to={`/finance/assets/${asset.id}/edit`}><Button variant="secondary" className="w-full justify-between rounded"><span>Edit asset</span><ArrowRight className="h-4 w-4" /></Button></NavLink>
               <Button variant="secondary" className="w-full justify-between rounded"
-                onClick={() => { const reason = window.prompt('Reason for disposing this asset:'); if (!reason) return; disposeMutation.mutate({ id: asset.id, body: { reason } }, { onSuccess: () => { toast('Asset disposed and recorded', 'warning'); navigate('/finance/assets'); }, onError: () => toast('Failed to dispose asset', 'error') }); }}>
+                onClick={() => { const reason = window.prompt('Reason for disposing this asset:'); if (!reason) return; disposeMutation.mutate({ id: asset.id, body: { reason } }, { onSuccess: () => { toast('Asset disposed and recorded', 'warning'); navigate('/finance/assets'); }, onError: (e) => toast(errorMessage(e, 'Failed to dispose asset'), 'error') }); }}>
                 <span>{disposeMutation.isPending ? 'Disposing…' : 'Dispose with reason'}</span><ArrowRight className="h-4 w-4" />
               </Button>
             </div>
@@ -4037,7 +4032,6 @@ export function FinancialReportsPage() {
   );
 }
 
-const BAR_TONES = ['bg-[#00334f]', 'bg-[#d59a1b]', 'bg-[#10b981]', 'bg-[#64748b]', 'bg-[#e11d48]', 'bg-[#0ea5e9]'];
 
 export function CollectionSummaryReportPage() {
   const { data: summary } = useCollectionSummary() as unknown as {
@@ -4857,7 +4851,7 @@ function prettyMethod(m: string): string {
 
 export function FeeDefaultersReportPage() {
   type ContactStatus = 'PENDING' | 'CONTACTED' | 'PROMISED' | 'ESCALATED';
-  type ContactNote = { text: string; method: string; date: string; followUp: string };
+  type ContactNote = { text: string; method: string; date: string; followUp: string; by: string };
 
   const { data: apiInvoices = [] as typeof invoices } = useFeeDefaulters() as unknown as { data: typeof invoices };
   const { data: apiOverview = EMPTY_OVERVIEW } = useFinanceOverview() as unknown as { data: typeof financeOverview };
@@ -4885,9 +4879,19 @@ export function FeeDefaultersReportPage() {
     return [...map.values()];
   }, [overdue]);
 
-  // Per-student contact tracking (session state)
-  const [contactStatus, setContactStatus] = useState<Record<string, ContactStatus>>({});
-  const [contactNotes, setContactNotes] = useState<Record<string, ContactNote[]>>({});
+  // Follow-up log saved on the server: newest contact first, so the first one per student is the current status
+  const { data: savedContacts = [] } = useDefaulterContacts();
+  const addContact = useAddDefaulterContactMutation();
+  const contactStatus = useMemo(() => {
+    const m: Record<string, ContactStatus> = {};
+    for (const c of savedContacts) if (!m[c.studentId]) m[c.studentId] = c.status;
+    return m;
+  }, [savedContacts]);
+  const contactNotes = useMemo(() => {
+    const m: Record<string, ContactNote[]> = {};
+    for (const c of savedContacts) (m[c.studentId] ??= []).push({ text: c.note, method: c.method, date: c.createdAt, followUp: c.followUpDate, by: c.by });
+    return m;
+  }, [savedContacts]);
   const [noteForm, setNoteForm] = useState<{ sid: string; text: string; method: string; followUp: string } | null>(null);
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
 
@@ -4918,13 +4922,17 @@ export function FeeDefaultersReportPage() {
   const submitNote = () => {
     if (!noteForm || !noteForm.text.trim()) return;
     const { sid, text, method, followUp } = noteForm;
-    setContactNotes((p) => ({ ...p, [sid]: [...(p[sid] ?? []), { text, method, date: new Date().toISOString(), followUp }] }));
-    if ((contactStatus[sid] ?? 'PENDING') === 'PENDING') setContactStatus((p) => ({ ...p, [sid]: 'CONTACTED' }));
-    setNoteForm(null);
+    addContact.mutate(
+      { studentId: sid, note: text.trim(), method, status: contactStatus[sid] ?? 'CONTACTED', followUpDate: followUp || undefined },
+      {
+        onSuccess: () => { toast('Contact saved', 'success'); setNoteForm(null); },
+        onError: (e) => toast(errorMessage(e, 'Could not save the contact'), 'error'),
+      },
+    );
   };
 
   const toggleCard = (sid: string) =>
-    setExpandedCards((p) => { const n = new Set(p); n.has(sid) ? n.delete(sid) : n.add(sid); return n; });
+    setExpandedCards((p) => { const n = new Set(p); if (n.has(sid)) n.delete(sid); else n.add(sid); return n; });
 
   const STATUS_LABEL: Record<ContactStatus, string> = { PENDING: 'Not Contacted', CONTACTED: 'Contacted', PROMISED: 'Promise to Pay', ESCALATED: 'Escalated' };
   const STATUS_COLOR: Record<ContactStatus, string> = {
@@ -4946,8 +4954,6 @@ export function FeeDefaultersReportPage() {
         { label: 'Not Yet Contacted', value: String(notContacted), detail: 'No contact logged yet',    tone: 'navy' },
         { label: 'Escalated',         value: String(escalated),    detail: 'Referred for action',      tone: 'red' },
       ]} />
-
-      <p className="text-xs font-semibold text-[#64748b]">Contact status and follow-up notes on this page are working notes for this browser session; they are not saved to the student record.</p>
 
       {/* ── Filter bar ── */}
       <div className="flex flex-wrap items-center gap-3">
@@ -5030,9 +5036,16 @@ export function FeeDefaultersReportPage() {
                       </NavLink>
                     </div>
                     <select value={status}
-                      onChange={(e) => setContactStatus((p) => ({ ...p, [def.studentId]: e.target.value as ContactStatus }))}
+                      onChange={(e) => {
+                        const next = e.target.value as ContactStatus;
+                        if (next === 'PENDING') return;
+                        addContact.mutate(
+                          { studentId: def.studentId, status: next, note: `Status changed to ${STATUS_LABEL[next]}` },
+                          { onError: (err) => toast(errorMessage(err, 'Could not update the status'), 'error') },
+                        );
+                      }}
                       className="h-7 rounded border border-[#d5dde6] bg-white px-2 text-[10px] font-bold text-[#00334f] outline-none">
-                      <option value="PENDING">Not Contacted</option>
+                      <option value="PENDING" disabled={status !== 'PENDING'}>Not Contacted</option>
                       <option value="CONTACTED">Contacted</option>
                       <option value="PROMISED">Promise to Pay</option>
                       <option value="ESCALATED">Escalated</option>
@@ -5073,7 +5086,7 @@ export function FeeDefaultersReportPage() {
                           {notes.map((n, i) => (
                             <div key={i} className="rounded-lg border border-[#e2e8f0] bg-white px-4 py-3">
                               <div className="flex items-center justify-between text-[10px]">
-                                <span className="font-black uppercase text-[#00334f]">{n.method.replace(/_/g, ' ')}</span>
+                                <span className="font-black uppercase text-[#00334f]">{n.method.replace(/_/g, ' ')}{n.by ? ` · ${n.by}` : ''}</span>
                                 <span className="text-[#94a3b8]">{formatDate(n.date)}</span>
                               </div>
                               <p className="mt-1.5 text-sm text-[#0f172a]">{n.text}</p>
@@ -5093,7 +5106,7 @@ export function FeeDefaultersReportPage() {
                               <select value={noteForm.method}
                                 onChange={(e) => setNoteForm((f) => f && { ...f, method: e.target.value })}
                                 className={inp}>
-                                {['PHONE', 'IN_PERSON', 'SMS', 'LETTER', 'EMAIL'].map((m) => (
+                                {['PHONE', 'IN_PERSON', 'SMS', 'WHATSAPP', 'LETTER', 'EMAIL'].map((m) => (
                                   <option key={m} value={m}>{m.replace(/_/g, ' ')}</option>
                                 ))}
                               </select>
@@ -5110,8 +5123,8 @@ export function FeeDefaultersReportPage() {
                             placeholder="What was discussed? Any commitment to pay? Outcome of the contact…"
                             className="h-20 w-full resize-none rounded-lg border border-[#d5dde6] bg-[#f7f9fb] px-3 py-2 text-sm outline-none focus:border-[#00334f] focus:bg-white" />
                           <div className="flex gap-2">
-                            <Button onClick={submitNote} disabled={!noteForm.text.trim()}>
-                              <Check className="h-4 w-4" /> Save Note
+                            <Button onClick={submitNote} disabled={!noteForm.text.trim() || addContact.isPending}>
+                              <Check className="h-4 w-4" /> {addContact.isPending ? 'Saving…' : 'Save Note'}
                             </Button>
                             <Button variant="secondary" onClick={() => setNoteForm(null)}>Cancel</Button>
                           </div>
@@ -5312,7 +5325,7 @@ export function FinanceExportsPage() {
       const count = await exportFinanceCsv(item.key);
       toast(count ? `${item.label}: ${count} rows downloaded` : `${item.label}: nothing to export yet`, count ? 'success' : 'info');
     } catch (e) {
-      toast(e instanceof Error && e.message ? `Could not export ${item.label}: ${e.message}` : `Could not export ${item.label}. Please try again.`, 'error');
+      toast(errorMessage(e, `Could not export ${item.label}. Please try again.`), 'error');
     } finally {
       setGenerating(null);
     }
@@ -5387,69 +5400,6 @@ export function FinanceNotReadyState() {
 }
 
 // ─── Shared page components ───────────────────────────────────────────────────
-
-function ReportPage({
-  title,
-  reportBreadcrumb,
-  chartValues,
-  overdue = false,
-}: {
-  title: string;
-  reportBreadcrumb: string;
-  chartValues: Array<{ label: string; value: number; tone?: string }>;
-  overdue?: boolean;
-}) {
-  const { data: apiOverview = EMPTY_OVERVIEW } = useFinanceOverview() as unknown as { data: typeof financeOverview };
-  const { data: apiPayments = [] as typeof payments } = usePayments() as unknown as { data: typeof payments };
-  const generateMutation = useGenerateReportMutation();
-  const collected = overdue ? apiOverview.outstanding : apiOverview.totalCollected;
-  const collectedPct = apiOverview.totalInvoiced > 0 ? Math.round((collected / apiOverview.totalInvoiced) * 100) : 0;
-  const invoiceCount = apiPayments.length;
-  const today = new Date().toLocaleDateString();
-  // Real collection trend: bucket confirmed payments by day
-  const trendData = useMemo(() => {
-    const byDay = new Map<string, number>();
-    apiPayments.forEach((p) => {
-      const day = String(p.date ?? '').slice(0, 10);
-      if (!day) return;
-      byDay.set(day, (byDay.get(day) ?? 0) + (p.amount ?? 0));
-    });
-    return [...byDay.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([, v]) => v);
-  }, [apiPayments]);
-  return (
-    <FinanceWorkspaceShell title={title} eyebrow="Generated report workspace">
-      <FinanceBreadcrumb crumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Reports', to: '/finance/reports' }, { label: reportBreadcrumb }]} />
-      <FinanceMetricStrip items={[
-        { label: overdue ? 'Outstanding' : 'Collected', value: formatTZS(collected), detail: 'Current term', tone: overdue ? 'red' : 'green', trend: overdue ? 'down' : 'up', progress: collectedPct },
-        { label: 'Payments', value: String(invoiceCount), detail: 'Report scope', tone: 'navy' },
-        { label: 'Collection Rate', value: `${apiOverview.collectionRate}%`, detail: 'Term rate', tone: 'slate' },
-        { label: 'Generated', value: today, detail: 'Live report', tone: 'gold' },
-      ]} />
-      <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_340px]">
-        <div className="space-y-gutter">
-          <MiniColumnChart title="Collection Trend" subtitle={trendData.length ? `${trendData.length}-day view` : 'No dated payments yet'} data={trendData.length ? trendData : [collected]} startLabel="Earliest" endLabel="Latest" />
-          {chartValues.length ? <DenseBarChart values={chartValues} /> : null}
-        </div>
-        <div className="space-y-gutter sticky top-24 h-fit">
-          <div className="rounded-lg border border-[#d5dde6] bg-white p-5">
-            <p className="text-[11px] font-black uppercase tracking-widest text-[#64748b]">Report Actions</p>
-            <div className="mt-4 space-y-2">
-              <Button variant="secondary" className="w-full justify-between rounded"
-                onClick={async () => { toast('Generating PDF…', 'info'); try { const result = await generateMutation.mutateAsync({ type: 'finance-report', format: 'pdf', report: reportBreadcrumb }) as Record<string, unknown>; const jobId = String(result?.id ?? result?.jobId ?? ''); if (jobId) { await downloadReportWhenReady(jobId, `${reportBreadcrumb}.pdf`); toast('PDF downloaded', 'success'); } } catch { toast('Failed to generate PDF', 'error'); } }}>
-                <span>Download PDF</span><ArrowRight className="h-4 w-4" />
-              </Button>
-              <Button variant="secondary" className="w-full justify-between rounded"
-                onClick={async () => { toast('Generating CSV…', 'info'); try { const result = await generateMutation.mutateAsync({ type: 'finance-report', format: 'csv', report: reportBreadcrumb }) as Record<string, unknown>; const jobId = String(result?.id ?? result?.jobId ?? ''); if (jobId) { await downloadReportWhenReady(jobId, `${reportBreadcrumb}.csv`); toast('CSV downloaded', 'success'); } } catch { toast('Failed to generate CSV', 'error'); } }}>
-                <span>Export CSV</span><ArrowRight className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
-      <PaymentTable rows={apiPayments} />
-    </FinanceWorkspaceShell>
-  );
-}
 
 function SideSummary({ title, items }: { title: string; items: Array<[string, string]> }) {
   return (
@@ -5540,17 +5490,6 @@ function InvoiceActionPanel({ invoice, onRecordPayment, onDownloadPdf, onRegenPd
           ) : null}
         </div>
       </div>
-    </div>
-  );
-}
-
-function SectionTitle({ title, to }: { title: string; to: string }) {
-  return (
-    <div className="flex items-center justify-between">
-      <h2 className="font-display text-xl font-black text-[#00334f]">{title}</h2>
-      <NavLink to={to} className="flex items-center gap-1 text-xs font-black uppercase tracking-widest text-[#d59a1b]">
-        Open <ArrowRight className="h-3.5 w-3.5" />
-      </NavLink>
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { AlertTriangle, ArrowRight, Plus, Send, X, PackagePlus, ArrowDownToLine, ArrowUpFromLine, Sliders, FileText, AlertCircle, BarChart3, ClipboardList } from 'lucide-react';
+import { AlertTriangle, Plus, Send, X, PackagePlus, ArrowDownToLine, ArrowUpFromLine, Sliders, FileText, AlertCircle, BarChart3, ClipboardList } from 'lucide-react';
 import { Button } from '../../../components/common/Button';
 import { Badge } from '../../../components/common/Badge';
 import { EmptyState } from '../../../components/feedback/EmptyState';
@@ -30,9 +30,16 @@ import {
   useAdjustStockMutation,
   type StoreItemRow,
 } from '../api/financeOps.hooks';
+import { errorMessage } from '../../../lib/api/errors';
 
 const input = 'mt-1 h-11 w-full rounded border border-[#d5dde6] bg-[#f7f9fb] px-3 font-semibold outline-none focus:border-[#00334f]';
 const lbl = 'text-[11px] font-black uppercase tracking-widest text-[#64748b]';
+
+/** Only finance staff change expenses and stock; heads of school and directors see them read-only (the API enforces the same). */
+function useCanManageFinance() {
+  const role = String(useAuthStore((s) => s.session?.user?.role) ?? '').toUpperCase();
+  return ['FINANCE', 'HEAD_OF_FINANCE', 'SYSTEM_ADMIN'].includes(role);
+}
 
 function useUserName() {
   return useAuthStore((s) => s.session?.user?.name) ?? 'Finance Officer';
@@ -72,6 +79,7 @@ export function FinancialStatementPage() {
 // ════════════════════════════════ EXPENSES ══════════════════════════════════════
 export function ExpensesPage() {
   const userName = useUserName();
+  const canManage = useCanManageFinance();
   const { data: expenses = [], isLoading } = useExpenses();
   const { data: summary } = useExpenseSummary();
   const [showForm, setShowForm] = useState(false);
@@ -89,13 +97,17 @@ export function ExpensesPage() {
         { label: 'Categories', value: String(summary?.byCategory?.length ?? 0), detail: 'Active spend areas', tone: 'slate' },
       ]} />
 
-      <div className="flex justify-end">
-        <Button className="rounded bg-[#00334f] py-2 text-xs hover:bg-[#001e30] hover:shadow-none" onClick={() => setShowForm((v) => !v)}>
-          <Plus className="h-3.5 w-3.5" /> Record Expense
-        </Button>
-      </div>
+      {canManage ? (
+        <div className="flex justify-end">
+          <Button className="rounded bg-[#00334f] py-2 text-xs hover:bg-[#001e30] hover:shadow-none" onClick={() => setShowForm((v) => !v)}>
+            <Plus className="h-3.5 w-3.5" /> Record Expense
+          </Button>
+        </div>
+      ) : (
+        <p className="text-xs font-semibold text-[#64748b]">Read-only view. Expenses are recorded by the finance office.</p>
+      )}
 
-      {showForm && <RecordExpenseForm userName={userName} onDone={() => setShowForm(false)} />}
+      {canManage && showForm && <RecordExpenseForm userName={userName} onDone={() => setShowForm(false)} />}
 
       {isLoading ? (
         <SkeletonTable cols={7} />
@@ -121,9 +133,9 @@ export function ExpensesPage() {
                     <td className="px-4 py-3 text-right font-mono font-black tabular-nums text-[#0f172a]">{formatTZS(e.amount)}</td>
                     <td className="px-4 py-3"><Badge tone={e.status === 'VOIDED' ? 'rose' : 'emerald'}>{e.status}</Badge></td>
                     <td className="px-4 py-3">
-                      {e.status !== 'VOIDED' && !e.fundRequestId && (
+                      {canManage && e.status !== 'VOIDED' && !e.fundRequestId && (
                         <button
-                          onClick={() => { const reason = window.prompt('Reason for voiding this expense?'); if (reason) voidMutation.mutate({ id: e.id, reason }, { onSuccess: () => toast('Expense voided', 'success'), onError: () => toast('Failed to void', 'error') }); }}
+                          onClick={() => { const reason = window.prompt('Reason for voiding this expense?'); if (reason) voidMutation.mutate({ id: e.id, reason }, { onSuccess: () => toast('Expense voided', 'success'), onError: (e) => toast(errorMessage(e, 'Failed to void'), 'error') }); }}
                           className="rounded border border-rose-200 px-2.5 py-1 text-[11px] font-black uppercase tracking-wide text-rose-700 hover:bg-rose-50"
                         >Void</button>
                       )}
@@ -148,7 +160,7 @@ function RecordExpenseForm({ userName, onDone }: { userName: string; onDone: () 
     if (!form.description.trim() || !form.amount) { toast('Description and amount are required', 'error'); return; }
     createMutation.mutate(
       { ...form, recordedByName: userName, incurredAt: new Date(form.incurredAt).toISOString() },
-      { onSuccess: () => { toast('Expense recorded', 'success'); onDone(); }, onError: () => toast('Failed to record expense', 'error') },
+      { onSuccess: () => { toast('Expense recorded', 'success'); onDone(); }, onError: (e) => toast(errorMessage(e, 'Failed to record expense'), 'error') },
     );
   };
   return (
@@ -173,7 +185,7 @@ function RecordExpenseForm({ userName, onDone }: { userName: string; onDone: () 
 }
 
 // ─── Low stock alert panel ────────────────────────────────────────────────────
-function LowStockAlerts({ items, onReceive }: { items: StoreItemRow[]; onReceive: (item: StoreItemRow) => void }) {
+function LowStockAlerts({ items, onReceive }: { items: StoreItemRow[]; onReceive?: (item: StoreItemRow) => void }) {
   const critical = items.filter((i) => i.quantityOnHand === 0);
   const warning  = items.filter((i) => i.quantityOnHand > 0);
   return (
@@ -220,10 +232,12 @@ function LowStockAlerts({ items, onReceive }: { items: StoreItemRow[]; onReceive
                   <p className="mt-1.5 text-[10px] text-[#94a3b8]">Unit cost: {formatTZS(item.unitCost)}</p>
                 )}
               </div>
+              {onReceive && (
               <button onClick={() => onReceive(item)}
                 className="flex w-full items-center justify-center gap-1.5 border-t border-[#f1f5f9] py-2 text-[10px] font-black uppercase tracking-wide text-emerald-700 hover:bg-emerald-50">
                 <ArrowDownToLine className="h-3 w-3" /> Receive Stock
               </button>
+              )}
             </div>
           );
         })}
@@ -235,6 +249,7 @@ function LowStockAlerts({ items, onReceive }: { items: StoreItemRow[]; onReceive
 // ════════════════════════════════ STORE / INVENTORY ═════════════════════════════
 export function StorePage() {
   const userName = useUserName();
+  const canManage = useCanManageFinance();
   const { data: items = [], isLoading } = useStoreItems();
   const { data: summary } = useStoreSummary();
   const { data: movements = [] } = useStoreMovements({ limit: 12 });
@@ -255,17 +270,21 @@ export function StorePage() {
       {items.filter((i) => i.lowStock).length > 0 && (
         <LowStockAlerts
           items={items.filter((i) => i.lowStock)}
-          onReceive={(item) => setStock({ kind: 'receive', item })}
+          onReceive={canManage ? (item) => setStock({ kind: 'receive', item }) : undefined}
         />
       )}
 
-      <div className="flex justify-end">
-        <Button className="rounded bg-[#00334f] py-2 text-xs hover:bg-[#001e30] hover:shadow-none" onClick={() => setShowForm((v) => !v)}>
-          <PackagePlus className="h-3.5 w-3.5" /> New Item
-        </Button>
-      </div>
+      {canManage ? (
+        <div className="flex justify-end">
+          <Button className="rounded bg-[#00334f] py-2 text-xs hover:bg-[#001e30] hover:shadow-none" onClick={() => setShowForm((v) => !v)}>
+            <PackagePlus className="h-3.5 w-3.5" /> New Item
+          </Button>
+        </div>
+      ) : (
+        <p className="text-xs font-semibold text-[#64748b]">Read-only view. Stock is managed by the finance office.</p>
+      )}
 
-      {showForm && <CreateItemForm onDone={() => setShowForm(false)} />}
+      {canManage && showForm && <CreateItemForm onDone={() => setShowForm(false)} />}
 
       {isLoading ? (
         <SkeletonTable cols={7} />
@@ -293,7 +312,7 @@ export function StorePage() {
                     <td className="px-4 py-3 text-right font-mono tabular-nums text-[#475569]">{formatTZS(it.unitCost)}</td>
                     <td className="px-4 py-3 text-right font-mono font-black tabular-nums text-[#0f172a]">{formatTZS(it.stockValue)}</td>
                     <td className="px-4 py-3">
-                      <div className="flex flex-wrap gap-1.5">
+                      <div className={`flex flex-wrap gap-1.5 ${canManage ? '' : 'hidden'}`}>
                         <button onClick={() => setStock({ kind: 'receive', item: it })} className="inline-flex items-center gap-1 rounded border border-emerald-200 px-2 py-1 text-[11px] font-black uppercase text-emerald-700 hover:bg-emerald-50"><ArrowDownToLine className="h-3 w-3" /> In</button>
                         <button onClick={() => setStock({ kind: 'issue', item: it })} className="inline-flex items-center gap-1 rounded border border-amber-200 px-2 py-1 text-[11px] font-black uppercase text-amber-700 hover:bg-amber-50"><ArrowUpFromLine className="h-3 w-3" /> Out</button>
                         <button onClick={() => setStock({ kind: 'adjust', item: it })} className="inline-flex items-center gap-1 rounded border border-slate-200 px-2 py-1 text-[11px] font-black uppercase text-slate-600 hover:bg-slate-50"><Sliders className="h-3 w-3" /> Adj</button>
@@ -351,7 +370,7 @@ function CreateItemForm({ onDone }: { onDone: () => void }) {
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name.trim()) { toast('Item name is required', 'error'); return; }
-    createMutation.mutate(form, { onSuccess: () => { toast('Item added', 'success'); onDone(); }, onError: () => toast('Failed to add item', 'error') });
+    createMutation.mutate(form, { onSuccess: () => { toast('Item added', 'success'); onDone(); }, onError: (e) => toast(errorMessage(e, 'Failed to add item'), 'error') });
   };
   return (
     <form onSubmit={submit} className="rounded-lg border border-[#d5dde6] bg-white p-5">
@@ -387,7 +406,7 @@ function StockModal({ kind, item, userName, onClose }: { kind: 'receive' | 'issu
   const titles = { receive: 'Receive Stock', issue: 'Issue Stock', adjust: 'Adjust Stock' };
   const run = () => {
     const ok = (m: string) => { toast(m, 'success'); onClose(); };
-    const err = (e: unknown) => toast((e as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Action failed', 'error');
+    const err = (e: unknown) => toast(errorMessage(e, 'Action failed'), 'error');
     if (kind === 'receive') {
       if (!qty) { toast('Quantity is required', 'error'); return; }
       receive.mutate({ id: item.id, body: { quantity: qty, unitCost: unitCost || undefined, supplier: party || undefined, reference: reference || undefined, actorName: userName } }, { onSuccess: () => ok('Stock received'), onError: err });

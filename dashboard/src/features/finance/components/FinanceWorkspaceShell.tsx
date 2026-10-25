@@ -31,6 +31,7 @@ import { useFinanceOverview, usePendingPaymentApprovals } from '../api/finance.h
 import { api } from '../../../lib/api/client';
 import { useAuthStore } from '../../../lib/auth/authStore';
 import { financeHeaderLinks } from './financeHeaderLinks';
+import { errorMessage } from '../../../lib/api/errors';
 
 // ─── Shell ────────────────────────────────────────────────────────────────────
 
@@ -548,8 +549,8 @@ export async function downloadInvoicePdf(invoice: { id: string; number: string }
   try {
     await saveServerPdf(`/finance/invoices/${invoice.id}/pdf`, `invoice_${invoice.number}.pdf`);
     toastFn?.('Invoice PDF downloaded', 'success');
-  } catch (e: any) {
-    toastFn?.(e?.response?.data?.message ?? 'Could not download the invoice PDF', 'error');
+  } catch (e: unknown) {
+    toastFn?.(errorMessage(e, 'Could not download the invoice PDF'), 'error');
   }
 }
 
@@ -557,8 +558,8 @@ export async function downloadReceiptPdf(receiptId: string, toast?: (msg: string
   try {
     await saveServerPdf(`/finance/receipts/${receiptId}/pdf`, 'receipt.pdf');
     toast?.('Receipt downloaded', 'success');
-  } catch (e: any) {
-    toast?.(e?.response?.data?.message ?? 'Could not download the receipt PDF', 'error');
+  } catch (e: unknown) {
+    toast?.(errorMessage(e, 'Could not download the receipt PDF'), 'error');
   }
 }
 

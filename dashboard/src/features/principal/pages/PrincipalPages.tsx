@@ -82,6 +82,7 @@ import {
 import { DataError } from '../../../components/feedback/DataError';
 import { EmptyState } from '../../../components/feedback/EmptyState';
 import { SkeletonTable } from '../../../components/common/SkeletonTable';
+import type { Loose } from '../../../lib/loose';
 
 const money = (n: number) => `TZS ${n.toLocaleString('en-US')}`;
 
@@ -331,12 +332,12 @@ export function ReportCardsManagementPage() {
   const [genTermId, setGenTermId] = useState('');
   const [genResult, setGenResult] = useState<{ generated: number } | null>(null);
   const generateMutation = useGenerateReportCardsMutation();
-  const filteredTerms = (allTerms as any[]).filter((t: any) => !genYearId || t.academicYearId === genYearId);
+  const filteredTerms = (allTerms as Loose[]).filter((t: Loose) => !genYearId || t.academicYearId === genYearId);
 
   const handleGenerate = () => {
     if (!genClassId || !genTermId) { toast('Select both a class and a term before generating', 'warning'); return; }
     generateMutation.mutate({ classId: genClassId, termId: genTermId }, {
-      onSuccess: (data: any) => {
+      onSuccess: (data: Loose) => {
         const count = data?.generated ?? data?.count ?? '?';
         setGenResult({ generated: Number(count) });
         toast(`${count} report card(s) generated successfully`, 'success');
@@ -374,7 +375,7 @@ export function ReportCardsManagementPage() {
             <select className="rounded-lg border border-ks-line bg-ks-paper px-3 py-2 text-sm font-bold text-ks-navy outline-none"
               value={genYearId} onChange={(e) => { setGenYearId(e.target.value); setGenTermId(''); }}>
               <option value="">Select Year</option>
-              {(allYears as any[]).map((y: any) => <option key={y.id} value={y.id}>{y.name}</option>)}
+              {(allYears as Loose[]).map((y: Loose) => <option key={y.id} value={y.id}>{y.name}</option>)}
             </select>
           </div>
           <div className="flex flex-col gap-1">
@@ -382,7 +383,7 @@ export function ReportCardsManagementPage() {
             <select className="rounded-lg border border-ks-line bg-ks-paper px-3 py-2 text-sm font-bold text-ks-navy outline-none"
               value={genTermId} onChange={(e) => setGenTermId(e.target.value)}>
               <option value="">Select Term</option>
-              {filteredTerms.map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}
+              {filteredTerms.map((t: Loose) => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
           </div>
           <div className="flex flex-col gap-1">

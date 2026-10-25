@@ -4,7 +4,7 @@ import { createHash } from 'crypto';
 import { applyRoleFilter } from '../common/helpers/role-filter.helper';
 import { mean, percentileRank } from '../common/helpers/statistics.helper';
 import { RequestUser } from '../common/interfaces/request-user.interface';
-import { assertSchoolInScope } from '../common/helpers/school-scope.helper';
+import { assertSchoolInScope, SchoolScope, schoolWhere, scopeCacheKey, scopeValue } from '../common/helpers/school-scope.helper';
 import { DownstreamService } from '../downstream/downstream.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
@@ -476,13 +476,13 @@ export class StudentsService {
     isOverdue?: string;
     page: number;
     limit: number;
-  }, schoolId?: string | null) {
-    const hash = createHash('sha1').update(JSON.stringify({ ...params, schoolId: schoolId || 'group' })).digest('hex');
+  }, schoolId?: SchoolScope) {
+    const hash = createHash('sha1').update(JSON.stringify({ ...params, schoolId: scopeCacheKey(schoolId) })).digest('hex');
     const key = `analytics:students:list:${hash}`;
     const cached = await this.redis.get<any>(key);
     if (cached) return cached;
 
-    const where: any = schoolId ? { schoolId } : {};
+    const where: any = schoolWhere(schoolId);
     if (params.search) {
       where.OR = [
         { firstName: { contains: params.search, mode: 'insensitive' } },
@@ -563,10 +563,10 @@ export class StudentsService {
     return result;
   }
 
-  async atRisk(classId?: string, schoolId?: string | null) {
+  async atRisk(classId?: string, schoolId?: SchoolScope) {
     // PerformanceAlert has no schoolId — scope via the school's student ids.
     const studentScope: Record<string, unknown> = schoolId
-      ? { studentId: { in: ((await this.prisma.student.findMany({ where: { schoolId }, select: { id: true } })).map((s) => s.id)) as string[] } }
+      ? { studentId: { in: ((await this.prisma.student.findMany({ where: { schoolId: scopeValue(schoolId) }, select: { id: true } })).map((s) => s.id)) as string[] } }
       : {};
     const alerts = await this.prisma.performanceAlert.findMany({
       where: { isResolved: false, severity: { in: ['CRITICAL', 'HIGH'] }, ...studentScope },
@@ -600,10 +600,10 @@ export class StudentsService {
       .filter((row) => !classId || row.className === classId);
   }
 
-  async topPerformers(classId?: string, subjectId?: string, termId?: string, limit = 10, schoolId?: string | null) {
+  async topPerformers(classId?: string, subjectId?: string, termId?: string, limit = 10, schoolId?: SchoolScope) {
     try {
       const rows = await this.prisma.termResult.findMany({
-        where: { termId: termId || undefined, subjectId: subjectId || undefined, isPublished: true, ...(schoolId ? { schoolId } : {}) },
+        where: { termId: termId || undefined, subjectId: subjectId || undefined, isPublished: true, ...(schoolWhere(schoolId)) },
         orderBy: { weightedTotal: 'desc' },
         take: 500,
       });
@@ -639,7 +639,7 @@ export class StudentsService {
     }
   }
 
-  async mostImproved(classId?: string, subjectId?: string, _termId?: string, schoolId?: string | null) {
+  async mostImproved(classId?: string, subjectId?: string, _termId?: string, schoolId?: SchoolScope) {
     const trends = await this.prisma.performanceTrend.findMany({
       where: { subjectId: subjectId || undefined },
       orderBy: { trendSlope: 'desc' },
@@ -648,7 +648,7 @@ export class StudentsService {
 
     const studentIds = [...new Set(trends.map((row) => row.studentId))];
     const [students, enrolments, classes] = await Promise.all([
-      this.prisma.student.findMany({ where: { id: { in: studentIds }, ...(schoolId ? { schoolId } : {}) } }),
+      this.prisma.student.findMany({ where: { id: { in: studentIds }, ...(schoolWhere(schoolId)) } }),
       this.prisma.enrolment.findMany({ where: { studentId: { in: studentIds }, isActive: true } }),
       this.prisma.class.findMany(),
     ]);
