@@ -78,6 +78,11 @@ class ApiStaffMetricsService {
           value: _formatTzs(billing['totalOutstanding']),
           detail: 'Awaiting payment',
         ),
+        StaffMetric(
+          label: 'Overdue invoices',
+          value: '${(finance?['overdueAnalysis'] as Map<String, dynamic>?)?['overdueCount'] ?? 0}',
+          detail: _formatTzs((finance?['overdueAnalysis'] as Map<String, dynamic>?)?['overdueAmount']),
+        ),
       ];
     }
 
