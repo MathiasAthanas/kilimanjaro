@@ -426,9 +426,10 @@ export class AuthService {
     return Boolean(found);
   }
 
-  /** Only explicitly group-wide roles see every school; SYSTEM_ADMIN is school-scoped. */
+  /** Group-wide operational roles can view every school, while super-admin records remain protected separately. */
   private static readonly GROUP_ROLES: Role[] = [
     Role.SUPER_ADMIN,
+    Role.SYSTEM_ADMIN,
     Role.MANAGER,
     Role.HEAD_OF_FINANCE,
   ];

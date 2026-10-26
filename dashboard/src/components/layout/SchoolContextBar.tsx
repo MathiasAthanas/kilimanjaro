@@ -25,7 +25,8 @@ export function SchoolContextBar() {
 
   const role = session?.user.role;
   // Scope comes from the server and is authoritative. In particular, the
-  // dashboard's ADMIN label represents SYSTEM_ADMIN, which is school-scoped.
+  // dashboard's ADMIN label represents SYSTEM_ADMIN, whose scope comes from
+  // the live authorization response rather than the display label.
   const groupRole = session?.user.scope === 'GROUP';
   // Where "All Schools (Group)" / "Back to Group" lands, per role. ADMIN has no
   // /manager access (403) — its group home is the Admin Console.

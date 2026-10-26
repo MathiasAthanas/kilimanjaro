@@ -5,7 +5,7 @@ import { AuditService } from '../audit/audit.service';
 import { RabbitMQService } from '../rabbitmq/rabbitmq.service';
 import { UsersService } from '../users/users.service';
 
-const GROUP_ROLES: Role[] = [Role.SUPER_ADMIN, Role.MANAGER, Role.HEAD_OF_FINANCE];
+const GROUP_ROLES: Role[] = [Role.SUPER_ADMIN, Role.SYSTEM_ADMIN, Role.MANAGER, Role.HEAD_OF_FINANCE];
 
 type MembershipActor = {
   sub: string;

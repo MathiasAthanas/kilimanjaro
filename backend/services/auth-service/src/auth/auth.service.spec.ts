@@ -17,7 +17,7 @@ describe('AuthService school scope', () => {
 
   beforeEach(() => jest.clearAllMocks());
 
-  it('returns SYSTEM_ADMIN as a school-scoped user from its memberships', async () => {
+  it('returns SYSTEM_ADMIN as a group-scoped user', async () => {
     findById.mockResolvedValue({ id: 'admin-1', role: Role.SYSTEM_ADMIN, isActive: true });
     findMany.mockResolvedValue([{ schoolId: 'school-a', role: Role.SYSTEM_ADMIN }]);
 
@@ -25,8 +25,8 @@ describe('AuthService school scope', () => {
       id: 'admin-1',
       role: Role.SYSTEM_ADMIN,
       isActive: true,
-      scope: 'SCHOOL',
-      schoolIds: ['school-a'],
+      scope: 'GROUP',
+      schoolIds: ['*'],
     });
   });
 

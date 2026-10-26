@@ -29,10 +29,6 @@ export function TopCommandBar({ onMenuToggle }: TopCommandBarProps) {
         >
           <Menu className="h-5 w-5" />
         </button>
-        <span title="Select the academic year and term within each workflow" className="hidden items-center rounded-lg border border-ks-line bg-white px-3 py-1.5 text-sm font-bold text-ks-navy md:inline-flex">
-          Term set in workspace
-        </span>
-        <div className="hidden h-6 w-px bg-ks-line md:block" />
         <Link to="/app/search" className="flex min-w-0 items-center gap-3 text-sm font-bold text-ks-muted transition hover:text-ks-navy">
           <Search className="h-5 w-5" />
           <span className="hidden truncate sm:block">Search schools, staff or students...</span>

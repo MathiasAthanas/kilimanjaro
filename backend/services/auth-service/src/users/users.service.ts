@@ -31,6 +31,7 @@ type AuthActor = {
 export class UsersService {
   private static readonly GROUP_ROLES: Role[] = [
     Role.SUPER_ADMIN,
+    Role.SYSTEM_ADMIN,
     Role.MANAGER,
     Role.HEAD_OF_FINANCE,
   ];
