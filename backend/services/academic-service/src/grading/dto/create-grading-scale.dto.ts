@@ -3,7 +3,6 @@ import { IsArray, IsBoolean, IsEnum, IsInt, IsNotEmpty, IsNumber, IsOptional, Is
 
 export enum EducationStageDto {
   NURSERY = 'NURSERY',
-  PRE_UNIT = 'PRE_UNIT',
   PRIMARY = 'PRIMARY',
   O_LEVEL = 'O_LEVEL',
   A_LEVEL = 'A_LEVEL',

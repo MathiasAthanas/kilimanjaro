@@ -148,12 +148,12 @@ import type { Loose } from '../../../lib/loose';
 // Zero-value overview — shown when API hasn't returned data yet (no fake numbers)
 const EMPTY_OVERVIEW: typeof financeOverview = { totalInvoiced: 0, totalCollected: 0, outstanding: 0, collectionRate: 0, today: 0, overdueInvoices: 0 };
 
-type StageLabel = 'Nursery' | 'Pre-Unit' | 'Primary' | 'O-Level' | 'A-Level';
-const STAGE_LABELS: StageLabel[] = ['Nursery', 'Pre-Unit', 'Primary', 'O-Level', 'A-Level'];
+type StageLabel = 'Nursery' | 'Primary' | 'O-Level' | 'A-Level';
+const STAGE_LABELS: StageLabel[] = ['Nursery', 'Primary', 'O-Level', 'A-Level'];
 /** Maps the API's education stage (any case, _ or -) to the label used on screen. */
 function stageLabel(raw: string | undefined | null): StageLabel | null {
   const key = String(raw ?? '').toUpperCase().replace(/[^A-Z]/g, '');
-  return ({ NURSERY: 'Nursery', PREUNIT: 'Pre-Unit', PRIMARY: 'Primary', OLEVEL: 'O-Level', ALEVEL: 'A-Level' } as Record<string, StageLabel>)[key] ?? null;
+  return ({ NURSERY: 'Nursery', PRIMARY: 'Primary', OLEVEL: 'O-Level', ALEVEL: 'A-Level' } as Record<string, StageLabel>)[key] ?? null;
 }
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
@@ -3452,7 +3452,7 @@ export function CreateFeeStructurePage() {
               <label className="block">
                 <span className={cap}>Education Stage</span>
                 <select value={educationStage} onChange={(e) => setEducationStage(e.target.value)} className={sel}>
-                  <option value="NURSERY">Nursery</option><option value="PRE_UNIT">Pre-Unit</option><option value="PRIMARY">Primary</option><option value="O_LEVEL">O-Level</option><option value="A_LEVEL">A-Level</option>
+                  <option value="NURSERY">Nursery</option><option value="PRIMARY">Primary</option><option value="O_LEVEL">O-Level</option><option value="A_LEVEL">A-Level</option>
                 </select>
               </label>
               <label className="block">

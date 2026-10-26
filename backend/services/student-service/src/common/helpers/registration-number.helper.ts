@@ -2,7 +2,6 @@
  * Registration number format:  KEMS-{STAGE}-{YY}{NNN}
  *
  *   Nursery   →  KEMS-N-26001
- *   Pre-Unit  →  KEMS-PU-26001
  *   Primary   →  KEMS-P-26001
  *   O-Level   →  KEMS-O-26001
  *   A-Level   →  KEMS-A-26001
@@ -11,13 +10,12 @@
  * Legacy format (KS-…) is still parseable by stageFromRegistrationNumber.
  */
 
-export type EducationStageCode = 'NURSERY' | 'PRE_UNIT' | 'PRIMARY' | 'O_LEVEL' | 'A_LEVEL';
+export type EducationStageCode = 'NURSERY' | 'PRIMARY' | 'O_LEVEL' | 'A_LEVEL';
 
 const SCHOOL_PREFIX = 'KEMS';
 
 const STAGE_PREFIX: Record<EducationStageCode, string> = {
   NURSERY:  'N',
-  PRE_UNIT: 'PU',
   PRIMARY:  'P',
   O_LEVEL:  'O',
   A_LEVEL:  'A',
@@ -45,13 +43,14 @@ export function formatRegistrationNumber(year: number, sequence: number): string
 /** Derive stage from a registration number string (handles both old KS- and new KEMS- formats). */
 export function stageFromRegistrationNumber(regNo: string): EducationStageCode | null {
   if (/^KEMS-N-/.test(regNo))  return 'NURSERY';
-  if (/^KEMS-PU-/.test(regNo)) return 'PRE_UNIT';
+  // Legacy Pre-Unit registration numbers now belong to the unified Nursery stage.
+  if (/^KEMS-PU-/.test(regNo)) return 'NURSERY';
   if (/^KEMS-P-/.test(regNo))  return 'PRIMARY';
   if (/^KEMS-O-/.test(regNo))  return 'O_LEVEL';
   if (/^KEMS-A-/.test(regNo))  return 'A_LEVEL';
   // legacy KS- formats
   if (/^KS-N-/.test(regNo))    return 'NURSERY';
-  if (/^KS-U-/.test(regNo))    return 'PRE_UNIT';
+  if (/^KS-U-/.test(regNo))    return 'NURSERY';
   if (/^KS-P-/.test(regNo))    return 'PRIMARY';
   if (/^KS-A-/.test(regNo))    return 'A_LEVEL';
   if (/^KS-S-/.test(regNo))    return 'O_LEVEL';

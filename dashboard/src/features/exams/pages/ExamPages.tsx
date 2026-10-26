@@ -208,7 +208,7 @@ function CreateWindowForm({ onDone }: { onDone: () => void }) {
         <Field label="Stage (optional filter)">
           <select className={inputCls} value={form.educationStage ?? ''} onChange={(e) => set('educationStage', e.target.value)}>
             <option value="">All stages</option>
-            {['NURSERY', 'PRE_UNIT', 'PRIMARY', 'O_LEVEL', 'A_LEVEL'].map((s) => <option key={s} value={s}>{s}</option>)}
+            {['NURSERY', 'PRIMARY', 'O_LEVEL', 'A_LEVEL'].map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
         </Field>
         <Field label="Scope">

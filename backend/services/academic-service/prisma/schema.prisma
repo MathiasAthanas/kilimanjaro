@@ -97,7 +97,6 @@ enum InterventionType {
 
 enum EducationStage {
   NURSERY
-  PRE_UNIT
   PRIMARY
   O_LEVEL
   A_LEVEL
@@ -594,7 +593,7 @@ model TimetableSheet {
   schoolId       String?
   name           String
   timetableType  TimetableType   @default(CLASS)
-  /// Stage scope: NURSERY | PRE_UNIT | PRIMARY | O_LEVEL | A_LEVEL | null = ALL
+  /// Stage scope: NURSERY | PRIMARY | O_LEVEL | A_LEVEL | null = ALL
   stage          String?
   classId        String?
   className      String?

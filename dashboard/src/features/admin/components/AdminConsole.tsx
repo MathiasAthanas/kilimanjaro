@@ -793,7 +793,7 @@ export function CsvImportZone({ entity }: { entity: string }) {
 // ─── Assessment type inline editor ───────────────────────────────────────────
 
 const STAGE_LABELS: Record<string, string> = {
-  NURSERY: 'Nursery', PRE_UNIT: 'Pre-Unit', PRIMARY: 'Primary', O_LEVEL: 'O-Level', A_LEVEL: 'A-Level',
+  NURSERY: 'Nursery', PRIMARY: 'Primary', O_LEVEL: 'O-Level', A_LEVEL: 'A-Level',
 };
 
 export function AssessmentTypeEditor({

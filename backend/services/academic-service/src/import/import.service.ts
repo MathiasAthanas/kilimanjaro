@@ -75,7 +75,7 @@ export class ImportService {
     const n = className.toLowerCase();
     if (n.includes('form 5') || n.includes('form 6') || n.includes('a level') || n.includes('a-level')) return EducationStage.A_LEVEL;
     if (n.includes('form') || n.includes('o level') || n.includes('o-level')) return EducationStage.O_LEVEL;
-    if (n.includes('pp') || n.includes('pre primary') || n.includes('nursery') || n.includes('kindergarten')) return EducationStage.NURSERY;
+    if (/\bpp\b/.test(n) || n.includes('pre primary') || n.includes('pre unit') || n.includes('pre-unit') || n.includes('nursery') || n.includes('kindergarten') || n.includes('baby class') || /\bkg\s*[12]\b/.test(n)) return EducationStage.NURSERY;
     if (n.includes('std') || n.includes('standard') || n.includes('primary')) return EducationStage.PRIMARY;
     return EducationStage.O_LEVEL;
   }

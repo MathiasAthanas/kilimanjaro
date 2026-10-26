@@ -5,7 +5,7 @@
  *
  * Stage code map (old → new):
  *   N → N   (Nursery)
- *   U → PU  (Pre-Unit)
+ *   U → N   (legacy Pre-Unit, now part of Nursery)
  *   P → P   (Primary)
  *   S → O   (O-Level / Secondary)
  *   A → A   (A-Level)
@@ -15,7 +15,7 @@ const { PrismaClient } = require('../generated/prisma');
 
 const prisma = new PrismaClient();
 
-const STAGE_MAP = { N: 'N', U: 'PU', P: 'P', S: 'O', A: 'A' };
+const STAGE_MAP = { N: 'N', U: 'N', P: 'P', S: 'O', A: 'A' };
 const OLD_PATTERN = /^KS-([A-Z]+)-(\d{4})-(\d+)$/;
 const LEGACY_PATTERN = /^KS-(\d{4})-(\d+)$/;
 

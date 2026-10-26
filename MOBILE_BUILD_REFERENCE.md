@@ -29,6 +29,12 @@ $env:Path = "$env:JAVA_HOME\bin;$env:Path"
 flutter build appbundle --release --dart-define=ENV=production
 ```
 
+For an obfuscated production release, preserve split debug symbols outside the uploaded AAB:
+
+```powershell
+flutter build appbundle --release --obfuscate --split-debug-info=build/symbols/release-<version-name>-<version-code> --dart-define=ENV=production
+```
+
 Output:
 
 ```text
@@ -39,15 +45,16 @@ Before every upload, increment `version:` in `mobile/kilimanjaro/pubspec.yaml`. 
 
 ## Latest Build Record
 
-Built on 2026-09-30 from the current local mobile workspace.
+Built on 2026-10-25 from the current local mobile workspace.
 
 - Package: `site.kilimanjaroschools.app`
-- Version: `1.0.1+2`
-- Size: `62.9 MB`
-- SHA-256: `5B07293EF9EDB7A061491AC51F7B13A50CB8F320148297EAF6A2A213471CF4B9`
+- Version: `1.0.2+3`
+- Size: `61.12 MB`
+- SHA-256: `833890E360768C46FF2F8C589E8C57D9643E04D671986BD27D8CD325D3635C6F`
 - Signing key: local `kilimanjaro-play-upload` upload key
 - Environment: `ENV=production`
 - API target: `https://srms.kilimanjaroschools.site`
+- Split debug symbols: `mobile/kilimanjaro/build/symbols/release-1.0.2-3` (retain securely; do not upload to Google Play)
 
 The hash and size apply only to this exact artifact. Replace this record after each successful signed release build.
 

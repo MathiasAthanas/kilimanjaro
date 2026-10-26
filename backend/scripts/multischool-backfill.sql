@@ -16,7 +16,7 @@ ON CONFLICT ("code") DO NOTHING;
 -- Step 3 — Backfill schoolId
 -- 3a. Classes by education stage
 UPDATE "students"."Class" SET "schoolId" = CASE
-  WHEN "educationStage" IN ('NURSERY','PRE_UNIT') THEN '00000000-0000-4000-8000-000000000001'
+  WHEN "educationStage" = 'NURSERY' THEN '00000000-0000-4000-8000-000000000001'
   WHEN "educationStage" = 'PRIMARY'               THEN '00000000-0000-4000-8000-000000000002'
   ELSE                                                 '00000000-0000-4000-8000-000000000003'
 END
@@ -40,7 +40,7 @@ WHERE s."id" = sub."studentId" AND s."schoolId" IS NULL;
 UPDATE "students"."Applicant" a SET "schoolId" = c."schoolId"
 FROM "students"."Class" c WHERE a."prospectiveClassId" = c."id" AND a."schoolId" IS NULL;
 UPDATE "students"."Applicant" SET "schoolId" = CASE
-  WHEN "educationStage" IN ('NURSERY','PRE_UNIT') THEN '00000000-0000-4000-8000-000000000001'
+  WHEN "educationStage" = 'NURSERY' THEN '00000000-0000-4000-8000-000000000001'
   WHEN "educationStage" = 'PRIMARY'               THEN '00000000-0000-4000-8000-000000000002'
   WHEN "educationStage" IS NOT NULL               THEN '00000000-0000-4000-8000-000000000003'
 END

@@ -1649,7 +1649,7 @@ function combPrincipalLabel(subjects: unknown): string {
 }
 
 type ClassWizardState = {
-  educationStage: 'NURSERY' | 'PRE_UNIT' | 'PRIMARY' | 'O_LEVEL' | 'A_LEVEL';
+  educationStage: 'NURSERY' | 'PRIMARY' | 'O_LEVEL' | 'A_LEVEL';
   level: string;
   stream: string;
   academicYearId: string;
@@ -1660,7 +1660,6 @@ type ClassWizardState = {
 
 const EDUCATION_STAGE_OPTIONS = [
   { value: 'NURSERY', label: 'Nursery' },
-  { value: 'PRE_UNIT', label: 'Pre-Unit' },
   { value: 'PRIMARY', label: 'Primary' },
   { value: 'O_LEVEL', label: 'O-Level' },
   { value: 'A_LEVEL', label: 'A-Level' },
@@ -1676,7 +1675,7 @@ function stageTone(value: unknown): 'emerald' | 'amber' | 'blue' | 'sky' | 'slat
   if (key === 'PRIMARY') return 'emerald';
   if (key === 'A_LEVEL') return 'amber';
   if (key === 'O_LEVEL') return 'blue';
-  if (key === 'NURSERY' || key === 'PRE_UNIT') return 'sky';
+  if (key === 'NURSERY') return 'sky';
   return 'slate';
 }
 
@@ -1688,7 +1687,7 @@ const STANDARD_STREAM_OPTIONS = [
 ];
 
 type UniversalLevelKey =
-  | 'NURSERY' | 'PRE_UNIT'
+  | 'BABY_CLASS' | 'KG_1' | 'KG_2'
   | 'STANDARD_1' | 'STANDARD_2' | 'STANDARD_3' | 'STANDARD_4' | 'STANDARD_5' | 'STANDARD_6' | 'STANDARD_7'
   | 'FORM_1' | 'FORM_2' | 'FORM_3' | 'FORM_4' | 'FORM_5' | 'FORM_6';
 
@@ -1710,8 +1709,9 @@ type GeneratedPathway = {
 };
 
 const UNIVERSAL_PROGRESSION_RULES: UniversalProgressionRule[] = [
-  { from: 'NURSERY', to: 'PRE_UNIT', transitionType: 'CROSS_STAGE', label: 'Nursery to Pre-Unit' },
-  { from: 'PRE_UNIT', to: 'STANDARD_1', transitionType: 'CROSS_STAGE', label: 'Pre-Unit to Standard 1' },
+  { from: 'BABY_CLASS', to: 'KG_1', transitionType: 'PROMOTION', label: 'Baby Class to KG 1' },
+  { from: 'KG_1', to: 'KG_2', transitionType: 'PROMOTION', label: 'KG 1 to KG 2' },
+  { from: 'KG_2', to: 'STANDARD_1', transitionType: 'CROSS_STAGE', label: 'KG 2 to Standard 1' },
   { from: 'STANDARD_1', to: 'STANDARD_2', transitionType: 'PROMOTION', label: 'Standard 1 to Standard 2' },
   { from: 'STANDARD_2', to: 'STANDARD_3', transitionType: 'PROMOTION', label: 'Standard 2 to Standard 3' },
   { from: 'STANDARD_3', to: 'STANDARD_4', transitionType: 'PROMOTION', label: 'Standard 3 to Standard 4' },
@@ -1732,10 +1732,14 @@ function universalLevelKey(cls: any): UniversalLevelKey | null {
   const stage = String(cls.educationStage ?? cls.stage ?? '').replace('-', '_').toUpperCase();
   const curriculum = String(cls.curriculumCode ?? cls.curriculum ?? '').toUpperCase();
   const level = Number(cls.level ?? cls.numericLevel);
-  if (stage === 'NURSERY') return 'NURSERY';
-  if (stage === 'PRE_UNIT') return 'PRE_UNIT';
-  if (name.includes('nursery') || curriculum.includes('NURSERY')) return 'NURSERY';
-  if (name.includes('pre-unit') || name.includes('pre unit') || curriculum.includes('PRE_PRIMARY')) return 'PRE_UNIT';
+  if (stage === 'NURSERY') {
+    if (level === 1) return 'BABY_CLASS';
+    if (level === 2) return 'KG_1';
+    if (level === 3) return 'KG_2';
+  }
+  if (name.includes('baby class')) return 'BABY_CLASS';
+  if (/\bkg\s*1\b/.test(name)) return 'KG_1';
+  if (/\bkg\s*2\b/.test(name)) return 'KG_2';
   if (stage === 'PRIMARY' && level >= 1 && level <= 7) return `STANDARD_${level}` as UniversalLevelKey;
   if (stage === 'O_LEVEL' && level >= 1 && level <= 4) return `FORM_${level}` as UniversalLevelKey;
   if (stage === 'A_LEVEL' && (level === 5 || level === 6)) return `FORM_${level}` as UniversalLevelKey;
@@ -1788,8 +1792,7 @@ function generateUniversalPathways(classes: any[], academicYearId: string): Gene
 }
 
 const STAGE_LEVEL_OPTIONS = {
-  NURSERY: [{ value: '1', label: 'Nursery' }],
-  PRE_UNIT: [{ value: '1', label: 'Pre-Unit' }],
+  NURSERY: [{ value: '1', label: 'Baby Class' }, { value: '2', label: 'KG 1' }, { value: '3', label: 'KG 2' }],
   PRIMARY: Array.from({ length: 7 }, (_, i) => ({ value: String(i + 1), label: `Class ${i + 1}` })),
   O_LEVEL: Array.from({ length: 4 }, (_, i) => ({ value: String(i + 1), label: `Form ${i + 1}` })),
   A_LEVEL: [
@@ -1800,23 +1803,23 @@ const STAGE_LEVEL_OPTIONS = {
 
 function curriculumForStage(stage: ClassWizardState['educationStage']) {
   if (stage === 'NURSERY') return 'NURSERY';
-  if (stage === 'PRE_UNIT') return 'PRE_PRIMARY';
   if (stage === 'PRIMARY') return 'NECTA_PRIMARY';
   if (stage === 'A_LEVEL') return 'NECTA_ALEVEL';
   return 'NECTA_OLEVEL';
 }
 
 function displayNameForClass(stage: ClassWizardState['educationStage'], level: string, stream: string) {
-  if (stage === 'NURSERY') return `Nursery${stream ? ` ${stream}` : ''}`.trim();
-  if (stage === 'PRE_UNIT') return `Pre-Unit${stream ? ` ${stream}` : ''}`.trim();
+  if (stage === 'NURSERY') {
+    const nurseryName = ({ '1': 'Baby Class', '2': 'KG 1', '3': 'KG 2' } as Record<string, string>)[level] ?? 'Nursery';
+    return `${nurseryName}${stream ? ` ${stream}` : ''}`.trim();
+  }
   if (stage === 'PRIMARY') return `Class ${level}${stream ? ` ${stream}` : ''}`.trim();
   if (stage === 'A_LEVEL') return `Form ${level} ${stream}`;
   return `Form ${level}${stream ? ` ${stream}` : ''}`.trim();
 }
 
 function isTerminalClass(stage: ClassWizardState['educationStage'], level: string) {
-  return (stage === 'PRE_UNIT' && level === '1')
-    || (stage === 'PRIMARY' && level === '7')
+  return (stage === 'PRIMARY' && level === '7')
     || (stage === 'O_LEVEL' && level === '4')
     || (stage === 'A_LEVEL' && level === '6');
 }
@@ -2190,7 +2193,7 @@ export function ClassesPage() {
   return (
     <AdminShell title="Class Management" eyebrow="Classes, rosters, assigned subjects">
       <AdminMetricStrip items={[
-        { label: 'Pre-Primary', value: String((byStage.NURSERY ?? 0) + (byStage['Nursery'] ?? 0) + (byStage.PRE_UNIT ?? 0) + (byStage['Pre-Unit'] ?? 0)), detail: 'Nursery and Pre-Unit', tone: 'green' },
+        { label: 'Nursery Classes', value: String((byStage.NURSERY ?? 0) + (byStage.Nursery ?? 0)), detail: 'Baby Class, KG 1 and KG 2', tone: 'green' },
         { label: 'Primary Classes', value: String((byStage.PRIMARY ?? 0) + (byStage.Primary ?? 0)), detail: 'Class 1 to terminal primary', tone: 'green' },
         { label: 'O-Level Classes', value: String((byStage.O_LEVEL ?? 0) + (byStage['O-Level'] ?? 0)), detail: 'Form 1 to Form 4', tone: 'blue' },
         { label: 'A-Level Streams', value: String((byStage.A_LEVEL ?? 0) + (byStage['A-Level'] ?? 0)), detail: 'Form 5/6 combinations', tone: 'amber' },
@@ -2230,14 +2233,13 @@ export function ClassesPage() {
           <Field label="Capacity" value={classForm.capacity} onChange={setClassField('capacity')} type="number" />
           <SelectField key={`curriculum-${classForm.curriculumCode}`} label="Curriculum Code" value={classForm.curriculumCode} onChange={setClassValue('curriculumCode')} options={[
             { value: 'NURSERY', label: 'Nursery' },
-            { value: 'PRE_PRIMARY', label: 'Pre-Primary (Nursery / Pre-Unit)' },
             { value: 'NECTA_PRIMARY', label: 'NECTA Primary' },
             { value: 'NECTA_OLEVEL', label: 'NECTA O-Level' },
             { value: 'NECTA_ALEVEL', label: 'NECTA A-Level' },
           ]} />
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-3">
-          <FeatureToggle label="Terminal year" description="Required for Pre-Unit, Form 4, Form 6 and final primary year." enabled={terminalYear} />
+          <FeatureToggle label="Terminal year" description="Required for Form 4, Form 6 and the final primary year." enabled={terminalYear} />
           <FeatureToggle label="Validate stage range" description="Blocks Class/Form level collisions before submit." enabled />
           <FeatureToggle label="Use universal pathways" description="Classes follow the progression trend defined below." enabled />
         </div>
@@ -2887,7 +2889,7 @@ function SubjectsTable() {
   };
   const cancelEdit = () => setEditingId(null);
   const saveEdit = (id: string) => {
-    const stageMap: Record<string, string> = { 'Nursery': 'NURSERY', 'Pre-Unit': 'PRE_UNIT', 'Primary': 'PRIMARY', 'O-Level': 'O_LEVEL', 'A-Level': 'A_LEVEL' };
+    const stageMap: Record<string, string> = { 'Nursery': 'NURSERY', 'Primary': 'PRIMARY', 'O-Level': 'O_LEVEL', 'A-Level': 'A_LEVEL' };
     updateSubjectMutation.mutate({ id, payload: { name: editForm.name.trim(), code: editForm.code.trim().toUpperCase(), educationStage: stageMap[editForm.stage] ?? editForm.stage, departmentId: editForm.departmentId || undefined, department: editForm.department || undefined } }, {
       onSuccess: () => { setEditingId(null); toast('Subject updated.', 'success'); },
       onError: (e: any) => toast(e?.response?.data?.message ?? 'Failed to update subject.', 'error'),
@@ -3132,7 +3134,6 @@ export function SubjectDetailPage() {
 
 const GRADING_DEFAULT_BOUNDARIES: Record<string, Array<{ label: string; min: number; max: number; points: number; remark: string; isPassing: boolean }>> = {
   NURSERY:  [{ label: 'EE', min: 75, max: 100, points: 4, remark: 'Exceeding Expectations', isPassing: true }, { label: 'ME', min: 50, max: 74, points: 3, remark: 'Meeting Expectations', isPassing: true }, { label: 'AE', min: 25, max: 49, points: 2, remark: 'Approaching Expectations', isPassing: true }, { label: 'BE', min: 0, max: 24, points: 1, remark: 'Below Expectations', isPassing: false }],
-  PRE_UNIT: [{ label: 'EE', min: 75, max: 100, points: 4, remark: 'Exceeding Expectations', isPassing: true }, { label: 'ME', min: 50, max: 74, points: 3, remark: 'Meeting Expectations', isPassing: true }, { label: 'AE', min: 25, max: 49, points: 2, remark: 'Approaching Expectations', isPassing: true }, { label: 'BE', min: 0, max: 24, points: 1, remark: 'Below Expectations', isPassing: false }],
   PRIMARY:  [{ label: 'A', min: 75, max: 100, points: 1, remark: 'Excellent', isPassing: true }, { label: 'B', min: 60, max: 74, points: 2, remark: 'Good', isPassing: true }, { label: 'C', min: 45, max: 59, points: 3, remark: 'Average', isPassing: true }, { label: 'D', min: 30, max: 44, points: 4, remark: 'Below Average', isPassing: true }, { label: 'F', min: 0, max: 29, points: 5, remark: 'Fail', isPassing: false }],
   O_LEVEL:  [{ label: 'A', min: 75, max: 100, points: 1, remark: 'Distinction', isPassing: true }, { label: 'B', min: 60, max: 74, points: 2, remark: 'Credit', isPassing: true }, { label: 'C', min: 45, max: 59, points: 3, remark: 'Merit', isPassing: true }, { label: 'D', min: 30, max: 44, points: 4, remark: 'Pass', isPassing: true }, { label: 'F', min: 0, max: 29, points: 5, remark: 'Fail', isPassing: false }],
   A_LEVEL:  [{ label: 'A', min: 80, max: 100, points: 1, remark: 'Distinction', isPassing: true }, { label: 'B', min: 65, max: 79, points: 2, remark: 'Merit', isPassing: true }, { label: 'C', min: 50, max: 64, points: 3, remark: 'Credit', isPassing: true }, { label: 'D', min: 40, max: 49, points: 4, remark: 'Pass', isPassing: true }, { label: 'E', min: 30, max: 39, points: 5, remark: 'Subsidiary Pass', isPassing: true }, { label: 'F', min: 0, max: 29, points: 6, remark: 'Fail', isPassing: false }],
@@ -3331,7 +3332,6 @@ export function CreateGradingScalePage() {
 
 const STAGE_TABS = [
   { value: 'NURSERY', label: 'Nursery' },
-  { value: 'PRE_UNIT', label: 'Pre-Unit' },
   { value: 'PRIMARY', label: 'Primary' },
   { value: 'O_LEVEL', label: 'O-Level' },
   { value: 'A_LEVEL', label: 'A-Level' },
@@ -4898,8 +4898,7 @@ export function AdminAnnouncementsPage() {
 // â"€â"€â"€ Stage Configuration (Gap 10) â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 const STAGE_DESCRIPTIONS: Record<string, { label: string; note: string; tone: 'emerald' | 'blue' | 'amber' | 'violet' | 'rose' }> = {
-  NURSERY:  { label: 'Nursery', note: 'Early childhood education. Developmental assessment (EE/ME/AE/BE scale). Registration prefix: KEMS-N-.', tone: 'violet' },
-  PRE_UNIT: { label: 'Pre-Unit', note: 'Pre-primary preparation class. Assessment uses EE/ME/AE/BE scale. Registration prefix: KEMS-PU-.', tone: 'rose' },
+  NURSERY:  { label: 'Nursery', note: 'Baby Class, KG 1 and KG 2. Developmental assessment uses the EE/ME/AE/BE scale. Registration prefix: KEMS-N-.', tone: 'violet' },
   PRIMARY:  { label: 'Primary School', note: 'Class 1 up to terminal year (Class 6 or 7). Pass mark: 50%. PSLE national exam at terminal year. Registration prefix: KEMS-P-.', tone: 'emerald' },
   O_LEVEL:  { label: 'Secondary O-Level', note: 'Form 1 to Form 4. CSEE national exam at Form 4. Registration prefix: KEMS-O-.', tone: 'blue' },
   A_LEVEL:  { label: 'Advanced Level', note: 'Form 5 and Form 6. ACSEE national exam at Form 6. Combination-based subjects. Registration prefix: KEMS-A-.', tone: 'amber' },
@@ -5001,8 +5000,7 @@ export function StageConfigPage() {
   return (
     <AdminShell title="Stage Range Configuration" eyebrow="Primary · O-Level · A-Level school structure">
       <AdminMetricStrip items={[
-        { label: 'Nursery',  value: 'KEMS-N',                     detail: 'Early childhood',             tone: 'purple' as any },
-        { label: 'Pre-Unit', value: 'KEMS-PU',                    detail: 'Pre-primary',                 tone: 'purple' as any },
+        { label: 'Nursery',  value: 'KEMS-N (Baby, KG 1–2)',      detail: 'Early childhood',             tone: 'purple' as any },
         { label: 'Primary',  value: `KEMS-P (Cl 1–${config.terminalPrimary})`, detail: 'PSLE terminal year', tone: 'green'  },
         { label: 'O-Level',  value: 'KEMS-O (Fm 1–4)',            detail: 'CSEE at Form 4',              tone: 'blue'  },
         { label: 'A-Level',  value: 'KEMS-A (Fm 5–6)',            detail: 'ACSEE at Form 6',             tone: 'amber' },

@@ -108,8 +108,9 @@ const teacherSpecs = [
 ];
 
 const classSpecs = [
-  ['nursery-a', 'Nursery', 0, 'A', 'PRIMARY', 'NURSERY', 12],
-  ['preunit-a', 'Pre-Unit', 0, 'A', 'PRIMARY', 'PRE_PRIMARY', 14],
+  ['baby-a', 'Baby Class', 1, 'A', 'NURSERY', 'NURSERY', 12],
+  ['kg1-a', 'KG 1', 2, 'A', 'NURSERY', 'NURSERY', 14],
+  ['kg2-a', 'KG 2', 3, 'A', 'NURSERY', 'NURSERY', 14],
   ['std1-a', 'Standard 1', 1, 'A', 'PRIMARY', 'PRIMARY', 14],
   ['std2-a', 'Standard 2', 2, 'A', 'PRIMARY', 'PRIMARY', 14],
   ['std3-a', 'Standard 3', 3, 'A', 'PRIMARY', 'PRIMARY', 14],

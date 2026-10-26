@@ -48,7 +48,6 @@ const DAYS = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY'] as const;
 
 const STAGE_OPTIONS = [
   { value: 'NURSERY',  label: 'Nursery' },
-  { value: 'PRE_UNIT', label: 'Pre-Unit' },
   { value: 'PRIMARY',  label: 'Primary' },
   { value: 'O_LEVEL',  label: 'O-Level (Secondary)' },
   { value: 'A_LEVEL',  label: 'A-Level (Advanced)' },
@@ -82,7 +81,7 @@ function typeBadge(type: string) {
 function stageBadge(stage?: string) {
   if (!stage) return <Badge tone="slate">All Stages</Badge>;
   const map: Record<string, 'rose' | 'amber' | 'blue' | 'emerald' | 'slate'> = {
-    NURSERY: 'rose', PRE_UNIT: 'amber', PRIMARY: 'blue', O_LEVEL: 'emerald', A_LEVEL: 'slate',
+    NURSERY: 'rose', PRIMARY: 'blue', O_LEVEL: 'emerald', A_LEVEL: 'slate',
   };
   return <Badge tone={map[stage] ?? 'slate'}>{fmtLabel(stage)}</Badge>;
 }

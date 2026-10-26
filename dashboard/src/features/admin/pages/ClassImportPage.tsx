@@ -197,7 +197,6 @@ export function ClassImportPage() {
       const stageCode = String(first.educationStage ?? '').toUpperCase();
       const stage = ({
         NURSERY: 'Nursery',
-        PRE_UNIT: 'Pre-Unit',
         PRIMARY: 'Primary',
         O_LEVEL: 'O-Level',
         A_LEVEL: 'A-Level',
