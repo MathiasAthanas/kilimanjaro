@@ -6,6 +6,7 @@ describe('school drill-down scope', () => {
     expect(canSelectSchool('SCHOOL', ['school-b'], 'school-a')).toBe(false);
     expect(canSelectSchool('SCHOOL', ['school-b'], 'school-b')).toBe(true);
     expect(canSelectSchool('GROUP', [], 'school-a')).toBe(true);
+    expect(canSelectSchool('GROUP', ['*'], 'school-a')).toBe(true);
     expect(canSelectSchool('GROUP', ['school-b'], 'school-a')).toBe(false);
   });
 
