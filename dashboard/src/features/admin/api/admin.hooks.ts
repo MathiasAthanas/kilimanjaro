@@ -41,6 +41,11 @@ type AdminUserRow = {
   linked: string;
   lastLogin: string;
   createdAt: string;
+  firstName?: string;
+  lastName?: string;
+  phoneNumber?: string | null;
+  department?: string | null;
+  mustChangePassword?: boolean;
 };
 
 function statusToState(status: unknown) {
@@ -67,7 +72,7 @@ function toServiceHealth(value: unknown) {
   }));
 }
 
-function toAdminUsers(value: unknown) {
+function toAdminUsers(value: unknown): AdminUserRow[] {
   return arrayFromApi(value, ['users']).map((raw) => {
     const user = raw as Record<string, unknown>;
     const fullName = [user.firstName, user.lastName].filter(Boolean).join(' ').trim();
@@ -80,7 +85,7 @@ function toAdminUsers(value: unknown) {
       createdAt: String(user.createdAt ?? ''),
       name: String(user.name ?? fullName ?? user.email ?? 'Unknown User'),
       status: String(user.status ?? status) as AdminStatus,
-      linked: String(user.linked ?? user.registrationNumber ?? user.phoneNumber ?? 'Portal account'),
+      linked: String(user.linked ?? user.department ?? user.registrationNumber ?? user.phoneNumber ?? 'Portal account'),
       lastLogin: String(user.lastLogin ?? user.lastLoginAt ?? user.updatedAt ?? user.createdAt ?? ''),
     } satisfies AdminUserRow;
   });
@@ -347,9 +352,10 @@ export function useTeachingStaff() {
 }
 
 export function useAdminUser(id: string | undefined) {
+  const activeSchoolKey = useActiveSchoolKey();
   return useQuery({
-    queryKey: adminKeys.user(id ?? ''),
-    queryFn: () => api.get(`/auth/users/${id}`).then(payloadOf),
+    queryKey: [...adminKeys.user(id ?? ''), activeSchoolKey] as const,
+    queryFn: () => api.get(`/auth/users/${id}`).then(payloadOf).then((value) => toAdminUsers([value])[0] ?? null),
     enabled: !!id,
     retry: false,
   });
@@ -940,6 +946,13 @@ export function useResetUserPwMutation() {
   });
 }
 
+export function useRevealTemporaryPasswordMutation() {
+  return useMutation({
+    mutationFn: (id: string) =>
+      api.get(`/auth/users/${id}/temporary-password`).then((r) => r.data?.data ?? r.data),
+  });
+}
+
 export function useCreateUserMutation() {
   const qc = useQueryClient();
   return useMutation({
@@ -1191,7 +1204,10 @@ export function useUpdateUserMutation() {
   return useMutation({
     mutationFn: ({ id, body }: { id: string; body: Record<string, unknown> }) =>
       api.patch(`/auth/users/${id}`, body).then((r) => r.data?.data ?? r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: [...adminKeys.all, 'users'] }),
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({ queryKey: [...adminKeys.all, 'users'] });
+      qc.invalidateQueries({ queryKey: adminKeys.user(variables.id) });
+    },
   });
 }
 

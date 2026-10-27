@@ -5,6 +5,7 @@ const requiredInProduction = [
   'JWT_PRIVATE_KEY',
   'JWT_PUBLIC_KEY',
   'INTERNAL_API_KEY',
+  'TEMP_CREDENTIAL_ENCRYPTION_KEY',
   'REDIS_HOST',
   'REDIS_PORT',
   'RABBITMQ_URL',
@@ -33,6 +34,9 @@ export function validateEnv(config: EnvConfig): EnvConfig {
 
   if (asString(config, 'NODE_ENV') === 'production') {
     requireKeys(config, requiredInProduction);
+    if (asString(config, 'TEMP_CREDENTIAL_ENCRYPTION_KEY').length < 32) {
+      throw new Error('TEMP_CREDENTIAL_ENCRYPTION_KEY must be at least 32 characters');
+    }
   }
 
   return config;

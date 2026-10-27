@@ -81,6 +81,7 @@ model User {
   isActive             Boolean              @default(true)
   isEmailVerified      Boolean              @default(false)
   mustChangePassword   Boolean              @default(false)
+  temporaryPasswordEncrypted String?
   failedLoginAttempts  Int                  @default(0)
   lockedUntil          DateTime?
   lastLoginAt          DateTime?

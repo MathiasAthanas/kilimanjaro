@@ -4,11 +4,13 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  InternalServerErrorException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AuditAction, Prisma, Role, User } from '../../generated/prisma';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import * as argon2 from 'argon2';
+import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { RabbitMQService } from '../rabbitmq/rabbitmq.service';
@@ -52,7 +54,9 @@ export class UsersService {
   }
 
   async findByEmail(email: string): Promise<User | null> {
-    return this.prisma.user.findUnique({ where: { email } });
+    return this.prisma.user.findFirst({
+      where: { email: { equals: email.trim().toLowerCase(), mode: 'insensitive' } },
+    });
   }
 
   async findByRegistrationNumber(registrationNumber: string): Promise<User | null> {
@@ -91,8 +95,9 @@ export class UsersService {
       throw new BadRequestException('email or phoneNumber is required for PARENT role');
     }
 
-    if (dto.email) {
-      const existingEmail = await this.findByEmail(dto.email);
+    const normalizedEmail = dto.email?.trim().toLowerCase();
+    if (normalizedEmail) {
+      const existingEmail = await this.findByEmail(normalizedEmail);
       if (existingEmail) {
         throw new ConflictException('Email already exists');
       }
@@ -107,12 +112,13 @@ export class UsersService {
 
     const temporaryPassword = dto.password || this.generateNamePassword(dto.firstName, dto.lastName);
     const passwordHash = await argon2.hash(temporaryPassword);
+    const temporaryPasswordEncrypted = this.encryptTemporaryPassword(temporaryPassword);
     const membershipSchoolId = this.resolveMembershipSchoolId(dto, actor);
 
     try {
       const user = await this.prisma.$transaction((tx) => tx.user.create({
         data: {
-          email: dto.email,
+          email: normalizedEmail,
           registrationNumber: dto.registrationNumber,
           passwordHash,
           role: dto.role,
@@ -122,6 +128,7 @@ export class UsersService {
           phoneNumber: dto.phoneNumber ? UsersService.normalisePhone(dto.phoneNumber) : undefined,
           isActive: dto.isActive ?? true,
           mustChangePassword: true,
+          temporaryPasswordEncrypted,
           createdBy,
           schoolMemberships: {
             create: {
@@ -198,11 +205,12 @@ export class UsersService {
 
     const temporaryPassword = `Parent@${normalised.slice(-4)}`;
     const passwordHash = await argon2.hash(temporaryPassword);
+    const temporaryPasswordEncrypted = this.encryptTemporaryPassword(temporaryPassword);
 
     try {
       const user = await this.prisma.user.create({
         data: {
-          email: input.email || undefined,
+          email: input.email?.trim().toLowerCase() || undefined,
           passwordHash,
           role: Role.PARENT,
           firstName: input.firstName,
@@ -210,6 +218,7 @@ export class UsersService {
           phoneNumber: normalised,
           isActive: true,
           mustChangePassword: true,
+          temporaryPasswordEncrypted,
           createdBy: actorId,
           schoolMemberships: {
             create: { schoolId: input.schoolId, role: Role.PARENT, assignedById: actorId },
@@ -455,9 +464,16 @@ export class UsersService {
 
   async updateUser(userId: string, dto: UpdateUserDto, actorId: string, actorRole?: string, actor?: AuthActor): Promise<ReturnType<UsersService['toSafeUser']>> {
     const existing = await this.findManageableById(userId, actorRole, actor);
+    const normalizedEmail = dto.email === undefined
+      ? undefined
+      : (dto.email?.trim().toLowerCase() || null);
 
-    if (dto.email && dto.email !== existing.email) {
-      const duplicate = await this.findByEmail(dto.email);
+    if (!normalizedEmail && normalizedEmail !== undefined && existing.role !== Role.STUDENT && existing.role !== Role.PARENT) {
+      throw new BadRequestException('Email is required for this role');
+    }
+
+    if (normalizedEmail && normalizedEmail !== existing.email) {
+      const duplicate = await this.findByEmail(normalizedEmail);
       if (duplicate && duplicate.id !== userId) {
         throw new ConflictException('Email already exists');
       }
@@ -470,17 +486,25 @@ export class UsersService {
       }
     }
 
-    const user = await this.prisma.user.update({
-      where: { id: userId },
-      data: {
-        email: dto.email === undefined ? undefined : dto.email,
-        registrationNumber: dto.registrationNumber === undefined ? undefined : dto.registrationNumber,
-        firstName: dto.firstName,
-        lastName: dto.lastName,
-        department: dto.department === undefined ? undefined : dto.department,
-        phoneNumber: dto.phoneNumber === undefined ? undefined : dto.phoneNumber,
-      },
-    });
+    const loginIdentifierChanged = normalizedEmail !== undefined && normalizedEmail !== existing.email;
+    const [user] = await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: userId },
+        data: {
+          email: normalizedEmail,
+          registrationNumber: dto.registrationNumber === undefined ? undefined : dto.registrationNumber,
+          firstName: dto.firstName,
+          lastName: dto.lastName,
+          department: dto.department === undefined ? undefined : dto.department,
+          phoneNumber: dto.phoneNumber === undefined
+            ? undefined
+            : (dto.phoneNumber ? UsersService.normalisePhone(dto.phoneNumber) : null),
+        },
+      }),
+      ...(loginIdentifierChanged
+        ? [this.prisma.refreshToken.updateMany({ where: { userId, isRevoked: false }, data: { isRevoked: true } })]
+        : []),
+    ]);
 
     await this.auditService.createLog({
       userId: actorId,
@@ -490,6 +514,7 @@ export class UsersService {
         action: 'USER_PROFILE_UPDATED',
         before: this.toSafeUser(existing),
         after: this.toSafeUser(user),
+        loginIdentifierChanged,
       },
     });
 
@@ -500,12 +525,19 @@ export class UsersService {
     await this.findManageableById(userId, actorRole, actor);
     const temporaryPassword = dto.temporaryPassword || this.generateTemporaryPassword();
     const passwordHash = await argon2.hash(temporaryPassword);
+    const temporaryPasswordEncrypted = this.encryptTemporaryPassword(temporaryPassword);
     const revokeSessions = dto.revokeSessions !== false;
 
     await this.prisma.$transaction([
       this.prisma.user.update({
         where: { id: userId },
-        data: { passwordHash, failedLoginAttempts: 0, lockedUntil: null, mustChangePassword: true },
+        data: {
+          passwordHash,
+          temporaryPasswordEncrypted,
+          failedLoginAttempts: 0,
+          lockedUntil: null,
+          mustChangePassword: true,
+        },
       }),
       ...(revokeSessions
         ? [this.prisma.refreshToken.updateMany({ where: { userId, isRevoked: false }, data: { isRevoked: true } })]
@@ -522,6 +554,27 @@ export class UsersService {
       message: 'Password reset successfully',
       temporaryPassword,
       revokeSessions,
+    };
+  }
+
+  async getTemporaryPassword(userId: string, actorRole?: string, actor?: AuthActor) {
+    const user = await this.findManageableById(userId, actorRole, actor);
+    if (!user.mustChangePassword) {
+      return { available: false, reason: 'PASSWORD_CHANGED' as const };
+    }
+    if (!user.temporaryPasswordEncrypted) {
+      return { available: false, reason: 'NOT_RECORDED' as const };
+    }
+
+    await this.auditService.createLog({
+      userId: actor?.sub,
+      action: AuditAction.PASSWORD_RESET_REQUESTED,
+      metadata: { targetUserId: userId, action: 'TEMPORARY_PASSWORD_VIEWED' },
+    });
+
+    return {
+      available: true,
+      temporaryPassword: this.decryptTemporaryPassword(user.temporaryPasswordEncrypted),
     };
   }
 
@@ -733,6 +786,42 @@ export class UsersService {
     const base = lastName.charAt(0).toUpperCase() + lastName.slice(1).toLowerCase().replace(/[^a-z]/g, '');
     const digits = Math.floor(1000 + Math.random() * 9000);
     return `${base}@Kili${digits}`;
+  }
+
+  private temporaryCredentialKey(): Buffer {
+    const secret = this.configService.get<string>('TEMP_CREDENTIAL_ENCRYPTION_KEY')
+      || this.configService.get<string>('INTERNAL_API_KEY');
+    if (!secret) {
+      throw new InternalServerErrorException('Temporary credential encryption is not configured');
+    }
+    return crypto.createHash('sha256').update(secret).digest();
+  }
+
+  private encryptTemporaryPassword(password: string): string {
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv('aes-256-gcm', this.temporaryCredentialKey(), iv);
+    const ciphertext = Buffer.concat([cipher.update(password, 'utf8'), cipher.final()]);
+    const tag = cipher.getAuthTag();
+    return `v1.${iv.toString('base64url')}.${tag.toString('base64url')}.${ciphertext.toString('base64url')}`;
+  }
+
+  private decryptTemporaryPassword(payload: string): string {
+    try {
+      const [version, iv, tag, ciphertext] = payload.split('.');
+      if (version !== 'v1' || !iv || !tag || !ciphertext) throw new Error('invalid payload');
+      const decipher = crypto.createDecipheriv(
+        'aes-256-gcm',
+        this.temporaryCredentialKey(),
+        Buffer.from(iv, 'base64url'),
+      );
+      decipher.setAuthTag(Buffer.from(tag, 'base64url'));
+      return Buffer.concat([
+        decipher.update(Buffer.from(ciphertext, 'base64url')),
+        decipher.final(),
+      ]).toString('utf8');
+    } catch {
+      throw new InternalServerErrorException('Temporary password cannot be read; reset it to issue a new one');
+    }
   }
 
   private resolveMembershipSchoolId(dto: CreateUserDto, actor?: AuthActor): string | null {

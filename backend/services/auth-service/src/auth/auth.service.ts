@@ -296,7 +296,7 @@ export class AuthService {
     await this.prisma.$transaction([
       this.prisma.user.update({
         where: { id: user.id },
-        data: { passwordHash, mustChangePassword: false },
+        data: { passwordHash, mustChangePassword: false, temporaryPasswordEncrypted: null },
       }),
       this.prisma.passwordResetToken.update({
         where: { id: validTokenId },
@@ -327,7 +327,10 @@ export class AuthService {
     const passwordHash = await argon2.hash(dto.newPassword);
 
     await this.prisma.$transaction([
-      this.prisma.user.update({ where: { id: userId }, data: { passwordHash, mustChangePassword: false } }),
+      this.prisma.user.update({
+        where: { id: userId },
+        data: { passwordHash, mustChangePassword: false, temporaryPasswordEncrypted: null },
+      }),
       this.prisma.refreshToken.updateMany({
         where: { userId, isRevoked: false },
         data: { isRevoked: true },

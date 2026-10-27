@@ -4,6 +4,7 @@ import {
   Delete,
   ForbiddenException,
   Get,
+  Header,
   Param,
   Patch,
   Post,
@@ -116,12 +117,20 @@ export class UsersController {
   }
 
   @Post(':userId/reset-password')
+  @Header('Cache-Control', 'no-store')
   async resetPassword(
     @Param('userId') userId: string,
     @Body() dto: AdminResetPasswordDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.usersService.resetPassword(userId, dto, user.sub, user.role, user);
+  }
+
+  @Get(':userId/temporary-password')
+  @Roles(Role.SYSTEM_ADMIN)
+  @Header('Cache-Control', 'no-store')
+  async temporaryPassword(@Param('userId') userId: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.usersService.getTemporaryPassword(userId, user.role, user);
   }
 
   @Post(':userId/invite')
@@ -156,7 +165,8 @@ export class UsersController {
 
   @Get(':userId')
   async getOne(@Param('userId') userId: string, @CurrentUser() user: AuthenticatedUser) {
-    return this.usersService.findManageableById(userId, user.role, user);
+    const target = await this.usersService.findManageableById(userId, user.role, user);
+    return this.usersService.toSafeUser(target);
   }
 
   @Get(':userId/memberships')

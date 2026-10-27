@@ -1,5 +1,6 @@
 ﻿import { AlertTriangle, ArrowLeft, CheckCircle2, ChevronDown, Database, Download, Edit2, Key, Lock, Play, Plus, Shield, Trash2, Unlock, UserPlus, X } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from 'react';
+import { Copy, Eye, EyeOff } from 'lucide-react';
 import { downloadReportWhenReady } from '../../operations/api/operations.hooks';
 import { NavLink, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { toast } from '../../../lib/toast';
@@ -21,6 +22,7 @@ import {
   useClassStudents,
   useAdminSubjects,
   useAdminUsers,
+  useAdminUser,
   useAdminUsersPage,
   useAcademicYears,
   useTerms,
@@ -36,6 +38,8 @@ import {
   useDeactivateUserMutation,
   useActivateUserMutation,
   useResetUserPwMutation,
+  useRevealTemporaryPasswordMutation,
+  useChangeUserRoleMutation,
   useUserMemberships,
   useUserUsage,
   useAddMembershipMutation,
@@ -593,6 +597,7 @@ export function UserDetailPage() {
   const deactivateMutation = useDeactivateUserMutation();
   const activateMutation = useActivateUserMutation();
   const resetPwMutation = useResetUserPwMutation();
+  const revealTemporaryPassword = useRevealTemporaryPasswordMutation();
   const deleteUserMutation = useDeleteUserMutation();
   const moveSchoolMutation = useMoveUserSchoolMutation();
   const { data: membershipsRaw } = useUserMemberships(user?.id);
@@ -605,6 +610,8 @@ export function UserDetailPage() {
   const [addSchool, setAddSchool] = React.useState('');
   const [pending, setPending] = React.useState<string | null>(null);
   const [resetResult, setResetResult] = React.useState<string | null>(null);
+  const [temporaryPasswordReason, setTemporaryPasswordReason] = React.useState<string | null>(null);
+  const [showTemporaryPassword, setShowTemporaryPassword] = React.useState(false);
   const [dangerInput, setDangerInput] = React.useState('');
   const [dangerNote, setDangerNote] = React.useState('');
   const [deleteError, setDeleteError] = React.useState<string | null>(null);
@@ -633,10 +640,38 @@ export function UserDetailPage() {
     resetPwMutation.mutate(user.id, {
       onSuccess: (result: any) => {
         setResetResult(String(result?.temporaryPassword ?? '(check email)'));
+        setTemporaryPasswordReason(null);
+        setShowTemporaryPassword(true);
         setPending(null);
       },
       onError: () => { toast('Failed to reset password', 'error'); setPending(null); },
     });
+  };
+
+  const handleRevealTemporaryPassword = () => {
+    setTemporaryPasswordReason(null);
+    revealTemporaryPassword.mutate(user.id, {
+      onSuccess: (result: any) => {
+        if (result?.available && result?.temporaryPassword) {
+          setResetResult(String(result.temporaryPassword));
+          setShowTemporaryPassword(true);
+          return;
+        }
+        setResetResult(null);
+        setTemporaryPasswordReason(String(result?.reason ?? 'NOT_AVAILABLE'));
+      },
+      onError: (error: any) => toast(error?.response?.data?.message ?? 'Unable to retrieve temporary password', 'error'),
+    });
+  };
+
+  const handleCopyTemporaryPassword = async () => {
+    if (!resetResult) return;
+    try {
+      await navigator.clipboard.writeText(resetResult);
+      toast('Temporary password copied', 'success');
+    } catch {
+      toast('Could not copy the password', 'error');
+    }
   };
 
   const handleDeactivate = () => {
@@ -750,6 +785,16 @@ export function UserDetailPage() {
                 <Key className="h-4 w-4" />
                 {pending === 'reset' ? 'Resetting…' : 'Reset Password'}
               </button>
+              {user.mustChangePassword && !resetResult && (
+                <button
+                  disabled={revealTemporaryPassword.isPending}
+                  onClick={handleRevealTemporaryPassword}
+                  className="inline-flex items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2.5 text-sm font-black text-indigo-700 transition hover:bg-indigo-100 disabled:opacity-40"
+                >
+                  <Eye className="h-4 w-4" />
+                  {revealTemporaryPassword.isPending ? 'Retrieving…' : 'Show Default Password'}
+                </button>
+              )}
             </div>
             {resetResult && (
               <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
@@ -757,9 +802,36 @@ export function UserDetailPage() {
                   <p className="text-sm font-black text-amber-900">Temporary password — share with {user.name}</p>
                   <button onClick={() => setResetResult(null)}><X className="h-4 w-4 text-amber-400" /></button>
                 </div>
-                <p className="mt-2 font-mono text-lg font-black text-amber-800">{resetResult}</p>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <p className="min-w-0 flex-1 rounded-lg bg-white px-3 py-2 font-mono text-lg font-black text-amber-900">
+                    {showTemporaryPassword ? resetResult : '••••••••••••'}
+                  </p>
+                  <button
+                    onClick={() => setShowTemporaryPassword((value) => !value)}
+                    className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-amber-200 bg-white px-3 text-xs font-black text-amber-800 hover:bg-amber-100"
+                  >
+                    {showTemporaryPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    {showTemporaryPassword ? 'Hide' : 'Show'}
+                  </button>
+                  <button
+                    onClick={handleCopyTemporaryPassword}
+                    className="inline-flex h-10 items-center gap-1.5 rounded-lg bg-amber-700 px-3 text-xs font-black text-white hover:bg-amber-800"
+                  >
+                    <Copy className="h-4 w-4" /> Copy Password
+                  </button>
+                </div>
                 <p className="mt-1 text-xs font-semibold text-amber-700">User must change this on first login.</p>
               </div>
+            )}
+            {!user.mustChangePassword && (
+              <p className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">
+                This user has set a permanent password. It cannot be viewed by administrators.
+              </p>
+            )}
+            {temporaryPasswordReason === 'NOT_RECORDED' && (
+              <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
+                This account was created before recoverable temporary passwords were enabled. Reset the password to issue a new one that can be copied later.
+              </p>
             )}
           </AdminFormSection>
 
@@ -914,17 +986,21 @@ export function EditUserPage() {
   const { loading, user } = useUser();
   const navigate = useNavigate();
   const updateMutation = useUpdateUserMutation();
+  const changeRoleMutation = useChangeUserRoleMutation();
   const { data: rawDepts = [] } = useDepartments();
   const depts = rawDepts as { name: string }[];
   const [role, setRole] = useState('');
   const [linked, setLinked] = useState('');
   const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
 
   useEffect(() => {
     if (!user) return;
     setRole(user.role);
     setName(user.name ?? '');
+    setEmail(user.email ?? '');
+    setPhone(user.phoneNumber ?? '');
     const validOptions = depts.length > 0 ? departmentOptionsForRole(user.role, depts) : [];
     const isValid = validOptions.some((o) => o.value === user.linked);
     setLinked(isValid ? user.linked : (validOptions[0]?.value ?? user.linked ?? ''));
@@ -936,11 +1012,35 @@ export function EditUserPage() {
   if (loading) return <AdminShell title="Loading…" eyebrow="Account update"><SkeletonTable cols={3} /></AdminShell>;
   if (!user) return <AdminShell title="Not Found" eyebrow="Account update"><EmptyState title="User not found" description="This user account does not exist." /></AdminShell>;
 
-  const handleSave = () => {
-    updateMutation.mutate({ id: user.id, body: { name: name || user.name, phone: phone || undefined, role, linked } }, {
-      onSuccess: () => { toast('User updated successfully', 'success'); navigate('/admin/users'); },
-      onError: () => toast('Failed to update user. Please try again.', 'error'),
-    });
+  const handleSave = async () => {
+    const cleanName = name.trim();
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanName) return toast('Full name is required', 'error');
+    const emailOptional = role === 'STUDENT' || role === 'PARENT';
+    if ((!cleanEmail && !emailOptional) || (cleanEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail))) {
+      return toast('Enter a valid email address', 'error');
+    }
+    const parts = cleanName.split(/\s+/);
+    const lastName = parts.length > 1 ? parts.pop()! : (user.lastName ?? 'User');
+    const firstName = parts.join(' ') || cleanName;
+
+    try {
+      await updateMutation.mutateAsync({
+        id: user.id,
+        body: {
+          firstName,
+          lastName,
+          email: cleanEmail || null,
+          phoneNumber: phone.trim() || null,
+          department: linked || null,
+        },
+      });
+      if (role !== user.role) await changeRoleMutation.mutateAsync({ id: user.id, role });
+      toast('User updated successfully. New sign-ins must use the updated email.', 'success');
+      navigate(`/admin/users/${user.id}`);
+    } catch (error: any) {
+      toast(error?.response?.data?.message ?? 'Failed to update user. Please try again.', 'error');
+    }
   };
 
   return (
@@ -950,7 +1050,7 @@ export function EditUserPage() {
           <AdminFormSection title="Identity" subtitle="Name, email, and contact details">
             <div className="grid gap-4 md:grid-cols-3">
               <Field label="Full Name" value={name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)} />
-              <Field label="Email Address" type="email" value={user.email} readOnly />
+              <Field label="Email Address (login username)" type="email" value={email} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)} />
               <Field label="Phone Number" type="tel" value={phone} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPhone(e.target.value)} placeholder="+255 7XX XXX XXX" />
             </div>
           </AdminFormSection>
@@ -966,8 +1066,8 @@ export function EditUserPage() {
               </div>
             )}
           </AdminFormSection>
-          <Button className="rounded-xl bg-[#4338CA]" disabled={updateMutation.isPending} onClick={handleSave}>
-            {updateMutation.isPending ? 'Saving…' : 'Save User'}
+          <Button className="rounded-xl bg-[#4338CA]" disabled={updateMutation.isPending || changeRoleMutation.isPending} onClick={handleSave}>
+            {updateMutation.isPending || changeRoleMutation.isPending ? 'Saving…' : 'Save User'}
           </Button>
         </div>
         <div className="h-fit rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -5755,11 +5855,11 @@ export function DepartmentsPage() {
 
 function useUser() {
   const { id } = useParams();
-  const { data: apiUsers = [] as typeof adminUsers, isLoading } = useAdminUsers() as unknown as { data: typeof adminUsers; isLoading: boolean };
+  const { data: apiUser, isLoading } = useAdminUser(id);
   return useMemo(() => ({
     loading: isLoading,
-    user: isLoading ? null : (apiUsers.find((u) => u.id === id) ?? null),
-  }), [id, apiUsers, isLoading]);
+    user: isLoading ? null : (apiUser ?? null),
+  }), [apiUser, isLoading]);
 }
 
 export { BulkImportPage } from './BulkImportPage';

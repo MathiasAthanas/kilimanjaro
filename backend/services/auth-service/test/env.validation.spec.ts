@@ -7,6 +7,7 @@ const validProductionEnv = {
   JWT_PRIVATE_KEY: 'private-key',
   JWT_PUBLIC_KEY: 'public-key',
   INTERNAL_API_KEY: 'internal-key',
+  TEMP_CREDENTIAL_ENCRYPTION_KEY: 'test-encryption-key-with-at-least-32-characters',
   REDIS_HOST: 'localhost',
   REDIS_PORT: '6379',
   RABBITMQ_URL: 'amqp://localhost:5672',
