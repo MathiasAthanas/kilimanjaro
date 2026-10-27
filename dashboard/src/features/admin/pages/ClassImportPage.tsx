@@ -71,8 +71,28 @@ function normalizeHeader(h: string): keyof ParsedRow | null {
   return null;
 }
 
+const EXCEL_EPOCH_UTC = Date.UTC(1899, 11, 30);
+const DAY_MS = 86_400_000;
+
+/** Convert Excel numeric date cells before generic string conversion loses their type. */
+export function normalizeSpreadsheetDate(value: unknown): string {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return [
+      value.getUTCFullYear(),
+      String(value.getUTCMonth() + 1).padStart(2, '0'),
+      String(value.getUTCDate()).padStart(2, '0'),
+    ].join('-');
+  }
+  const text = String(value ?? '').trim();
+  const serial = Number(text);
+  if (/^\d+(?:\.\d+)?$/.test(text) && Number.isFinite(serial) && serial >= 1 && serial <= 100_000) {
+    return new Date(EXCEL_EPOCH_UTC + Math.floor(serial) * DAY_MS).toISOString().slice(0, 10);
+  }
+  return text;
+}
+
 /** Turn a matrix (array of arrays, first row = headers) into ParsedRows. */
-function rowsFromMatrix(matrix: unknown[][]): { rows: ParsedRow[]; headers: string[]; unmapped: string[] } {
+export function rowsFromMatrix(matrix: unknown[][]): { rows: ParsedRow[]; headers: string[]; unmapped: string[] } {
   const headerRow = (matrix[0] ?? []).map((h) => String(h ?? '').trim());
   const mapping = headerRow.map(normalizeHeader);
   const unmapped = headerRow.filter((h, i) => h && !mapping[i]);
@@ -87,7 +107,9 @@ function rowsFromMatrix(matrix: unknown[][]): { rows: ParsedRow[]; headers: stri
     if (cells.every((c) => c === undefined || c === null || String(c).trim() === '')) continue;
     const row: ParsedRow = {};
     mapping.forEach((field, idx) => {
-      if (field) row[field] = String(cells[idx] ?? '').trim();
+      if (field) row[field] = field === 'dateOfBirth'
+        ? normalizeSpreadsheetDate(cells[idx])
+        : String(cells[idx] ?? '').trim();
     });
     if (!row.name && (firstIdx >= 0 || lastIdx >= 0)) {
       row.name = [cells[firstIdx], cells[middleIdx], cells[lastIdx]].filter((c) => c != null && String(c).trim()).map((c) => String(c).trim()).join(' ');
@@ -99,7 +121,7 @@ function rowsFromMatrix(matrix: unknown[][]): { rows: ParsedRow[]; headers: stri
 
 async function parseFile(file: File): Promise<{ rows: ParsedRow[]; headers: string[]; unmapped: string[] }> {
   const buf = await file.arrayBuffer();
-  const wb = XLSX.read(buf, { type: 'array' });
+  const wb = XLSX.read(buf, { type: 'array', cellDates: true });
   const sheet = wb.Sheets[wb.SheetNames[0]];
   const matrix = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, blankrows: false, defval: '' });
   return rowsFromMatrix(matrix as unknown[][]);

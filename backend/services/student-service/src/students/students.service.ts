@@ -137,8 +137,8 @@ export class StudentsService {
         const firstName = normalized(dto.firstName);
         const middleName = normalized(dto.middleName);
         const lastName = normalized(dto.lastName);
-        const birthDate = new Date(dto.dateOfBirth);
-        const identityKey = [classExists.schoolId ?? '', firstName, middleName, lastName, birthDate.toISOString().slice(0, 10)].join('|');
+        const birthDateIso = dto.dateOfBirth.slice(0, 10);
+        const identityKey = [classExists.schoolId ?? '', firstName, middleName, lastName, birthDateIso].join('|');
 
         // Cast PostgreSQL's `void` lock result to text because Prisma's raw
         // query decoder cannot deserialize a void column.
@@ -148,7 +148,7 @@ export class StudentsService {
           SELECT id, "registrationNumber"
           FROM students."Student"
           WHERE "schoolId" IS NOT DISTINCT FROM ${classExists.schoolId}
-            AND "dateOfBirth"::date = ${birthDate}::date
+            AND "dateOfBirth"::date = ${birthDateIso}::date
             AND lower(regexp_replace(btrim(coalesce("firstName", '')), '[[:space:]]+', ' ', 'g')) = ${firstName}
             AND lower(regexp_replace(btrim(coalesce("middleName", '')), '[[:space:]]+', ' ', 'g')) = ${middleName}
             AND lower(regexp_replace(btrim(coalesce("lastName", '')), '[[:space:]]+', ' ', 'g')) = ${lastName}

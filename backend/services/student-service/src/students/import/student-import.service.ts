@@ -8,6 +8,35 @@ import { ImportStudentsDto, ImportStudentRowDto } from '../dto/import-students.d
 
 type Gender = 'MALE' | 'FEMALE';
 
+const EXCEL_EPOCH_UTC = Date.UTC(1899, 11, 30);
+const DAY_MS = 86_400_000;
+
+/** Accept documented ISO dates and Excel serial dates without ambiguous JavaScript date parsing. */
+export function normalizeImportDate(value: unknown): string | undefined {
+  const text = String(value ?? '').trim();
+  if (!text) return undefined;
+
+  const serial = Number(text);
+  if (/^\d+(?:\.\d+)?$/.test(text) && Number.isFinite(serial) && serial >= 1 && serial <= 100_000) {
+    return new Date(EXCEL_EPOCH_UTC + Math.floor(serial) * DAY_MS).toISOString().slice(0, 10);
+  }
+
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+  if (!match) return undefined;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (
+    year < 1900
+    || date.getUTCFullYear() !== year
+    || date.getUTCMonth() !== month - 1
+    || date.getUTCDate() !== day
+    || date.getTime() > Date.now()
+  ) return undefined;
+  return text;
+}
+
 interface NormalizedRow {
   line: number;
   raw: ImportStudentRowDto;
@@ -176,9 +205,8 @@ export class StudentImportService {
       // DOB (nullable) — warn if missing.
       let dateOfBirth: string | undefined;
       if (raw.dateOfBirth && String(raw.dateOfBirth).trim()) {
-        const d = new Date(String(raw.dateOfBirth).trim());
-        if (Number.isNaN(d.getTime())) warnings.push(`Row ${line}, ${label}: date of birth "${raw.dateOfBirth}" is not a valid date; leaving blank.`);
-        else dateOfBirth = d.toISOString().slice(0, 10);
+        dateOfBirth = normalizeImportDate(raw.dateOfBirth);
+        if (!dateOfBirth) warnings.push(`Row ${line}, ${label}: date of birth "${raw.dateOfBirth}" is not a valid YYYY-MM-DD or Excel date; leaving blank.`);
       } else {
         warnings.push(`Row ${line}, ${label}: date of birth is missing.`);
       }
