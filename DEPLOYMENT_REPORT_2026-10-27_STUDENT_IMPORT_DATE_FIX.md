@@ -25,7 +25,12 @@ Class imports containing Excel numeric date cells failed during student duplicat
 
 ## Production Record
 
-- Live release: pending
-- Rollback release: pending
-- Gateway health: pending
-- Dashboard verification: pending
+- Commit: `bd584b2`
+- Live release: `/opt/kilimanjaro/releases/bd584b2-20261027T070242Z`
+- Rollback release: `/opt/kilimanjaro/releases/8ab9f4e-20261027T064340Z`
+- No database migration or production-data write was required.
+- Gateway health passed with every dependent service reachable.
+- All eight PM2 services are online.
+- The production dashboard build passed, Nginx validation passed, and the public dashboard returns HTTP 200.
+- A read-only Prisma query bound `2023-03-15` successfully through the deployed student-service client.
+- Production contains zero student records from the failed `BABY 030` through `BABY 060` import attempt for the affected school.
