@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/providers/notification_provider.dart';
 import '../../core/providers/snackbar_provider.dart';
+import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../widgets/auth/password_strength.dart';
 import '../../widgets/common/common_screen_surface.dart';
@@ -63,9 +64,9 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
         _next.clear();
         _confirm.clear();
       });
-      ref
-          .read(snackbarProvider.notifier)
-          .show('Password changed — use the new password next time you sign in.');
+      ref.read(snackbarProvider.notifier).show('Password changed. Welcome!');
+      final user = ref.read(currentUserProvider).valueOrNull;
+      if (user != null) AppRouter.go(context, '/shell/${user.role.shellSegment}/home');
     } catch (_) {
       if (!mounted) return;
       ref

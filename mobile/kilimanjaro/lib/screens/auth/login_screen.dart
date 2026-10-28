@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:local_auth/local_auth.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/providers/auth_provider.dart';
@@ -21,11 +20,8 @@ class LoginScreen extends ConsumerStatefulWidget {
 class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _identifierController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _localAuth = LocalAuthentication();
 
   bool _obscure = true;
-  bool _biometricsAvailable = false;
-  bool _useFaceId = false;
 
   bool get _canSubmit =>
       _identifierController.text.trim().isNotEmpty &&
@@ -36,25 +32,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     super.initState();
     _identifierController.addListener(_refresh);
     _passwordController.addListener(_refresh);
-    _checkBiometrics();
   }
 
   void _refresh() {
     if (mounted) setState(() {});
-  }
-
-  Future<void> _checkBiometrics() async {
-    try {
-      final canCheck = await _localAuth.canCheckBiometrics;
-      if (!canCheck || !mounted) return;
-      final types = await _localAuth.getAvailableBiometrics();
-      if (mounted) {
-        setState(() {
-          _biometricsAvailable = types.isNotEmpty;
-          _useFaceId = types.contains(BiometricType.face);
-        });
-      }
-    } catch (_) {}
   }
 
   @override
@@ -89,21 +70,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     AppRouter.go(context, '/shell/${result.user.role.shellSegment}/home');
   }
 
-  Future<void> _tryBiometric() async {
-    try {
-      final authenticated = await _localAuth.authenticate(
-        localizedReason: 'Sign in to Kilimanjaro School Portal',
-      );
-      if (!authenticated || !mounted) return;
-      ref.read(snackbarProvider.notifier).show(
-        'Biometric sign-in will be available after your first login.',
-      );
-    } catch (_) {}
-  }
-
   Future<void> _contactRegistry() async {
-    final uri = Uri.parse('tel:+255000000000');
-    if (await canLaunchUrl(uri)) await launchUrl(uri);
+    final uri = Uri.parse('mailto:support@kilimanjaroschools.site?subject=Kilimanjaro%20Schools%20app%20sign-in%20help');
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri);
+        return;
+      }
+    } catch (_) {}
+    if (mounted) {
+      ref.read(snackbarProvider.notifier).show('Email support@kilimanjaroschools.site for sign-in help.');
+    }
   }
 
   @override
@@ -236,14 +213,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         ),
                         onPressed: loading || !_canSubmit ? null : _submit,
                       ),
-                      // ── Biometrics ────────────────────────────────────────
-                      if (_biometricsAvailable) ...[
-                        const SizedBox(height: 12),
-                        _BiometricButton(
-                          useFaceId: _useFaceId,
-                          onPressed: _tryBiometric,
-                        ),
-                      ],
                       const SizedBox(height: 30),
                       // ── Footer ────────────────────────────────────────────
                       _ContactRegistryFooter(onTap: _contactRegistry),
@@ -457,36 +426,6 @@ class _AuthErrorBanner extends StatelessWidget {
   }
 }
 
-class _BiometricButton extends StatelessWidget {
-  const _BiometricButton({required this.useFaceId, required this.onPressed});
-
-  final bool useFaceId;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return OutlinedButton.icon(
-      onPressed: onPressed,
-      icon: Icon(
-        useFaceId ? Icons.face_rounded : Icons.fingerprint_rounded,
-        size: 22,
-      ),
-      label: Text(
-        useFaceId ? 'Sign in with Face ID' : 'Sign in with Fingerprint',
-      ),
-      style: OutlinedButton.styleFrom(
-        minimumSize: const Size(double.infinity, 52),
-        foregroundColor: AppColors.skyBlue600,
-        side: const BorderSide(color: AppColors.skyBlue200),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-      ),
-    );
-  }
-}
-
 class _ContactRegistryFooter extends StatelessWidget {
   const _ContactRegistryFooter({required this.onTap});
 
@@ -506,7 +445,7 @@ class _ContactRegistryFooter extends StatelessWidget {
             children: [
               const TextSpan(text: 'Having trouble? '),
               const TextSpan(
-                text: 'Contact School Registry',
+                text: 'Email support',
                 style: TextStyle(
                   color: AppColors.skyBlue600,
                   fontWeight: FontWeight.w700,

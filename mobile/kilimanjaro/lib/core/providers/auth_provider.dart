@@ -1,8 +1,10 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../models/auth_result.dart';
 import '../../models/auth_user.dart';
+import '../network/api_failure.dart';
 import '../services/api/api_auth_service.dart';
 import '../services/interfaces/auth_service_interface.dart';
 
@@ -51,6 +53,23 @@ class AuthError extends AuthState {
   final String message;
 }
 
+/// A sentence a person can act on for a failed sign-in / reset call (never a raw exception dump).
+String authErrorMessage(Object error) {
+  if (error is DioException) {
+    final status = error.response?.statusCode;
+    if (status == 401) return 'Incorrect email, registration number or password.';
+    if (status == 429) return 'Too many attempts. Please wait a few minutes and try again.';
+    if (status == 423) return 'This account is temporarily locked. Please try again later or contact support.';
+    if (status == 400 || status == 422) {
+      final data = error.response?.data;
+      final message = data is Map ? data['message'] : null;
+      final text = message is List ? message.join('. ') : message?.toString();
+      if (text != null && text.isNotEmpty) return text;
+    }
+  }
+  return ApiFailure.from(error).message;
+}
+
 class AuthController extends Notifier<AuthState> {
   @override
   AuthState build() {
@@ -74,7 +93,7 @@ class AuthController extends Notifier<AuthState> {
       state = AuthAuthenticated(result.user);
       return result;
     } catch (error) {
-      state = AuthError(error.toString().replaceFirst('Exception: ', ''));
+      state = AuthError(authErrorMessage(error));
       return null;
     }
   }
@@ -190,7 +209,7 @@ class OtpController extends StateNotifier<OtpState> {
       state = state.copyWith(
         isVerifying: false,
         isVerified: false,
-        error: error.toString().replaceFirst('Exception: ', ''),
+        error: authErrorMessage(error),
       );
     }
   }
@@ -261,7 +280,7 @@ class ResetPasswordController extends StateNotifier<ResetPasswordState> {
       state = state.copyWith(
         isResetting: false,
         isReset: false,
-        error: error.toString().replaceFirst('Exception: ', ''),
+        error: authErrorMessage(error),
       );
     }
   }

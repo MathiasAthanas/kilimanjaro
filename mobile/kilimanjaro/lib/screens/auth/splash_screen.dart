@@ -60,7 +60,14 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   }
 
   Future<void> _goNext() async {
-    final result = await _launchGateFuture;
+    _LaunchGateResult result;
+    try {
+      result = await _launchGateFuture.timeout(const Duration(seconds: 12));
+    } catch (_) {
+      // Slow network or a bad response must never leave the app stuck on the splash screen.
+      if (mounted) AppRouter.go(context, '/login');
+      return;
+    }
     if (!mounted) return;
     if (result.needsForceUpdate) {
       AppRouter.go(

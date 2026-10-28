@@ -111,7 +111,8 @@ class ApiAuthService implements IAuthService {
       final payload = raw['data'] is Map<String, dynamic> ? raw['data'] as Map<String, dynamic> : raw;
       final userJson = payload['user'] is Map<String, dynamic> ? payload['user'] as Map<String, dynamic> : payload;
       return AuthUser.fromJson(userJson);
-    } on DioException {
+    } catch (_) {
+      // Offline, expired session or an unexpected payload: treat as signed out instead of failing startup.
       return null;
     }
   }
