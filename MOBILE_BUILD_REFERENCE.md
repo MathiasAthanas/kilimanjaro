@@ -45,19 +45,19 @@ Before every upload, increment `version:` in `mobile/kilimanjaro/pubspec.yaml`. 
 
 ## Latest Build Record
 
-Built on 2026-10-28 from the current local mobile workspace (replaces the rejected `1.0.2+3`).
+Built on 2026-10-28 from the current local mobile workspace (replaces the rejected `1.0.2+3`; supersedes `1.0.3+4`).
 
 - Package: `site.kilimanjaroschools.app`
-- Version: `1.0.3+4`
+- Version: `1.0.4+5`
 - Size: `63.6 MB`
-- SHA-256: `FCEF7609FB597C4844AD7110AF880942A4941129664E3012968338CD1FEF7C43`
+- SHA-256: `8FF2257426DC5A2AB6A0CF6341B516C44088529CCF7291EA3B880C5FC279C881`
 - Signing key: local `kilimanjaro-play-upload` upload key
 - Environment: `ENV=production`
 - API target: `https://srms.kilimanjaroschools.site`
 
 The hash and size apply only to this exact artifact. Replace this record after each successful signed release build.
 
-**Do not upload this build until the production backend has been updated** to the release described in `deployment/DEPLOYMENT_GUIDE_2026-10-25.md`. The app depends on the gateway mobile adapters, e-learning rules and finance endpoints added on 2026-10-24; against an older backend, new screens show error states, which Google Play review treats as a broken app.
+**Upload this build only if the production backend is on the release described** to the release described in `deployment/DEPLOYMENT_GUIDE_2026-10-25.md`. The app depends on the gateway mobile adapters, e-learning rules and finance endpoints added on 2026-10-24; against an older backend, new screens show error states, which Google Play review treats as a broken app.
 
 ## Release Verification
 

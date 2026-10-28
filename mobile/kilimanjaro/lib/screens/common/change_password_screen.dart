@@ -59,14 +59,25 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
             newPassword: _next.text,
           );
       if (!mounted) return;
+      // The server ends every session when a password changes, so sign in again with the new
+      // password right away; otherwise the app would drop to the login screen a few minutes later.
+      final user = ref.read(currentUserProvider).valueOrNull;
+      final identifier = (user?.registrationNumber?.isNotEmpty ?? false) ? user!.registrationNumber! : (user?.email ?? '');
+      final next = _next.text;
+      final signedIn = identifier.isEmpty ? null : await ref.read(authControllerProvider.notifier).login(identifier, next);
+      if (!mounted) return;
       setState(() {
         _current.clear();
         _next.clear();
         _confirm.clear();
       });
-      ref.read(snackbarProvider.notifier).show('Password changed. Welcome!');
-      final user = ref.read(currentUserProvider).valueOrNull;
-      if (user != null) AppRouter.go(context, '/shell/${user.role.shellSegment}/home');
+      if (signedIn != null) {
+        ref.read(snackbarProvider.notifier).show('Password changed. Welcome!');
+        AppRouter.go(context, '/shell/${signedIn.user.role.shellSegment}/home');
+      } else {
+        ref.read(snackbarProvider.notifier).show('Password changed. Please sign in with your new password.');
+        AppRouter.go(context, '/login');
+      }
     } catch (_) {
       if (!mounted) return;
       ref

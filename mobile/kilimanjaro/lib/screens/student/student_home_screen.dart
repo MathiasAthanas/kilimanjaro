@@ -158,11 +158,14 @@ class _StudentSummaryCard extends StatelessWidget {
       children: [
         Row(
           children: [
-            KSGradeDisplay(
-              grade: grade,
-              size: GradeDisplaySize.small,
-              showLabel: false,
-            ),
+            if (score != null)
+              KSGradeDisplay(
+                grade: grade,
+                size: GradeDisplaySize.small,
+                showLabel: false,
+              )
+            else
+              const Icon(Icons.hourglass_empty_rounded, size: 40, color: AppColors.textMuted),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -174,13 +177,13 @@ class _StudentSummaryCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    '${score?.toStringAsFixed(1) ?? '--'}% overall performance',
+                    score == null ? 'No published results yet' : '${score!.toStringAsFixed(1)}% overall performance',
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                 ],
               ),
             ),
-            KSRankBadge(rank: rank, total: totalStudents),
+            if (score != null && rank > 0 && totalStudents > 0) KSRankBadge(rank: rank, total: totalStudents),
           ],
         ),
         const SizedBox(height: 18),
