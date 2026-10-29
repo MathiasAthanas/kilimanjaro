@@ -23,6 +23,7 @@ import { UpdateRoleDto } from './dto/update-role.dto';
 import { ListUsersDto } from './dto/list-users.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { AdminResetPasswordDto } from './dto/admin-reset-password.dto';
+import { CommitBulkEditUsersDto, PreviewBulkEditUsersDto } from './dto/bulk-edit-users.dto';
 import { IsEmail, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 type AuthenticatedUser = {
@@ -76,6 +77,19 @@ export class UsersController {
       throw new ForbiddenException('Select a school before creating or linking a parent account');
     }
     return this.usersService.ensureParentAccount({ ...dto, schoolId }, user.sub);
+  }
+
+  @Post('bulk-edit/preview')
+  @Roles(Role.SUPER_ADMIN, Role.SYSTEM_ADMIN)
+  async previewBulkEdit(@Body() dto: PreviewBulkEditUsersDto, @CurrentUser() user: AuthenticatedUser) {
+    return this.usersService.previewBulkEdit(dto.rows, user);
+  }
+
+  @Post('bulk-edit/commit')
+  @Roles(Role.SUPER_ADMIN, Role.SYSTEM_ADMIN)
+  @Header('Cache-Control', 'no-store')
+  async commitBulkEdit(@Body() dto: CommitBulkEditUsersDto, @CurrentUser() user: AuthenticatedUser) {
+    return this.usersService.commitBulkEdit(dto, user);
   }
 
   @Patch(':userId/deactivate')

@@ -17,7 +17,7 @@ function useActiveSchoolKey() {
  * is collected. The X-Active-School header (added by the api client) scopes
  * the result to the selected school.
  */
-async function fetchAllUsers(params: Record<string, unknown> = {}): Promise<unknown[]> {
+export async function fetchAllUsers(params: Record<string, unknown> = {}): Promise<unknown[]> {
   const raw: unknown[] = [];
   let page = 1;
   for (;;) {
@@ -32,7 +32,7 @@ async function fetchAllUsers(params: Record<string, unknown> = {}): Promise<unkn
   return raw;
 }
 
-type AdminUserRow = {
+export type AdminUserRow = {
   id: string;
   name: string;
   email: string;
@@ -46,6 +46,9 @@ type AdminUserRow = {
   phoneNumber?: string | null;
   department?: string | null;
   mustChangePassword?: boolean;
+  registrationNumber?: string | null;
+  updatedAt?: string;
+  schoolIds?: string[];
 };
 
 function statusToState(status: unknown) {
@@ -72,7 +75,7 @@ function toServiceHealth(value: unknown) {
   }));
 }
 
-function toAdminUsers(value: unknown): AdminUserRow[] {
+export function toAdminUsers(value: unknown): AdminUserRow[] {
   return arrayFromApi(value, ['users']).map((raw) => {
     const user = raw as Record<string, unknown>;
     const fullName = [user.firstName, user.lastName].filter(Boolean).join(' ').trim();

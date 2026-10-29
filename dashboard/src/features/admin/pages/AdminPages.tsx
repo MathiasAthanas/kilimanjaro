@@ -118,6 +118,7 @@ import { DataError } from '../../../components/feedback/DataError';
 import { EmptyState } from '../../../components/feedback/EmptyState';
 import { useTableControls, TableToolbar, SortHeader, DataPagination } from '../../../components/common/table';
 import { SkeletonTable } from '../../../components/common/SkeletonTable';
+import { BulkUserEditDialog } from '../components/BulkUserEditDialog';
 
 // â"€â"€â"€ Home â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
@@ -182,10 +183,23 @@ export function AdminHomePage() {
 export function AdminUsersPage() {
   const [searchParams] = useSearchParams();
   const roleFilter = searchParams.get('role') === 'TEACHER' ? 'TEACHER' : '';
+  const requestedCategory = searchParams.get('category');
+  const category = roleFilter === 'TEACHER'
+    ? 'TEACHERS'
+    : ['ALL', 'STAFF', 'TEACHERS', 'STUDENTS', 'PARENTS_GUARDIANS'].includes(requestedCategory ?? '')
+      ? requestedCategory!
+      : 'ALL';
+  const categoryTabs = [
+    { value: 'ALL', label: 'All users', to: '/admin/users' },
+    { value: 'STAFF', label: 'All staff', to: '/admin/users?category=STAFF' },
+    { value: 'TEACHERS', label: 'Teachers', to: '/admin/users?category=TEACHERS' },
+    { value: 'STUDENTS', label: 'Students', to: '/admin/users?category=STUDENTS' },
+    { value: 'PARENTS_GUARDIANS', label: 'Parents / Guardians', to: '/admin/users?category=PARENTS_GUARDIANS' },
+  ];
   return (
-    <AdminShell title={roleFilter ? 'Teacher Directory' : 'Staff Directory'} eyebrow="Accounts, roles, security">
+    <AdminShell title="User Directory" eyebrow="Accounts, roles, security">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm font-semibold text-ks-muted">Find staff accounts, open their profile, and continue to the existing role-specific tasks.</p>
+        <p className="text-sm font-semibold text-ks-muted">Find and manage staff, students, parents, and guardians within your current school access.</p>
         <NavLink
           to="/admin/users/create"
           className="inline-flex items-center gap-2 rounded-xl bg-[#4338CA] px-4 py-2.5 text-sm font-black text-white shadow-sm transition hover:bg-[#3730a3]"
@@ -194,26 +208,25 @@ export function AdminUsersPage() {
           Register New User
         </NavLink>
       </div>
-      <nav aria-label="Staff directory views" className="my-4 flex flex-wrap gap-2">
-        <NavLink
-          to="/admin/users"
-          end
-          className={({ isActive }) => `rounded-xl border px-4 py-2 text-sm font-black ${isActive && !roleFilter ? 'border-[#4338CA] bg-indigo-50 text-[#4338CA]' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}
-        >All staff</NavLink>
-        <NavLink
-          to="/admin/users?role=TEACHER"
-          className={() => `rounded-xl border px-4 py-2 text-sm font-black ${roleFilter ? 'border-[#4338CA] bg-indigo-50 text-[#4338CA]' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}
-        >Teachers</NavLink>
+      <nav aria-label="User directory views" className="my-4 flex flex-wrap gap-2">
+        {categoryTabs.map((tab) => (
+          <NavLink
+            key={tab.value}
+            to={tab.to}
+            end={tab.value === 'ALL'}
+            className={() => `rounded-xl border px-4 py-2 text-sm font-black ${category === tab.value ? 'border-[#4338CA] bg-indigo-50 text-[#4338CA]' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}
+          >{tab.label}</NavLink>
+        ))}
       </nav>
-      {roleFilter && <p className="mb-3 text-xs font-semibold text-slate-500">The Teachers view filters the directory only. The existing staff CSV import supports a role column and remains shared across supported staff roles.</p>}
+      <p className="mb-3 text-xs font-semibold text-slate-500">The importer below creates new staff accounts. Use Bulk Edit Users in the directory toolbar to update existing accounts.</p>
       <CsvImportZone entity="staff user" />
-      <UsersTable key={roleFilter || 'all'} initialRole={roleFilter} />
+      <UsersTable key={`${category}-${roleFilter}`} initialRole={roleFilter} initialCategory={category} />
     </AdminShell>
   );
 }
 
-function UsersTable({ initialRole = '' }: { initialRole?: string }) {
-  const t = useTableControls({ initialLimit: 20, initialFilters: initialRole ? { role: initialRole } : {} });
+function UsersTable({ initialRole = '', initialCategory = 'ALL' }: { initialRole?: string; initialCategory?: string }) {
+  const t = useTableControls({ initialLimit: 20, initialFilters: { ...(initialRole ? { role: initialRole } : {}), category: initialCategory } });
   const { data, isLoading, isError, refetch } = useAdminUsersPage(t.params) as unknown as {
     data?: { users: typeof adminUsers; meta?: { total?: number } };
     isLoading: boolean;
@@ -285,6 +298,7 @@ function UsersTable({ initialRole = '' }: { initialRole?: string }) {
         <option value="true">Active</option>
         <option value="false">Inactive</option>
       </select>
+      <BulkUserEditDialog params={t.params} total={total} onCompleted={() => { void refetch(); }} />
     </TableToolbar>
   );
 
@@ -394,6 +408,8 @@ function UsersTable({ initialRole = '' }: { initialRole?: string }) {
 // â"€â"€â"€ Create / Edit user â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 const ROLE_LABELS: Record<string, string> = {
+  BOARD_DIRECTOR:     'Board Director',
+  MANAGING_DIRECTOR: 'Managing Director',
   TEACHER:            'Teacher',
   HEAD_OF_DEPARTMENT: 'Head of Department',
   ACADEMIC_QA:        'AQA Officer',
@@ -401,6 +417,11 @@ const ROLE_LABELS: Record<string, string> = {
   PRINCIPAL:          'Head master / Head of School',
   SYSTEM_ADMIN:       'System Admin',
   ADMISSIONS:         'Admissions Officer',
+  STUDENT:            'Student',
+  PARENT:             'Parent / Guardian',
+  MANAGER:            'Manager',
+  HEAD_OF_SCHOOL:     'Head of School',
+  HEAD_OF_FINANCE:    'Head of Finance',
 };
 
 function roleLabel(role: string): string {

@@ -4,6 +4,14 @@ import { Transform } from 'class-transformer';
 import { IsBoolean, IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 import { SortDir } from '../../common/helpers/sort.helper';
 
+export enum UserDirectoryCategory {
+  ALL = 'ALL',
+  STAFF = 'STAFF',
+  TEACHERS = 'TEACHERS',
+  STUDENTS = 'STUDENTS',
+  PARENTS_GUARDIANS = 'PARENTS_GUARDIANS',
+}
+
 export class ListUsersDto {
   @ApiPropertyOptional({ default: 1 })
   @IsOptional()
@@ -24,6 +32,11 @@ export class ListUsersDto {
   @IsOptional()
   @IsEnum(Role)
   role?: Role;
+
+  @ApiPropertyOptional({ enum: UserDirectoryCategory })
+  @IsOptional()
+  @IsEnum(UserDirectoryCategory)
+  category?: UserDirectoryCategory;
 
   @ApiPropertyOptional()
   @IsOptional()

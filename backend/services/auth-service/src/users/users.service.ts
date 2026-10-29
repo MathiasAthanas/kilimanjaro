@@ -15,9 +15,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { RabbitMQService } from '../rabbitmq/rabbitmq.service';
 import { CreateUserDto } from './dto/create-user.dto';
-import { ListUsersDto } from './dto/list-users.dto';
+import { ListUsersDto, UserDirectoryCategory } from './dto/list-users.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { AdminResetPasswordDto } from './dto/admin-reset-password.dto';
+import { BulkEditUserRowDto, CommitBulkEditUsersDto } from './dto/bulk-edit-users.dto';
 import { getPagination } from '../common/helpers/pagination.helper';
 import { resolveOrderBy } from '../common/helpers/sort.helper';
 
@@ -27,6 +28,33 @@ type AuthActor = {
   scope?: 'GROUP' | 'SCHOOL';
   schoolIds?: string[];
   activeSchoolId?: string;
+};
+
+type BulkEditValue = string | null | boolean;
+
+type BulkEditChange = {
+  field: string;
+  before: BulkEditValue;
+  after: BulkEditValue;
+};
+
+type BulkEditPreviewRow = {
+  rowNumber: number;
+  userId: string;
+  name: string;
+  role: Role | string;
+  changes: BulkEditChange[];
+  errors: string[];
+  warnings: string[];
+  values: {
+    firstName: string;
+    lastName: string;
+    email: string | null;
+    registrationNumber: string | null;
+    phoneNumber: string | null;
+    department: string | null;
+    isActive: boolean;
+  };
 };
 
 @Injectable()
@@ -650,11 +678,236 @@ export class UsersService {
     return { message: 'Sessions revoked', revokedCount: result.count };
   }
 
+  async previewBulkEdit(rows: BulkEditUserRowDto[], actor: AuthActor) {
+    const ids = rows.map((row) => row.userId.trim());
+    const duplicateIds = new Set(ids.filter((id, index) => ids.indexOf(id) !== index));
+    const users = await this.prisma.user.findMany({
+      where: {
+        id: { in: [...new Set(ids)] },
+        role: this.resolveVisibleRoleFilter(undefined, actor.role),
+        ...this.userSchoolScope(actor),
+      },
+      include: {
+        schoolMemberships: {
+          where: { isActive: true },
+          select: { schoolId: true },
+        },
+      },
+    });
+    const usersById = new Map(users.map((user) => [user.id, user]));
+    const previewRows: BulkEditPreviewRow[] = rows.map((row, index) => {
+      const user = usersById.get(row.userId.trim());
+      const errors: string[] = [];
+      const warnings: string[] = [];
+      const firstName = row.firstName.trim();
+      const lastName = row.lastName.trim();
+      const email = row.email?.trim().toLowerCase() || null;
+      const registrationNumber = row.registrationNumber?.trim() || null;
+      const phoneNumber = row.phoneNumber?.trim()
+        ? UsersService.normalisePhone(row.phoneNumber.trim())
+        : null;
+      const department = row.department?.trim() || null;
+      const isActive = row.status === 'ACTIVE';
+      const values = { firstName, lastName, email, registrationNumber, phoneNumber, department, isActive };
+
+      if (!user) {
+        errors.push('User was not found or is outside your current school access.');
+        return {
+          rowNumber: index + 2,
+          userId: row.userId,
+          name: [firstName, lastName].filter(Boolean).join(' ') || row.userId,
+          role: row.role,
+          changes: [],
+          errors,
+          warnings,
+          values,
+        };
+      }
+
+      if (duplicateIds.has(user.id)) errors.push('This user appears more than once in the uploaded file.');
+      if (!firstName) errors.push('First name is required.');
+      if (!lastName) errors.push('Last name is required.');
+      if (row.role.trim() !== user.role) errors.push('Role is read-only and cannot be changed by bulk edit.');
+
+      const actualSchoolIds = this.serialiseSchoolIds(user.schoolMemberships.map((membership) => membership.schoolId));
+      if (this.normaliseSchoolIds(row.schoolIds) !== actualSchoolIds) {
+        errors.push('School memberships are read-only. Export a fresh file if memberships changed.');
+      }
+
+      const expectedUpdatedAt = new Date(row.updatedAt);
+      if (Number.isNaN(expectedUpdatedAt.getTime()) || expectedUpdatedAt.getTime() !== user.updatedAt.getTime()) {
+        errors.push('This account changed after export. Export a fresh file before editing it.');
+      }
+
+      if (!(user.role === Role.STUDENT || user.role === Role.PARENT) && !email) {
+        errors.push('Email is required for this role.');
+      }
+      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.push('Email address is invalid.');
+      if (user.role === Role.STUDENT && !registrationNumber) errors.push('Registration number is required for students.');
+      if (user.role === Role.PARENT && !email && !phoneNumber) errors.push('A parent or guardian requires an email or phone number.');
+      if (user.id === actor.sub && !isActive) errors.push('You cannot deactivate your own account.');
+
+      const changes: BulkEditChange[] = [];
+      const addChange = (field: string, before: BulkEditValue, after: BulkEditValue) => {
+        if (before !== after) changes.push({ field, before, after });
+      };
+      addChange('firstName', user.firstName, firstName);
+      addChange('lastName', user.lastName, lastName);
+      addChange('email', user.email, email);
+      addChange('registrationNumber', user.registrationNumber, registrationNumber);
+      addChange('phoneNumber', user.phoneNumber, phoneNumber);
+      addChange('department', user.department, department);
+      addChange('status', user.isActive ? 'ACTIVE' : 'INACTIVE', isActive ? 'ACTIVE' : 'INACTIVE');
+
+      if (!changes.length) warnings.push('No editable fields changed.');
+      return {
+        rowNumber: index + 2,
+        userId: user.id,
+        name: `${user.firstName} ${user.lastName}`.trim(),
+        role: user.role,
+        changes,
+        errors,
+        warnings,
+        values,
+      };
+    });
+
+    await this.addBulkIdentifierConflicts(previewRows);
+    const changed = previewRows.filter((row) => row.changes.length > 0 && row.errors.length === 0).length;
+    const invalid = previewRows.filter((row) => row.errors.length > 0).length;
+    return {
+      summary: {
+        total: previewRows.length,
+        changed,
+        unchanged: previewRows.length - changed - invalid,
+        invalid,
+      },
+      canCommit: changed > 0 && invalid === 0,
+      rows: previewRows,
+    };
+  }
+
+  async commitBulkEdit(dto: CommitBulkEditUsersDto, actor: AuthActor) {
+    if (!dto.confirmed) throw new BadRequestException('Confirm the reviewed changes before applying them.');
+    const preview = await this.previewBulkEdit(dto.rows, actor);
+    if (!preview.canCommit) {
+      throw new BadRequestException({
+        message: 'Bulk edit cannot be applied. Fix the preview errors and upload the file again.',
+        preview,
+      });
+    }
+
+    const changedRows = preview.rows.filter((row) => row.changes.length > 0 && row.errors.length === 0);
+    const changedIds = new Set(changedRows.map((row) => row.userId));
+    const resetIds = [...new Set(dto.resetUserIds)];
+    if (resetIds.some((id) => !changedIds.has(id))) {
+      throw new BadRequestException('Passwords can only be reset for users with reviewed changes in this upload.');
+    }
+
+    const credentialMap = new Map<string, { temporaryPassword: string; passwordHash: string; encrypted: string }>();
+    // Argon2 is intentionally expensive. Four-at-a-time uses its worker pool
+    // without launching an unbounded number of memory-heavy hashes.
+    for (let offset = 0; offset < resetIds.length; offset += 4) {
+      await Promise.all(resetIds.slice(offset, offset + 4).map(async (userId) => {
+        const temporaryPassword = this.generateTemporaryPassword();
+        credentialMap.set(userId, {
+          temporaryPassword,
+          passwordHash: await argon2.hash(temporaryPassword),
+          encrypted: this.encryptTemporaryPassword(temporaryPassword),
+        });
+      }));
+    }
+
+    const sourceRows = new Map(dto.rows.map((row) => [row.userId.trim(), row]));
+    await this.prisma.$transaction(async (tx) => {
+      for (const row of changedRows) {
+        const source = sourceRows.get(row.userId);
+        if (!source) throw new ConflictException('Uploaded data changed before commit. Preview it again.');
+        const credential = credentialMap.get(row.userId);
+        const updateResult = await tx.user.updateMany({
+          where: { id: row.userId, updatedAt: new Date(source.updatedAt) },
+          data: {
+            ...row.values,
+            ...(credential
+              ? {
+                  passwordHash: credential.passwordHash,
+                  temporaryPasswordEncrypted: credential.encrypted,
+                  mustChangePassword: true,
+                  failedLoginAttempts: 0,
+                  lockedUntil: null,
+                }
+              : {}),
+          },
+        });
+        if (updateResult.count !== 1) {
+          throw new ConflictException(`${row.name} changed while this update was being applied. Export and review a fresh file.`);
+        }
+
+        if (row.role === Role.STUDENT) {
+          await tx.$executeRaw`
+            UPDATE students."Student"
+            SET "firstName" = ${row.values.firstName},
+                "lastName" = ${row.values.lastName},
+                "registrationNumber" = ${row.values.registrationNumber},
+                "updatedAt" = NOW()
+            WHERE "authUserId" = ${row.userId}
+          `;
+        } else if (row.role === Role.PARENT) {
+          await tx.$executeRaw`
+            UPDATE students."Guardian"
+            SET "firstName" = ${row.values.firstName},
+                "lastName" = ${row.values.lastName},
+                "email" = ${row.values.email},
+                "phoneNumber" = COALESCE(${row.values.phoneNumber}, "phoneNumber")
+            WHERE "authUserId" = ${row.userId}
+          `;
+        }
+
+        const loginChanged = row.changes.some((change) => ['email', 'registrationNumber', 'phoneNumber', 'status'].includes(change.field));
+        if (credential || loginChanged) {
+          await tx.refreshToken.updateMany({
+            where: { userId: row.userId, isRevoked: false },
+            data: { isRevoked: true },
+          });
+        }
+        await tx.auditLog.create({
+          data: {
+            userId: actor.sub,
+            action: AuditAction.USER_ROLE_CHANGED,
+            metadata: {
+              action: 'BULK_USER_PROFILE_UPDATED',
+              targetUserId: row.userId,
+              changes: row.changes,
+              passwordReset: Boolean(credential),
+            },
+          },
+        });
+      }
+    }, { maxWait: 10_000, timeout: 180_000 });
+
+    const credentials = changedRows.flatMap((row) => {
+      const credential = credentialMap.get(row.userId);
+      if (!credential) return [];
+      return [{
+        userId: row.userId,
+        name: row.name,
+        login: row.values.email ?? row.values.registrationNumber ?? row.values.phoneNumber ?? '',
+        temporaryPassword: credential.temporaryPassword,
+      }];
+    });
+    return {
+      message: `${changedRows.length} user account${changedRows.length === 1 ? '' : 's'} updated successfully.`,
+      updated: changedRows.length,
+      passwordResets: credentials.length,
+      credentials,
+    };
+  }
+
   async listUsers(query: ListUsersDto, actor?: AuthActor) {
     const pagination = getPagination(query.page, query.limit);
 
     const where: Prisma.UserWhereInput = {
-      role: this.resolveVisibleRoleFilter(query.role, actor?.role),
+      role: this.resolveVisibleRoleFilter(query.role, actor?.role, query.category),
       isActive: query.isActive,
       ...(query.phoneNumber ? { phoneNumber: UsersService.normalisePhone(query.phoneNumber) } : {}),
       ...(query.search
@@ -895,9 +1148,79 @@ export class UsersService {
     }
   }
 
-  private resolveVisibleRoleFilter(role: Role | undefined, actorRole?: string): Prisma.EnumRoleFilter | Role | undefined {
-    if (!this.isSystemAdmin(actorRole)) return role;
-    if (role === Role.SUPER_ADMIN) return { in: [] };
-    return role ?? { not: Role.SUPER_ADMIN };
+  private resolveVisibleRoleFilter(
+    role: Role | undefined,
+    actorRole?: string,
+    category: UserDirectoryCategory = UserDirectoryCategory.ALL,
+  ): Prisma.EnumRoleFilter | Role | undefined {
+    const hiddenRoles: Role[] = this.isSystemAdmin(actorRole) ? [Role.SUPER_ADMIN] : [];
+    if (role) {
+      if (hiddenRoles.includes(role)) return { in: [] };
+      return role;
+    }
+
+    const categoryRoles: Partial<Record<UserDirectoryCategory, Role[]>> = {
+      [UserDirectoryCategory.TEACHERS]: [Role.TEACHER],
+      [UserDirectoryCategory.STUDENTS]: [Role.STUDENT],
+      [UserDirectoryCategory.PARENTS_GUARDIANS]: [Role.PARENT],
+      [UserDirectoryCategory.STAFF]: Object.values(Role).filter((candidate) => candidate !== Role.STUDENT && candidate !== Role.PARENT),
+    };
+    const included = categoryRoles[category];
+    if (included) return { in: included.filter((candidate) => !hiddenRoles.includes(candidate)) };
+    return hiddenRoles.length ? { notIn: hiddenRoles } : undefined;
+  }
+
+  private serialiseSchoolIds(schoolIds: Array<string | null>): string {
+    return [...new Set(schoolIds.filter((id): id is string => Boolean(id)))].sort().join(',');
+  }
+
+  private normaliseSchoolIds(value: string): string {
+    return [...new Set(value.split(',').map((id) => id.trim()).filter(Boolean))].sort().join(',');
+  }
+
+  private async addBulkIdentifierConflicts(rows: BulkEditPreviewRow[]): Promise<void> {
+    const validRows = rows.filter((row) => row.errors.length === 0);
+    const emailOwners = new Map<string, BulkEditPreviewRow[]>();
+    const registrationOwners = new Map<string, BulkEditPreviewRow[]>();
+    for (const row of validRows) {
+      if (row.values.email) {
+        const owners = emailOwners.get(row.values.email) ?? [];
+        owners.push(row);
+        emailOwners.set(row.values.email, owners);
+      }
+      if (row.values.registrationNumber) {
+        const owners = registrationOwners.get(row.values.registrationNumber) ?? [];
+        owners.push(row);
+        registrationOwners.set(row.values.registrationNumber, owners);
+      }
+    }
+    for (const owners of emailOwners.values()) {
+      if (owners.length > 1) owners.forEach((row) => row.errors.push('Email is duplicated in the uploaded file.'));
+    }
+    for (const owners of registrationOwners.values()) {
+      if (owners.length > 1) owners.forEach((row) => row.errors.push('Registration number is duplicated in the uploaded file.'));
+    }
+
+    const identifiers = await this.prisma.user.findMany({
+      where: {
+        OR: [
+          { email: { in: [...emailOwners.keys()] } },
+          { registrationNumber: { in: [...registrationOwners.keys()] } },
+        ],
+      },
+      select: { id: true, email: true, registrationNumber: true },
+    });
+    for (const existing of identifiers) {
+      if (existing.email) {
+        emailOwners.get(existing.email)?.forEach((row) => {
+          if (row.userId !== existing.id) row.errors.push('Email already belongs to another user.');
+        });
+      }
+      if (existing.registrationNumber) {
+        registrationOwners.get(existing.registrationNumber)?.forEach((row) => {
+          if (row.userId !== existing.id) row.errors.push('Registration number already belongs to another user.');
+        });
+      }
+    }
   }
 }
