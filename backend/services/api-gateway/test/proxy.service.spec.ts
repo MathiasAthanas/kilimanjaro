@@ -105,6 +105,18 @@ describe('gateway proxy service', () => {
     expect(httpService.request).toHaveBeenCalledWith(expect.objectContaining({ data: undefined }));
   });
 
+  it('allows reviewed bulk user operations enough time without changing other route timeouts', async () => {
+    const httpService = { request: jest.fn(() => of({ status: 200, data: { ok: true } })) };
+    const { service } = createService(httpService, { PROXY_TIMEOUT_MS: '30000' });
+    const request = { method: 'POST', headers: {}, query: {}, body: { rows: [] } } as any;
+
+    await service.forward(request, service.resolveRoute('/api/v1/auth/users/bulk-edit/preview'));
+    expect(httpService.request).toHaveBeenLastCalledWith(expect.objectContaining({ timeout: 60_000 }));
+
+    await service.forward(request, service.resolveRoute('/api/v1/auth/users/bulk-edit/commit'));
+    expect(httpService.request).toHaveBeenLastCalledWith(expect.objectContaining({ timeout: 180_000 }));
+  });
+
   it('maps downstream network errors to service unavailable', async () => {
     const httpService = { request: jest.fn(() => throwError(() => new Error('down'))) };
     const { service } = createService(httpService);

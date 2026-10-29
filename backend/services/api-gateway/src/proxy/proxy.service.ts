@@ -73,7 +73,8 @@ export class ProxyService {
     auth?: { id: string; role: string; email?: string | null; scope?: 'GROUP' | 'SCHOOL'; schoolIds?: string[] },
   ): Promise<ProxiedResponse> {
     const internalApiKey = this.configService.get<string>('INTERNAL_API_KEY') || '';
-    const timeoutMs = Number(this.configService.get<string>('PROXY_TIMEOUT_MS', '30000'));
+    const defaultTimeoutMs = Number(this.configService.get<string>('PROXY_TIMEOUT_MS', '30000'));
+    const timeoutMs = this.resolveTimeout(route.outboundPath, defaultTimeoutMs);
 
     const headers: Record<string, string> = {};
 
@@ -160,6 +161,12 @@ export class ProxyService {
     // parsed as JSON (which corrupts the payload and rewrites the content-type).
     if (/\/files\/[^/]+\//i.test(path)) return true;
     return /\/(download|pdf|csv|xlsx|xls|excel|export)(?:\/)?$/i.test(path);
+  }
+
+  private resolveTimeout(path: string, defaultTimeoutMs: number): number {
+    if (path === '/api/v1/auth/users/bulk-edit/commit') return Math.max(defaultTimeoutMs, 180_000);
+    if (path === '/api/v1/auth/users/bulk-edit/preview') return Math.max(defaultTimeoutMs, 60_000);
+    return defaultTimeoutMs;
   }
 
   private route(
