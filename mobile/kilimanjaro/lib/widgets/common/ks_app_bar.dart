@@ -46,7 +46,7 @@ class KSAppBar extends StatelessWidget implements PreferredSizeWidget {
               child: SafeArea(
                 bottom: false,
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 18),
+                  padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -62,16 +62,21 @@ class KSAppBar extends StatelessWidget implements PreferredSizeWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            AnimatedDefaultTextStyle(
-                              duration: const Duration(milliseconds: 220),
-                              curve: Curves.easeOutCubic,
-                              style: GoogleFonts.spaceGrotesk(
-                                fontSize: collapsed ? 22 : 34,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.white,
-                                height: 1.05,
+                            // One line: long titles shrink to fit instead of wrapping and growing the header.
+                            FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.centerLeft,
+                              child: AnimatedDefaultTextStyle(
+                                duration: const Duration(milliseconds: 220),
+                                curve: Curves.easeOutCubic,
+                                style: GoogleFonts.spaceGrotesk(
+                                  fontSize: collapsed ? 22 : 30,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.white,
+                                  height: 1.1,
+                                ),
+                                child: Text(title, maxLines: 1, softWrap: false),
                               ),
-                              child: Text(title),
                             ),
                             if (subtitle != null) ...[
                               const SizedBox(height: 6),
@@ -144,7 +149,16 @@ class KSAppBar extends StatelessWidget implements PreferredSizeWidget {
     );
   }
 
+  /// Height of the status-bar inset, read without a BuildContext so the hero can size itself to the device.
+  static double get _statusBarInset {
+    final views = WidgetsBinding.instance.platformDispatcher.views;
+    if (views.isEmpty) return 24;
+    final view = views.first;
+    return view.padding.top / view.devicePixelRatio;
+  }
+
   @override
-  Size get preferredSize =>
-      Size.fromHeight(variant == KSAppBarVariant.hero ? 152 : 64);
+  Size get preferredSize => Size.fromHeight(
+        variant == KSAppBarVariant.hero ? _statusBarInset + 92 : 64,
+      );
 }

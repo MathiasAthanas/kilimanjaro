@@ -2623,7 +2623,7 @@ class _TwoColumnTiles extends StatelessWidget {
         ),
       );
     }
-    return Column(children: rows);
+    return Padding(padding: const EdgeInsets.only(bottom: 10), child: Column(children: rows));
   }
 }
 

@@ -196,14 +196,28 @@ class TeacherClassCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(item.nextLesson.isEmpty ? '${item.studentCount} students' : '${item.studentCount} students - next ${item.nextLesson}'),
-                const SizedBox(height: 8),
-                LinearProgressIndicator(
-                  value: item.averageScore / 100,
-                  minHeight: 7,
-                  borderRadius: BorderRadius.circular(999),
-                  color: AppColors.skyBlue600,
-                  backgroundColor: AppColors.border,
-                ),
+                // Only draw the average when the server actually has one; an empty track looks broken.
+                if (item.averageScore > 0) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: LinearProgressIndicator(
+                          value: (item.averageScore / 100).clamp(0.0, 1.0),
+                          minHeight: 7,
+                          borderRadius: BorderRadius.circular(999),
+                          color: item.averageScore >= 50 ? AppColors.skyBlue600 : AppColors.accentRose,
+                          backgroundColor: AppColors.border,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        '${item.averageScore.round()}% avg',
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w800),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),
