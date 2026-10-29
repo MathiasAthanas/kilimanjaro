@@ -77,7 +77,7 @@ class _AboutScreenState extends State<AboutScreen> {
                 ),
                 KSListTile(
                   title: 'Contact',
-                  subtitle: 'support@kilimanjaro.ac.tz',
+                  subtitle: 'support@kilimanjaroschools.site',
                   leading: Icon(
                     Icons.mail_rounded,
                     color: AppColors.accentTeal,
@@ -85,29 +85,14 @@ class _AboutScreenState extends State<AboutScreen> {
                 ),
                 KSListTile(
                   title: 'Website',
-                  subtitle: 'www.kilimanjaro.ac.tz',
+                  subtitle: 'manage.kilimanjaroschools.site',
                   leading: Icon(
                     Icons.public_rounded,
                     color: AppColors.accentIndigo,
                   ),
-                ),
-                KSListTile(
-                  title: 'Built With',
-                  subtitle:
-                      'Flutter mobile app with NestJS backend architecture',
-                  leading: Icon(
-                    Icons.code_rounded,
-                    color: AppColors.accentAmber,
-                  ),
                   showDivider: false,
                 ),
               ],
-            ),
-          ),
-          const CommonSectionTitle(title: 'Readiness'),
-          const CommonCard(
-            child: Text(
-              'Common screens are role-aware and can be reused by student, parent, teacher, finance, principal, HOD, Academic QA, and admin shells.',
             ),
           ),
         ],

@@ -545,10 +545,9 @@ class _DepartmentAlertsScreenState
         'Medium' => all
             .where((a) => a.severity == HodAlertSeverity.medium)
             .toList(),
-        'Biology' => all.where((a) => a.subject == 'Biology').toList(),
-        'Chemistry' => all.where((a) => a.subject == 'Chemistry').toList(),
-        'Physics' => all.where((a) => a.subject == 'Physics').toList(),
-        _ => all,
+        'All' => all,
+        // any other chip is a subject taken from the alerts themselves
+        _ => all.where((a) => a.subject == _filter).toList(),
       };
 
   @override
@@ -567,13 +566,11 @@ class _DepartmentAlertsScreenState
       body: HodSurface(
         children: [
           _FilterChips(
-            labels: const [
+            labels: [
               'All',
               'High',
               'Medium',
-              'Biology',
-              'Chemistry',
-              'Physics',
+              ...({for (final a in alerts) a.subject}..remove('')).toList()..sort(),
             ],
             selected: _filter,
             onSelected: (label) => setState(() => _filter = label),
@@ -671,9 +668,8 @@ class _DepartmentPairingsScreenState
       switch (_filter) {
         'Suggested' => all.where((p) => p.status == 'SUGGESTED').toList(),
         'Active' => all.where((p) => p.status == 'ACTIVE').toList(),
-        'Chemistry' => all.where((p) => p.subject == 'Chemistry').toList(),
-        'Biology' => all.where((p) => p.subject == 'Biology').toList(),
-        _ => all,
+        'All' => all,
+        _ => all.where((p) => p.subject == _filter).toList(),
       };
 
   @override
@@ -692,18 +688,17 @@ class _DepartmentPairingsScreenState
       body: HodSurface(
         children: [
           _FilterChips(
-            labels: const [
+            labels: [
               'All',
               'Suggested',
               'Active',
-              'Chemistry',
-              'Biology',
+              ...({for (final p in items) p.subject}..remove('')).toList()..sort(),
             ],
             selected: _filter,
             onSelected: (label) => setState(() => _filter = label),
           ),
           HodInsightCard(
-            title: '$totalPairs pairings across Sciences',
+            title: '$totalPairs pairings across the department',
             subtitle:
                 '${suggested.length} groups awaiting activation · '
                 '${items.length - suggested.length} already active.',

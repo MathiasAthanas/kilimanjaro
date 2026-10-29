@@ -52,6 +52,14 @@ class _AppShellState extends ConsumerState<AppShell> {
           notifier.setTabIndex(0);
           return;
         }
+        // A page opened from the More menu (trends, report cards, settings...) is not the home screen:
+        // Back should return to Home, and only Back on Home itself offers to leave the app.
+        final homePath = '/shell/${widget.role.shellSegment}/home';
+        final here = GoRouterState.of(context).uri.path;
+        if (here != homePath) {
+          context.go(homePath);
+          return;
+        }
         await BackButtonHandler.showExitSheet(context);
       },
       child: Scaffold(

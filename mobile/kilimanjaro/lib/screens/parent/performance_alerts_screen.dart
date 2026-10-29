@@ -130,9 +130,7 @@ class PerformanceAlertsScreen extends ConsumerWidget {
                           severity: item.severity,
                           subjectName: item.subjectName,
                           studentName: child.firstName,
-                          peerName: item.subjectName == 'Biology'
-                              ? 'Brian Mwangi'
-                              : null,
+                          peerName: null,
                           onTap: () =>
                               context.push('/parent/performance/trends'),
                           messageOverride:

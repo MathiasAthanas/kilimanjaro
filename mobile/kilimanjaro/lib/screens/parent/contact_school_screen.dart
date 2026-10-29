@@ -59,20 +59,24 @@ class ContactSchoolScreen extends ConsumerWidget {
                           style: Theme.of(context).textTheme.titleLarge
                               ?.copyWith(fontWeight: FontWeight.w900),
                         ),
-                        const SizedBox(height: 4),
-                        Text(contact.address),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Open: ${contact.openHours}',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
+                        if (contact.address.trim().isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(contact.address),
+                        ],
+                        if (contact.openHours.trim().isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            'Open: ${contact.openHours}',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
                       ],
                     ),
                   ),
                 ],
               ),
             ),
-            const ParentSectionTitle(title: 'Get in Touch'),
+            if (contact.actions.isNotEmpty) const ParentSectionTitle(title: 'Get in Touch'),
             ...contact.actions.map(
               (item) => Padding(
                 padding: const EdgeInsets.only(bottom: 12),
@@ -114,10 +118,11 @@ class ContactSchoolScreen extends ConsumerWidget {
                     .toList(),
               ),
             ),
-            const ParentSectionTitle(title: 'Common Questions'),
+            if (contact.faqItems.isNotEmpty) const ParentSectionTitle(title: 'Common Questions'),
             ...contact.faqItems.map(
               (item) => _FaqTile(question: item.question, answer: item.answer),
             ),
+            if (contact.emergencyPhone.trim().isNotEmpty)
             ParentCard(
               onTap: () => launchUrl(
                 Uri.parse('tel:${contact.emergencyPhone}'),

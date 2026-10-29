@@ -384,6 +384,9 @@ String _waiting(DateTime since) {
   return '${d.inDays} d ${d.inHours % 24} h';
 }
 
+/// Approvals currently being sent to the server, so a slow connection cannot be tapped twice.
+final _busyPaymentsProvider = StateProvider<Set<String>>((ref) => <String>{});
+
 class PrincipalFinanceScreen extends ConsumerWidget {
   const PrincipalFinanceScreen({super.key});
 
@@ -394,13 +397,20 @@ class PrincipalFinanceScreen extends ConsumerWidget {
     final service = ref.read(principalServiceProvider);
     final snackbar = ref.read(snackbarProvider.notifier);
 
-    Future<void> run(Future<void> Function() action, String message) async {
+    final busy = ref.watch(_busyPaymentsProvider);
+
+    Future<void> run(String id, Future<void> Function() action, String message) async {
+      if (ref.read(_busyPaymentsProvider).contains(id)) return;
+      ref.read(_busyPaymentsProvider.notifier).state = {...ref.read(_busyPaymentsProvider), id};
       try {
         await action();
-        refreshPrincipalData(ref);
         snackbar.show(message);
       } catch (e) {
         snackbar.show(ApiFailure.from(e).message, isError: true);
+      } finally {
+        // Always reload: even a failed attempt may mean the decision was already taken elsewhere.
+        refreshPrincipalData(ref);
+        ref.read(_busyPaymentsProvider.notifier).state = {...ref.read(_busyPaymentsProvider)}..remove(id);
       }
     }
 
@@ -493,10 +503,10 @@ class PrincipalFinanceScreen extends ConsumerWidget {
                                     children: [
                                       Expanded(
                                         child: OutlinedButton(
-                                          onPressed: () async {
+                                          onPressed: busy.contains(p.approvalId) ? null : () async {
                                             final reason = await _askReason(context, 'Reject payment');
                                             if (reason == null) return;
-                                            await run(() => service.rejectPayment(p.approvalId, reason), 'Payment rejected.');
+                                            await run(p.approvalId, () => service.rejectPayment(p.approvalId, reason), 'Payment rejected.');
                                           },
                                           child: const Text('Reject'),
                                         ),
@@ -504,12 +514,14 @@ class PrincipalFinanceScreen extends ConsumerWidget {
                                       const SizedBox(width: 12),
                                       Expanded(
                                         child: FilledButton(
-                                          onPressed: () async {
+                                          onPressed: busy.contains(p.approvalId) ? null : () async {
                                             final ok = await _confirm(context, 'Approve payment?', '${_tzs(p.amount)} for ${p.studentName.isEmpty ? 'this invoice' : p.studentName} will be applied to the invoice and a receipt issued.');
                                             if (!ok) return;
-                                            await run(() => service.approvePayment(p.approvalId), 'Payment approved.');
+                                            await run(p.approvalId, () => service.approvePayment(p.approvalId), 'Payment approved.');
                                           },
-                                          child: const Text('Approve'),
+                                          child: busy.contains(p.approvalId)
+                                              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                              : const Text('Approve'),
                                         ),
                                       ),
                                     ],
