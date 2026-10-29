@@ -151,7 +151,7 @@ class _BalancedNavItem extends StatelessWidget {
           child: FittedBox(
             fit: BoxFit.scaleDown,
             child: SizedBox(
-              width: 54,
+              width: 66,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -165,7 +165,8 @@ class _BalancedNavItem extends StatelessWidget {
                   Text(
                     item.label,
                     maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                    softWrap: false,
+                    overflow: TextOverflow.visible,
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.labelSmall?.copyWith(
                       fontSize: 9.5,
@@ -241,6 +242,19 @@ IconData _iconForNavItem(String label, {required bool active}) {
       return active
           ? Icons.notifications_rounded
           : Icons.notifications_none_rounded;
+    case 'at-risk':
+    case 'at risk':
+      return active ? Icons.health_and_safety_rounded : Icons.health_and_safety_outlined;
+    case 'alerts':
+      return active ? Icons.warning_amber_rounded : Icons.warning_amber_outlined;
+    case 'settings':
+      return active ? Icons.settings_rounded : Icons.settings_outlined;
+    case 'profile':
+      return active ? Icons.person_rounded : Icons.person_outline_rounded;
+    case 'applicants':
+      return active ? Icons.how_to_reg_rounded : Icons.how_to_reg_outlined;
+    case 'new inquiry':
+      return active ? Icons.contact_support_rounded : Icons.contact_support_outlined;
     case 'more':
       return active ? Icons.close_rounded : Icons.grid_view_rounded;
     default:

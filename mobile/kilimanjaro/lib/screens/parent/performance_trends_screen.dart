@@ -41,15 +41,15 @@ class PerformanceTrendsScreen extends ConsumerWidget {
         ),
         data: (snapshots) {
           final doingWell = snapshots
-              .where((item) => item.currentScore >= 80)
+              .where((item) => item.currentScore >= 75)
               .toList();
           final roomToGrow = snapshots
               .where(
-                (item) => item.currentScore >= 70 && item.currentScore < 80,
+                (item) => item.currentScore >= 50 && item.currentScore < 75,
               )
               .toList();
           final needsFocus = snapshots
-              .where((item) => item.currentScore < 70)
+              .where((item) => item.currentScore < 50)
               .toList();
 
           return ParentSurface(

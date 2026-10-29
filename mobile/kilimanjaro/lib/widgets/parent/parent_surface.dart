@@ -260,16 +260,19 @@ class ParentMetricTile extends StatelessWidget {
         children: [
           KSSvgIcon(iconAsset, size: 18, color: color),
           const SizedBox(height: 10),
-          Text(
-            value,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(
-              context,
-            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              maxLines: 1,
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+            ),
           ),
           const SizedBox(height: 2),
-          Text(label, style: Theme.of(context).textTheme.labelSmall),
+          Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.labelSmall),
           if (subtitle != null) ...[
             const SizedBox(height: 2),
             Text(

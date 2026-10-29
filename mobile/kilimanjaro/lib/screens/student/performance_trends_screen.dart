@@ -24,14 +24,14 @@ class PerformanceTrendsScreen extends ConsumerWidget {
     return Scaffold(
       body: snapshotsAsync.when(
         data: (snapshots) {
-          final watchlist = snapshots
-              .where((item) => item.currentScore < 70 || item.trendDelta <= -4)
-              .toList();
+          // Mutually exclusive groups: below the pass mark or dropping fast is a watchlist item first.
+          bool onWatchlist(item) => item.currentScore < 50 || item.trendDelta <= -4;
+          final watchlist = snapshots.where(onWatchlist).toList();
           final improving = snapshots
-              .where((item) => item.trendDelta >= 4)
+              .where((item) => !onWatchlist(item) && item.trendDelta >= 4)
               .toList();
           final stable = snapshots
-              .where((item) => item.trendDelta > -4 && item.trendDelta < 4)
+              .where((item) => !onWatchlist(item) && item.trendDelta < 4)
               .toList();
 
           return CustomScrollView(
@@ -39,7 +39,11 @@ class PerformanceTrendsScreen extends ConsumerWidget {
               SliverToBoxAdapter(
                 child: StudentHeroHeader(
                   kicker: 'PERFORMANCE TRENDS',
-                  title: '${watchlist.length} subjects need attention',
+                  title: watchlist.isEmpty
+                      ? 'All subjects on track'
+                      : watchlist.length == 1
+                          ? '1 subject needs attention'
+                          : '${watchlist.length} subjects need attention',
                   subtitle:
                       'Grouped by risk, improvement, and stable movement from the previous term.',
                 ),
@@ -183,7 +187,7 @@ class _TrendCard extends ConsumerWidget {
     final subject = ref.watch(subjectByIdProvider(item.subjectId));
     final grade = subject?.grade ?? _gradeFromScore(item.currentScore);
     final accent =
-        item.currentScore >= 70 ? AppColors.skyBlue500 : AppColors.accentRose;
+        item.currentScore >= 50 ? AppColors.skyBlue500 : AppColors.accentRose;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
@@ -302,6 +306,6 @@ String _gradeFromScore(double score) {
   if (score >= 75) return 'A';
   if (score >= 65) return 'B';
   if (score >= 50) return 'C';
-  if (score >= 30) return 'D';
+  if (score >= 40) return 'D';
   return 'F';
 }

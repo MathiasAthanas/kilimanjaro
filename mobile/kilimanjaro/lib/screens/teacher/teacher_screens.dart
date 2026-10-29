@@ -51,13 +51,7 @@ class TeacherHomeScreen extends ConsumerWidget {
       ),
       body: TeacherSurface(
         children: [
-          GridView.count(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            crossAxisCount: 2,
-            mainAxisSpacing: 12,
-            crossAxisSpacing: 12,
-            childAspectRatio: 1.28,
+          _TwoColumnTiles(
             children: [
               _MetricTile(
                 label: 'Classes',
@@ -87,17 +81,23 @@ class TeacherHomeScreen extends ConsumerWidget {
           ),
           const TeacherSectionTitle(title: "Today's Priority"),
           ...sessions.map(
-            (session) => TeacherCard(
+            (session) {
+              final marked = session.statusLabel.toUpperCase() == 'MARKED';
+              return TeacherCard(
               onTap: () => context.go('/shell/teacher/attendance'),
               child: Row(
                 children: [
                   Icon(
-                    session.isUrgent
-                        ? Icons.priority_high_rounded
-                        : Icons.schedule_rounded,
-                    color: session.isUrgent
-                        ? AppColors.accentRose
-                        : AppColors.skyBlue600,
+                    marked
+                        ? Icons.check_circle_rounded
+                        : session.isUrgent
+                            ? Icons.priority_high_rounded
+                            : Icons.schedule_rounded,
+                    color: marked
+                        ? AppColors.accentEmerald
+                        : session.isUrgent
+                            ? AppColors.accentRose
+                            : AppColors.skyBlue600,
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -109,19 +109,26 @@ class TeacherHomeScreen extends ConsumerWidget {
                           style: Theme.of(context).textTheme.titleMedium
                               ?.copyWith(fontWeight: FontWeight.w900),
                         ),
-                        Text('${session.timeLabel} - ${session.statusLabel}'),
+                        Text(
+                          marked
+                              ? '${session.timeLabel} · attendance taken'
+                              : '${session.timeLabel} · attendance not taken yet',
+                        ),
                       ],
                     ),
                   ),
                   TeacherStatusPill(
-                    label: session.isUrgent ? 'URGENT' : 'PENDING',
-                    color: session.isUrgent
-                        ? AppColors.accentRose
-                        : AppColors.accentAmber,
+                    label: marked ? 'DONE' : session.isUrgent ? 'URGENT' : 'PENDING',
+                    color: marked
+                        ? AppColors.accentEmerald
+                        : session.isUrgent
+                            ? AppColors.accentRose
+                            : AppColors.accentAmber,
                   ),
                 ],
               ),
-            ),
+            );
+            },
           ),
           const TeacherSectionTitle(title: 'Open Assessments'),
           ...openAssessments.map(
@@ -738,6 +745,13 @@ class _AttendanceMarkingScreenState
     super.initState();
     final sessions = ref.read(teacherAttendanceSessionsProvider);
     _sessionId = sessions.isNotEmpty ? sessions.first.id : '';
+    // The first class is shown straight away, so its register (and anything already taken today) must load too.
+    if (sessions.isNotEmpty) {
+      final first = sessions.first;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _loadSession(first.id, first.classSubjectId);
+      });
+    }
   }
 
   void _loadSession(String sessionId, String classSubjectId) {
@@ -891,7 +905,9 @@ class _AttendanceMarkingScreenState
             ),
           ),
           // ── Stats row ─────────────────────────────────────────────────
-          Row(
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Row(
             children: [
               _AttendanceStat(
                   label: 'Present',
@@ -913,6 +929,7 @@ class _AttendanceMarkingScreenState
                   count: excusedCount,
                   color: AppColors.accentIndigo),
             ],
+          ),
           ),
           // ── Progress bar + quick action ───────────────────────────────
           TeacherCard(
@@ -2579,6 +2596,34 @@ class _MiniStudent extends StatelessWidget {
         ),
       ],
     );
+  }
+}
+
+class _TwoColumnTiles extends StatelessWidget {
+  const _TwoColumnTiles({required this.children});
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    final rows = <Widget>[];
+    for (var i = 0; i < children.length; i += 2) {
+      rows.add(
+        Padding(
+          padding: EdgeInsets.only(bottom: i + 2 < children.length ? 12 : 0),
+          child: SizedBox(
+            height: 112,
+            child: Row(
+              children: [
+                Expanded(child: children[i]),
+                const SizedBox(width: 12),
+                Expanded(child: i + 1 < children.length ? children[i + 1] : const SizedBox.shrink()),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+    return Column(children: rows);
   }
 }
 

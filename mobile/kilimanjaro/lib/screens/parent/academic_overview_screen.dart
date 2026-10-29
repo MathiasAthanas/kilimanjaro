@@ -120,7 +120,7 @@ class AcademicOverviewScreen extends ConsumerWidget {
           children: terms
               .map(
                 (term) => ListTile(
-                  title: Text('${term.label} - ${term.academicYear}'),
+                  title: Text(term.title),
                   subtitle: Text(
                     '${term.overallScore.toStringAsFixed(1)}% overall',
                   ),
@@ -160,7 +160,7 @@ class _AcademicsContent extends ConsumerWidget {
         child: child,
         title: "${child.firstName}'s Academics",
         subtitle:
-            '${term.label} - ${term.academicYear}. Parent-friendly academic progress summary.',
+            '${term.title} progress summary',
         trailing: KSGradeDisplay(
           grade: term.overallGrade,
           size: GradeDisplaySize.medium,
@@ -198,11 +198,6 @@ class _AcademicsContent extends ConsumerWidget {
                           spacing: 8,
                           runSpacing: 8,
                           children: [
-                            KSGradeDisplay(
-                              grade: term.overallGrade,
-                              size: GradeDisplaySize.small,
-                              showLabel: false,
-                            ),
                             KSRankBadge(
                               rank: term.rank,
                               total: term.totalStudents,
@@ -275,7 +270,9 @@ class _AcademicsContent extends ConsumerWidget {
         ParentSectionTitle(
           title: 'All Subjects',
           subtitle: failing > 0
-              ? '$failing subjects may need extra attention.'
+              ? (failing == 1
+                  ? '1 subject may need extra attention.'
+                  : '$failing subjects may need extra attention.')
               : 'All subjects are currently passing.',
         ),
         classAveragesAsync.when(

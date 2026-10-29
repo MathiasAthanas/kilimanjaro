@@ -71,6 +71,25 @@ class ReportCardModel {
   final String? divisionSummary;
   final DateTime? generatedAt;
 
+  /// The same card under a different heading (the lists title each card with its term).
+  ReportCardModel withTitle(String value) => ReportCardModel(
+        termId: termId,
+        title: value,
+        classLabel: classLabel,
+        stream: stream,
+        overallScore: overallScore,
+        overallGrade: overallGrade,
+        rank: rank,
+        totalStudents: totalStudents,
+        teacherRemark: teacherRemark,
+        principalRemark: principalRemark,
+        educationStage: educationStage,
+        combinationCode: combinationCode,
+        reportTemplateCode: reportTemplateCode,
+        divisionSummary: divisionSummary,
+        generatedAt: generatedAt,
+      );
+
   factory ReportCardModel.fromJson(Map<String, dynamic> json) {
     DateTime? parseDate(dynamic v) {
       if (v == null) return null;

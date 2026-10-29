@@ -102,7 +102,7 @@ class KSNotificationCard extends StatelessWidget {
                   Row(
                     children: [
                       KSChip(
-                        label: item.channel.name.toUpperCase(),
+                        label: item.channel.label,
                         color: channelColor,
                         size: ChipSize.small,
                         leadingDot: false,

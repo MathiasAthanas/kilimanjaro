@@ -194,15 +194,52 @@ export class UiController {
     if (phone) actions.push({ type: 'PHONE', label: 'Call school', value: phone });
     if (email) actions.push({ type: 'EMAIL', label: 'Email school', value: email });
     if (address) actions.push({ type: 'MAPS', label: 'View on map', value: address });
+
+    // The child's own subject teachers: names and subjects only. Personal phone/email are never exposed to parents.
+    const profileObj = (profile.data as unknown as Record<string, unknown>) ?? {};
+    const enrolments = this.ui.asArray(profileObj.enrolments ?? profileObj.enrollments);
+    const classId =
+      this.pickId((enrolments[0] as Record<string, unknown>) ?? {}, ['class']) ?? this.pickId(profile.data, ['class']);
+    const teachers: Array<Record<string, unknown>> = [];
+    if (classId) {
+      const classSubjects = await this.ui.tryGet(
+        { service: 'academic', path: '/academics/class-subjects', params: { classId, limit: 100 } },
+        [],
+        this.asService(user),
+      );
+      const subjectsByTeacher = new Map<string, string[]>();
+      for (const cs of this.ui.asArray(classSubjects.data) as Record<string, any>[]) {
+        const teacherId = cs.teacherId ? String(cs.teacherId) : '';
+        const subjectName = String(cs.subject?.name ?? '');
+        if (!teacherId || !subjectName) continue;
+        subjectsByTeacher.set(teacherId, [...(subjectsByTeacher.get(teacherId) ?? []), subjectName]);
+      }
+      if (subjectsByTeacher.size) {
+        const people = await this.ui.tryGet(
+          { service: 'auth', path: '/auth/internal/users-by-ids', params: { ids: [...subjectsByTeacher.keys()].join(',') } },
+          { users: [] },
+          this.asService(user),
+        );
+        const payload = (people.data as unknown as Record<string, unknown>) ?? {};
+        for (const person of this.ui.asArray(payload.users ?? payload) as Record<string, any>[]) {
+          const name = `${person.firstName ?? ''} ${person.lastName ?? ''}`.trim();
+          const subjects = subjectsByTeacher.get(String(person.id));
+          if (!name || !subjects) continue;
+          teachers.push({ name, role: 'Subject teacher', subjects: subjects.join(', '), contactValue: '', contactVisible: false });
+        }
+        teachers.sort((a, b) => String(a.name).localeCompare(String(b.name)));
+      }
+    }
+
     return this.ui.envelope(
       {
         childId,
         schoolName: (s.name as string) ?? '',
         address,
-        openHours: '',
+        openHours: (s.openHours as string) ?? '',
         emergencyPhone: phone,
         actions,
-        teachers: [],
+        teachers,
         faqItems: [],
       },
       [...this.warning(profile), ...this.warning(school)],
@@ -300,6 +337,17 @@ export class UiController {
       user,
     );
     warnings.push(...this.warning(students));
+    // What has already been taken today, so a reopened register shows it instead of starting blank.
+    const today = new Date().toISOString().slice(0, 10);
+    const taken = await this.ui.tryGet(
+      { service: 'student', path: '/students/attendance', params: { classId, startDate: today, endDate: today, limit: 1000, page: 1 } },
+      [],
+      user,
+    );
+    const statusByStudent = new Map<string, string>();
+    for (const rec of this.ui.asArray(taken.data) as Record<string, any>[]) {
+      if (rec.studentId && rec.status) statusByStudent.set(String(rec.studentId), String(rec.status));
+    }
     const items = (this.ui.asArray(students.data) as Record<string, any>[]).map((st) => ({
       id: st.id,
       firstName: st.firstName,
@@ -307,6 +355,7 @@ export class UiController {
       name: `${st.firstName ?? ''} ${st.lastName ?? ''}`.trim(),
       registrationNumber: st.registrationNumber,
       classLabel: labels.get(classId)?.label ?? '',
+      attendanceStatus: statusByStudent.get(String(st.id)) ?? null,
     }));
     return this.ui.envelope({ resource: 'students', items, raw: items }, warnings);
   }
@@ -631,7 +680,7 @@ export class UiController {
           classLabel: `${c.className ?? ''} ${c.stream ?? ''}`.trim(),
           teacherName: teacherName(c.teacherName),
           average: Number(c.average ?? 0),
-          studentCount: 0,
+          studentCount: Number(c.studentCount ?? 0),
         })),
       };
     });

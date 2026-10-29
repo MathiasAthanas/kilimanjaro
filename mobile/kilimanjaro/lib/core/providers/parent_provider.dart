@@ -195,7 +195,10 @@ final parentReportCardsProvider = FutureProvider<List<ReportCardModel>>((ref) as
   final terms = await ref.watch(parentServiceProvider).getTerms(childId);
   final service = ref.watch(parentServiceProvider);
   final cards = await Future.wait(
-    terms.map((term) => service.getReportCard(childId, term.id)),
+    terms.map((term) async {
+      final card = await service.getReportCard(childId, term.id);
+      return card?.withTitle(term.title);
+    }),
   );
   return cards.whereType<ReportCardModel>().toList();
 });

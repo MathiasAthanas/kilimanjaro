@@ -225,7 +225,7 @@ class _ParentHomeContent extends ConsumerWidget {
             crossAxisCount: 2,
             mainAxisSpacing: 12,
             crossAxisSpacing: 12,
-            childAspectRatio: 1.42,
+            childAspectRatio: 1.9,
             children: [
               _ActionTile(
                 label: 'Academics',
@@ -266,38 +266,39 @@ class _MetricGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tiles = [
+      ParentMetricTile(
+        label: 'Average',
+        value: '${child.overallScore.toStringAsFixed(1)}%',
+        iconAsset: 'assets/icons/chart-line.svg',
+        color: AppColors.skyBlue600,
+      ),
+      ParentMetricTile(
+        label: 'Attendance',
+        value: '${child.attendanceRate.toStringAsFixed(1)}%',
+        iconAsset: 'assets/icons/calendar-check.svg',
+        color: AppColors.accentEmerald,
+      ),
+      ParentMetricTile(
+        label: 'Balance',
+        value: child.isFullyPaid
+            ? 'Paid'
+            : formatParentShortTzs(child.outstandingBalance),
+        iconAsset: 'assets/icons/banknotes.svg',
+        color: child.isFullyPaid ? AppColors.accentTeal : AppColors.accentAmber,
+      ),
+    ];
     return ParentCard(
-      child: GridView.count(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        crossAxisCount: 3,
-        mainAxisSpacing: 10,
-        crossAxisSpacing: 10,
-        childAspectRatio: 0.9,
-        children: [
-          ParentMetricTile(
-            label: 'Average',
-            value: '${child.overallScore.toStringAsFixed(1)}%',
-            iconAsset: 'assets/icons/chart-line.svg',
-            color: AppColors.skyBlue600,
-          ),
-          ParentMetricTile(
-            label: 'Attendance',
-            value: '${child.attendanceRate.toStringAsFixed(1)}%',
-            iconAsset: 'assets/icons/calendar-check.svg',
-            color: AppColors.accentEmerald,
-          ),
-          ParentMetricTile(
-            label: 'Balance',
-            value: child.isFullyPaid
-                ? 'Paid'
-                : formatParentShortTzs(child.outstandingBalance),
-            iconAsset: 'assets/icons/banknotes.svg',
-            color: child.isFullyPaid
-                ? AppColors.accentTeal
-                : AppColors.accentAmber,
-          ),
-        ],
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (var i = 0; i < tiles.length; i++) ...[
+              if (i > 0) const SizedBox(width: 10),
+              Expanded(child: tiles[i]),
+            ],
+          ],
+        ),
       ),
     );
   }

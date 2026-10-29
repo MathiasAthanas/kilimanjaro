@@ -39,6 +39,7 @@ class TeacherStudent {
     required this.averageScore,
     required this.attendanceRate,
     this.currentMark,
+    this.todayStatus,
   });
 
   final String id;
@@ -48,6 +49,9 @@ class TeacherStudent {
   final double averageScore;
   final double attendanceRate;
   final double? currentMark;
+
+  /// What the register already says for today (null when attendance has not been taken for this learner).
+  final TeacherAttendanceStatus? todayStatus;
 
   String get firstName => name.split(' ').first;
 }

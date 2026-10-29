@@ -52,6 +52,7 @@ export class DepartmentService {
         className: klass?.name || 'Unknown',
         stream: klass?.stream || null,
         teacherName: `Teacher ${entry.teacherId}`,
+        studentCount: new Set(classRows.map((x) => x.studentId)).size,
         average: mean(classRows.map((x) => x.weightedTotal)),
         passRate: classRows.length ? (classRows.filter((x) => x.isPassing).length / classRows.length) * 100 : 0,
         syllabusCompletion: syllabusRow?.completionPercentage || 0,

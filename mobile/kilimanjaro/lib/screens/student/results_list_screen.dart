@@ -58,7 +58,7 @@ class ResultsListScreen extends ConsumerWidget {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  '${term.label} ${term.academicYear}',
+                                  term.title,
                                   style: Theme.of(context).textTheme.titleLarge
                                       ?.copyWith(
                                         color: term.isCurrent
@@ -103,6 +103,7 @@ class ResultsListScreen extends ConsumerWidget {
                           KSRankBadge(
                             rank: term.rank,
                             total: term.totalStudents,
+                            onDark: term.isCurrent,
                           ),
                         ],
                       ),

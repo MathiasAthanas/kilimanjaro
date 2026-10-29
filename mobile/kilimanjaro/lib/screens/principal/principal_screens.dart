@@ -592,6 +592,7 @@ class PrincipalAtRiskScreen extends ConsumerWidget {
                                       ],
                                     ),
                                   ),
+                                  const SizedBox(width: 12),
                                   Text('${a.score.toStringAsFixed(0)}%', style: const TextStyle(fontWeight: FontWeight.w900)),
                                 ],
                               ),

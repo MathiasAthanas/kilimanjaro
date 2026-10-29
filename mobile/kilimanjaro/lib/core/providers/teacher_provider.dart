@@ -177,7 +177,7 @@ class TeacherAttendanceController
     final students = await _service.getStudentsForClass(classSubjectId);
     state = {
       ...state,
-      sessionId: {for (final s in students) s.id: null},
+      sessionId: {for (final s in students) s.id: s.todayStatus},
     };
   }
 

@@ -123,7 +123,7 @@ class SubjectResultsDetailScreen extends ConsumerWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                '${term.label} - ${term.academicYear}',
+                                term.title,
                                 style: Theme.of(context).textTheme.labelLarge
                                     ?.copyWith(fontWeight: FontWeight.w900),
                               ),

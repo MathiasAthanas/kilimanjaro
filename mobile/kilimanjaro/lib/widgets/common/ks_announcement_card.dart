@@ -100,7 +100,7 @@ class _KSAnnouncementCardState extends State<KSAnnouncementCard>
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    '${widget.announcement.authorRole} / ${widget.announcement.authorName}',
+                    widget.announcement.byline,
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],

@@ -39,7 +39,8 @@ class SubjectResultModel {
   final int totalStudents;
   final List<AssessmentScore> assessments;
 
-  bool get isPassing => score >= 70;
+  /// Matches the school pass mark used by the server's performance alerts.
+  bool get isPassing => score >= 50;
 
   factory SubjectResultModel.fromJson(Map<String, dynamic> json) {
     // The backend stores scores as {label: score}; older payloads send a list.

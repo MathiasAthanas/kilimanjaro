@@ -392,6 +392,7 @@ export class ClassesService {
         academicYearId: filters.academicYearId,
         ...(typeof filters.isCurrent === 'boolean' ? { isCurrent: filters.isCurrent } : {}),
       },
+      include: { academicYear: { select: { id: true, name: true } } },
       orderBy: [{ academicYear: { startDate: 'desc' } }, { startDate: 'asc' }],
     });
   }

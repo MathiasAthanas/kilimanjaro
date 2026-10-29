@@ -70,7 +70,7 @@ class StudentHomeScreen extends ConsumerWidget {
                 _StudentSummaryCard(
                   termLabel: currentTerm == null
                       ? 'Current term'
-                      : '${currentTerm.label} ${currentTerm.academicYear}',
+                      : currentTerm.title,
                   score: currentTerm?.overallScore,
                   grade: currentTerm?.overallGrade ?? 'A',
                   rank: currentTerm?.rank ?? 1,

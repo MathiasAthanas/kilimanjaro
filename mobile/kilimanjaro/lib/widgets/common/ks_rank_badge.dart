@@ -7,21 +7,29 @@ class KSRankBadge extends StatelessWidget {
     super.key,
     required this.rank,
     required this.total,
+    this.onDark = false,
   });
 
   final int rank;
   final int total;
 
+  /// Use on a dark/gradient card, where the default blue chip has no contrast.
+  final bool onDark;
+
   @override
   Widget build(BuildContext context) {
     // No ranking yet (e.g. trend rows carry none): show nothing rather than "0th of 0".
     if (rank <= 0 || total <= 0) return const SizedBox.shrink();
-    final medalColor = rank <= 3 ? AppColors.accentAmber : AppColors.skyBlue500;
+    final medalColor = onDark
+        ? AppColors.white
+        : rank <= 3
+            ? AppColors.accentAmber
+            : AppColors.skyBlue500;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: medalColor.withValues(alpha: isDark ? 0.18 : 0.12),
+        color: medalColor.withValues(alpha: onDark ? 0.18 : (isDark ? 0.18 : 0.12)),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Row(

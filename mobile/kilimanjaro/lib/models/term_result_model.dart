@@ -18,6 +18,9 @@ class TermResultModel {
   final String id;
   final String label;
   final String academicYear;
+
+  /// "Term 2 · 2026", or just "Term 2" when the year is unknown.
+  String get title => academicYear.isEmpty ? label : '$label · $academicYear';
   final List<SubjectResultModel> subjects;
   final double overallScore;
   final String overallGrade;
@@ -52,9 +55,12 @@ class TermResultModel {
         ? (reportCard['totalStudentsInClass'] as int? ?? 0)
         : (results.isNotEmpty ? (results.first['totalStudentsInClass'] as int? ?? 0) : 0);
 
-    final academicYear = (term['academicYear'] as Map<String, dynamic>?)?['name'] as String?
-        ?? term['academicYearName'] as String?
-        ?? '';
+    // "2026 Academic Year" reads better as "2026" next to the term name.
+    final academicYear = ((term['academicYear'] as Map<String, dynamic>?)?['name'] as String?
+            ?? term['academicYearName'] as String?
+            ?? '')
+        .replaceAll(RegExp(r'\s*academic year\s*', caseSensitive: false), ' ')
+        .trim();
 
     return TermResultModel(
       id: term['id'] as String? ?? '',
@@ -76,10 +82,10 @@ class TermResultModel {
   }
 
   static String _gradeFromScore(double score) {
-    if (score >= 80) return 'A';
-    if (score >= 70) return 'B';
-    if (score >= 60) return 'C';
-    if (score >= 50) return 'D';
+    if (score >= 75) return 'A';
+    if (score >= 65) return 'B';
+    if (score >= 50) return 'C';
+    if (score >= 40) return 'D';
     return 'F';
   }
 }

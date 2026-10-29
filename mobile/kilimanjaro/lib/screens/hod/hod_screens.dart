@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../widgets/common/fixed_tile_grid.dart';
 import '../../core/providers/hod_extra_provider.dart';
 import '../../core/providers/hod_provider.dart';
 import '../../core/network/api_failure.dart';
@@ -53,13 +54,8 @@ class HodHomeScreen extends ConsumerWidget {
                 : AppColors.accentRose,
             onTap: () => context.go('/shell/hod/approvals'),
           ),
-          GridView.count(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            crossAxisCount: 2,
-            mainAxisSpacing: 12,
-            crossAxisSpacing: 12,
-            childAspectRatio: 1.22,
+          FixedTileGrid(
+            tileHeight: 136,
             children: [
               _MetricTile(
                 label: 'Subjects',
@@ -299,12 +295,13 @@ class DepartmentOverviewScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final subjects = ref.watch(hodSubjectsProvider);
-    final average =
-        subjects.fold<double>(0, (sum, item) => sum + item.average) /
-        subjects.length;
-    final syllabus =
-        subjects.fold<double>(0, (sum, item) => sum + item.syllabusCompletion) /
-        subjects.length;
+    // An empty department (nothing set up, or the wrong school selected) must not divide by zero.
+    final average = subjects.isEmpty
+        ? 0.0
+        : subjects.fold<double>(0, (sum, item) => sum + item.average) / subjects.length;
+    final syllabus = subjects.isEmpty
+        ? 0.0
+        : subjects.fold<double>(0, (sum, item) => sum + item.syllabusCompletion) / subjects.length;
     return Scaffold(
       appBar: const KSAppBar(
         title: 'My Department',
@@ -1178,7 +1175,19 @@ class _DepartmentSubjectTabsState extends State<_DepartmentSubjectTabs> {
 
   @override
   Widget build(BuildContext context) {
-    final current = widget.subjects[_index];
+    if (widget.subjects.isEmpty) {
+      return const HodCard(
+        child: _IconTextRow(
+          icon: Icons.science_rounded,
+          color: AppColors.skyBlue600,
+          title: 'No subjects yet',
+          subtitle: 'Subjects in your department will appear here once they are set up.',
+        ),
+      );
+    }
+    // The list can shrink after a refresh (or a school switch), so never trust the stored index.
+    final selectedIndex = _index < widget.subjects.length ? _index : 0;
+    final current = widget.subjects[selectedIndex];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1190,13 +1199,16 @@ class _DepartmentSubjectTabsState extends State<_DepartmentSubjectTabs> {
             separatorBuilder: (_, __) => const SizedBox(width: 8),
             itemBuilder: (context, index) {
               final subject = widget.subjects[index];
-              final selected = index == _index;
-              final color = subject.name == 'Chemistry'
-                  ? AppColors.accentRose
-                  : _scoreColor(subject.average);
+              final selected = index == selectedIndex;
+              final color = _scoreColor(subject.average);
+              // Same subject taught at different levels: add the first class so the chips can be told apart.
+              final duplicated = widget.subjects.where((s) => s.name == subject.name).length > 1;
+              final label = duplicated && subject.classes.isNotEmpty
+                  ? '${subject.name} · ${subject.classes.first.classLabel.split(' ').take(2).join(' ')}'
+                  : subject.name;
               return ChoiceChip(
                 selected: selected,
-                label: Text(subject.name),
+                label: Text(label),
                 selectedColor: color.withValues(alpha: 0.18),
                 side: BorderSide(color: selected ? color : AppColors.border),
                 onSelected: (_) => setState(() => _index = index),

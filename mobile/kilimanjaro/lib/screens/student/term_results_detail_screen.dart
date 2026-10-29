@@ -7,7 +7,6 @@ import '../../core/theme/app_colors.dart';
 import '../../widgets/common/ks_empty_state.dart';
 import '../../widgets/common/ks_shimmer_list.dart';
 import '../../widgets/common/ks_back_button.dart';
-import '../../widgets/common/ks_chip.dart';
 import '../../widgets/common/ks_grade_display.dart';
 import '../../widgets/common/ks_rank_badge.dart';
 import '../../widgets/common/ks_subject_card.dart';
@@ -33,7 +32,7 @@ class TermResultsDetailScreen extends ConsumerWidget {
                 SliverToBoxAdapter(
                   child: StudentHeroHeader(
                     kicker: 'TERM RESULTS',
-                    title: '${term.label} ${term.academicYear}',
+                    title: term.title,
                     subtitle:
                         '${term.overallScore.toStringAsFixed(1)}% overall with ${subjects.length} subjects recorded.',
                     trailing: const KSBackButton(),
@@ -63,16 +62,9 @@ class TermResultsDetailScreen extends ConsumerWidget {
                                       ).textTheme.titleLarge,
                                     ),
                                     const SizedBox(height: 8),
-                                    Wrap(
-                                      spacing: 10,
-                                      runSpacing: 10,
-                                      children: [
-                                        KSRankBadge(
-                                          rank: term.rank,
-                                          total: term.totalStudents,
-                                        ),
-                                        KSChip.grade(term.overallGrade),
-                                      ],
+                                    KSRankBadge(
+                                      rank: term.rank,
+                                      total: term.totalStudents,
                                     ),
                                   ],
                                 ),

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
@@ -176,7 +177,7 @@ class StudentCourseSpaceScreen extends ConsumerWidget {
         },
         title: course.subjectName,
         kicker: '${course.className} · ${course.stageLabel}',
-        subtitle: '${course.enrolledCount} students · ${course.status}',
+        subtitle: '${course.enrolledCount} students enrolled',
         children: [
           progressAsync.when(
             data: (p) => _ProgressBanner(value: p.completionPercent),
@@ -1700,7 +1701,7 @@ class _StudentQuizAttemptScreenState
                   bottom: PreferredSize(
                     preferredSize: const Size.fromHeight(4),
                     child: LinearProgressIndicator(
-                      value: answeredCount / questions.length,
+                      value: questions.isEmpty ? 0 : answeredCount / questions.length,
                       backgroundColor: AppColors.eLearningPrimary,
                       valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
                       minHeight: 4,
@@ -2586,10 +2587,14 @@ class _LearnScaffold extends StatelessWidget {
             ),
           ],
         );
-    return Scaffold(
-      backgroundColor: isDark ? null : AppColors.offWhite,
-      body: SafeArea(
-        child: onRefresh == null ? scroll : RefreshIndicator(onRefresh: onRefresh!, child: scroll),
+    // The page sits on a light background under the status bar, so keep its clock and icons dark.
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: isDark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
+      child: Scaffold(
+        backgroundColor: isDark ? null : AppColors.offWhite,
+        body: SafeArea(
+          child: onRefresh == null ? scroll : RefreshIndicator(onRefresh: onRefresh!, child: scroll),
+        ),
       ),
     );
   }
@@ -2635,10 +2640,11 @@ class _Hero extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(children: [
-          IconButton(
-            icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white70, size: 18),
-            onPressed: () => context.pop(),
-          ),
+          if (context.canPop())
+            IconButton(
+              icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white70, size: 18),
+              onPressed: () => context.pop(),
+            ),
           Text(kicker, style: Theme.of(context).textTheme.labelSmall?.copyWith(
             color: Colors.white70,
             fontWeight: FontWeight.w900,
@@ -2667,34 +2673,43 @@ class _MetricStrip extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return SizedBox(
       height: 108,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemBuilder: (_, i) => Container(
-          width: 116,
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: isDark ? Colors.grey[900] : Colors.white,
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: AppColors.border),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(items[i].$2,
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w900,
-                    color: AppColors.eLearningPrimary,
-                  )),
-              Text(items[i].$1,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  )),
-            ],
-          ),
-        ),
-        separatorBuilder: (_, __) => const SizedBox(width: 10),
-        itemCount: items.length,
+      child: Row(
+        children: [
+          for (var i = 0; i < items.length; i++) ...[
+            if (i > 0) const SizedBox(width: 10),
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.grey[900] : Colors.white,
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(items[i].$2,
+                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                            fontWeight: FontWeight.w900,
+                            color: AppColors.eLearningPrimary,
+                          )),
+                    ),
+                    Text(items[i].$1,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        )),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }

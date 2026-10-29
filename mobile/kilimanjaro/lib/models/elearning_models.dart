@@ -91,7 +91,25 @@ class ElearningCourseModel {
         return className;
     }
   }
-  String get emoji => coverEmoji ?? '📘';
+  /// Cover glyph for the course tile. The server may send an emoji or an icon keyword ("BOOK");
+  /// anything that is plain ASCII text is mapped to an emoji so the tile never prints a word.
+  String get emoji {
+    final raw = coverEmoji?.trim() ?? '';
+    if (raw.isEmpty) return '📘';
+    if (raw.runes.every((r) => r < 128)) {
+      return switch (raw.toUpperCase()) {
+        'SCIENCE' || 'FLASK' => '🔬',
+        'MATH' || 'MATHS' || 'CALCULATOR' => '📐',
+        'LANGUAGE' || 'ENGLISH' || 'PEN' => '✏️',
+        'GLOBE' || 'GEOGRAPHY' => '🌍',
+        'MUSIC' => '🎵',
+        'ART' => '🎨',
+        'COMPUTER' || 'ICT' => '💻',
+        _ => '📘',
+      };
+    }
+    return raw;
+  }
 }
 
 class ElearningLessonModel {

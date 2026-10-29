@@ -146,13 +146,15 @@ class _ProfileStats extends ConsumerWidget {
         : DateFormat('MMM yyyy').format(user.joinedAt!);
 
     return CommonCard(
-      child: GridView.count(
+      child: GridView(
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
-        crossAxisCount: 2,
-        mainAxisSpacing: 12,
-        crossAxisSpacing: 12,
-        childAspectRatio: 1.35,
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          mainAxisSpacing: 12,
+          crossAxisSpacing: 12,
+          mainAxisExtent: 118,
+        ),
         children: [
           CommonMetricPill(
             label: 'Joined',

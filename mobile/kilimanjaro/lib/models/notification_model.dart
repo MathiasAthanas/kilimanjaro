@@ -1,5 +1,14 @@
 enum NotificationChannel { inApp, sms, email, push }
 
+extension NotificationChannelLabel on NotificationChannel {
+  String get label => switch (this) {
+        NotificationChannel.inApp => 'In-app',
+        NotificationChannel.sms => 'SMS',
+        NotificationChannel.email => 'Email',
+        NotificationChannel.push => 'Push',
+      };
+}
+
 enum NotificationEventType {
   paymentConfirmed,
   resultsPublished,
@@ -41,7 +50,7 @@ class NotificationModel {
   factory NotificationModel.fromJson(Map<String, dynamic> json) {
     return NotificationModel(
       id: json['id'] as String? ?? '',
-      title: json['title'] as String? ?? '',
+      title: _titleOf(json),
       body: json['body'] as String? ?? json['message'] as String? ?? '',
       channel: _parseChannel(json['channel'] as String? ?? 'IN_APP'),
       eventType: parseEventType(json['eventType'] as String? ?? ''),
@@ -51,6 +60,16 @@ class NotificationModel {
       targetRoute: json['targetRoute'] as String?,
       actionLabel: json['actionLabel'] as String?,
     );
+  }
+
+  /// The service sends the heading as `subject`; fall back to the event name ("RESULTS_PUBLISHED" → "Results published").
+  static String _titleOf(Map<String, dynamic> json) {
+    for (final key in const ['title', 'subject']) {
+      final value = (json[key] as String?)?.trim() ?? '';
+      if (value.isNotEmpty) return value;
+    }
+    final event = (json['eventType'] as String? ?? '').replaceAll('_', ' ').trim().toLowerCase();
+    return event.isEmpty ? 'Notification' : '${event[0].toUpperCase()}${event.substring(1)}';
   }
 
   static NotificationChannel _parseChannel(String raw) {

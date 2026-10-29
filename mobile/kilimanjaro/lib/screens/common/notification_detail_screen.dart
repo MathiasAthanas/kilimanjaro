@@ -48,7 +48,7 @@ class NotificationDetailScreen extends ConsumerWidget {
                     child: Row(
                       children: [
                         KSChip(
-                          label: item.channel.name.toUpperCase(),
+                          label: item.channel.label,
                           color: _channelColor(item.channel),
                           size: ChipSize.small,
                           leadingDot: false,

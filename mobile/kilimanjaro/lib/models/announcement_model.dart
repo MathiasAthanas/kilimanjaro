@@ -43,6 +43,20 @@ class AnnouncementModel {
   final DateTime publishedAt;
   final AnnouncementAttachment? attachment;
 
+  /// Who sent it, in words: "Jane Doe · Head of School", "Head of School" or "School" when unknown.
+  String get byline {
+    final role = authorRole
+        .toLowerCase()
+        .split('_')
+        .where((part) => part.isNotEmpty)
+        .map((part) => part == 'of' ? part : '${part[0].toUpperCase()}${part.substring(1)}')
+        .join(' ');
+    final name = authorName.trim();
+    if (name.isNotEmpty && role.isNotEmpty) return '$name · $role';
+    if (name.isNotEmpty) return name;
+    return role.isEmpty ? 'School' : role;
+  }
+
   factory AnnouncementModel.fromJson(Map<String, dynamic> json) {
     final rawAttachment = json['attachment'] as Map<String, dynamic>?;
     return AnnouncementModel(

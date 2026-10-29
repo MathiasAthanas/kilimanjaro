@@ -72,7 +72,7 @@ class ParentAnnouncementDetailScreen extends ConsumerWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Posted by ${announcement.authorName} - ${announcement.authorRole}',
+                      'Posted by ${announcement.byline}',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: AppColors.textSecondary,
                       ),

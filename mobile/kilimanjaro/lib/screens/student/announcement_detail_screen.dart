@@ -40,7 +40,7 @@ class AnnouncementDetailScreen extends ConsumerWidget {
                   kicker: announcement.priority.name.toUpperCase(),
                   title: announcement.title,
                   subtitle:
-                      'Posted by ${announcement.authorName} / ${timeAgo(announcement.publishedAt)}.',
+                      'Posted by ${announcement.byline} · ${timeAgo(announcement.publishedAt)}.',
                   trailing: IconButton.filledTonal(
                     onPressed: () => Navigator.of(context).maybePop(),
                     icon: const Icon(Icons.arrow_back_rounded),

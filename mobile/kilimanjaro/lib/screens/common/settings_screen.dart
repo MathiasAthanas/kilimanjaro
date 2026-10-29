@@ -41,7 +41,7 @@ class SettingsScreen extends ConsumerWidget {
                     KSSettingsItem(
                       title: 'Theme',
                       subtitle: 'Cycle between system, light, and dark modes',
-                      iconAsset: 'assets/icons/device-phone.svg',
+                      iconAsset: 'assets/icons/system.svg',
                       iconColor: AppColors.accentIndigo,
                       value: switch (themeMode) {
                         ThemeMode.light => 'Light',

@@ -86,6 +86,13 @@ class ApiTeacherService implements ITeacherService {
       averageScore: numOf(json['averageScore'])?.toDouble() ?? 0.0,
       attendanceRate: numOf(json['attendanceRate'])?.toDouble() ?? 0.0,
       currentMark: numOf(json['currentMark'])?.toDouble(),
+      todayStatus: switch ((json['attendanceStatus'] as String?)?.toUpperCase()) {
+        'PRESENT' => TeacherAttendanceStatus.present,
+        'ABSENT' => TeacherAttendanceStatus.absent,
+        'LATE' => TeacherAttendanceStatus.late,
+        'EXCUSED' => TeacherAttendanceStatus.excused,
+        _ => null,
+      },
     );
   }
 

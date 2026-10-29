@@ -53,8 +53,11 @@ final subjectByIdProvider =
 final reportCardsProvider = FutureProvider<List<ReportCardModel>>((ref) async {
   final terms = await ref.watch(studentTermsProvider.future);
   final service = ref.watch(studentServiceProvider);
-  final futures = terms.map((term) => service.getReportCard(term.id));
-  return (await Future.wait(futures)).whereType<ReportCardModel>().toList();
+  final cards = await Future.wait(terms.map((term) async {
+    final card = await service.getReportCard(term.id);
+    return card?.withTitle(term.title);
+  }));
+  return cards.whereType<ReportCardModel>().toList();
 });
 
 final studentAttendanceProvider = FutureProvider<List<AttendanceRecordModel>>((ref) async {
