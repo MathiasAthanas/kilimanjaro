@@ -4,6 +4,7 @@ import { Copy, Eye, EyeOff } from 'lucide-react';
 import { downloadReportWhenReady } from '../../operations/api/operations.hooks';
 import { NavLink, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { toast } from '../../../lib/toast';
+import { buildCreateTermPayload } from '../utils/termPayload';
 import { Badge } from '../../../components/common/Badge';
 import { Button } from '../../../components/common/Button';
 import {
@@ -1292,7 +1293,7 @@ export function TermsPage() {
   const currentYear = (apiYears as any[]).find((y: any) => y.isCurrent === true || y.isActive === true)
     ?? (apiYears as any[])[0];
 
-  const [form, setForm] = useState({ name: '', termNumber: '1', startDate: '', endDate: '', academicYearId: '' });
+  const [form, setForm] = useState({ name: '', startDate: '', endDate: '', academicYearId: '' });
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
@@ -1309,13 +1310,7 @@ export function TermsPage() {
       toast('All fields are required.', 'warning'); return;
     }
     createTermMutation.mutate(
-      {
-        name: form.name,
-        termNumber: Number(form.termNumber),
-        startDate: form.startDate,
-        endDate: form.endDate,
-        academicYearId: form.academicYearId,
-      },
+      buildCreateTermPayload(form),
       {
         onSuccess: () => { toast('Term created.', 'success'); setForm((f) => ({ ...f, name: '', startDate: '', endDate: '' })); },
         onError: (e: any) => toast(e?.response?.data?.message ?? 'Failed to create term.', 'error'),
@@ -1333,7 +1328,8 @@ export function TermsPage() {
   };
 
   const terms = (apiTerms as any[]).slice().sort((a: any, b: any) =>
-    String(a.academicYearId).localeCompare(String(b.academicYearId)) || Number(a.termNumber ?? 0) - Number(b.termNumber ?? 0));
+    String(a.academicYearId).localeCompare(String(b.academicYearId)) ||
+    String(a.startDate ?? '').localeCompare(String(b.startDate ?? '')));
 
   const yearName = (yearId: string) => {
     const y = (apiYears as any[]).find((y: any) => String(y.id) === String(yearId));
@@ -1346,9 +1342,6 @@ export function TermsPage() {
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <Field label="Term Name" value={form.name} placeholder="e.g. Term 1"
             onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
-          <SelectField label="Term Number" value={form.termNumber}
-            onChange={(v) => setForm((f) => ({ ...f, termNumber: v }))}
-            options={[{ value: '1', label: 'Term 1' }, { value: '2', label: 'Term 2' }, { value: '3', label: 'Term 3' }]} />
           <SelectField label="Academic Year" value={form.academicYearId}
             onChange={(v) => setForm((f) => ({ ...f, academicYearId: v }))}
             options={yearOptions.length ? yearOptions : [{ value: '', label: 'No years yet' }]} />
@@ -1392,7 +1385,7 @@ export function TermsPage() {
                   const isPending = pendingDeleteId === term.id;
                   return (
                     <tr key={term.id} className={isPending ? 'bg-red-50' : 'hover:bg-slate-50'}>
-                      <Td><span className="font-black text-slate-900">{term.name}</span>{term.termNumber ? <span className="ml-2 text-[11px] font-bold text-slate-400">Term {term.termNumber}</span> : null}</Td>
+                      <Td><span className="font-black text-slate-900">{term.name}</span></Td>
                       <Td>{yearName(term.academicYearId)}</Td>
                       <Td>{start ? start.toLocaleDateString() : '—'}</Td>
                       <Td>{end ? end.toLocaleDateString() : '—'}</Td>
