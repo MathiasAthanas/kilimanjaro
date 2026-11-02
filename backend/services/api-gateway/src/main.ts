@@ -5,11 +5,17 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import * as express from 'express';
 import helmet from 'helmet';
 import * as morgan from 'morgan';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const configService = app.get(ConfigService);
+
+  // Nginx is the single trusted reverse proxy in production. This makes
+  // Express use its X-Forwarded-For value instead of grouping everyone under
+  // the loopback address for public rate limiting and audit metadata.
+  app.set('trust proxy', 1);
 
   app.use(helmet());
   app.use(morgan(configService.get<string>('NODE_ENV') === 'production' ? 'combined' : 'dev'));
