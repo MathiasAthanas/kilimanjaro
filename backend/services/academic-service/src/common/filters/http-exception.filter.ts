@@ -21,10 +21,15 @@ export class HttpExceptionFilter implements ExceptionFilter {
       this.logger.error(`${request.method} ${request.url}`, exception as Error);
     }
 
+    const extra = typeof errorResponse === 'object' && errorResponse ? (errorResponse as Record<string, unknown>) : {};
+
     response.status(status).json({
       success: false,
       message,
       error: status >= 500 ? 'Internal server error' : undefined,
+      // Structured blockers (e.g. RESULTS_INCOMPLETE) so the UI can render a readiness list.
+      ...(extra.code ? { code: extra.code } : {}),
+      ...(extra.details ? { details: extra.details } : {}),
     });
   }
 }

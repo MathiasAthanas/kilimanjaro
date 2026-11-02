@@ -261,7 +261,7 @@ export class PerformanceProxyService {
     const [local, remote] = await Promise.all([
       this.prisma.termResult.groupBy({
         by: ['subjectId', 'subjectName'],
-        where: { classId },
+        where: { classId, resultStatus: { not: 'EXEMPT' } },
         _avg: { weightedTotal: true },
       }),
       this.studentClient.get<any>(`/students/performance/summary/class/${classId}`, {}, {
@@ -280,7 +280,7 @@ export class PerformanceProxyService {
     const [local, remote] = await Promise.all([
       this.prisma.termResult.groupBy({
         by: ['subjectId', 'subjectName'],
-        where: schoolScopeFilter(user),
+        where: { ...schoolScopeFilter(user), resultStatus: { not: 'EXEMPT' } },
         _avg: { weightedTotal: true },
       }),
       this.studentClient.get<any>('/students/performance/summary/school', {}, {

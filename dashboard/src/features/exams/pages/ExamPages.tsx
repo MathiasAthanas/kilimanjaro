@@ -18,6 +18,8 @@ import {
   useMigrateExamTypes, useSubmitAssessment, useTeacherExamWindows,
   useUploadMarks, useWindowAction,
 } from '../api/examHooks';
+import { useWindowReadiness } from '../api/readinessHooks';
+import { ExemptionsPanel, ReadinessPanel } from './ExamReadiness';
 
 // ─── helpers ──────────────────────────────────────────────────────────────
 const S = (v: unknown, d = '') => (v === null || v === undefined ? d : String(v));
@@ -262,11 +264,15 @@ export function ExamWindowDetailPage() {
   const win = useExamWindow(id);
   const reference = useExamReference();
   const action = useWindowAction();
-  const [tab, setTab] = useState<'overview' | 'merit' | 'edits'>('overview');
+  const [tab, setTab] = useState<'overview' | 'readiness' | 'merit' | 'exemptions' | 'edits'>('overview');
   const [msg, setMsg] = useState<string>('');
+  const [exemptSeed, setExemptSeed] = useState<{ classId: string; subjectId: string; studentId: string } | null>(null);
 
   const w = win.data;
   const status = S(w?.status);
+  const entryOpen = status === 'OPEN' || status === 'REOPENED';
+  const readiness = useWindowReadiness(id, entryOpen);
+  const notReady = entryOpen && readiness.data ? !readiness.data.canClose : false;
   const academicYear = (reference.data?.years ?? []).find((year) => S(year.id) === S(w?.academicYearId));
   const term = (reference.data?.terms ?? []).find((item) => S(item.id) === S(w?.termId));
 
@@ -274,10 +280,14 @@ export function ExamWindowDetailPage() {
     setMsg('');
     try {
       const res: any = await action.mutateAsync({ id, action: act });
-      if (act === 'close') setMsg(`Closed & computed ${N(res?.computed)} students.`);
+      if (act === 'close') setMsg(`Closed & calculated ${N(res?.computed)} students${N(res?.exemptSubjects) ? ` (${N(res.exemptSubjects)} exempt subject result${N(res.exemptSubjects) === 1 ? '' : 's'})` : ''}${N(res?.ungraded) ? `, ${N(res.ungraded)} ungraded (too few eligible subjects)` : ''}.`);
+      else if (act === 'compute') setMsg(`Recalculated ${N(res?.computed)} students${N(res?.exemptSubjects) ? ` · ${N(res.exemptSubjects)} exempt subject result${N(res.exemptSubjects) === 1 ? '' : 's'}` : ''}.`);
       else if (act === 'publish') setMsg(`Published to ${N(res?.students)} students. Downstream snapshots: ${N(res?.downstream?.snapshots)}.`);
       else setMsg(`${act} done.`);
-    } catch (e: any) { setMsg(e?.message ?? `${act} failed`); }
+    } catch (e: any) {
+      setMsg(`${act} failed: ${e?.message ?? 'please try again'}`);
+      if (act === 'close') setTab('readiness');
+    }
   };
 
   if (win.isLoading) return <Card className="p-8 text-center text-ks-muted">Loading…</Card>;
@@ -296,24 +306,39 @@ export function ExamWindowDetailPage() {
       {/* Lifecycle actions */}
       <Card className="mb-5 flex flex-wrap items-center gap-2 p-4">
         {(status === 'DRAFT' || status === 'REOPENED') && <Button onClick={() => runAction('open')} loading={action.isPending}><PlayCircle className="h-4 w-4" /> Open for entry</Button>}
-        {(status === 'OPEN' || status === 'REOPENED') && <Button onClick={() => runAction('close')} loading={action.isPending}><Lock className="h-4 w-4" /> Close & compute</Button>}
-        {status === 'CLOSED' && <Button onClick={() => runAction('compute')} variant="secondary" loading={action.isPending}><RefreshCw className="h-4 w-4" /> Recompute</Button>}
+        {(status === 'OPEN' || status === 'REOPENED') && <Button onClick={() => runAction('close')} loading={action.isPending} disabled={notReady} title={notReady ? 'Resolve the items on the Readiness tab first' : undefined}><Lock className="h-4 w-4" /> Close & calculate</Button>}
+        {(status === 'CLOSED' || status === 'REOPENED') && <Button onClick={() => runAction('compute')} variant="secondary" loading={action.isPending}><RefreshCw className="h-4 w-4" /> Recalculate</Button>}
         {(status === 'CLOSED' || status === 'REOPENED') && <Button onClick={() => runAction('publish')} variant="success" loading={action.isPending}><CheckCircle2 className="h-4 w-4" /> Publish results</Button>}
         {status === 'PUBLISHED' && <Button onClick={() => runAction('unpublish')} variant="danger" loading={action.isPending}><Unlock className="h-4 w-4" /> Unpublish</Button>}
         <span className="ml-auto text-xs text-ks-muted">Lifecycle: DRAFT → OPEN → CLOSED → PUBLISHED</span>
       </Card>
-      {msg && <div className="mb-5"><Banner tone={msg.toLowerCase().includes('fail') ? 'rose' : 'emerald'}>{msg}</Banner></div>}
+      {msg && <div className="mb-5"><Banner tone={msg.toLowerCase().includes('fail') ? 'rose' : 'emerald'}><span className="whitespace-pre-line">{msg}</span></Banner></div>}
+      {notReady && (
+        <div className="mb-5 flex flex-wrap items-center gap-3 rounded-lg border border-ks-rose/30 bg-ks-rose/5 px-4 py-3 text-sm" role="status">
+          <span className="font-bold text-ks-rose">Not ready to close:</span>
+          <span className="whitespace-pre-line text-ks-navy">{S(readiness.data?.blockers?.[0]?.message)}</span>
+          <Button variant="secondary" className="ml-auto" onClick={() => setTab('readiness')}>Open readiness</Button>
+        </div>
+      )}
 
       <div className="mb-4 flex gap-2 border-b border-ks-line">
-        {(['overview', 'merit', 'edits'] as const).map((t) => (
+        {(['overview', 'readiness', 'merit', 'exemptions', 'edits'] as const).map((t) => (
           <button key={t} onClick={() => setTab(t)} className={`px-4 py-2 text-sm font-bold ${tab === t ? 'border-b-2 border-ks-blue text-ks-blue' : 'text-ks-muted'}`}>
-            {t === 'overview' ? 'Subjects' : t === 'merit' ? 'Merit List' : 'Edit Requests'}
+            {t === 'overview' ? 'Subjects' : t === 'readiness' ? 'Readiness' : t === 'merit' ? 'Merit List' : t === 'exemptions' ? 'Exemptions' : 'Edit Requests'}
           </button>
         ))}
       </div>
 
       {tab === 'overview' && <WindowSubjects w={w} classes={reference.data?.classes ?? []} />}
+      {tab === 'readiness' && (
+        status === 'DRAFT'
+          ? <EmptyState title="Window not open yet" message="Open the window to see which results are still missing." />
+          : <ReadinessPanel windowId={id} status={status} onExempt={(seed) => { setExemptSeed(seed); setTab('exemptions'); }} />
+      )}
       {tab === 'merit' && <MeritListPanel windowId={id} status={status} />}
+      {tab === 'exemptions' && (
+        <ExemptionsPanel key={exemptSeed ? `${exemptSeed.studentId}:${exemptSeed.subjectId}` : 'blank'} windowId={id} window={w} seed={exemptSeed} onChanged={(m) => { setMsg(m); setExemptSeed(null); }} />
+      )}
       {tab === 'edits' && <EditRequestsPanel windowId={id} />}
     </div>
   );
@@ -383,7 +408,7 @@ function MeritListPanel({ windowId, status }: { windowId: string; status: string
                 <th className="px-2 py-2">Name</th><th className="px-2 py-2">Str</th>
                 {subjects.map((s) => <th key={s.subjectId} className="px-2 py-2 text-center" title={s.subjectName}>{S(s.code || s.subjectName).slice(0, 5)}</th>)}
                 <th className="px-2 py-2 text-center">SBJ</th><th className="px-2 py-2 text-center">TOT</th>
-                <th className="px-2 py-2 text-center">MN</th><th className="px-2 py-2 text-center">DEV</th><th className="px-2 py-2 text-center">GR</th>
+                <th className="px-2 py-2 text-center">MN %</th><th className="px-2 py-2 text-center">DEV</th><th className="px-2 py-2 text-center">GR</th><th className="px-2 py-2 text-center">DIV</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-ks-line">
@@ -399,13 +424,15 @@ function MeritListPanel({ windowId, status }: { windowId: string; status: string
                     <td className="px-2 py-2">{S(r.stream)}</td>
                     {subjects.map((s) => {
                       const cell = scores[s.subjectId];
-                      return <td key={s.subjectId} className="px-2 py-2 text-center">{cell ? (cell.missing ? '–' : cell.isAbsent ? 'ABS' : `${Math.round(N(cell.score))} ${S(cell.grade)}`) : ''}</td>;
+                      const exempt = cell?.status === 'EXEMPT';
+                      return <td key={s.subjectId} className={`px-2 py-2 text-center ${exempt ? 'bg-ks-blue/10 font-bold text-ks-blue' : cell?.status === 'NOT_SAT' || cell?.isAbsent ? 'bg-ks-amber/15 text-[#7a5200]' : ''}`} title={exempt ? `Exempt: ${S(cell?.exemptReason)}` : undefined}>{cell ? (cell.missing ? '–' : exempt ? 'EXEMPT' : cell.status === 'NOT_SAT' ? 'NS' : cell.isAbsent ? 'ABS' : `${Math.round(N(cell.score))} ${S(cell.grade)}`) : '·'}</td>;
                     })}
-                    <td className="px-2 py-2 text-center">{N(r.subjectCount)}</td>
+                    <td className="px-2 py-2 text-center" title="Subjects counted in the average of subjects expected">{N(r.subjectsAssessed ?? r.subjectCount)}{N(r.subjectsExpected) > N(r.subjectsAssessed ?? r.subjectCount) ? `/${N(r.subjectsExpected)}` : ''}</td>
                     <td className="px-2 py-2 text-center font-bold">{N(r.total)}</td>
                     <td className="px-2 py-2 text-center">{N(r.mean)}</td>
                     <td className={`px-2 py-2 text-center ${N(dev) < 0 ? 'text-ks-rose' : 'text-ks-emerald'}`}>{N(dev) > 0 ? '+' : ''}{Math.round(N(dev) * 10) / 10}</td>
                     <td className="px-2 py-2 text-center"><Badge tone={statusTone('')}>{S(r.overallGrade)}</Badge></td>
+                    <td className="px-2 py-2 text-center text-[10px] font-bold text-ks-navy" title={S(r.divisionNote)}>{S(r.division, '—').replace('Division ', 'Div ')}</td>
                   </tr>
                 );
               })}
@@ -567,8 +594,18 @@ export function ComposeReportCardsPage() {
   const terms = (ref.data?.terms ?? []).filter((t: any) => !year || t.academicYearId === year);
   const levels = [...new Set((ref.data?.classes ?? []).map((c: any) => c.level).filter((l: any) => l != null))].sort((a: any, b: any) => a - b);
 
-  const toggle = (w: any) => setSelected((s) => { const n = { ...s }; if (n[w.id] != null) delete n[w.id]; else n[w.id] = N(w.weight, 100); return n; });
-  const canCompose = year && term && Object.keys(selected).length > 0;
+  const toggle = (w: any) => setSelected((s) => {
+    const n = { ...s };
+    if (n[w.id] != null) delete n[w.id]; else n[w.id] = N(w.weight, 100);
+    // One window fills the card; several start from an even split so the total is valid immediately.
+    const ids = Object.keys(n);
+    if (ids.length === 1) n[ids[0]] = 100;
+    else if (ids.length > 1 && !(n[w.id] != null && s[w.id] != null)) ids.forEach((k, i) => { n[k] = Math.round((100 / ids.length) * 100) / 100 + (i === ids.length - 1 ? Math.round((100 - Math.round((100 / ids.length) * 100) / 100 * ids.length) * 100) / 100 : 0); });
+    return n;
+  });
+  const weightTotal = Math.round(Object.values(selected).reduce((a, b) => a + (Number.isFinite(b) ? b : 0), 0) * 100) / 100;
+  const weightsOk = Object.keys(selected).length > 0 && Object.values(selected).every((v) => v > 0) && Math.abs(weightTotal - 100) <= 0.01;
+  const canCompose = year && term && weightsOk;
 
   const submit = async () => {
     setResult(null);
@@ -576,8 +613,7 @@ export function ComposeReportCardsPage() {
       academicYearId: year, termId: term, scopeLevel: scopeLevel ? Number(scopeLevel) : undefined, publish,
       windows: Object.entries(selected).map(([examWindowId, weight]) => ({ examWindowId, weight })),
     };
-    const res = await compose.mutateAsync(body);
-    setResult(res);
+    try { const res = await compose.mutateAsync(body); setResult(res); } catch { /* shown via compose.isError */ }
   };
 
   return (
@@ -629,6 +665,11 @@ export function ComposeReportCardsPage() {
               );
             })}
           </div>
+          {Object.keys(selected).length > 0 && (
+            <p className={`mt-3 text-sm font-bold ${weightsOk ? 'text-ks-emerald' : 'text-ks-rose'}`} role="status">
+              Weights total {weightTotal}% {weightsOk ? '✓' : '— they must be positive and add up to exactly 100%.'}
+            </p>
+          )}
           <label className="mt-4 flex items-center gap-2 text-sm font-semibold text-ks-navy">
             <input type="checkbox" checked={publish} onChange={(e) => setPublish(e.target.checked)} /> Publish report cards immediately
           </label>
@@ -640,6 +681,7 @@ export function ComposeReportCardsPage() {
       {result && (
         <Banner tone="emerald">
           Generated {N(result.reportCardsGenerated)} report cards for {N(result.students)} students across {N(result.classes)} class(es){result.published ? ' · published' : ''}.
+          {N(result.exemptSubjects) > 0 ? ` ${N(result.exemptSubjects)} exempt subject result(s) are shown as EXEMPT and left out of averages.` : ''}
         </Banner>
       )}
     </div>
@@ -702,7 +744,8 @@ export function TeacherExamMarksPage() {
   const upload = useUploadMarks();
   const submit = useSubmitAssessment();
   const editReq = useCreateEditRequest();
-  const [rows, setRows] = useState<Record<string, { score: string; isAbsent: boolean }>>({});
+  type EntryStatus = 'SCORED' | 'ABSENT' | 'NOT_SAT';
+  const [rows, setRows] = useState<Record<string, { score: string; status: EntryStatus }>>({});
   const [result, setResult] = useState<any>(null);
   const [reason, setReason] = useState('');
   const [showReq, setShowReq] = useState(false);
@@ -723,8 +766,8 @@ export function TeacherExamMarksPage() {
   useEffect(() => {
     if (data?.rows && seededRef.current !== assessmentId) {
       seededRef.current = assessmentId;
-      const seed: Record<string, { score: string; isAbsent: boolean }> = {};
-      for (const r of data.rows as any[]) seed[S(r.registrationNumber)] = { score: r.score === '' || r.score == null ? '' : String(r.score), isAbsent: !!r.isAbsent };
+      const seed: Record<string, { score: string; status: EntryStatus }> = {};
+      for (const r of data.rows as any[]) seed[S(r.registrationNumber)] = { score: r.score === '' || r.score == null ? '' : String(r.score), status: r.notSat ? 'NOT_SAT' : r.isAbsent ? 'ABSENT' : 'SCORED' };
       setRows(seed);
     }
   }, [data, assessmentId]);
@@ -732,8 +775,12 @@ export function TeacherExamMarksPage() {
   const save = async (autoSubmit = false) => {
     setResult(null);
     const payload = (data?.rows as any[]).map((r, i) => {
-      const local = rows[S(r.registrationNumber)] ?? { score: '', isAbsent: false };
-      return { registrationNumber: S(r.registrationNumber), score: local.isAbsent ? undefined : (local.score === '' ? '' : Number(local.score)), isAbsent: local.isAbsent, row: i + 2 };
+      const local = rows[S(r.registrationNumber)] ?? { score: '', status: 'SCORED' as EntryStatus };
+      return {
+        registrationNumber: S(r.registrationNumber),
+        score: local.status !== 'SCORED' ? undefined : (local.score === '' ? '' : Number(local.score)),
+        isAbsent: local.status === 'ABSENT', notSat: local.status === 'NOT_SAT', row: i + 2,
+      };
     });
     const res = await upload.mutateAsync({ assessmentId, rows: payload, autoSubmit });
     setResult(res);
@@ -785,28 +832,42 @@ export function TeacherExamMarksPage() {
         </div>
       )}
 
+      {!locked && (() => {
+        const blank = (data.rows as any[]).filter((r) => { const l = rows[S(r.registrationNumber)]; return !l || (l.status === 'SCORED' && l.score === ''); }).length;
+        return (
+          <p className={`mb-3 text-xs font-semibold ${blank ? 'text-ks-rose' : 'text-ks-emerald'}`} role="status">
+            {blank ? `${blank} student${blank === 1 ? '' : 's'} still without a result — enter a score, or choose Absent / Not sat. Results cannot be closed with blanks.` : 'Every student has a result.'}
+          </p>
+        );
+      })()}
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-ks-paper text-left text-[11px] uppercase tracking-wider text-ks-muted">
-              <tr><th className="px-4 py-3">ADMNO</th><th className="px-4 py-3">Student</th><th className="px-4 py-3 w-32">Score</th><th className="px-4 py-3">Absent</th></tr>
+              <tr><th className="px-4 py-3">ADMNO</th><th className="px-4 py-3">Student</th><th className="px-4 py-3 w-32">Score</th><th className="px-4 py-3">Status</th></tr>
             </thead>
             <tbody className="divide-y divide-ks-line">
               {(data.rows as any[]).map((r) => {
                 const reg = S(r.registrationNumber);
-                const local = rows[reg] ?? { score: '', isAbsent: false };
+                const local = rows[reg] ?? { score: '', status: 'SCORED' as EntryStatus };
+                const empty = local.status === 'SCORED' && local.score === '';
                 return (
-                  <tr key={reg}>
+                  <tr key={reg} className={empty && !locked ? 'bg-ks-rose/5' : ''}>
                     <td className="px-4 py-2 text-ks-muted">{reg}</td>
                     <td className="px-4 py-2 font-semibold text-ks-navy">{S(r.studentName)}</td>
                     <td className="px-4 py-2">
-                      <input type="number" min={0} max={maxScore} disabled={locked || local.isAbsent} value={local.score}
+                      <input type="number" min={0} max={maxScore} disabled={locked || local.status !== 'SCORED'} value={local.score} aria-label={`Score for ${S(r.studentName)}`}
                         onChange={(e) => setRows((s) => ({ ...s, [reg]: { ...local, score: e.target.value } }))}
                         className="w-24 rounded border border-ks-line px-2 py-1 disabled:bg-ks-mist/20" />
                     </td>
                     <td className="px-4 py-2">
-                      <input type="checkbox" disabled={locked} checked={local.isAbsent}
-                        onChange={(e) => setRows((s) => ({ ...s, [reg]: { ...local, isAbsent: e.target.checked } }))} />
+                      <select disabled={locked} value={local.status} aria-label={`Status for ${S(r.studentName)}`}
+                        onChange={(e) => setRows((s) => ({ ...s, [reg]: { ...local, status: e.target.value as EntryStatus, score: e.target.value === 'SCORED' ? local.score : '' } }))}
+                        className="rounded border border-ks-line px-2 py-1 text-xs">
+                        <option value="SCORED">Scored</option>
+                        <option value="ABSENT">Absent (0)</option>
+                        <option value="NOT_SAT">Not sat (0)</option>
+                      </select>
                     </td>
                   </tr>
                 );

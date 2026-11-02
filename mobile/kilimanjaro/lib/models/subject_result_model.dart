@@ -29,6 +29,7 @@ class SubjectResultModel {
     required this.rank,
     required this.totalStudents,
     required this.assessments,
+    this.status = 'SCORED',
   });
 
   final String id;
@@ -39,8 +40,14 @@ class SubjectResultModel {
   final int totalStudents;
   final List<AssessmentScore> assessments;
 
+  /// SCORED | ABSENT | NOT_SAT | EXEMPT (server `resultStatus`).
+  final String status;
+
+  /// An approved exemption: shown as EXEMPT and never counted as a pass or a fail.
+  bool get isExempt => status == 'EXEMPT';
+
   /// Matches the school pass mark used by the server's performance alerts.
-  bool get isPassing => score >= 50;
+  bool get isPassing => isExempt || score >= 50;
 
   factory SubjectResultModel.fromJson(Map<String, dynamic> json) {
     // The backend stores scores as {label: score}; older payloads send a list.
@@ -65,6 +72,7 @@ class SubjectResultModel {
       rank: numOf(json['rank'])?.toInt() ?? 0,
       totalStudents: numOf(json['totalStudentsInClass'])?.toInt() ?? numOf(json['totalStudents'])?.toInt() ?? 0,
       assessments: assessments,
+      status: (json['resultStatus'] as String?) ?? 'SCORED',
     );
   }
 }

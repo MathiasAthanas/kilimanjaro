@@ -45,7 +45,7 @@ class KSSubjectCard extends ConsumerWidget {
                     stacked ? CrossAxisAlignment.start : CrossAxisAlignment.end,
                 children: [
                   Text(
-                    '${subject.score.toStringAsFixed(0)}%',
+                    subject.isExempt ? 'EXEMPT' : '${subject.score.toStringAsFixed(0)}%',
                     style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                           color: accent,
                           fontWeight: FontWeight.w800,

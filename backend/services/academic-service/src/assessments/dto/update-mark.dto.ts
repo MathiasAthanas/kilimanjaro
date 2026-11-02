@@ -10,6 +10,10 @@ export class UpdateMarkDto {
   isAbsent?: boolean;
 
   @IsOptional()
+  @IsBoolean()
+  notSat?: boolean;
+
+  @IsOptional()
   @IsString()
   note?: string;
 }

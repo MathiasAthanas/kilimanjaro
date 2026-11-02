@@ -13,10 +13,13 @@ import { ReportCompositionController } from './report-composition.controller';
 import { ReportCompositionService } from './report-composition.service';
 import { MeritExportController } from './merit-export.controller';
 import { MeritExportService } from './merit-export.service';
-import { GradingResolverService } from './grading-resolver.service';
+import { GradingResolverModule } from './grading-resolver.module';
+import { ResultCalculatorService } from './result-calculator.service';
+import { ExemptionsController } from './exemptions.controller';
+import { ExemptionsService } from './exemptions.service';
 
 @Module({
-  imports: [AssessmentModule, ReportCardsModule],
+  imports: [AssessmentModule, ReportCardsModule, GradingResolverModule],
   controllers: [
     ExamTypesController,
     ExamWindowsController,
@@ -24,6 +27,7 @@ import { GradingResolverService } from './grading-resolver.service';
     ExamMarksController,
     ReportCompositionController,
     MeritExportController,
+    ExemptionsController,
   ],
   providers: [
     ExamTypesService,
@@ -32,7 +36,8 @@ import { GradingResolverService } from './grading-resolver.service';
     ExamMarksService,
     ReportCompositionService,
     MeritExportService,
-    GradingResolverService,
+    ResultCalculatorService,
+    ExemptionsService,
   ],
   exports: [ExamTypesService, ExamWindowsService, ExamResultsService, ExamMarksService, ReportCompositionService],
 })

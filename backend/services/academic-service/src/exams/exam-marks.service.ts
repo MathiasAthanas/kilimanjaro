@@ -14,6 +14,7 @@ import { ROLES } from '../common/constants/roles';
 import { assertSchoolInScope } from '../common/helpers/school-scope.helper';
 import { AssessmentsService } from '../assessments/assessments.service';
 import { UploadMarksDto } from './dto/upload-marks.dto';
+import { resolveExpectedStudents } from './engine/expected-students';
 
 interface RosterStudent {
   studentId: string;
@@ -90,7 +91,15 @@ export class ExamMarksService {
     return assessment;
   }
 
-  private async loadRoster(classId: string, user: RequestUser): Promise<RosterStudent[]> {
+  private async loadRoster(classId: string, user: RequestUser, assessment?: any): Promise<RosterStudent[]> {
+    const roster = await this.loadClassRoster(classId, user);
+    if (!assessment) return roster;
+    // Optional / combination subjects: only students who take the subject, and who are not exempt.
+    const { required } = await resolveExpectedStudents(this.prisma, assessment, roster.map((r) => r.studentId));
+    return roster.filter((r) => required.has(r.studentId));
+  }
+
+  private async loadClassRoster(classId: string, user: RequestUser): Promise<RosterStudent[]> {
     const payload = await this.studentClient.get<unknown>(
       '/students',
       { classId, limit: 2000, page: 1 },
@@ -108,11 +117,11 @@ export class ExamMarksService {
   /** Structured template: metadata + pre-filled roster rows, for the dashboard to render/export. */
   async getTemplateData(assessmentId: string, user: RequestUser) {
     const assessment = await this.getAssessmentForTeacher(assessmentId, user);
-    const roster = await this.loadRoster(assessment.classId, user);
+    const roster = await this.loadRoster(assessment.classId, user, assessment);
 
     const existing = await this.prisma.mark.findMany({
       where: { assessmentId },
-      select: { studentId: true, score: true, isAbsent: true, note: true },
+      select: { studentId: true, score: true, isAbsent: true, notSat: true, note: true },
     });
     const markMap = new Map(existing.map((m) => [m.studentId, m]));
 
@@ -126,14 +135,15 @@ export class ExamMarksService {
         status: assessment.status,
         examWindow: assessment.examWindow,
       },
-      columns: ['registration_number', 'student_name', 'score', 'is_absent', 'note'],
+      columns: ['registration_number', 'student_name', 'score', 'is_absent', 'not_sat', 'note'],
       rows: roster.map((r) => {
         const m = markMap.get(r.studentId);
         return {
           registrationNumber: r.registrationNumber,
           studentName: r.name,
-          score: m && !m.isAbsent ? m.score : '',
-          isAbsent: m?.isAbsent ?? false,
+          score: m && !m.isAbsent && !m.notSat ? m.score : '',
+          isAbsent: (m?.isAbsent ?? false) && !(m?.notSat ?? false),
+          notSat: m?.notSat ?? false,
           note: m?.note ?? '',
         };
       }),
@@ -153,7 +163,7 @@ export class ExamMarksService {
     const lines: string[] = [];
     lines.push(`# Exam Window: ${win?.name ?? ''}`);
     lines.push(`# Subject: ${data.assessment.subjectName}  |  Max Score: ${data.assessment.maxScore}`);
-    lines.push('# Fill the "score" column (0 to max). For an absent student put yes in "is_absent". Do not edit registration_number.');
+    lines.push('# Fill the "score" column (0 to max). Absent on the day: put yes in "is_absent". Required to sit but did not: put yes in "not_sat". Do not edit registration_number.');
     lines.push(data.columns.join(','));
     for (const r of data.rows) {
       lines.push([
@@ -161,6 +171,7 @@ export class ExamMarksService {
         this.csvEscape(r.studentName),
         this.csvEscape(r.score),
         this.csvEscape(r.isAbsent ? 'yes' : ''),
+        this.csvEscape(r.notSat ? 'yes' : ''),
         this.csvEscape(r.note),
       ].join(','));
     }
@@ -170,7 +181,7 @@ export class ExamMarksService {
   }
 
   private parseBool(v: unknown): boolean {
-    return ['true', '1', 'yes', 'y', 'absent'].includes(String(v ?? '').toLowerCase().trim());
+    return ['true', '1', 'yes', 'y', 'absent', 'not sat', 'notsat', 'ns'].includes(String(v ?? '').toLowerCase().trim());
   }
 
   /**
@@ -193,12 +204,12 @@ export class ExamMarksService {
       );
     }
 
-    const roster = await this.loadRoster(assessment.classId, user);
+    const roster = await this.loadRoster(assessment.classId, user, assessment);
     const byReg = new Map(roster.filter((r) => r.registrationNumber).map((r) => [r.registrationNumber!.toUpperCase().trim(), r]));
     const byId = new Map(roster.map((r) => [r.studentId, r]));
 
     const errors: Array<{ row: number | null; registrationNumber?: string; message: string }> = [];
-    const valid = new Map<string, { studentId: string; score: number; isAbsent: boolean; note?: string }>();
+    const valid = new Map<string, { studentId: string; score: number; isAbsent: boolean; notSat: boolean; note?: string }>();
 
     (dto.rows ?? []).forEach((raw, index) => {
       const rowNum = raw.row ?? index + 2; // +2 ≈ header + 1-based
@@ -216,13 +227,14 @@ export class ExamMarksService {
         return;
       }
 
-      const isAbsent = raw.isAbsent === true || this.parseBool(raw.isAbsent as unknown);
+      const notSat = raw.notSat === true || this.parseBool(raw.notSat as unknown);
+      const isAbsent = notSat || raw.isAbsent === true || this.parseBool(raw.isAbsent as unknown);
       let score: number;
       if (isAbsent) {
         score = 0;
       } else {
         if (raw.score === undefined || raw.score === null || (raw.score as unknown) === '') {
-          errors.push({ row: rowNum, registrationNumber: student.registrationNumber ?? undefined, message: 'Score is empty. Enter a score or mark the student absent.' });
+          errors.push({ row: rowNum, registrationNumber: student.registrationNumber ?? undefined, message: 'Score is empty. Enter a score, or mark the student Absent / Not sat.' });
           return;
         }
         const parsed = Number(raw.score);
@@ -241,7 +253,7 @@ export class ExamMarksService {
         errors.push({ row: rowNum, registrationNumber: student.registrationNumber ?? undefined, message: 'Duplicate row for this student — only the first was kept.' });
         return;
       }
-      valid.set(student.studentId, { studentId: student.studentId, score, isAbsent, note: raw.note?.toString().trim() || undefined });
+      valid.set(student.studentId, { studentId: student.studentId, score, isAbsent, notSat, note: raw.note?.toString().trim() || undefined });
     });
 
     // Apply the valid rows.
@@ -257,12 +269,14 @@ export class ExamMarksService {
               studentId: e.studentId,
               score: e.score,
               isAbsent: e.isAbsent,
+              notSat: e.notSat,
               note: e.note,
               enteredById: user.id,
             },
             update: {
               score: e.score,
               isAbsent: e.isAbsent,
+              notSat: e.notSat,
               note: e.note,
               lastEditedById: user.id,
               lastEditedAt: new Date(),
@@ -275,7 +289,7 @@ export class ExamMarksService {
     }
 
     // Coverage + optional auto-submit.
-    const markedCount = await this.prisma.mark.count({ where: { assessmentId } });
+    const markedCount = await this.prisma.mark.count({ where: { assessmentId, studentId: { in: roster.map((r) => r.studentId) } } });
     const missing = roster.length - markedCount;
     let autoSubmitted = false;
     let submitMessage: string | undefined;

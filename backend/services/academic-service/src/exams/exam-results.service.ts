@@ -7,46 +7,11 @@ import { StudentClientService } from '../student-client/student-client.service';
 import { RequestUser } from '../common/interfaces/request-user.interface';
 import { assertSchoolInScope, schoolScopeFilter } from '../common/helpers/school-scope.helper';
 import { ROLES } from '../common/constants/roles';
-import { GradingResolverService, ResolvedGrade } from './grading-resolver.service';
+import { GradingResolverService } from './grading-resolver.service';
+import { CalcContext, CalcStudentRow, ResultCalculatorService } from './result-calculator.service';
+import { SubjectOutcome } from './engine/result-engine';
 
-interface SubjectScore {
-  subjectId: string;
-  subjectName: string;
-  code: string;
-  score: number;
-  maxScore: number;
-  percentage: number;
-  grade: string;
-  points: number;
-  isAbsent: boolean;
-  missing: boolean;
-}
-
-interface StudentRow {
-  studentId: string;
-  classId: string;
-  className: string | null;
-  stream: string | null;
-  classLevel: number | null;
-  educationStage: string;
-  registrationNumber: string | null;
-  studentName: string | null;
-  gender: string | null;
-  subjectScores: Record<string, SubjectScore>;
-  subjectCount: number;
-  total: number;
-  mean: number;
-  meanPoints: number;
-  overall: ResolvedGrade;
-  classMeanDev: number;
-  standardMeanDev: number;
-  prevWindowMean: number | null;
-  prevWindowDelta: number | null;
-  streamRank?: number;
-  streamTotal?: number;
-  standardRank?: number;
-  standardTotal?: number;
-}
+type SubjectScore = SubjectOutcome;
 
 @Injectable()
 export class ExamResultsService {
@@ -58,6 +23,7 @@ export class ExamResultsService {
     private readonly rabbitMq: RabbitMqService,
     private readonly studentClient: StudentClientService,
     private readonly grading: GradingResolverService,
+    private readonly calculator: ResultCalculatorService,
   ) {}
 
   private unwrap<T>(payload: any): T[] {
@@ -93,318 +59,191 @@ export class ExamResultsService {
   }
 
   /**
-   * Competition ranking (1,2,2,4…): ties share a rank, and the next rank skips.
-   * Returns a map keyed by the row's key → rank, plus the group size.
+   * Validate + calculate a window WITHOUT writing anything. Throws a structured
+   * error when a grading scale is missing or any expected subject result is
+   * MISSING (blocks closing / calculation until resolved).
    */
-  private rank<T>(rows: T[], key: (r: T) => string, score: (r: T) => number): Record<string, number> {
-    const sorted = [...rows].sort((a, b) => score(b) - score(a));
-    const ranks: Record<string, number> = {};
-    let prevScore: number | null = null;
-    let prevRank = 0;
-    sorted.forEach((row, index) => {
-      let r = index + 1;
-      if (prevScore !== null && score(row) === prevScore) {
-        r = prevRank;
-      }
-      ranks[key(row)] = r;
-      prevRank = r;
-      prevScore = score(row);
-    });
-    return ranks;
+  async calculate(windowId: string, user?: RequestUser): Promise<CalcContext> {
+    const ctx = await this.calculator.build(windowId, user);
+    this.calculator.assertCalculable(ctx);
+    await this.applyPreviousWindowDelta(ctx.window, ctx.rows);
+    return ctx;
   }
 
-  /** Compute (or recompute) the merit list for a window and persist the rows. */
+  /** Upsert merit rows for a calculated window. Pass a transaction client to make it atomic with the caller. */
+  async persist(client: Prisma.TransactionClient, ctx: CalcContext, now = new Date()): Promise<void> {
+    const windowId = ctx.window.id as string;
+    for (const r of ctx.rows) {
+      const dv = r.summary.division;
+      const data = {
+        className: r.className,
+        stream: r.stream,
+        classLevel: r.classLevel,
+        educationStage: r.educationStage as any,
+        registrationNumber: r.registrationNumber,
+        studentName: r.studentName,
+        gender: r.gender,
+        subjectScores: r.subjectScores as unknown as Prisma.InputJsonValue,
+        subjectCount: r.summary.subjectsAssessed,
+        subjectsExpected: r.summary.subjectsExpected,
+        subjectsAssessed: r.summary.subjectsAssessed,
+        division: dv.division ?? dv.descriptor,
+        divisionPoints: dv.totalPoints,
+        divisionNote: dv.note ?? dv.descriptor,
+        total: r.summary.total,
+        mean: r.summary.mean,
+        meanPoints: r.summary.meanPoints,
+        overallGrade: r.overall.grade,
+        overallPoints: r.overall.points,
+        overallRemark: r.overall.remark,
+        isPassing: r.overall.isPassing,
+        classMeanDev: r.classMeanDev,
+        standardMeanDev: r.standardMeanDev,
+        prevWindowMean: r.prevWindowMean,
+        prevWindowDelta: r.prevWindowDelta,
+        streamRank: r.streamRank,
+        streamTotal: r.streamTotal,
+        standardRank: r.standardRank,
+        standardTotal: r.standardTotal,
+        computedAt: now,
+      };
+      await client.examWindowResult.upsert({
+        where: { examWindowId_studentId: { examWindowId: windowId, studentId: r.studentId } },
+        create: { schoolId: ctx.window.schoolId, examWindowId: windowId, studentId: r.studentId, classId: r.classId, ...data },
+        update: data,
+      });
+    }
+    // Students no longer on the roster (moved/withdrawn) must not linger on the merit list.
+    await client.examWindowResult.deleteMany({
+      where: { examWindowId: windowId, studentId: { notIn: ctx.rows.map((r) => r.studentId) } },
+    });
+    await client.examWindow.update({ where: { id: windowId }, data: { computedAt: now } });
+  }
+
+  /**
+   * Explicit recomputation of a closed window's merit list (the ONLY way existing
+   * results change after the additive migration). Published windows must be
+   * unpublished first so published results are never silently altered.
+   */
   async compute(windowId: string, user?: RequestUser) {
     const window = await this.prisma.examWindow.findUnique({ where: { id: windowId } });
     if (!window) throw new NotFoundException('Exam window not found');
     if (user) assertSchoolInScope(user, window.schoolId ?? null);
-
-    const assessments = await this.prisma.assessment.findMany({
-      where: { examWindowId: windowId },
-      include: { classSubject: { include: { subject: true } } },
-    });
-    if (!assessments.length) {
-      throw new BadRequestException('This window has no assessments to compute. Open the window first.');
+    if (window.status === ExamWindowStatus.PUBLISHED) {
+      throw new BadRequestException('This window is published. Unpublish it (or have an edit request approved) before recalculating.');
+    }
+    if (window.status === ExamWindowStatus.DRAFT) {
+      throw new BadRequestException('Open the window and enter marks before calculating results.');
     }
 
-    const classIds = [...new Set(assessments.map((a) => a.classId))];
-
-    // Class metadata (level / stream / name) from student-service.
-    const classesPayload = await this.studentClient.get<unknown>(
-      '/students/classes',
-      { academicYearId: window.academicYearId, limit: 1000 },
-      this.studentServiceHeaders(user),
-    );
-    const classMeta = new Map<string, { name: string; level: number | null; stream: string | null; educationStage: string | null }>();
-    for (const c of this.unwrap<any>(classesPayload)) {
-      classMeta.set(c.id, { name: c.name, level: c.level ?? null, stream: c.stream ?? null, educationStage: c.educationStage ?? null });
-    }
-
-    // Students per class.
-    const studentMeta = new Map<string, { classId: string; registrationNumber: string | null; name: string; gender: string | null }>();
-    const studentsByClass = new Map<string, string[]>();
-    for (const classId of classIds) {
-      const payload = await this.studentClient.get<unknown>(
-        '/students',
-        { classId, limit: 2000, page: 1 },
-        this.studentServiceHeaders(user),
-      );
-      const list = this.unwrap<any>(payload);
-      const ids: string[] = [];
-      for (const s of list) {
-        studentMeta.set(s.id, {
-          classId,
-          registrationNumber: s.registrationNumber ?? null,
-          name: this.studentName(s),
-          gender: s.gender ?? null,
-        });
-        ids.push(s.id);
-      }
-      studentsByClass.set(classId, ids);
-    }
-
-    // Marks for every assessment in the window.
-    const marks = await this.prisma.mark.findMany({
-      where: { assessmentId: { in: assessments.map((a) => a.id) } },
-      select: { assessmentId: true, studentId: true, score: true, isAbsent: true },
-    });
-    const marksByAssessment = new Map<string, Map<string, { score: number; isAbsent: boolean }>>();
-    for (const m of marks) {
-      let inner = marksByAssessment.get(m.assessmentId);
-      if (!inner) {
-        inner = new Map();
-        marksByAssessment.set(m.assessmentId, inner);
-      }
-      inner.set(m.studentId, { score: m.score, isAbsent: m.isAbsent });
-    }
-
-    // Assessments grouped by class → the subject columns for that class.
-    const assessmentsByClass = new Map<string, typeof assessments>();
-    for (const a of assessments) {
-      const arr = assessmentsByClass.get(a.classId) ?? [];
-      arr.push(a);
-      assessmentsByClass.set(a.classId, arr as any);
-    }
-
-    // Lazy grading-scale cache keyed by stage:level:subject.
-    const scaleCache = new Map<string, any>();
-    const scaleFor = async (stage: string | null, level: number | null, subjectId: string | null) => {
-      const key = `${stage}:${level}:${subjectId}`;
-      if (scaleCache.has(key)) return scaleCache.get(key);
-      const scale = await this.grading.getActiveScale(
-        window.academicYearId,
-        { educationStage: stage, classLevel: level, subjectId },
-        window.schoolId ?? null,
-      );
-      scaleCache.set(key, scale);
-      return scale;
-    };
-
-    // ── Build one row per student ─────────────────────────────────────────
-    const rows: StudentRow[] = [];
-    for (const classId of classIds) {
-      const meta = classMeta.get(classId) ?? { name: null as any, level: null, stream: null, educationStage: null };
-      const classAssessments = assessmentsByClass.get(classId) ?? ([] as any);
-      const studentIds = studentsByClass.get(classId) ?? [];
-
-      for (const studentId of studentIds) {
-        const sMeta = studentMeta.get(studentId)!;
-        const subjectScores: Record<string, SubjectScore> = {};
-        let total = 0;
-        let pointsSum = 0;
-        let subjectCount = 0;
-
-        for (const a of classAssessments) {
-          const mark = marksByAssessment.get(a.id)?.get(studentId);
-          const maxScore = a.maxScore || window.maxScore || 100;
-          const missing = !mark;
-          const isAbsent = mark?.isAbsent ?? false;
-          const score = mark && !isAbsent ? mark.score : 0;
-          const percentage = maxScore > 0 ? this.round((score / maxScore) * 100) : 0;
-          const subjScale = await scaleFor(a.educationStage, a.classLevel ?? meta.level, a.subjectId);
-          const resolved: ResolvedGrade =
-            isAbsent || missing
-              ? { grade: 'X', points: 0, remark: isAbsent ? 'Absent' : 'No mark', isPassing: false }
-              : this.grading.resolveGrade(subjScale, percentage);
-
-          subjectScores[a.subjectId] = {
-            subjectId: a.subjectId,
-            subjectName: a.classSubject.subject.name,
-            code: a.classSubject.subject.code,
-            score,
-            maxScore,
-            percentage,
-            grade: resolved.grade,
-            points: resolved.points,
-            isAbsent,
-            missing,
-          };
-          total += score;
-          pointsSum += resolved.points;
-          subjectCount += 1;
-        }
-
-        const mean = subjectCount ? this.round(total / subjectCount) : 0;
-        const meanPoints = subjectCount ? this.round(pointsSum / subjectCount) : 0;
-        const overallScale = await scaleFor(meta.educationStage ?? window.educationStage, meta.level, null);
-        const overall = this.grading.resolveGrade(overallScale, mean);
-
-        rows.push({
-          studentId,
-          classId,
-          className: meta.name,
-          stream: meta.stream,
-          classLevel: meta.level,
-          educationStage: meta.educationStage ?? window.educationStage ?? 'PRIMARY',
-          registrationNumber: sMeta.registrationNumber,
-          studentName: sMeta.name,
-          gender: sMeta.gender,
-          subjectScores,
-          subjectCount,
-          total: this.round(total),
-          mean,
-          meanPoints,
-          overall,
-          classMeanDev: 0,
-          standardMeanDev: 0,
-          prevWindowMean: null,
-          prevWindowDelta: null,
-        });
-      }
-    }
-
-    // ── Stream ranks + stream-mean deviation (per class) ──────────────────
-    for (const classId of classIds) {
-      const group = rows.filter((r) => r.classId === classId);
-      if (!group.length) continue;
-      const streamMean = group.reduce((s, r) => s + r.mean, 0) / group.length;
-      const ranks = this.rank(group, (r) => r.studentId, (r) => r.total);
-      for (const r of group) {
-        r.streamRank = ranks[r.studentId];
-        r.streamTotal = group.length;
-        r.classMeanDev = this.round(r.mean - streamMean);
-      }
-    }
-
-    // ── Standard ranks + standard-mean deviation (per stage + level) ──────
-    // A "standard" is identified by (educationStage, level), NOT level alone:
-    // Primary "Class 6" and A-Level "Form 6" are both level 6 but are distinct
-    // standards and must never be ranked against each other.
-    const standardKey = (r: StudentRow) => `${r.educationStage}::${r.classLevel}`;
-    const standardKeys = [...new Set(rows.filter((r) => r.classLevel !== null).map(standardKey))];
-    for (const key of standardKeys) {
-      const group = rows.filter((r) => r.classLevel !== null && standardKey(r) === key);
-      if (!group.length) continue;
-      const standardMean = group.reduce((s, r) => s + r.mean, 0) / group.length;
-      const ranks = this.rank(group, (r) => r.studentId, (r) => r.total);
-      for (const r of group) {
-        r.standardRank = ranks[r.studentId];
-        r.standardTotal = group.length;
-        r.standardMeanDev = this.round(r.mean - standardMean);
-      }
-    }
-    // Students with no level fall back to stream ranking for the standard columns.
-    for (const r of rows) {
-      if (r.classLevel === null) {
-        r.standardRank = r.streamRank;
-        r.standardTotal = r.streamTotal;
-      }
-    }
-
-    // ── Δ vs previous window (enrichment) ─────────────────────────────────
-    await this.applyPreviousWindowDelta(window, rows);
-
-    // ── Persist ───────────────────────────────────────────────────────────
+    const ctx = await this.calculate(windowId, user);
     const now = new Date();
-    await this.prisma.$transaction(
-      rows.map((r) =>
-        this.prisma.examWindowResult.upsert({
-          where: { examWindowId_studentId: { examWindowId: windowId, studentId: r.studentId } },
-          create: {
-            schoolId: window.schoolId,
-            examWindowId: windowId,
-            studentId: r.studentId,
-            classId: r.classId,
-            className: r.className,
-            stream: r.stream,
-            classLevel: r.classLevel,
-            educationStage: r.educationStage as any,
-            registrationNumber: r.registrationNumber,
-            studentName: r.studentName,
-            gender: r.gender,
-            subjectScores: r.subjectScores as unknown as Prisma.InputJsonValue,
-            subjectCount: r.subjectCount,
-            total: r.total,
-            mean: r.mean,
-            meanPoints: r.meanPoints,
-            overallGrade: r.overall.grade,
-            overallPoints: r.overall.points,
-            overallRemark: r.overall.remark,
-            isPassing: r.overall.isPassing,
-            classMeanDev: r.classMeanDev,
-            standardMeanDev: r.standardMeanDev,
-            prevWindowMean: r.prevWindowMean,
-            prevWindowDelta: r.prevWindowDelta,
-            streamRank: r.streamRank,
-            streamTotal: r.streamTotal,
-            standardRank: r.standardRank,
-            standardTotal: r.standardTotal,
-            computedAt: now,
-          },
-          update: {
-            className: r.className,
-            stream: r.stream,
-            classLevel: r.classLevel,
-            educationStage: r.educationStage as any,
-            registrationNumber: r.registrationNumber,
-            studentName: r.studentName,
-            gender: r.gender,
-            subjectScores: r.subjectScores as unknown as Prisma.InputJsonValue,
-            subjectCount: r.subjectCount,
-            total: r.total,
-            mean: r.mean,
-            meanPoints: r.meanPoints,
-            overallGrade: r.overall.grade,
-            overallPoints: r.overall.points,
-            overallRemark: r.overall.remark,
-            isPassing: r.overall.isPassing,
-            classMeanDev: r.classMeanDev,
-            standardMeanDev: r.standardMeanDev,
-            prevWindowMean: r.prevWindowMean,
-            prevWindowDelta: r.prevWindowDelta,
-            streamRank: r.streamRank,
-            streamTotal: r.streamTotal,
-            standardRank: r.standardRank,
-            standardTotal: r.standardTotal,
-            computedAt: now,
-          },
-        }),
-      ),
-    );
+    await this.prisma.$transaction((tx) => this.persist(tx, ctx, now), { timeout: 120000, maxWait: 20000 });
+    return this.afterCompute(ctx, now);
+  }
 
-    await this.prisma.examWindow.update({ where: { id: windowId }, data: { computedAt: now } });
+  async afterCompute(ctx: CalcContext, now: Date) {
+    const windowId = ctx.window.id as string;
     await this.redis.delByPattern(`exam-window:meritlist:${windowId}`);
-
     await this.rabbitMq.publish('exam.results.computed', {
       examWindowId: windowId,
-      termId: window.termId,
-      academicYearId: window.academicYearId,
-      studentsRanked: rows.length,
-      classes: classIds.length,
-      schoolId: window.schoolId,
+      termId: ctx.window.termId,
+      academicYearId: ctx.window.academicYearId,
+      studentsRanked: ctx.rows.length,
+      classes: ctx.classIds.length,
+      schoolId: ctx.window.schoolId,
+    });
+    const standards = new Set(ctx.rows.filter((r) => r.classLevel !== null).map((r) => `${r.educationStage}::${r.classLevel}`));
+    return {
+      computed: ctx.rows.length,
+      classes: ctx.classIds.length,
+      standards: standards.size,
+      exemptSubjects: ctx.rows.reduce((n, r) => n + r.summary.exemptCount, 0),
+      ungraded: ctx.rows.filter((r) => !r.summary.division.eligible).length,
+      computedAt: now,
+    };
+  }
+
+  /**
+   * Student-by-subject readiness matrix for a window: every expected subject has
+   * exactly one status (SCORED / ABSENT / NOT_SAT / MISSING / EXEMPT). Anything
+   * MISSING (or a missing grading scale) blocks closing and calculation.
+   */
+  async readiness(windowId: string, user: RequestUser) {
+    const ctx = await this.calculator.build(windowId, user);
+    const counts = { students: ctx.rows.length, expected: 0, scored: 0, absent: 0, notSat: 0, missing: 0, exempt: 0 };
+    const subjectCols = new Map<string, { subjectId: string; subjectName: string; code: string }>();
+    for (const r of ctx.rows) {
+      for (const o of r.outcomes) {
+        counts.expected += 1;
+        if (o.status === 'SCORED') counts.scored += 1;
+        else if (o.status === 'ABSENT') counts.absent += 1;
+        else if (o.status === 'NOT_SAT') counts.notSat += 1;
+        else if (o.status === 'MISSING') counts.missing += 1;
+        else counts.exempt += 1;
+        if (!subjectCols.has(o.subjectId)) subjectCols.set(o.subjectId, { subjectId: o.subjectId, subjectName: o.subjectName, code: o.code });
+      }
+    }
+
+    const blockers: Array<{ code: string; message: string }> = [];
+    for (const issue of ctx.scaleIssues) blockers.push({ code: 'GRADING_SCALE_MISSING', message: issue.message });
+    if (ctx.missing.length) {
+      const e = this.calculator.incompleteError(ctx.missing);
+      blockers.push({ code: 'RESULTS_INCOMPLETE', message: String((e.getResponse() as any).message) });
+    }
+    const closable = ([ExamWindowStatus.OPEN, ExamWindowStatus.REOPENED] as ExamWindowStatus[]).includes(ctx.window.status);
+
+    const classes = ctx.classIds.map((classId) => {
+      const group = ctx.rows.filter((r) => r.classId === classId);
+      return {
+        classId,
+        className: group[0]?.className ?? classId,
+        students: group
+          .sort((a, b) => (a.registrationNumber ?? '').localeCompare(b.registrationNumber ?? ''))
+          .map((r) => ({
+            studentId: r.studentId,
+            studentName: r.studentName,
+            registrationNumber: r.registrationNumber,
+            subjectsExpected: r.summary.subjectsExpected,
+            subjectsAssessed: r.summary.subjectsAssessed,
+            mean: r.summary.mean,
+            division: r.summary.division.division ?? r.summary.division.descriptor,
+            divisionEligible: r.summary.division.eligible,
+            warnings: r.warnings,
+            cells: Object.fromEntries(
+              r.outcomes.map((o) => [
+                o.subjectId,
+                {
+                  status: o.status,
+                  score: o.status === 'MISSING' ? null : o.score,
+                  maxScore: o.maxScore,
+                  percentage: o.percentage,
+                  grade: o.grade,
+                  exemptReason: o.exemptReason ?? null,
+                },
+              ]),
+            ),
+          })),
+      };
     });
 
     return {
-      computed: rows.length,
-      classes: classIds.length,
-      standards: standardKeys.length,
-      computedAt: now,
+      window: { id: ctx.window.id, name: ctx.window.name, status: ctx.window.status, termId: ctx.window.termId, academicYearId: ctx.window.academicYearId, computedAt: ctx.window.computedAt },
+      ready: blockers.length === 0,
+      canClose: blockers.length === 0 && closable,
+      blockers,
+      counts,
+      scaleIssues: ctx.scaleIssues,
+      warnings: ctx.warnings,
+      subjects: [...subjectCols.values()].sort((a, b) => a.subjectName.localeCompare(b.subjectName)),
+      missing: ctx.missing.slice(0, 1000),
+      classes,
     };
   }
 
   private async applyPreviousWindowDelta(
     window: { id: string; schoolId: string | null; academicYearId: string; termId: string; createdAt: Date },
-    rows: StudentRow[],
+    rows: CalcStudentRow[],
   ): Promise<void> {
     try {
       const candidates = await this.prisma.examWindow.findMany({
@@ -443,7 +282,7 @@ export class ExamResultsService {
         const prev = bestByStudent.get(r.studentId);
         if (prev) {
           r.prevWindowMean = this.round(prev.mean);
-          r.prevWindowDelta = this.round(r.mean - prev.mean);
+          r.prevWindowDelta = this.round(r.summary.mean - prev.mean);
         }
       }
     } catch (err) {
@@ -527,10 +366,12 @@ export class ExamResultsService {
   private deriveGradeCodes(results: any[]): string[] {
     const seen = new Set<string>();
     for (const r of results) {
-      seen.add(r.overallGrade);
+      if (r.overallGrade && r.overallGrade !== '-') seen.add(r.overallGrade);
       const scores = r.subjectScores as Record<string, SubjectScore>;
       for (const key of Object.keys(scores ?? {})) {
-        seen.add(scores[key].grade);
+        const sc = scores[key];
+        if (sc.status === 'EXEMPT' || sc.status === 'MISSING' || !sc.grade) continue;
+        seen.add(sc.grade);
       }
     }
     // Prefer the conventional order A,B,C,D,E,F then specials.
@@ -565,7 +406,7 @@ export class ExamResultsService {
         stream: group[0].stream,
         entries: group.length,
         meanMarks: round(means.reduce((s, m) => s + m, 0) / Math.max(means.length, 1)),
-        distribution: this.distribution(group.map((g) => g.overallGrade), codes),
+        distribution: this.distribution(group.map((g) => g.overallGrade).filter((g) => g && g !== '-'), codes),
       };
     });
 
@@ -575,7 +416,8 @@ export class ExamResultsService {
       const percs: number[] = [];
       for (const r of results) {
         const s = (r.subjectScores as Record<string, SubjectScore>)?.[subj.subjectId];
-        if (s) {
+        // Exempt / unresolved subjects never enter subject grade summaries or means.
+        if (s && s.status !== 'EXEMPT' && s.status !== 'MISSING' && s.percentage !== null && s.percentage !== undefined) {
           grades.push(s.grade);
           percs.push(s.percentage);
         }
@@ -601,7 +443,7 @@ export class ExamResultsService {
       gender,
       entries: group.length,
       meanMarks: round(group.reduce((s, g) => s + g.mean, 0) / Math.max(group.length, 1)),
-      distribution: this.distribution(group.map((g) => g.overallGrade), codes),
+      distribution: this.distribution(group.map((g) => g.overallGrade).filter((g) => g && g !== '-'), codes),
     }));
 
     return { byStream, bySubject, byGender };
@@ -645,7 +487,7 @@ export class ExamResultsService {
       const scores = r.subjectScores as unknown as Record<string, SubjectScore>;
       for (const key of Object.keys(scores ?? {})) {
         const s = scores[key];
-        if (s.missing) continue;
+        if (s.missing || s.status === 'EXEMPT' || s.status === 'MISSING' || s.percentage === null) continue;
         snaps.push({
           studentId: r.studentId,
           subjectId: s.subjectId,

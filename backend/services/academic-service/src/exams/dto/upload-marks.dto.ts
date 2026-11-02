@@ -33,6 +33,10 @@ export class UploadMarkRowDto {
   @IsOptional()
   isAbsent?: boolean | string;
 
+  /** "yes"/true when the student was required to sit but did not (scores 0, counts in the average). */
+  @IsOptional()
+  notSat?: boolean | string;
+
   @IsOptional()
   @IsString()
   note?: string;

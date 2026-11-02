@@ -465,6 +465,8 @@ model TermResult {
   termId               String
   academicYearId       String
   weightedTotal        Float
+  /// SCORED | ABSENT | NOT_SAT | EXEMPT. EXEMPT rows never take part in any average, rank or pass rate.
+  resultStatus         String @default("SCORED")
   grade                String
   gradePoints          Float
   isPassing            Boolean

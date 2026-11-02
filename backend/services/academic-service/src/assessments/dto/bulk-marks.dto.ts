@@ -14,6 +14,11 @@ class MarkEntryDto {
   @IsBoolean()
   isAbsent?: boolean;
 
+  /** Student was required to sit but did not. Scores 0 and counts in the average. */
+  @IsOptional()
+  @IsBoolean()
+  notSat?: boolean;
+
   @IsOptional()
   @IsString()
   note?: string;

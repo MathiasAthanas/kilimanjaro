@@ -28,6 +28,12 @@ export class ExamResultsController {
     return this.examResults.compute(id, user);
   }
 
+  @Get('exam-windows/:id/readiness')
+  @Roles(...STAFF)
+  readiness(@Param('id') id: string, @CurrentUser() user: RequestUser) {
+    return this.examResults.readiness(id, user);
+  }
+
   @Get('exam-windows/:id/merit-list')
   @Roles(...STAFF)
   meritList(

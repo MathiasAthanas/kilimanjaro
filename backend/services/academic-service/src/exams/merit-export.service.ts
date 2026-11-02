@@ -21,6 +21,7 @@ interface SubjectCell {
   grade: string;
   isAbsent: boolean;
   missing: boolean;
+  status?: string;
 }
 
 @Injectable()
@@ -39,6 +40,8 @@ export class MeritExportService {
 
   private cellText(cell: SubjectCell | undefined): string {
     if (!cell || cell.missing) return '';
+    if (cell.status === 'EXEMPT') return 'EXEMPT';
+    if (cell.status === 'NOT_SAT') return 'NS';
     if (cell.isAbsent) return 'ABS';
     return `${Math.round(cell.score)} ${cell.grade}`;
   }

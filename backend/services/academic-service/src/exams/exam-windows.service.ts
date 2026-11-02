@@ -218,29 +218,36 @@ export class ExamWindowsService {
     return { assessmentsCreated: created, classesCovered: classIds.length, subjectsCovered: classSubjects.length };
   }
 
-  /** Close entry, lock marks, and compute the merit list. */
+  /**
+   * Close entry and calculate the merit list ATOMICALLY.
+   * Order: validate (grading scales + every expected subject resolved) ->
+   * calculate in memory -> ONE transaction that locks marks/assessments, persists
+   * the results and flips the window to CLOSED. Any failure leaves the window
+   * open and editable with nothing locked or written.
+   */
   async close(id: string, user: RequestUser) {
     const window = await this.getWindowOrThrow(id, user);
     if (!([ExamWindowStatus.OPEN, ExamWindowStatus.REOPENED] as ExamWindowStatus[]).includes(window.status)) {
       throw new BadRequestException(`Only an OPEN window can be closed. Current status: ${window.status}.`);
     }
 
-    await this.prisma.$transaction(async (tx) => {
-      await tx.mark.updateMany({
-        where: { assessment: { examWindowId: id } },
-        data: { isLocked: true },
-      });
-      await tx.assessment.updateMany({
-        where: { examWindowId: id, status: { not: AssessmentStatus.LOCKED } },
-        data: { status: AssessmentStatus.LOCKED, lockedAt: new Date() },
-      });
-      await tx.examWindow.update({
-        where: { id },
-        data: { status: ExamWindowStatus.CLOSED, closedAt: new Date() },
-      });
-    });
+    const ctx = await this.examResults.calculate(id, user);
+    const now = new Date();
 
-    const merit = await this.examResults.compute(id, user);
+    await this.prisma.$transaction(
+      async (tx) => {
+        await tx.mark.updateMany({ where: { assessment: { examWindowId: id } }, data: { isLocked: true } });
+        await tx.assessment.updateMany({
+          where: { examWindowId: id, status: { not: AssessmentStatus.LOCKED } },
+          data: { status: AssessmentStatus.LOCKED, lockedAt: now },
+        });
+        await this.examResults.persist(tx, ctx, now);
+        await tx.examWindow.update({ where: { id }, data: { status: ExamWindowStatus.CLOSED, closedAt: now, computedAt: now } });
+      },
+      { timeout: 120000, maxWait: 20000 },
+    );
+
+    const merit = await this.examResults.afterCompute(ctx, now);
     return { closed: true, ...merit };
   }
 
@@ -254,6 +261,29 @@ export class ExamWindowsService {
     const resultCount = await this.prisma.examWindowResult.count({ where: { examWindowId: id } });
     if (resultCount === 0) {
       await this.examResults.compute(id, user);
+    } else if (window.computedAt) {
+      // Marks or exemptions changed after the last calculation -> published figures would be wrong.
+      const [staleMarks, staleExemptions] = await Promise.all([
+        this.prisma.mark.count({
+          where: {
+            assessment: { examWindowId: id },
+            OR: [{ lastEditedAt: { gt: window.computedAt } }, { enteredAt: { gt: window.computedAt } }],
+          },
+        }),
+        this.prisma.resultCalculationExemption.count({
+          where: {
+            termId: window.termId,
+            academicYearId: window.academicYearId,
+            OR: [{ examWindowId: null }, { examWindowId: id }],
+            updatedAt: { gt: window.computedAt },
+          },
+        }),
+      ]);
+      if (staleMarks || staleExemptions) {
+        throw new BadRequestException(
+          'Marks or exemptions changed after the last calculation. Recalculate results before publishing.',
+        );
+      }
     }
 
     await this.prisma.$transaction(async (tx) => {
@@ -395,6 +425,15 @@ export class ExamWindowsService {
       progressByWindow.set(key, rec);
     }
 
+    const classRows = ids.length
+      ? await this.prisma.assessment.groupBy({ by: ['examWindowId', 'classId'], where: { examWindowId: { in: ids } } })
+      : [];
+    const classCountByWindow = new Map<string, number>();
+    for (const r of classRows) {
+      const key = r.examWindowId as string;
+      classCountByWindow.set(key, (classCountByWindow.get(key) ?? 0) + 1);
+    }
+
     return windows.map((w) => {
       const byStatus = progressByWindow.get(w.id) ?? {};
       const total = w._count.assessments;
@@ -404,6 +443,7 @@ export class ExamWindowsService {
       const open = (byStatus[AssessmentStatus.OPEN] ?? 0) + (byStatus[AssessmentStatus.DRAFT] ?? 0);
       return {
         ...w,
+        classCount: classCountByWindow.get(w.id) ?? 0,
         progress: {
           totalAssessments: total,
           open,

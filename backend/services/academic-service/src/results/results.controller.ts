@@ -43,6 +43,12 @@ export class ResultsController {
     return this.resultsService.readiness(termId);
   }
 
+  @Post('results/unpublish')
+  @Roles(ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN)
+  unpublish(@Body() dto: PublishResultsDto, @CurrentUser() user?: RequestUser) {
+    return this.resultsService.unpublishResults(dto, user!);
+  }
+
   @Post('results/publish')
   @Roles(ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN)
   publish(@Body() dto: PublishResultsDto, @CurrentUser() user?: RequestUser) {

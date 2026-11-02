@@ -1,13 +1,10 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
+import { resolveBand } from './engine/result-engine';
 
-export interface ResolvedGrade {
-  grade: string;
-  points: number;
-  remark: string;
-  isPassing: boolean;
-}
+export type { ResolvedGrade } from './engine/result-engine';
+import type { ResolvedGrade } from './engine/result-engine';
 
 export interface GradingScaleScope {
   educationStage?: string | null;
@@ -89,18 +86,7 @@ export class GradingResolverService {
    * band instead of falling through to "not graded".
    */
   resolveGrade(scale: any, percentage: number): ResolvedGrade {
-    const bands = (scale?.grades ?? []).slice().sort((a: any, b: any) => b.minScore - a.minScore);
-    if (!bands.length) {
-      return { grade: 'X', points: 0, remark: 'Not graded', isPassing: false };
-    }
-    // First band whose lower bound the score reaches; else the lowest band.
-    const band = bands.find((b: any) => percentage >= b.minScore) ?? bands[bands.length - 1];
-    return {
-      grade: band.grade,
-      points: band.points,
-      remark: band.remark,
-      isPassing: band.isPassing,
-    };
+    return resolveBand(scale, percentage);
   }
 
   /** Ordered list of grade codes for building distribution summaries (A,B,C,…,X). */

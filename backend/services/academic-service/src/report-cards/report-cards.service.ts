@@ -10,6 +10,8 @@ import { AccessControlService } from '../common/helpers/access-control.service';
 import { GenerateReportCardsDto } from './dto/generate-report-cards.dto';
 import { UpdateCommentsDto } from './dto/update-comments.dto';
 import { ReportCardPdfService } from './report-card-pdf.service';
+import { GradingResolverService } from '../exams/grading-resolver.service';
+import { competitionRanks, computeDivision, round, scaleDirection } from '../exams/engine/result-engine';
 
 @Injectable()
 export class ReportCardsService {
@@ -20,6 +22,7 @@ export class ReportCardsService {
     private readonly rabbitMq: RabbitMqService,
     private readonly pdfService: ReportCardPdfService,
     private readonly accessControl: AccessControlService,
+    private readonly grading: GradingResolverService,
   ) {}
 
   private unwrap<T>(payload: any): T {
@@ -30,47 +33,61 @@ export class ReportCardsService {
     return payload as T;
   }
 
-  private fallbackGradeFromAverage(avg: number): { grade: string; points: number; remark: string } {
-    if (avg >= 80) return { grade: 'A', points: 4, remark: 'Excellent' };
-    if (avg >= 70) return { grade: 'B+', points: 3.5, remark: 'Very Good' };
-    if (avg >= 60) return { grade: 'B', points: 3, remark: 'Good' };
-    if (avg >= 50) return { grade: 'C', points: 2, remark: 'Pass' };
-    if (avg >= 40) return { grade: 'D', points: 1, remark: 'Low Pass' };
-    return { grade: 'F', points: 0, remark: 'Fail' };
-  }
-
+  /**
+   * Overall grade for an average, via the SAME resolver the merit list uses.
+   * Throws a clear error when no grading scale is active (never a silent fallback).
+   */
   private async gradeFromAverage(
     avg: number,
     academicYearId: string,
     scope: { educationStage?: string | null; classLevel?: number | null },
     schoolId?: string | null,
   ): Promise<{ grade: string; points: number; remark: string }> {
-    const scales = await this.prisma.gradingScale.findMany({
-      where: {
-        academicYearId,
-        isActive: true,
-        // Prefer school-specific scales; fall back to global (schoolId: null).
-        ...(schoolId ? { OR: [{ schoolId }, { schoolId: null }] } : {}),
-        OR: [
-          { educationStage: scope.educationStage as any, classLevel: scope.classLevel ?? null, subjectId: null },
-          { educationStage: scope.educationStage as any, classLevel: null, subjectId: null },
-          { educationStage: null, classLevel: null, subjectId: null },
-        ],
-      },
-      include: { grades: true },
-    });
-    const scale = scales
-      .sort((a, b) => {
-        const score = (item: typeof a) =>
-          (item.schoolId === schoolId ? 8 : 0) +
-          (item.classLevel !== null ? 2 : 0) +
-          (item.educationStage ? 1 : 0);
-        return score(b) - score(a);
-      })[0];
-    const boundary = scale?.grades.find((grade) => avg >= grade.minScore && avg <= grade.maxScore);
-    return boundary
-      ? { grade: boundary.grade, points: boundary.points, remark: boundary.remark }
-      : this.fallbackGradeFromAverage(avg);
+    const scale = await this.grading.getActiveScale(academicYearId, { ...scope, subjectId: null }, schoolId ?? null);
+    const r = this.grading.resolveGrade(scale, avg);
+    return { grade: r.grade, points: r.points, remark: r.remark };
+  }
+
+  /** Per-student figures shared by bulk generation and single-PDF regeneration. EXEMPT rows never count. */
+  private async summarizeRows(
+    rows: Array<{ subjectId: string; weightedTotal: number; gradePoints: number; grade: string; isPassing: boolean; resultStatus?: string | null; educationStage: any; classLevel: number | null; academicYearId: string }>,
+    principalSubjectIds: Set<string> | undefined,
+    schoolId: string | null,
+  ) {
+    const counted = rows.filter((r) => (r.resultStatus ?? 'SCORED') !== 'EXEMPT');
+    const avg = counted.length ? round(counted.reduce((s, r) => s + r.weightedTotal, 0) / counted.length) : 0;
+    const first = rows[0];
+    const resolved = counted.length
+      ? await this.gradeFromAverage(avg, first.academicYearId, { educationStage: first.educationStage, classLevel: first.classLevel }, schoolId)
+      : { grade: '-', points: 0, remark: 'No assessed subjects' };
+    let direction: 'LOWER_BETTER' | 'HIGHER_BETTER' = 'HIGHER_BETTER';
+    if (first.educationStage === 'A_LEVEL') {
+      const scale = await this.grading
+        .getActiveScale(first.academicYearId, { educationStage: first.educationStage, classLevel: first.classLevel, subjectId: null }, schoolId)
+        .catch(() => null);
+      direction = scaleDirection(scale) ?? 'HIGHER_BETTER';
+    }
+    const division = computeDivision(
+      first.educationStage,
+      counted.map((r) => ({ subjectId: r.subjectId, grade: r.grade, gradePoints: r.gradePoints, isPassing: r.isPassing })),
+      principalSubjectIds,
+      direction,
+    );
+    const divisionSummary = {
+      ...division,
+      subjectsAssessed: counted.length,
+      subjectsExpected: rows.length,
+      exemptSubjects: rows.length - counted.length,
+    };
+    return {
+      avg,
+      resolved,
+      divisionSummary,
+      subjectsAssessed: counted.length,
+      subjectsExpected: rows.length,
+      exemptSubjectCount: rows.length - counted.length,
+      failingSubjectCount: counted.filter((r) => !r.isPassing).length,
+    };
   }
 
   private reportTemplateFor(stage: string | null, classLevel: number | null): string {
@@ -81,84 +98,25 @@ export class ReportCardsService {
     return 'O_LEVEL_TERM';
   }
 
-  /**
-   * Tanzania NECTA division calculation.
-   *
-   * O-Level CSEE: best 7 subjects by grade-point (A=1…F=5, lower is better).
-   *   Points sum: 7-17 → Div I | 18-21 → Div II | 22-25 → Div III | 26-33 → Div IV | ≥34 → Div 0
-   *
-   * A-Level ACSEE: best 3 PRINCIPAL subjects by grade-point (A=5…E=1, S/F=0, higher is better).
-   *   Points sum: 13-15 → Div I | 10-12 → Div II | 7-9 → Div III | 4-6 → Div IV | ≤3 → Div 0
-   *   Requires ≥2 principal passes (grade point ≥1 i.e. E or better).
-   *
-   * Primary: every subject must pass for "Promotable"; otherwise "Needs intervention".
-   */
-  private divisionSummaryFor(
-    stage: string | null,
-    rows: Array<{ subjectId: string; grade: string; gradePoints: number; isPassing: boolean }>,
-    principalSubjectIds?: Set<string>,
-  ) {
-    if (stage === 'PRIMARY') {
-      const totalPoints = rows.reduce((sum, row) => sum + row.gradePoints, 0);
-      return {
-        mode: 'PRIMARY',
-        descriptor: rows.every((row) => row.isPassing) ? 'Promotable' : 'Needs intervention',
-        totalPoints,
-      };
+  /** Group-scope headers for internal student-service reads made on behalf of an actor. */
+  private internalHeaders(actorId: string): Record<string, string> {
+    return { 'X-User-Id': actorId, 'X-User-Role': ROLES.PRINCIPAL, 'X-User-Scope': 'GROUP', 'X-User-School-Ids': '*' };
+  }
+
+  /** Term + academic-year names for the PDF header (best effort; ids are the fallback). */
+  private async termLabels(termId: string, actorId: string): Promise<{ termName?: string; academicYearName?: string }> {
+    try {
+      const payload = await this.studentClient.get<any>('/students/terms', {}, this.internalHeaders(actorId));
+      const list = this.unwrap<any>(payload);
+      const term = (Array.isArray(list) ? list : list?.items ?? []).find((t: any) => t.id === termId);
+      return { termName: term?.name, academicYearName: term?.academicYear?.name };
+    } catch {
+      return {};
     }
-
-    if (stage === 'A_LEVEL') {
-      // Filter to principal subjects if roles are known; otherwise use all rows
-      const principalRows = principalSubjectIds
-        ? rows.filter((row) => principalSubjectIds.has(row.subjectId))
-        : rows;
-      const principalPasses = principalRows.filter((row) => row.gradePoints >= 1).length;
-      const best3 = [...principalRows].sort((a, b) => b.gradePoints - a.gradePoints).slice(0, 3);
-      const divPoints = best3.reduce((sum, row) => sum + row.gradePoints, 0);
-
-      let division: string;
-      if (principalPasses < 2 || divPoints <= 3) division = 'Division 0';
-      else if (divPoints >= 13)                  division = 'Division I';
-      else if (divPoints >= 10)                  division = 'Division II';
-      else if (divPoints >= 7)                   division = 'Division III';
-      else if (divPoints >= 4)                   division = 'Division IV';
-      else                                       division = 'Division 0';
-
-      return {
-        mode: 'A_LEVEL',
-        division,
-        descriptor: principalPasses >= 2
-          ? `${division} · ${principalPasses} principal pass(es) · ${divPoints} pts`
-          : `Division 0 — only ${principalPasses} principal pass(es)`,
-        principalPasses,
-        totalPoints: divPoints,
-      };
-    }
-
-    // O-Level CSEE: sort ascending (lower grade-points = better), take best 7
-    const sorted = [...rows].sort((a, b) => a.gradePoints - b.gradePoints);
-    const best7 = sorted.slice(0, 7);
-    const divPoints = best7.reduce((sum, row) => sum + row.gradePoints, 0);
-    const failing = rows.filter((row) => !row.isPassing).length;
-
-    let division: string;
-    if (best7.length < 7)      division = 'Ungraded';
-    else if (divPoints <= 17)  division = 'Division I';
-    else if (divPoints <= 21)  division = 'Division II';
-    else if (divPoints <= 25)  division = 'Division III';
-    else if (divPoints <= 33)  division = 'Division IV';
-    else                       division = 'Division 0';
-
-    return {
-      mode: 'O_LEVEL',
-      division,
-      descriptor: `${division} · ${divPoints} pts · ${failing} failing subject(s)`,
-      failingSubjects: failing,
-      totalPoints: divPoints,
-    };
   }
 
   async generateForClassTerm(classId: string, termId: string, actorId: string) {
+    const labels = await this.termLabels(termId, actorId);
     const termResults = await this.prisma.termResult.findMany({
       where: { classId, termId },
       orderBy: [{ studentId: 'asc' }, { weightedTotal: 'desc' }],
@@ -195,18 +153,20 @@ export class ReportCardsService {
       }
     }
 
-    const averages = [...byStudent.entries()].map(([studentId, rows]) => ({
-      studentId,
-      average: rows.reduce((sum, item) => sum + item.weightedTotal, 0) / Math.max(rows.length, 1),
-    }));
-
-    const ranked = [...averages].sort((a, b) => b.average - a.average);
-    const ranking = new Map(ranked.map((item, index) => [item.studentId, index + 1]));
+    const averages = [...byStudent.entries()].map(([studentId, rows]) => {
+      const counted = rows.filter((r) => (r.resultStatus ?? 'SCORED') !== 'EXEMPT');
+      return {
+        studentId,
+        average: counted.length ? round(counted.reduce((sum, item) => sum + item.weightedTotal, 0) / counted.length) : 0,
+      };
+    });
+    // Competition ranking on the normalized average: ties share a position.
+    const ranking = new Map(Object.entries(competitionRanks(averages, (a) => a.studentId, (a) => a.average)));
 
     const alertsPayload = await this.studentClient.get<any>(
         '/students/performance/alerts',
       { classId, isResolved: false, severity: 'HIGH,CRITICAL' },
-      { 'X-User-Id': actorId, 'X-User-Role': ROLES.PRINCIPAL },
+      this.internalHeaders(actorId),
     );
 
     const alertsData = this.unwrap<any>(alertsPayload);
@@ -219,21 +179,14 @@ export class ReportCardsService {
     const saved: string[] = [];
 
     for (const [studentId, rows] of byStudent.entries()) {
-      const avg = averages.find((item) => item.studentId === studentId)?.average ?? 0;
       const firstRow = rows[0];
-      const resolved = await this.gradeFromAverage(avg, firstRow.academicYearId, {
-        educationStage: firstRow.educationStage,
-        classLevel: firstRow.classLevel,
-      }, (firstRow as any).schoolId ?? null);
-      const subjectCount = rows.length;
-      const failingSubjectCount = rows.filter((item) => !item.isPassing).length;
-      const reportTemplateCode = this.reportTemplateFor(firstRow.educationStage, firstRow.classLevel);
-      const principalSubjectIds = firstRow.combinationId
-        ? principalsByCombo.get(firstRow.combinationId)
-        : undefined;
-      const divisionSummary = this.divisionSummaryFor(firstRow.educationStage, rows, principalSubjectIds);
-
       const schoolId = (firstRow as any).schoolId ?? null;
+      const reportTemplateCode = this.reportTemplateFor(firstRow.educationStage, firstRow.classLevel);
+      const principalSubjectIds = firstRow.combinationId ? principalsByCombo.get(firstRow.combinationId) : undefined;
+      const card = await this.summarizeRows(rows as any, principalSubjectIds, schoolId);
+      const { avg, resolved, divisionSummary } = card;
+      const subjectCount = card.subjectsAssessed;
+      const failingSubjectCount = card.failingSubjectCount;
 
       const current = await this.prisma.reportCard.upsert({
         where: { studentId_termId: { studentId, termId } },
@@ -246,7 +199,7 @@ export class ReportCardsService {
           combinationId: firstRow.combinationId,
           termId,
           academicYearId: firstRow.academicYearId,
-          overallAverage: Number(avg.toFixed(2)),
+          overallAverage: avg,
           overallGrade: resolved.grade,
           overallPoints: resolved.points,
           overallRemark: resolved.remark,
@@ -255,6 +208,8 @@ export class ReportCardsService {
           rank: ranking.get(studentId),
           totalStudentsInClass: byStudent.size,
           subjectCount,
+          subjectsExpected: card.subjectsExpected,
+          exemptSubjectCount: card.exemptSubjectCount,
           failingSubjectCount,
         },
         update: {
@@ -262,7 +217,7 @@ export class ReportCardsService {
           educationStage: firstRow.educationStage,
           classLevel: firstRow.classLevel,
           combinationId: firstRow.combinationId,
-          overallAverage: Number(avg.toFixed(2)),
+          overallAverage: avg,
           overallGrade: resolved.grade,
           overallPoints: resolved.points,
           overallRemark: resolved.remark,
@@ -271,6 +226,8 @@ export class ReportCardsService {
           rank: ranking.get(studentId),
           totalStudentsInClass: byStudent.size,
           subjectCount,
+          subjectsExpected: card.subjectsExpected,
+          exemptSubjectCount: card.exemptSubjectCount,
           failingSubjectCount,
         },
       });
@@ -278,16 +235,13 @@ export class ReportCardsService {
       // Fetch student profile, attendance, and performance in parallel instead of sequentially.
       const [studentProfilePayload, attendancePayload, performancePayload] = await Promise.all([
         this.studentClient.get<any>(`/students/${studentId}`, undefined, {
-          'X-User-Id': actorId,
-          'X-User-Role': ROLES.PRINCIPAL,
+          ...this.internalHeaders(actorId),
         }),
         this.studentClient.get<any>(`/students/attendance/summary/${studentId}`, {}, {
-          'X-User-Id': actorId,
-          'X-User-Role': ROLES.PRINCIPAL,
+          ...this.internalHeaders(actorId),
         }),
         this.studentClient.get<any>(`/students/performance/${studentId}`, {}, {
-          'X-User-Id': actorId,
-          'X-User-Role': ROLES.PRINCIPAL,
+          ...this.internalHeaders(actorId),
         }),
       ]);
 
@@ -304,6 +258,7 @@ export class ReportCardsService {
         studentId,
         termId,
         academicYearId: firstRow.academicYearId,
+        ...labels,
         studentName: `${studentProfile?.firstName || ''} ${studentProfile?.lastName || ''}`.trim() || studentId,
         registrationNumber: studentProfile?.registrationNumber || '-',
         className,
@@ -318,10 +273,14 @@ export class ReportCardsService {
             ...(row.assessmentScores as any),
             total: row.weightedTotal,
             grade: row.grade,
+            gradePoints: row.gradePoints,
             remark: row.remark,
+            status: row.resultStatus,
           };
         }),
         average: avg,
+        subjectsAssessed: card.subjectsAssessed,
+        subjectsExpected: card.subjectsExpected,
         overallGrade: resolved.grade,
         reportTemplateCode,
         divisionSummary,
@@ -432,11 +391,13 @@ export class ReportCardsService {
     const studentsPayload = await this.studentClient.get<any>(
       `/students/classes/${classId}/students`,
       { limit: 500 },
-      { 'X-User-Id': actorId, 'X-User-Role': ROLES.PRINCIPAL },
+      this.internalHeaders(actorId),
     );
     const studentsData = this.unwrap<any>(studentsPayload);
     // Endpoint returns enrolment rows with the student nested inside
-    const enrolmentItems: any[] = Array.isArray(studentsData?.items)
+    const enrolmentItems: any[] = Array.isArray(studentsData?.students)
+      ? studentsData.students
+      : Array.isArray(studentsData?.items)
       ? studentsData.items
       : Array.isArray(studentsData)
         ? studentsData
@@ -543,20 +504,18 @@ export class ReportCardsService {
       principalSubjectIds = new Set(comboSubjects.map((cs) => cs.subjectId));
     }
 
-    const avg = rows.reduce((sum, r) => sum + r.weightedTotal, 0) / Math.max(rows.length, 1);
+    const card = await this.summarizeRows(rows as any, principalSubjectIds, (firstRow as any).schoolId ?? null);
+    const { avg, resolved, divisionSummary } = card;
 
     const [studentProfilePayload, attendancePayload, performancePayload] = await Promise.all([
       this.studentClient.get<any>(`/students/${studentId}`, undefined, {
-        'X-User-Id': actorId,
-        'X-User-Role': ROLES.PRINCIPAL,
+        ...this.internalHeaders(actorId),
       }),
       this.studentClient.get<any>(`/students/attendance/summary/${studentId}`, {}, {
-        'X-User-Id': actorId,
-        'X-User-Role': ROLES.PRINCIPAL,
+        ...this.internalHeaders(actorId),
       }),
       this.studentClient.get<any>(`/students/performance/${studentId}`, {}, {
-        'X-User-Id': actorId,
-        'X-User-Role': ROLES.PRINCIPAL,
+        ...this.internalHeaders(actorId),
       }),
     ]);
 
@@ -567,19 +526,15 @@ export class ReportCardsService {
       ? performance.pairings.some((p: any) => ['ACTIVE', 'SUGGESTED'].includes(p.status))
       : false;
 
-    const resolved = await this.gradeFromAverage(avg, firstRow.academicYearId, {
-      educationStage: firstRow.educationStage,
-      classLevel: firstRow.classLevel,
-    }, (firstRow as any).schoolId ?? null);
-
-    const divisionSummary = this.divisionSummaryFor(firstRow.educationStage, rows, principalSubjectIds);
     const reportTemplateCode = this.reportTemplateFor(firstRow.educationStage, firstRow.classLevel);
     const className = studentProfile?.enrolments?.[0]?.class?.name || firstRow.classId;
 
+    const labels = await this.termLabels(termId, actorId);
     const pdfUrl = await this.pdfService.generatePdf({
       studentId,
       termId,
       academicYearId: firstRow.academicYearId,
+      ...labels,
       studentName: `${studentProfile?.firstName || ''} ${studentProfile?.lastName || ''}`.trim() || studentId,
       registrationNumber: studentProfile?.registrationNumber || '-',
       className,
@@ -594,10 +549,14 @@ export class ReportCardsService {
           ...(row.assessmentScores as any),
           total: row.weightedTotal,
           grade: row.grade,
+          gradePoints: row.gradePoints,
           remark: row.remark,
+          status: row.resultStatus,
         };
       }),
       average: avg,
+      subjectsAssessed: card.subjectsAssessed,
+      subjectsExpected: card.subjectsExpected,
       overallGrade: resolved.grade,
       reportTemplateCode,
       divisionSummary,

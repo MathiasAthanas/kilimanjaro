@@ -19,6 +19,9 @@ type PdfResult = {
   total: number;
   grade: string;
   remark: string;
+  /** SCORED | ABSENT | NOT_SAT | EXEMPT (absent = scored zero; exempt = excluded from every calculation). */
+  status?: string;
+  gradePoints?: number;
 };
 
 type DivisionSummary = {
@@ -46,10 +49,16 @@ export type ReportCardPdfInput = {
   studentName: string;
   registrationNumber: string;
   className: string;
+  /** Human labels; fall back to id fragments only when unavailable. */
+  termName?: string;
+  academicYearName?: string;
   generatedAt: Date;
   results: PdfResult[];
   average: number;
   overallGrade: string;
+  /** Subjects counted in the average vs. subjects the student was expected to take. */
+  subjectsAssessed?: number;
+  subjectsExpected?: number;
   reportTemplateCode?: string;
   divisionSummary?: unknown;
   rank?: number | null;
@@ -140,8 +149,8 @@ export class ReportCardPdfService {
     this.infoField(doc, 'Reg. No.', input.registrationNumber, margin + col + 4, infoTop + 6, col - 8);
     this.infoField(doc, 'Class',   input.className,          margin + col * 2 + 4, infoTop + 6, col - 8);
 
-    const termLabel = `Term ID: ${input.termId.slice(-8)}`;
-    const dateLabel = `Year: ${input.academicYearId.slice(-8)}`;
+    const termLabel = input.termName ?? `Term ID: ${input.termId.slice(-8)}`;
+    const dateLabel = input.academicYearName ?? `Year: ${input.academicYearId.slice(-8)}`;
     this.infoField(doc, 'Term',    termLabel,  margin + 8,       infoTop + 32, col - 8);
     this.infoField(doc, 'Year',    dateLabel,  margin + col + 4, infoTop + 32, col - 8);
 
@@ -341,7 +350,8 @@ export class ReportCardPdfService {
       const bg = idx % 2 === 0 ? 'white' : '#F8FAFC';
       doc.rect(margin, y, contentWidth, rowH).fill(bg);
 
-      const isFailing = !this.isPassingGrade(row.grade);
+      const isExempt = row.status === 'EXEMPT';
+      const isFailing = !isExempt && !this.isPassingGrade(row.grade);
       const textColor = isFailing ? '#DC2626' : '#111827';
 
       cx = margin;
@@ -367,6 +377,9 @@ export class ReportCardPdfService {
   }
 
   private rowValues(row: PdfResult, headers: string[], showGradePoints: boolean): string[] {
+    if (row.status === 'EXEMPT') {
+      return headers.map((h) => (h === 'Subject' ? row.subjectName : h === 'Total' || h === 'Grade' ? 'EXEMPT' : h === 'Remark' ? 'Exempt' : '-'));
+    }
     return headers.map((h) => {
       switch (h) {
         case 'Subject':     return row.subjectName;
@@ -376,7 +389,7 @@ export class ReportCardPdfService {
         case 'Final':       return row.FINAL != null ? row.FINAL.toFixed(1) : '-';
         case 'Total':       return row.total.toFixed(1);
         case 'Grade':       return row.grade;
-        case 'Grade Pts':   return showGradePoints ? String((row as any).gradePoints ?? '-') : '-';
+        case 'Grade Pts':   return showGradePoints ? String(row.gradePoints ?? '-') : '-';
         case 'Remark':      return row.remark;
         default:            return '-';
       }
@@ -434,6 +447,17 @@ export class ReportCardPdfService {
       );
     doc.fillColor('#1e293b');
     doc.y += 36;
+    if (input.subjectsExpected !== undefined && input.subjectsAssessed !== undefined) {
+      const exempt = input.subjectsExpected - input.subjectsAssessed;
+      doc.fontSize(8.5).font('Helvetica').fillColor('#374151')
+        .text(
+          exempt > 0
+            ? `Subjects assessed: ${input.subjectsAssessed} of ${input.subjectsExpected}. Average calculated from ${input.subjectsAssessed} subject${input.subjectsAssessed === 1 ? '' : 's'} (${exempt} exempt).`
+            : `Subjects assessed: ${input.subjectsAssessed} of ${input.subjectsExpected}.`,
+          48, doc.y - 4, { width: doc.page.width - 96 },
+        );
+      doc.fillColor('#1e293b');
+    }
     doc.moveDown(0.4);
   }
 

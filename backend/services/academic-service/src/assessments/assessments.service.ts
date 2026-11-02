@@ -18,6 +18,7 @@ import { mean, median, stdDeviation } from '../common/helpers/statistics.helper'
 import { RequestUser } from '../common/interfaces/request-user.interface';
 import { ROLES } from '../common/constants/roles';
 import { ResultsService } from '../results/results.service';
+import { resolveExpectedStudents } from '../exams/engine/expected-students';
 import { ApproveAssessmentDto } from './dto/approve-assessment.dto';
 import { BulkMarksDto } from './dto/bulk-marks.dto';
 import { GenerateAssessmentsDto } from './dto/generate-assessments.dto';
@@ -246,7 +247,14 @@ export class AssessmentsService {
     );
 
     const studentsData = this.unwrap<any>(studentsPayload);
-    const students = Array.isArray(studentsData?.items) ? studentsData.items : [];
+    const allStudents = Array.isArray(studentsData?.items) ? studentsData.items : [];
+    // Optional / combination subjects: only students who actually take the subject get a row.
+    const { expected, exempt } = await resolveExpectedStudents(
+      this.prisma,
+      assessment as any,
+      allStudents.map((s: any) => s.id),
+    );
+    const students = allStudents.filter((s: any) => expected.has(s.id));
 
     const marks = await this.prisma.mark.findMany({
       where: { assessmentId: id },
@@ -255,6 +263,7 @@ export class AssessmentsService {
         studentId: true,
         score: true,
         isAbsent: true,
+        notSat: true,
         note: true,
       },
     });
@@ -271,6 +280,8 @@ export class AssessmentsService {
         registrationNumber: student.registrationNumber,
         score: existing?.score ?? null,
         isAbsent: existing?.isAbsent ?? false,
+        notSat: existing?.notSat ?? false,
+        exempt: exempt.has(student.id),
         note: existing?.note ?? null,
       };
     });
@@ -289,11 +300,11 @@ export class AssessmentsService {
       throw new BadRequestException('Assessment is not open for editing');
     }
 
-    const normalizedMarks = dto.marks.map((item) => ({
-      ...item,
-      isAbsent: item.isAbsent ?? false,
-      score: item.isAbsent ? 0 : item.score,
-    }));
+    const normalizedMarks = dto.marks.map((item) => {
+      const notSat = item.notSat ?? false;
+      const isAbsent = (item.isAbsent ?? false) || notSat;
+      return { ...item, notSat, isAbsent, score: isAbsent ? 0 : item.score };
+    });
 
     const expectedIdsPayload = await this.studentClient.get<unknown>(
       `/students/internal/class/${assessment.classId}/student-ids`,
@@ -334,12 +345,14 @@ export class AssessmentsService {
             studentId: entry.studentId,
             score: entry.score!,
             isAbsent: entry.isAbsent,
+            notSat: entry.notSat,
             note: entry.note,
             enteredById: user.id,
           },
           update: {
             score: entry.score!,
             isAbsent: entry.isAbsent,
+            notSat: entry.notSat,
             note: entry.note,
             lastEditedById: user.id,
             lastEditedAt: new Date(),
@@ -373,7 +386,9 @@ export class AssessmentsService {
       throw new ForbiddenException('Locked marks can only be edited by HOD or Principal');
     }
 
-    const score = dto.isAbsent ? 0 : dto.score ?? mark.score;
+    const notSat = dto.notSat ?? (dto.isAbsent === false || dto.score !== undefined ? false : mark.notSat);
+    const isAbsent = (dto.isAbsent ?? mark.isAbsent) || notSat;
+    const score = isAbsent ? 0 : dto.score ?? mark.score;
     if (score < 0 || score > assessment.maxScore) {
       throw new BadRequestException(`Score must be between 0 and ${assessment.maxScore}`);
     }
@@ -382,7 +397,8 @@ export class AssessmentsService {
       where: { id: markId },
       data: {
         score,
-        isAbsent: dto.isAbsent ?? mark.isAbsent,
+        isAbsent,
+        notSat,
         note: dto.note ?? mark.note,
         lastEditedById: user.id,
         lastEditedAt: new Date(),
@@ -419,7 +435,10 @@ export class AssessmentsService {
       undefined,
       {},
     );
-    const studentIds = this.unwrap<string[]>(studentIdsPayload) || [];
+    const allStudentIds = this.unwrap<string[]>(studentIdsPayload) || [];
+    // Only students who take this subject (and are not exempt) need a mark.
+    const { required } = await resolveExpectedStudents(this.prisma, assessment as any, allStudentIds);
+    const studentIds = allStudentIds.filter((sid) => required.has(sid));
 
     const marks = await this.prisma.mark.findMany({
       where: { assessmentId: id },
@@ -430,7 +449,7 @@ export class AssessmentsService {
     const missing = studentIds.filter((studentId) => !markedIds.has(studentId));
 
     if (missing.length) {
-      throw new BadRequestException(`Missing marks for ${missing.length} students`);
+      throw new BadRequestException(`Missing marks for ${missing.length} student(s). Enter a score, or mark each one Absent / Not sat.`);
     }
 
     const updated = await this.prisma.assessment.update({

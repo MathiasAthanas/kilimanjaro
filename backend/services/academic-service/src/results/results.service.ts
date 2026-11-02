@@ -18,6 +18,8 @@ import { PublishResultsDto } from './dto/publish-results.dto';
 import { ResultsFilterDto } from './dto/results-filter.dto';
 import { ReportCardsService } from '../report-cards/report-cards.service';
 import { AccessControlService } from '../common/helpers/access-control.service';
+import { resolveBand } from '../exams/engine/result-engine';
+import { resolveExpectedStudents } from '../exams/engine/expected-students';
 
 @Injectable()
 export class ResultsService {
@@ -111,17 +113,8 @@ export class ResultsService {
   }
 
   private resolveGrade(scale: any, score: number) {
-    const grade = scale.grades.find((item: any) => score >= item.minScore && score <= item.maxScore);
-    if (!grade) {
-      return { grade: 'N/A', points: 0, remark: 'Not graded', isPassing: false };
-    }
-
-    return {
-      grade: grade.grade,
-      points: grade.points,
-      remark: grade.remark,
-      isPassing: grade.isPassing,
-    };
+    // One gap-proof resolver for every grade in the system.
+    return resolveBand(scale, score);
   }
 
   async computeTermResults(classSubjectId: string, termId: string) {
@@ -149,7 +142,14 @@ export class ResultsService {
     );
 
     const studentIdsPayload = await this.studentClient.get<any>(`/students/internal/class/${first.classId}/student-ids`);
-    const studentIds = this.unwrap<string[]>(studentIdsPayload) || [];
+    const classStudentIds = this.unwrap<string[]>(studentIdsPayload) || [];
+    // Only students who take this subject are calculated; exempt students are recorded as EXEMPT.
+    const { expected, exempt } = await resolveExpectedStudents(
+      this.prisma,
+      { ...(first as any), examWindowId: null, classSubject: first.classSubject as any },
+      classStudentIds,
+    );
+    const studentIds = classStudentIds.filter((id) => expected.has(id));
 
     const marks = await this.prisma.mark.findMany({
       where: { assessmentId: { in: assessments.map((item) => item.id) } },
@@ -163,13 +163,28 @@ export class ResultsService {
       marksMap.get(mark.studentId)!.set(mark.assessmentId, mark.score);
     }
 
+    // A student with no mark for an assessment is NOT a silent zero: calculation is blocked until
+    // a score is entered, or the student is marked ABSENT / NOT SAT, or an exemption is approved.
+    const unresolved = studentIds.filter((id) => !exempt.has(id) && assessments.some((a) => !marksMap.get(id)?.has(a.id)));
+    if (unresolved.length) {
+      throw new BadRequestException(
+        `${unresolved.length} student(s) have no ${first.classSubject.subject.name} mark. ` +
+          'Enter a score, mark the student ABSENT/NOT SAT, or approve an exemption.',
+      );
+    }
+
     const computedRows: Array<{
       studentId: string;
       weightedTotal: number;
       breakdown: Record<string, number>;
+      exempt?: boolean;
     }> = [];
 
     for (const studentId of studentIds) {
+      if (exempt.has(studentId)) {
+        computedRows.push({ studentId, weightedTotal: 0, breakdown: {}, exempt: true });
+        continue;
+      }
       const map = marksMap.get(studentId) ?? new Map();
       const breakdown: Record<string, number> = {};
 
@@ -189,11 +204,13 @@ export class ResultsService {
     }
 
     const ranking = this.assignCompetitionRanks(
-      computedRows.map((row) => ({ studentId: row.studentId, score: row.weightedTotal })),
+      computedRows.filter((row) => !row.exempt).map((row) => ({ studentId: row.studentId, score: row.weightedTotal })),
     );
 
     const upsertOps = computedRows.map((row) => {
-      const resolved = this.resolveGrade(scale, row.weightedTotal);
+      const resolved = row.exempt
+        ? { grade: 'EXEMPT', points: 0, remark: 'Exempt', isPassing: true }
+        : this.resolveGrade(scale, row.weightedTotal);
       return this.prisma.termResult.upsert({
         where: {
           studentId_classSubjectId_termId: {
@@ -216,11 +233,12 @@ export class ResultsService {
           schoolId: (first as any).schoolId ?? null,
           assessmentScores: row.breakdown,
           weightedTotal: row.weightedTotal,
+          resultStatus: row.exempt ? 'EXEMPT' : 'SCORED',
           grade: resolved.grade,
           gradePoints: resolved.points,
           remark: resolved.remark,
           isPassing: resolved.isPassing,
-          rank: ranking[row.studentId],
+          rank: row.exempt ? null : ranking[row.studentId],
           totalStudentsInClass: studentIds.length,
           teacherId: first.classSubject.teacherId,
         },
@@ -230,11 +248,12 @@ export class ResultsService {
           combinationId: first.classSubject.combinationId,
           assessmentScores: row.breakdown,
           weightedTotal: row.weightedTotal,
+          resultStatus: row.exempt ? 'EXEMPT' : 'SCORED',
           grade: resolved.grade,
           gradePoints: resolved.points,
           remark: resolved.remark,
           isPassing: resolved.isPassing,
-          rank: ranking[row.studentId],
+          rank: row.exempt ? null : ranking[row.studentId],
           totalStudentsInClass: studentIds.length,
           teacherId: first.classSubject.teacherId,
         },
@@ -245,6 +264,7 @@ export class ResultsService {
     const results = await this.prisma.$transaction(upsertOps);
 
     for (const result of results) {
+      if (result.resultStatus === 'EXEMPT') continue;
       await this.rabbitMq.publish('performance.snapshot.ready', {
         studentId: result.studentId,
         subjectId: result.subjectId,
@@ -317,6 +337,8 @@ export class ResultsService {
 
     const groupedBySubject = new Map<string, TermResult[]>();
     for (const row of results) {
+      // Exempt subjects stay visible in `items` but never distort subject averages / top-bottom.
+      if (row.resultStatus === 'EXEMPT') continue;
       if (!groupedBySubject.has(row.subjectId)) {
         groupedBySubject.set(row.subjectId, []);
       }
@@ -353,6 +375,41 @@ export class ResultsService {
     return response;
   }
 
+  /**
+   * Withdraw published term results + report cards for a class/term so that
+   * exemptions or marks can be corrected. Required before any change to
+   * published results; they stay hidden from students/parents until republished.
+   */
+  async unpublishResults(dto: PublishResultsDto, user: RequestUser) {
+    const publisherRoles = [ROLES.PRINCIPAL, ROLES.HEAD_OF_SCHOOL, ROLES.MANAGER, ROLES.SUPER_ADMIN];
+    if (!publisherRoles.includes(user.role as any)) {
+      throw new ForbiddenException('Only Principal, Head of School, Manager or Super Admin can unpublish results');
+    }
+    const [results, cards] = await this.prisma.$transaction([
+      this.prisma.termResult.updateMany({
+        where: { classId: dto.classId, termId: dto.termId, isPublished: true },
+        data: { isPublished: false, publishedAt: null },
+      }),
+      this.prisma.reportCard.updateMany({
+        where: { classId: dto.classId, termId: dto.termId, isPublished: true },
+        data: { isPublished: false, publishedAt: null },
+      }),
+    ]);
+    await this.prisma.academicAuditLog.create({
+      data: {
+        schoolId: (user as { activeSchoolId?: string | null }).activeSchoolId ?? null,
+        action: 'RESULTS_UNPUBLISHED',
+        performedById: user.id,
+        payload: { classId: dto.classId, termId: dto.termId, termResults: results.count, reportCards: cards.count },
+      },
+    });
+    await this.redis.del(`class-results:${dto.classId}:${dto.termId}`);
+    await this.redis.delByPattern(`student-results:*:${dto.termId}`);
+    await this.redis.delByPattern(`report-card:*:${dto.termId}`);
+    await this.rabbitMq.publish('results.unpublished', { classId: dto.classId, termId: dto.termId });
+    return { unpublished: true, termResults: results.count, reportCards: cards.count };
+  }
+
   async publishResults(dto: PublishResultsDto, user: RequestUser) {
     const publisherRoles = [ROLES.PRINCIPAL, ROLES.HEAD_OF_SCHOOL, ROLES.MANAGER, ROLES.SUPER_ADMIN];
     if (!publisherRoles.includes(user.role as any)) {
@@ -387,10 +444,12 @@ export class ResultsService {
       academicYearId,
     });
 
+    // Exempt subjects never count toward the class average or pass rate.
+    const counted = results.filter((item) => item.resultStatus !== 'EXEMPT');
     const classAverage =
-      results.reduce((sum, item) => sum + item.weightedTotal, 0) / Math.max(results.length, 1);
+      counted.reduce((sum, item) => sum + item.weightedTotal, 0) / Math.max(counted.length, 1);
     const passRate =
-      (results.filter((item) => item.isPassing).length / Math.max(results.length, 1)) * 100;
+      (counted.filter((item) => item.isPassing).length / Math.max(counted.length, 1)) * 100;
     await this.rabbitMq.publish('academic.results.finalized', {
       classId: dto.classId,
       termId: dto.termId,

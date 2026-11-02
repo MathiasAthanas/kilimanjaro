@@ -7,19 +7,7 @@ import { assertSchoolInScope, requireWriteSchoolId, schoolScopeFilter } from '..
 import { ReportCardsService } from '../report-cards/report-cards.service';
 import { GradingResolverService } from './grading-resolver.service';
 import { ComposeReportCardsDto } from './dto/compose-report-cards.dto';
-
-interface SubjectScore {
-  subjectId: string;
-  subjectName: string;
-  code: string;
-  score: number;
-  maxScore: number;
-  percentage: number;
-  grade: string;
-  points: number;
-  isAbsent: boolean;
-  missing: boolean;
-}
+import { blendWindows, resolveBand, SubjectOutcome, SubjectStatus, validateWeights, WindowContribution } from './engine/result-engine';
 
 interface ClassSubjectMeta {
   classSubjectId: string;
@@ -41,13 +29,38 @@ interface BlendedRow {
   classSubjectId: string;
   teacherId: string;
   combinationId: string | null;
+  status: SubjectStatus;
   blended: number;
-  contributions: Array<{ examWindowId: string; name: string; weight: number; percentage: number }>;
+  contributions: unknown[];
   grade: string;
   points: number;
   remark: string;
   isPassing: boolean;
   rank?: number;
+}
+
+/** Window results written before statuses existed carry no `status`; derive one without changing their numbers. */
+function readOutcome(raw: any): SubjectOutcome {
+  const status: SubjectStatus =
+    raw.status ?? (raw.isAbsent ? 'ABSENT' : 'SCORED');
+  return {
+    subjectId: raw.subjectId,
+    subjectName: raw.subjectName,
+    code: raw.code,
+    status,
+    score: raw.score ?? 0,
+    maxScore: raw.maxScore ?? 100,
+    percentage: status === 'EXEMPT' || status === 'MISSING' ? null : raw.percentage ?? 0,
+    grade: raw.grade ?? '',
+    points: raw.points ?? 0,
+    remark: raw.remark ?? '',
+    isPassing: raw.isPassing ?? false,
+    isAbsent: !!raw.isAbsent,
+    missing: status === 'MISSING',
+    exempt: status === 'EXEMPT',
+    exemptionId: raw.exemptionId ?? null,
+    exemptReason: raw.exemptReason ?? null,
+  };
 }
 
 @Injectable()
@@ -61,14 +74,12 @@ export class ReportCompositionService {
     private readonly reportCards: ReportCardsService,
   ) {}
 
-  private round(n: number, dp = 2): number {
-    const f = Math.pow(10, dp);
-    return Math.round(n * f) / f;
-  }
-
-  /** Validate the selected windows and resolve their effective weights. */
+  /** Validate the selected windows and resolve their effective weights (must be positive and total exactly 100%). */
   private async resolveWindows(dto: ComposeReportCardsDto, user: RequestUser) {
     const ids = dto.windows.map((w) => w.examWindowId);
+    if (new Set(ids).size !== ids.length) {
+      throw new BadRequestException('A window can only be selected once.');
+    }
     const windows = await this.prisma.examWindow.findMany({
       where: { id: { in: ids } },
       include: { examType: true, _count: { select: { results: true } } },
@@ -91,19 +102,44 @@ export class ReportCompositionService {
         throw new BadRequestException(`Window "${w.name}" has no merit results to compose. Compute it first.`);
       }
       const sel = dto.windows.find((s) => s.examWindowId === w.id);
-      const weight = sel?.weight ?? w.weight ?? w.examType?.defaultWeight ?? 100;
+      const weight = sel?.weight ?? (windows.length === 1 ? 100 : w.weight ?? w.examType?.defaultWeight ?? 0);
       weightByWindow.set(w.id, { weight, name: w.name });
+    }
+
+    const check = validateWeights([...weightByWindow.values()].map((w) => w.weight));
+    if (!check.ok) throw new BadRequestException(check.message);
+
+    // Results older than the latest marks / exemptions must be recalculated before they feed a report card.
+    for (const w of windows) {
+      if (!w.computedAt) continue;
+      const [staleMarks, staleExemptions] = await Promise.all([
+        this.prisma.mark.count({
+          where: { assessment: { examWindowId: w.id }, OR: [{ lastEditedAt: { gt: w.computedAt } }, { enteredAt: { gt: w.computedAt } }] },
+        }),
+        this.prisma.resultCalculationExemption.count({
+          where: { termId: w.termId, academicYearId: w.academicYearId, OR: [{ examWindowId: null }, { examWindowId: w.id }], updatedAt: { gt: w.computedAt } },
+        }),
+      ]);
+      if (staleMarks || staleExemptions) {
+        throw new BadRequestException(`Window "${w.name}" has marks or exemptions changed since it was last calculated. Recalculate it before composing report cards.`);
+      }
     }
     return { windows, weightByWindow };
   }
 
   async compose(dto: ComposeReportCardsDto, user: RequestUser) {
-    const schoolId = requireWriteSchoolId(user, 'report card composition');
     const { windows, weightByWindow } = await this.resolveWindows(dto, user);
+    // Group users without an active school: the selected windows already pin the school.
+    let schoolId: string;
+    try {
+      schoolId = requireWriteSchoolId(user, 'report card composition');
+    } catch (err) {
+      const ids = [...new Set(windows.map((w) => w.schoolId))];
+      if (ids.length !== 1 || !ids[0]) throw err;
+      schoolId = ids[0];
+    }
     const windowIds = windows.map((w) => w.id);
 
-    // Class-subject map: (classId:subjectId) -> classSubject metadata, from the
-    // windows' assessments (the authoritative link subject↔class↔teacher).
     const assessments = await this.prisma.assessment.findMany({
       where: { examWindowId: { in: windowIds } },
       include: { classSubject: { include: { subject: true } } },
@@ -120,7 +156,6 @@ export class ReportCompositionService {
       });
     }
 
-    // Merit results across the selected windows, narrowed to scope.
     const where: Prisma.ExamWindowResultWhereInput = {
       examWindowId: { in: windowIds },
       classLevel: dto.scopeLevel,
@@ -131,7 +166,6 @@ export class ReportCompositionService {
       throw new BadRequestException('No merit results match the selected windows and scope.');
     }
 
-    // Group per student.
     const byStudent = new Map<string, typeof results>();
     for (const r of results) {
       const arr = byStudent.get(r.studentId) ?? [];
@@ -152,37 +186,38 @@ export class ReportCompositionService {
     // ── Blend each student's subjects across the selected windows ──────────
     const rows: BlendedRow[] = [];
     for (const [studentId, studentResults] of byStudent.entries()) {
-      // Use the most recently computed result for class identity.
       const primary = [...studentResults].sort((a, b) => (b.computedAt?.getTime() ?? 0) - (a.computedAt?.getTime() ?? 0))[0];
       const classId = primary.classId;
       const classLevel = primary.classLevel;
       const stage = primary.educationStage;
 
-      // Collect per-subject contributions across windows.
-      const perSubject = new Map<string, { num: number; den: number; name: string; code: string; contributions: BlendedRow['contributions'] }>();
+      const perSubject = new Map<string, WindowContribution[]>();
       for (const res of studentResults) {
         const w = weightByWindow.get(res.examWindowId);
         if (!w) continue;
-        const scores = res.subjectScores as unknown as Record<string, SubjectScore>;
+        const scores = res.subjectScores as unknown as Record<string, any>;
         for (const key of Object.keys(scores ?? {})) {
-          const s = scores[key];
-          const entry = perSubject.get(s.subjectId) ?? { num: 0, den: 0, name: s.subjectName, code: s.code, contributions: [] };
-          entry.num += s.percentage * w.weight;
-          entry.den += w.weight;
-          entry.contributions.push({ examWindowId: res.examWindowId, name: w.name, weight: w.weight, percentage: s.percentage });
-          perSubject.set(s.subjectId, entry);
+          const outcome = readOutcome(scores[key]);
+          const arr = perSubject.get(outcome.subjectId) ?? [];
+          arr.push({ examWindowId: res.examWindowId, name: w.name, weight: w.weight, outcome });
+          perSubject.set(outcome.subjectId, arr);
         }
       }
 
-      for (const [subjectId, agg] of perSubject.entries()) {
+      for (const [subjectId, contribs] of perSubject.entries()) {
         const meta = csMeta.get(`${classId}:${subjectId}`);
-        if (!meta) {
-          // Subject not linked to a class-subject in these windows — skip defensively.
-          continue;
+        if (!meta) continue;
+        const blend = blendWindows(contribs);
+        if (blend.status === 'MISSING') {
+          throw new BadRequestException(
+            `${primary.studentName ?? studentId} is missing a ${meta.subjectName} result in a selected window. Resolve it before composing report cards.`,
+          );
         }
-        const blended = agg.den > 0 ? this.round(agg.num / agg.den) : 0;
         const scale = await scaleFor(stage, classLevel, subjectId);
-        const resolved = this.grading.resolveGrade(scale, blended);
+        const isExempt = blend.status === 'EXEMPT';
+        const resolved = isExempt
+          ? { grade: 'EXEMPT', points: 0, remark: 'Exempt', isPassing: true }
+          : resolveBand(scale, blend.percentage ?? 0);
         rows.push({
           studentId,
           classId,
@@ -190,16 +225,17 @@ export class ReportCompositionService {
           educationStage: stage,
           academicYearId,
           subjectId,
-          subjectName: agg.name,
+          subjectName: contribs[0].outcome.subjectName,
           classSubjectId: meta.classSubjectId,
           teacherId: meta.teacherId,
           combinationId: meta.combinationId,
-          blended,
-          contributions: agg.contributions,
+          status: blend.status,
+          blended: blend.percentage ?? 0,
+          contributions: blend.contributions,
           grade: resolved.grade,
           points: resolved.points,
-          remark: resolved.remark,
-          isPassing: resolved.isPassing,
+          remark: !isExempt && blend.status !== 'SCORED' ? (blend.status === 'NOT_SAT' ? 'Not sat' : 'Absent') : resolved.remark,
+          isPassing: !isExempt && blend.status !== 'SCORED' ? false : resolved.isPassing,
         });
       }
     }
@@ -208,9 +244,10 @@ export class ReportCompositionService {
       throw new BadRequestException('Nothing to compose — the selected windows have no subjects linked to classes in scope.');
     }
 
-    // ── Per-subject rank within class ─────────────────────────────────────
+    // ── Per-subject rank within class (exempt rows are not ranked) ─────────
     const groups = new Map<string, BlendedRow[]>();
     for (const r of rows) {
+      if (r.status === 'EXEMPT') continue;
       const key = `${r.classId}:${r.subjectId}`;
       const arr = groups.get(key) ?? [];
       arr.push(r);
@@ -221,75 +258,105 @@ export class ReportCompositionService {
       let prev: number | null = null;
       let prevRank = 0;
       sorted.forEach((r, i) => {
-        let rank = i + 1;
-        if (prev !== null && r.blended === prev) rank = prevRank;
+        const rank = prev !== null && r.blended === prev ? prevRank : i + 1;
         r.rank = rank;
         prevRank = rank;
         prev = r.blended;
       });
     }
 
-    // ── Upsert TermResult rows (the report-card generator reads these) ─────
     const classStudentCount = new Map<string, Set<string>>();
     for (const r of rows) {
       if (!classStudentCount.has(r.classId)) classStudentCount.set(r.classId, new Set());
       classStudentCount.get(r.classId)!.add(r.studentId);
     }
+    const classIds = [...classStudentCount.keys()];
+
+    // Published report cards are never silently overwritten: unpublish first (audited).
+    const published = await this.prisma.reportCard.count({ where: { classId: { in: classIds }, termId: dto.termId, isPublished: true } });
+    if (published) {
+      throw new BadRequestException(
+        `${published} report card(s) in this term are already published. Unpublish the class results first, then compose again.`,
+      );
+    }
+
+    // ── Upsert TermResult rows + drop stale composed rows (one atomic write) ──
+    const keep = new Set(rows.map((r) => `${r.studentId}:${r.classSubjectId}`));
+    const existing = await this.prisma.termResult.findMany({
+      where: { classId: { in: classIds }, termId: dto.termId, studentId: { in: [...byStudent.keys()] } },
+      select: { id: true, studentId: true, classSubjectId: true, assessmentScores: true },
+    });
+    const staleIds = existing
+      .filter((e) => !keep.has(`${e.studentId}:${e.classSubjectId}`) && (e.assessmentScores as any)?.composedFrom !== undefined)
+      .map((e) => e.id);
+
+    const scoreJson = (r: BlendedRow) =>
+      ({ composedFrom: r.contributions, blended: r.blended, status: r.status }) as unknown as Prisma.InputJsonValue;
 
     await this.prisma.$transaction(
-      rows.map((r) =>
-        this.prisma.termResult.upsert({
-          where: { studentId_classSubjectId_termId: { studentId: r.studentId, classSubjectId: r.classSubjectId, termId: dto.termId } },
-          create: {
-            studentId: r.studentId,
-            classId: r.classId,
-            classSubjectId: r.classSubjectId,
-            subjectId: r.subjectId,
-            subjectName: r.subjectName,
-            educationStage: r.educationStage as any,
-            classLevel: r.classLevel,
-            combinationId: r.combinationId,
-            termId: dto.termId,
-            academicYearId: r.academicYearId,
-            schoolId,
-            assessmentScores: { composedFrom: r.contributions, blended: r.blended } as unknown as Prisma.InputJsonValue,
-            weightedTotal: r.blended,
-            grade: r.grade,
-            gradePoints: r.points,
-            remark: r.remark,
-            isPassing: r.isPassing,
-            rank: r.rank,
-            totalStudentsInClass: classStudentCount.get(r.classId)!.size,
-            teacherId: r.teacherId,
-          },
-          update: {
-            educationStage: r.educationStage as any,
-            classLevel: r.classLevel,
-            combinationId: r.combinationId,
-            assessmentScores: { composedFrom: r.contributions, blended: r.blended } as unknown as Prisma.InputJsonValue,
-            weightedTotal: r.blended,
-            grade: r.grade,
-            gradePoints: r.points,
-            remark: r.remark,
-            isPassing: r.isPassing,
-            rank: r.rank,
-            totalStudentsInClass: classStudentCount.get(r.classId)!.size,
-            teacherId: r.teacherId,
-          },
-        }),
-      ),
+      [
+        ...(staleIds.length ? [this.prisma.termResult.deleteMany({ where: { id: { in: staleIds } } })] : []),
+        ...rows.map((r) =>
+          this.prisma.termResult.upsert({
+            where: { studentId_classSubjectId_termId: { studentId: r.studentId, classSubjectId: r.classSubjectId, termId: dto.termId } },
+            create: {
+              studentId: r.studentId,
+              classId: r.classId,
+              classSubjectId: r.classSubjectId,
+              subjectId: r.subjectId,
+              subjectName: r.subjectName,
+              educationStage: r.educationStage as any,
+              classLevel: r.classLevel,
+              combinationId: r.combinationId,
+              termId: dto.termId,
+              academicYearId: r.academicYearId,
+              schoolId,
+              assessmentScores: scoreJson(r),
+              weightedTotal: r.blended,
+              resultStatus: r.status,
+              grade: r.grade,
+              gradePoints: r.points,
+              remark: r.remark,
+              isPassing: r.isPassing,
+              rank: r.rank ?? null,
+              totalStudentsInClass: classStudentCount.get(r.classId)!.size,
+              teacherId: r.teacherId,
+            },
+            update: {
+              educationStage: r.educationStage as any,
+              classLevel: r.classLevel,
+              combinationId: r.combinationId,
+              assessmentScores: scoreJson(r),
+              weightedTotal: r.blended,
+              resultStatus: r.status,
+              grade: r.grade,
+              gradePoints: r.points,
+              remark: r.remark,
+              isPassing: r.isPassing,
+              rank: r.rank ?? null,
+              totalStudentsInClass: classStudentCount.get(r.classId)!.size,
+              teacherId: r.teacherId,
+            },
+          }),
+        ),
+      ],
     );
 
     // ── Reuse the existing generator to build ReportCards + PDFs per class ─
-    const classIds = [...classStudentCount.keys()];
     let reportCardsGenerated = 0;
+    const failures: string[] = [];
     for (const classId of classIds) {
       try {
         const res = await this.reportCards.generateForClassTerm(classId, dto.termId, user.id);
         reportCardsGenerated += Number((res as any)?.generated ?? 0);
       } catch (err) {
-        this.logger.warn(`Report card generation failed for class ${classId}: ${(err as Error)?.message ?? err}`);
+        const msg = (err as Error)?.message ?? String(err);
+        failures.push(`${classId}: ${msg}`);
+        this.logger.warn(`Report card generation failed for class ${classId}: ${msg}`);
       }
+    }
+    if (failures.length && reportCardsGenerated === 0) {
+      throw new BadRequestException(`Report cards could not be generated. ${failures[0]}`);
     }
 
     // ── Optional publish ──────────────────────────────────────────────────
@@ -305,8 +372,6 @@ export class ReportCompositionService {
         }),
       ]);
 
-      // Linkage: feed analytics + the perf engine's attendance-correlation pass
-      // via the legacy event contracts (per composed class).
       const cards = await this.prisma.reportCard.findMany({
         where: { classId: { in: classIds }, termId: dto.termId },
         select: { classId: true, studentId: true, overallAverage: true, failingSubjectCount: true },
@@ -340,7 +405,6 @@ export class ReportCompositionService {
       }
     }
 
-    // ── Persist the composition for audit / repeatability ─────────────────
     const composition = await this.prisma.reportCardComposition.create({
       data: {
         schoolId,
@@ -379,7 +443,9 @@ export class ReportCompositionService {
       classes: classIds.length,
       students: byStudent.size,
       termResultsWritten: rows.length,
+      exemptSubjects: rows.filter((r) => r.status === 'EXEMPT').length,
       reportCardsGenerated,
+      warnings: failures,
       published: !!dto.publish,
     };
   }

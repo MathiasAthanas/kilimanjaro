@@ -145,6 +145,21 @@ enum ResultEditRequestStatus {
   @@schema("academics")
 }
 
+/// Who a calculation exemption covers: a single student or the whole class.
+enum ExemptionScope {
+  STUDENT
+  CLASS
+
+  @@schema("academics")
+}
+
+enum ExemptionStatus {
+  APPROVED
+  REVOKED
+
+  @@schema("academics")
+}
+
 /// Role of a subject inside an A-Level combination.
 /// COMPULSORY_SUBSIDIARY marks General Studies / General Paper which every
 /// ACSEE candidate must sit regardless of their principal combination.
@@ -309,6 +324,8 @@ model Mark {
   studentId      String
   score          Float
   isAbsent       Boolean      @default(false)
+  /// Student was required to sit but did not (distinct from ABSENT on the day). Scores 0, counts in averages.
+  notSat         Boolean      @default(false)
   note           String?
   enteredById    String
   enteredAt      DateTime     @default(now())
@@ -339,6 +356,8 @@ model TermResult {
   academicYearId       String
   assessmentScores     Json
   weightedTotal        Float
+  /// SCORED | ABSENT | NOT_SAT | EXEMPT. EXEMPT rows are shown on the report card but excluded from every average, rank and division.
+  resultStatus         String         @default("SCORED")
   grade                String
   gradePoints          Float
   remark               String
@@ -380,6 +399,9 @@ model ReportCard {
   rank                 Int?
   totalStudentsInClass Int?
   subjectCount         Int
+  /// Subjects the student was expected to take (assessed + exempt).
+  subjectsExpected     Int            @default(0)
+  exemptSubjectCount   Int            @default(0)
   failingSubjectCount  Int
   teacherComment       String?
   principalComment     String?
@@ -714,6 +736,7 @@ model ExamWindow {
   assessments        Assessment[]
   results            ExamWindowResult[]
   editRequests       ResultEditRequest[]
+  exemptions         ResultCalculationExemption[]
 
   @@index([schoolId, academicYearId, termId])
   @@index([status])
@@ -741,6 +764,14 @@ model ExamWindowResult {
   /// { [subjectId]: { subjectName, code, score, maxScore, grade, points, isAbsent } }
   subjectScores      Json
   subjectCount       Int            @default(0)
+  /// Subjects the student was expected to take (assessed + exempt).
+  subjectsExpected   Int            @default(0)
+  /// Subjects actually counted in the average (excludes exempt).
+  subjectsAssessed   Int            @default(0)
+  /// National division label (O-Level/A-Level) or Primary descriptor; "Ungraded" when ineligible.
+  division           String?
+  divisionPoints     Float?
+  divisionNote       String?
   total              Float          @default(0)
   mean               Float          @default(0)
   meanPoints         Float          @default(0)
@@ -832,5 +863,39 @@ model ReportCardComposition {
 
   @@index([schoolId, termId])
   @@index([academicYearId, termId])
+  @@schema("academics")
+}
+
+/// An approved, audited exemption that removes one subject from a student's (or a
+/// whole class's) result calculation. `examWindowId = null` means the whole term;
+/// otherwise only that window. Existing marks are preserved but ignored while the
+/// exemption is APPROVED. Never deleted — revoking sets status REVOKED.
+model ResultCalculationExemption {
+  id             String          @id @default(uuid())
+  schoolId       String?
+  academicYearId String
+  termId         String
+  examWindowId   String?
+  classId        String
+  subjectId      String
+  studentId      String?
+  scope          ExemptionScope
+  reason         String
+  status         ExemptionStatus @default(APPROVED)
+  createdById    String
+  createdByRole  String?
+  approvedById   String?
+  approvedAt     DateTime?
+  revokedById    String?
+  revokedAt      DateTime?
+  revokeReason   String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  examWindow     ExamWindow?     @relation(fields: [examWindowId], references: [id], onDelete: Cascade)
+
+  @@index([schoolId, termId, status])
+  @@index([classId, subjectId, termId])
+  @@index([studentId, termId])
+  @@index([examWindowId])
   @@schema("academics")
 }
