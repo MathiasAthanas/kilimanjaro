@@ -87,7 +87,6 @@ export class AuthService {
   }
 
   private async doLogin(dto: LoginDto, meta: { ip: string; userAgent: string }, localOnly: boolean) {
-    await this.enforceIpLoginThrottle(meta.ip);
 
     const user = dto.email
       ? await this.usersService.findByEmail(dto.email)
@@ -512,18 +511,6 @@ export class AuthService {
       return null;
     }
     return { id, secret };
-  }
-
-  private async enforceIpLoginThrottle(ipAddress: string): Promise<void> {
-    const safeIp = ipAddress || 'unknown';
-    const key = `auth:login:ip:${safeIp}`;
-    const ttl = Number(this.configService.get<string>('LOGIN_THROTTLE_TTL', '900'));
-    const limit = Number(this.configService.get<string>('LOGIN_THROTTLE_LIMIT', '10'));
-    const attempts = await this.redisService.incrWithExpiry(key, ttl);
-
-    if (attempts > limit) {
-      throw new HttpException('Too many login attempts. Try again later.', HttpStatus.TOO_MANY_REQUESTS);
-    }
   }
 
   private generateOtp(): string {

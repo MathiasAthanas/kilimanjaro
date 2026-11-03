@@ -11,7 +11,7 @@ import { ProxyService } from './proxy.service';
 import { Public } from '../auth/decorators/public.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { Throttle } from '@nestjs/throttler';
+import { SkipThrottle } from '@nestjs/throttler';
 
 @ApiTags('Proxy')
 @Controller()
@@ -20,7 +20,7 @@ export class ProxyController {
 
   @All(['auth/login', 'api/v1/auth/login'])
   @Public()
-  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @SkipThrottle()
   @ApiOperation({ summary: 'Public login route proxy' })
   async loginProxy(@Req() req: Request, @Res() res: Response) {
     return this.forwardPublic(req, res);

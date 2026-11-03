@@ -11,6 +11,7 @@ import { useAuthStore } from '../../lib/auth/authStore';
 import { getDefaultRouteForRole } from '../../lib/auth/permissions';
 import { login } from './api';
 import { loginSchema, type LoginForm } from './schemas';
+import { loginErrorMessage } from '../../lib/api/errors';
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -25,12 +26,7 @@ export function LoginPage() {
       setSession(session, values.remember);
       navigate(getDefaultRouteForRole(session.user.role), { replace: true });
     } catch (error) {
-      const message = error instanceof Error
-        ? error.message
-        : typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string'
-          ? error.message
-          : 'Unable to sign in. Please try again.';
-      setServerError(message);
+      setServerError(loginErrorMessage(error));
     }
   }
 
