@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import * as XLSX from 'xlsx';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft, CheckCircle2, Download, FileSpreadsheet, FileText, Layers, Lock,
   PlayCircle, Plus, RefreshCw, Send, Unlock, Upload, XCircle,
@@ -51,11 +52,13 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 const inputCls = 'rounded-lg border border-ks-line px-3 py-2 text-sm focus:border-ks-blue focus:outline-none';
 
-function ExamTaskNavigation({ active }: { active: 'windows' | 'types' | 'composition' }) {
+export function ExamTaskNavigation({ active }: { active: 'windows' | 'types' | 'composition' | 'performance' | 'requests' }) {
   const items = [
     { key: 'windows', to: '/exams', label: 'Exam windows' },
-    { key: 'types', to: '/exams/types', label: 'Exam types' },
+    { key: 'requests', to: '/exams/edit-requests', label: 'Edit requests' },
     { key: 'composition', to: '/exams/compose', label: 'Report-card composition' },
+    { key: 'performance', to: '/exams/performance', label: 'Student lists & performance' },
+    { key: 'types', to: '/exams/types', label: 'Exam types' },
   ] as const;
   return (
     <nav aria-label="Exam tasks" className="mb-5 flex flex-wrap gap-2 border-b border-ks-line pb-3">
@@ -266,6 +269,8 @@ export function ExamWindowDetailPage() {
   const action = useWindowAction();
   const [tab, setTab] = useState<'overview' | 'readiness' | 'merit' | 'exemptions' | 'edits'>('overview');
   const [msg, setMsg] = useState<string>('');
+  const [reopenReason, setReopenReason] = useState('');
+  const [showReopen, setShowReopen] = useState(false);
   const [exemptSeed, setExemptSeed] = useState<{ classId: string; subjectId: string; studentId: string } | null>(null);
 
   const w = win.data;
@@ -276,11 +281,13 @@ export function ExamWindowDetailPage() {
   const academicYear = (reference.data?.years ?? []).find((year) => S(year.id) === S(w?.academicYearId));
   const term = (reference.data?.terms ?? []).find((item) => S(item.id) === S(w?.termId));
 
-  const runAction = async (act: string) => {
+  const runAction = async (act: string, body?: Record<string, unknown>) => {
     setMsg('');
     try {
-      const res: any = await action.mutateAsync({ id, action: act });
+      const res: any = await action.mutateAsync({ id, action: act, body });
       if (act === 'close') setMsg(`Closed & calculated ${N(res?.computed)} students${N(res?.exemptSubjects) ? ` (${N(res.exemptSubjects)} exempt subject result${N(res.exemptSubjects) === 1 ? '' : 's'})` : ''}${N(res?.ungraded) ? `, ${N(res.ungraded)} ungraded (too few eligible subjects)` : ''}.`);
+      else if (act === 'republish') setMsg(`Recalculated, closed and published again to ${N(res?.published?.students)} students.`);
+      else if (act === 'reopen') { setMsg(`Window reopened${res?.wasPublished ? ' and results unpublished' : ''}. Teachers and admins can now correct marks. When done, use "Close & republish".`); setShowReopen(false); setReopenReason(''); }
       else if (act === 'compute') setMsg(`Recalculated ${N(res?.computed)} students${N(res?.exemptSubjects) ? ` · ${N(res.exemptSubjects)} exempt subject result${N(res.exemptSubjects) === 1 ? '' : 's'}` : ''}.`);
       else if (act === 'publish') setMsg(`Published to ${N(res?.students)} students. Downstream snapshots: ${N(res?.downstream?.snapshots)}.`);
       else setMsg(`${act} done.`);
@@ -308,10 +315,24 @@ export function ExamWindowDetailPage() {
         {(status === 'DRAFT' || status === 'REOPENED') && <Button onClick={() => runAction('open')} loading={action.isPending}><PlayCircle className="h-4 w-4" /> Open for entry</Button>}
         {(status === 'OPEN' || status === 'REOPENED') && <Button onClick={() => runAction('close')} loading={action.isPending} disabled={notReady} title={notReady ? 'Resolve the items on the Readiness tab first' : undefined}><Lock className="h-4 w-4" /> Close & calculate</Button>}
         {(status === 'CLOSED' || status === 'REOPENED') && <Button onClick={() => runAction('compute')} variant="secondary" loading={action.isPending}><RefreshCw className="h-4 w-4" /> Recalculate</Button>}
-        {(status === 'CLOSED' || status === 'REOPENED') && <Button onClick={() => runAction('publish')} variant="success" loading={action.isPending}><CheckCircle2 className="h-4 w-4" /> Publish results</Button>}
+        {status === 'REOPENED' && <Button onClick={() => runAction('republish')} variant="success" loading={action.isPending} disabled={notReady} title={notReady ? 'Resolve the items on the Readiness tab first' : undefined}><CheckCircle2 className="h-4 w-4" /> Close & republish</Button>}
+        {status === 'CLOSED' && <Button onClick={() => runAction('publish')} variant="success" loading={action.isPending}><CheckCircle2 className="h-4 w-4" /> Publish results</Button>}
+        {(status === 'CLOSED' || status === 'PUBLISHED') && <Button onClick={() => setShowReopen((v) => !v)} variant="secondary"><Unlock className="h-4 w-4" /> Reopen for corrections</Button>}
         {status === 'PUBLISHED' && <Button onClick={() => runAction('unpublish')} variant="danger" loading={action.isPending}><Unlock className="h-4 w-4" /> Unpublish</Button>}
         <span className="ml-auto text-xs text-ks-muted">Lifecycle: DRAFT → OPEN → CLOSED → PUBLISHED</span>
       </Card>
+      {showReopen && (
+        <Card className="mb-5 p-4">
+          <p className="mb-2 text-sm text-ks-muted">Marks are locked after closing. Reopening {status === 'PUBLISHED' ? 'unpublishes the results, ' : ''}unlocks every subject so corrections can be made, and is recorded in the audit trail. Afterwards use <b>Close &amp; republish</b>.</p>
+          <Field label="Reason (required)">
+            <input className={inputCls} value={reopenReason} onChange={(e) => setReopenReason(e.target.value)} placeholder="e.g. Wrong mark entered for Mathematics, Standard 6 A" />
+          </Field>
+          <div className="mt-3 flex gap-2">
+            <Button onClick={() => runAction('reopen', { reason: reopenReason })} loading={action.isPending} disabled={reopenReason.trim().length < 5}><Unlock className="h-4 w-4" /> Reopen window</Button>
+            <Button variant="ghost" onClick={() => setShowReopen(false)}>Cancel</Button>
+          </div>
+        </Card>
+      )}
       {msg && <div className="mb-5"><Banner tone={msg.toLowerCase().includes('fail') ? 'rose' : 'emerald'}><span className="whitespace-pre-line">{msg}</span></Banner></div>}
       {notReady && (
         <div className="mb-5 flex flex-wrap items-center gap-3 rounded-lg border border-ks-rose/30 bg-ks-rose/5 px-4 py-3 text-sm" role="status">
@@ -344,32 +365,55 @@ export function ExamWindowDetailPage() {
   );
 }
 
-function WindowSubjects({ w, classes }: { w: Record<string, unknown>; classes: Record<string, unknown>[] }) {
-  const assessments = (w.assessments ?? []) as Record<string, unknown>[];
-  if (!assessments.length) return <EmptyState title="No subjects yet" message="Open the window to fan out one marks sheet per class-subject in scope." />;
+function ProgressBar({ entered, required }: { entered: number; required: number }) {
+  const pct = required ? Math.min(100, Math.round((entered / required) * 100)) : 0;
+  const done = required > 0 && entered >= required;
   return (
-    <Card className="overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-ks-paper text-left text-[11px] uppercase tracking-wider text-ks-muted">
-            <tr><th className="px-4 py-3">Subject</th><th className="px-4 py-3">Class</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Max</th></tr>
-          </thead>
-          <tbody className="divide-y divide-ks-line">
-            {assessments.map((a) => (
-              <tr key={S(a.id)}>
-                <td className="px-4 py-3 font-semibold text-ks-navy">{S((a.classSubject as any)?.subject?.name)}</td>
-                <td className="px-4 py-3 text-ks-muted">{(() => {
-                  const klass = classes.find((item) => S(item.id) === S(a.classId));
-                  return klass ? `${S(klass.name)}${klass.stream ? ` · ${S(klass.stream)}` : ''}` : 'Class context unavailable';
-                })()}</td>
-                <td className="px-4 py-3"><Badge tone={S(a.status) === 'LOCKED' ? 'emerald' : S(a.status) === 'SUBMITTED' || S(a.status) === 'HOD_APPROVED' ? 'amber' : 'slate'}>{S(a.status)}</Badge></td>
-                <td className="px-4 py-3">{N(a.maxScore)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </Card>
+    <div className="min-w-[120px]">
+      <div className="h-2 overflow-hidden rounded-full bg-ks-mist/60"><div className={`h-full ${done ? 'bg-ks-emerald' : 'bg-ks-blue'}`} style={{ width: `${pct}%` }} /></div>
+      <div className="mt-1 text-[11px] font-semibold text-ks-muted">{entered}/{required} entered</div>
+    </div>
+  );
+}
+
+function WindowSubjects({ w, classes }: { w: Record<string, unknown>; classes: Record<string, unknown>[] }) {
+  const assessments = (w.assessments ?? []) as Record<string, any>[];
+  const windowOpen = S(w.status) === 'OPEN' || S(w.status) === 'REOPENED';
+  if (!assessments.length) return <EmptyState title="No subjects yet" message="Open the window to fan out one marks sheet per class-subject in scope." />;
+  const incomplete = assessments.filter((a) => N(a.entry?.entered) < N(a.entry?.required)).length;
+  return (
+    <div className="space-y-3">
+      {windowOpen && (
+        <p className={`text-sm font-semibold ${incomplete ? 'text-[#7a5200]' : 'text-ks-emerald'}`}>
+          {incomplete ? `${incomplete} of ${assessments.length} subjects still waiting for marks. You can enter marks on a teacher's behalf with "Enter marks".` : 'All subjects have marks. The window is ready to close.'}
+        </p>
+      )}
+      <Card className="overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-ks-paper text-left text-[11px] uppercase tracking-wider text-ks-muted">
+              <tr><th className="px-4 py-3">Subject</th><th className="px-4 py-3">Class</th><th className="px-4 py-3">Teacher</th><th className="px-4 py-3">Progress</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Max</th><th /></tr>
+            </thead>
+            <tbody className="divide-y divide-ks-line">
+              {assessments.map((a) => (
+                <tr key={S(a.id)}>
+                  <td className="px-4 py-3 font-semibold text-ks-navy">{S(a.classSubject?.subject?.name)}</td>
+                  <td className="px-4 py-3 text-ks-muted">{(() => {
+                    const klass = classes.find((item) => S(item.id) === S(a.classId));
+                    return klass ? `${S(klass.name)}${klass.stream ? ` · ${S(klass.stream)}` : ''}` : 'Class context unavailable';
+                  })()}</td>
+                  <td className="px-4 py-3 text-ks-muted">{S(a.teacherName, 'Unassigned')}</td>
+                  <td className="px-4 py-3"><ProgressBar entered={N(a.entry?.entered)} required={N(a.entry?.required)} /></td>
+                  <td className="px-4 py-3"><Badge tone={S(a.status) === 'LOCKED' ? 'emerald' : S(a.status) === 'SUBMITTED' || S(a.status) === 'HOD_APPROVED' ? 'amber' : 'slate'}>{S(a.status)}</Badge></td>
+                  <td className="px-4 py-3">{N(a.maxScore)}</td>
+                  <td className="px-4 py-3 text-right">{windowOpen && ['OPEN', 'DRAFT', 'REJECTED', 'SUBMITTED'].includes(S(a.status)) && <Link to={`/exams/marks/${S(a.id)}`} className="text-xs font-bold text-ks-blue hover:underline">Enter marks →</Link>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </div>
   );
 }
 
@@ -480,28 +524,47 @@ function SummaryTables({ summaries, gradeCodes }: { summaries: any; gradeCodes: 
   );
 }
 
+export function EditRequestCard({ r, showWindow }: { r: Record<string, any>; showWindow?: boolean }) {
+  const decide = useDecideEditRequest();
+  const [note, setNote] = useState('');
+  const [err, setErr] = useState('');
+  const go = async (decision: 'grant' | 'reject') => {
+    setErr('');
+    try { await decide.mutateAsync({ id: S(r.id), decision, note: note.trim() || undefined }); } catch (e: any) { setErr(S(e?.message, 'Could not save the decision')); }
+  };
+  return (
+    <Card className="p-4">
+      <div className="flex flex-wrap items-start gap-3">
+        <Badge tone={statusTone(S(r.status))}>{S(r.status)}</Badge>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-ks-navy">{S(r.reason)}</p>
+          <p className="text-xs text-ks-muted">
+            {S(r.requestedByName, S(r.requestedByRole))}{r.subjectName ? ` · ${S(r.subjectName)}` : ' · whole window'}
+            {showWindow ? ` · ${S(r.examWindow?.name)} (${S(r.examWindow?.status)})` : ''} · {r.createdAt ? new Date(r.createdAt).toLocaleDateString() : ''}
+          </p>
+          {r.decisionNote && <p className="mt-1 text-xs text-ks-muted">Decision note: {S(r.decisionNote)}</p>}
+        </div>
+      </div>
+      {S(r.status) === 'REQUESTED' && (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <input className={`${inputCls} min-w-[200px] flex-1`} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Optional note to the teacher" />
+          <Button variant="success" onClick={() => go('grant')} loading={decide.isPending}><Unlock className="h-4 w-4" /> Approve & unlock</Button>
+          <Button variant="danger" onClick={() => go('reject')} loading={decide.isPending}><XCircle className="h-4 w-4" /> Decline</Button>
+        </div>
+      )}
+      {S(r.status) === 'REQUESTED' && <p className="mt-2 text-xs text-ks-muted">Approving unpublishes the window's results, unlocks this subject for the teacher, and the window must be closed and republished afterwards.</p>}
+      {err && <p className="mt-2 text-xs font-semibold text-ks-rose" role="alert">{err}</p>}
+    </Card>
+  );
+}
+
 function EditRequestsPanel({ windowId }: { windowId: string }) {
   const reqs = useEditRequests({ examWindowId: windowId });
-  const decide = useDecideEditRequest();
   return (
     <div className="space-y-3">
       {reqs.isLoading && <Card className="p-6 text-center text-ks-muted">Loading…</Card>}
       {reqs.data && reqs.data.length === 0 && <EmptyState title="No edit requests" message="Teachers can request to edit locked results; approvals appear here." />}
-      {(reqs.data ?? []).map((r) => (
-        <Card key={S(r.id)} className="flex flex-wrap items-center gap-3 p-4">
-          <Badge tone={statusTone(S(r.status))}>{S(r.status)}</Badge>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-ks-navy">{S(r.reason)}</p>
-            <p className="text-xs text-ks-muted">by {S(r.requestedByRole)} · {S(r.requestedById).slice(0, 8)}</p>
-          </div>
-          {S(r.status) === 'REQUESTED' && (
-            <div className="flex gap-2">
-              <Button variant="success" onClick={() => decide.mutate({ id: S(r.id), decision: 'grant' })} loading={decide.isPending}><Unlock className="h-4 w-4" /> Grant</Button>
-              <Button variant="danger" onClick={() => decide.mutate({ id: S(r.id), decision: 'reject' })} loading={decide.isPending}><XCircle className="h-4 w-4" /> Reject</Button>
-            </div>
-          )}
-        </Card>
-      ))}
+      {(reqs.data ?? []).map((r) => <EditRequestCard key={S(r.id)} r={r} />)}
     </div>
   );
 }
@@ -694,41 +757,103 @@ export function ComposeReportCardsPage() {
 export function TeacherExamWindowsPage() {
   const windows = useTeacherExamWindows();
   const reference = useExamReference();
+  const editReq = useCreateEditRequest();
+  const [reqFor, setReqFor] = useState<{ windowId: string; assessmentId: string } | null>(null);
+  const [reason, setReason] = useState('');
+  const [msg, setMsg] = useState('');
+  const [err, setErr] = useState('');
+
+  const all = (windows.data ?? []) as any[];
+  const todo = all
+    .filter((w) => w.status === 'OPEN' || w.status === 'REOPENED')
+    .flatMap((w) => (w.mySubjects as any[]).filter((s) => s.canEdit && !s.complete));
+
+  const sendRequest = async () => {
+    if (!reqFor) return;
+    setErr('');
+    try {
+      await editReq.mutateAsync({ examWindowId: reqFor.windowId, assessmentId: reqFor.assessmentId, reason });
+      setMsg('Request sent. Your Head of Department or an administrator will review it. You will see the answer here.');
+      setReqFor(null); setReason('');
+      windows.refetch();
+    } catch (e: any) { setErr(S(e?.message, 'Could not send the request')); }
+  };
+
   return (
     <div>
-      <WorkspaceHeader title="Exam Windows" description="Open exams awaiting your marks. Download a template or enter marks on screen." />
-      <div className="mb-5 flex flex-wrap items-center gap-2 rounded-lg border border-ks-line bg-ks-paper/40 px-4 py-3 text-sm font-semibold text-ks-navy" aria-label="Exam work path">
-        <span className="rounded-md bg-white px-3 py-1.5">My exam windows</span><span aria-hidden="true">→</span><span>Assigned class subjects</span><span aria-hidden="true">→</span><span>Enter, save, or submit marks</span>
-      </div>
+      <WorkspaceHeader title="Exam Windows" description="Enter the marks for the subjects you teach. Everything you need for each exam is on this page." />
+      <ol className="mb-5 grid gap-2 text-sm sm:grid-cols-4" aria-label="How exam marks work">
+        {['1. Open your subject', '2. Type marks, or download the template and upload the filled file', '3. Save. Mark absent students "Absent" or "Not sat"', '4. Submit when every student has a result'].map((t) => (
+          <li key={t} className="rounded-lg border border-ks-line bg-ks-paper/40 px-3 py-2 font-semibold text-ks-navy">{t}</li>
+        ))}
+      </ol>
       {windows.isLoading && <Card className="p-8 text-center text-ks-muted">Loading…</Card>}
       {windows.isError && <ErrorState title="Could not load" message={S((windows.error as any)?.message)} onRetry={() => windows.refetch()} />}
-      {windows.data && windows.data.length === 0 && <EmptyState title="No open exam windows" message="When an exam window is opened for your class, it will appear here." />}
-      <div className="grid gap-4 md:grid-cols-2">
-        {(windows.data ?? []).map((w) => (
-          <Card key={S(w.id)} className="p-5">
-            <div className="mb-3 flex items-center justify-between">
-              <div><h3 className="font-display text-lg font-bold text-ks-navy">{S(w.name)}</h3><p className="text-xs text-ks-muted">{S((w.examType as any)?.name)}{w.termId ? ` · ${S(reference.data?.terms.find((term) => S(term.id) === S(w.termId))?.name, 'Term unavailable')}` : ''}</p></div>
-              <Badge tone={statusTone(S(w.status))}>{S(w.status)}</Badge>
-            </div>
-            <div className="space-y-2">
-              {((w.mySubjects ?? []) as any[]).map((s) => (
-                <Link key={S(s.assessmentId)} to={`/teacher/exams/marks/${S(s.assessmentId)}`}
-                  className="flex items-center justify-between rounded-lg border border-ks-line p-3 hover:border-ks-blue hover:bg-ks-blue/5">
-                  <div>
-                    <span className="font-semibold text-ks-navy">{S(s.subjectName)}</span>
-                    <span className="mt-0.5 block text-xs text-ks-muted">{(() => {
-                      const klass = reference.data?.classes.find((item) => S(item.id) === S(s.classId));
-                      return klass ? `${S(klass.name)}${klass.stream ? ` · ${S(klass.stream)}` : ''}` : 'Class context unavailable';
-                    })()}</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs text-ks-muted">
-                    <span>{N(s.marksEntered)} entered</span><Badge tone={S(s.status) === 'LOCKED' ? 'emerald' : S(s.status) === 'SUBMITTED' ? 'amber' : 'blue'}>{S(s.status)}</Badge>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </Card>
-        ))}
+      {windows.data && todo.length > 0 && <div className="mb-4"><Banner tone="amber">{todo.length} subject{todo.length === 1 ? '' : 's'} still need marks.</Banner></div>}
+      {windows.data && windows.data.length > 0 && todo.length === 0 && <div className="mb-4"><Banner tone="emerald">You are up to date. Nothing is waiting for your marks.</Banner></div>}
+      {msg && <div className="mb-4"><Banner tone="emerald">{msg}</Banner></div>}
+      {windows.data && windows.data.length === 0 && <EmptyState title="No exam windows" message="When an exam window is opened for a class you teach, your subjects appear here." />}
+      <div className="grid gap-4 lg:grid-cols-2">
+        {all.map((w) => {
+          const open = w.status === 'OPEN' || w.status === 'REOPENED';
+          const overdue = open && w.closesAt && new Date(w.closesAt) < new Date();
+          return (
+            <Card key={S(w.id)} className="p-5">
+              <div className="mb-3 flex items-start justify-between gap-2">
+                <div>
+                  <h3 className="font-display text-lg font-bold text-ks-navy">{S(w.name)}</h3>
+                  <p className="text-xs text-ks-muted">{S(w.examType?.name)}{w.termId ? ` · ${S(reference.data?.terms.find((term) => S(term.id) === S(w.termId))?.name, 'Term')}` : ''} · out of {N(w.maxScore)}</p>
+                  {w.closesAt && <p className={`text-xs font-semibold ${overdue ? 'text-ks-rose' : 'text-ks-muted'}`}>{overdue ? 'Deadline passed: ' : 'Marks due: '}{new Date(w.closesAt).toLocaleDateString()}</p>}
+                </div>
+                <Badge tone={statusTone(S(w.status))}>{S(w.status)}</Badge>
+              </div>
+              {w.instructions && <p className="mb-3 rounded-lg bg-ks-paper/60 p-2 text-xs text-ks-navy">{S(w.instructions)}</p>}
+              {!open && <p className="mb-3 text-xs text-ks-muted">{w.status === 'PUBLISHED' ? 'Results are published.' : 'Entry is closed.'} Marks are locked. To change one, ask your Head of Department or an administrator for permission.</p>}
+              <div className="space-y-2">
+                {((w.mySubjects ?? []) as any[]).map((s) => {
+                  const klass = reference.data?.classes.find((item) => S(item.id) === S(s.classId));
+                  const er = s.editRequest;
+                  const asking = reqFor?.assessmentId === s.assessmentId;
+                  return (
+                    <div key={S(s.assessmentId)} className="rounded-lg border border-ks-line p-3">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <div className="min-w-0 flex-1">
+                          <span className="font-semibold text-ks-navy">{S(s.subjectName)}</span>
+                          <span className="block text-xs text-ks-muted">{klass ? `${S(klass.name)}${klass.stream ? ` · ${S(klass.stream)}` : ''}` : 'Class'}</span>
+                        </div>
+                        <ProgressBar entered={N(s.marksEntered)} required={N(s.required)} />
+                        {s.canEdit
+                          ? <Link to={`/teacher/exams/marks/${S(s.assessmentId)}`} className="rounded-lg bg-ks-blue px-3 py-2 text-xs font-bold text-white hover:opacity-90">{s.complete ? 'Review marks' : 'Enter marks'}</Link>
+                          : <Link to={`/teacher/exams/marks/${S(s.assessmentId)}`} className="rounded-lg border border-ks-line px-3 py-2 text-xs font-bold text-ks-navy hover:bg-ks-paper">View</Link>}
+                      </div>
+                      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                        <Badge tone={S(s.status) === 'LOCKED' ? 'emerald' : S(s.status) === 'SUBMITTED' ? 'amber' : 'blue'}>{S(s.status)}</Badge>
+                        {er && <Badge tone={statusTone(S(er.status))}>Edit request: {S(er.status)}</Badge>}
+                        {er?.status === 'GRANTED' && <span className="font-semibold text-ks-emerald">Edit approved. Open the subject and make your changes.</span>}
+                        {er?.status === 'REJECTED' && <span className="text-ks-rose">{S(er.decisionNote, 'Declined')}</span>}
+                        {!s.canEdit && !open && (!er || ['REJECTED', 'REPUBLISHED', 'COMPLETED'].includes(S(er.status))) && (
+                          <button type="button" className="font-bold text-ks-blue underline" onClick={() => { setReqFor({ windowId: S(w.id), assessmentId: S(s.assessmentId) }); setErr(''); }}>Request permission to edit</button>
+                        )}
+                      </div>
+                      {asking && (
+                        <div className="mt-3 space-y-2 rounded-lg bg-ks-paper/60 p-3">
+                          <Field label="Why does this need to change?">
+                            <textarea className={inputCls} rows={2} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Entered 45 instead of 54 for one student" />
+                          </Field>
+                          {err && <p className="text-xs font-semibold text-ks-rose" role="alert">{err}</p>}
+                          <div className="flex gap-2">
+                            <Button onClick={sendRequest} loading={editReq.isPending} disabled={reason.trim().length < 5}>Send request</Button>
+                            <Button variant="ghost" onClick={() => setReqFor(null)}>Cancel</Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
+          );
+        })}
       </div>
     </div>
   );
@@ -749,15 +874,23 @@ export function TeacherExamMarksPage() {
   const [result, setResult] = useState<any>(null);
   const [reason, setReason] = useState('');
   const [showReq, setShowReq] = useState(false);
+  const [fileMsg, setFileMsg] = useState('');
+  const location = useLocation();
+  const decide = useDecideEditRequest();
+  const adminView = location.pathname.startsWith('/exams');
 
   const data = tpl.data as any;
+  const myRequests = useEditRequests({ examWindowId: S(data?.assessment?.examWindow?.id) || undefined });
+  const grantedRequest = (myRequests.data ?? []).find((r) => S(r.assessmentId) === assessmentId && S(r.status) === 'GRANTED');
   const assessment = data?.assessment;
   const classInfo = reference.data?.classes.find((klass) => S(klass.id) === S(assessment?.classId));
   const yearInfo = reference.data?.years.find((year) => S(year.id) === S(assessment?.examWindow?.academicYearId));
   const termInfo = reference.data?.terms.find((term) => S(term.id) === S(assessment?.examWindow?.termId));
   const maxScore = N(assessment?.maxScore, 100);
   const status = S(assessment?.status);
-  const locked = ['LOCKED', 'SUBMITTED', 'HOD_APPROVED', 'APPROVED'].includes(status);
+  // Editable while the window is open, even after "submit" (a slip can still be fixed). Locked once the window closes.
+  const windowOpen = ['OPEN', 'REOPENED'].includes(S(assessment?.examWindow?.status));
+  const locked = !windowOpen || ['LOCKED', 'HOD_APPROVED', 'APPROVED'].includes(status);
 
   // Seed the grid ONCE per assessment when the template loads. Using a ref guard
   // (not the raw data reference) prevents React Query's re-fetches from wiping
@@ -786,12 +919,43 @@ export function TeacherExamMarksPage() {
     setResult(res);
   };
 
+  /** Fill the grid from a CSV / Excel file (the downloaded template, filled in). Nothing is saved until the teacher clicks Save. */
+  const onFile = async (file: File | undefined) => {
+    if (!file) return;
+    setFileMsg(''); setResult(null);
+    try {
+      const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+      const grid: any[][] = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: false, defval: '' });
+      const hi = grid.findIndex((row) => row.some((c) => /^registration[_ ]?number$|^admno$|^adm\.? ?no$/i.test(String(c).trim())));
+      if (hi < 0) { setFileMsg('Could not find the "registration_number" column. Use the downloaded template.'); return; }
+      const head = grid[hi].map((c) => String(c).trim().toLowerCase().replace(/\s+/g, '_'));
+      const col = (re: RegExp) => head.findIndex((h) => re.test(h));
+      const ci = { reg: col(/^(registration_number|admno|adm\.?_?no)$/), score: col(/^score|marks?$/), abs: col(/^is_absent|absent$/), ns: col(/^not_sat|notsat$/) };
+      const yes = (v: unknown) => ['yes', 'y', 'true', '1', 'x'].includes(String(v ?? '').trim().toLowerCase());
+      const known = new Set((data.rows as any[]).map((r) => S(r.registrationNumber).toUpperCase()));
+      const next = { ...rows };
+      let applied = 0; const unknown: string[] = [];
+      for (const row of grid.slice(hi + 1)) {
+        const reg = S(row[ci.reg]).trim();
+        if (!reg) continue;
+        if (!known.has(reg.toUpperCase())) { unknown.push(reg); continue; }
+        const key = (data.rows as any[]).find((r) => S(r.registrationNumber).toUpperCase() === reg.toUpperCase()).registrationNumber;
+        const score = ci.score >= 0 ? String(row[ci.score] ?? '').trim() : '';
+        const status: EntryStatus = ci.ns >= 0 && yes(row[ci.ns]) ? 'NOT_SAT' : ci.abs >= 0 && yes(row[ci.abs]) ? 'ABSENT' : 'SCORED';
+        next[S(key)] = { score: status === 'SCORED' ? score : '', status };
+        applied += 1;
+      }
+      setRows(next);
+      setFileMsg(`Loaded ${applied} row(s) from ${file.name}.${unknown.length ? ` ${unknown.length} registration number(s) are not in this class and were ignored: ${unknown.slice(0, 5).join(', ')}.` : ''} Review the marks below, then click "Save marks".`);
+    } catch (e: any) { setFileMsg(`Could not read that file: ${S(e?.message)}`); }
+  };
+
   if (tpl.isLoading) return <Card className="p-8 text-center text-ks-muted">Loading marks sheet…</Card>;
   if (tpl.isError || !data) return <ErrorState title="Could not load" message={S((tpl.error as any)?.message)} onRetry={() => tpl.refetch()} />;
 
   return (
     <div>
-      <Link to="/teacher/exams" className="mb-3 inline-flex items-center gap-1 text-sm font-bold text-ks-blue"><ArrowLeft className="h-4 w-4" /> My exam windows</Link>
+      <Link to={adminView ? `/exams/${S(assessment?.examWindow?.id)}` : '/teacher/exams'} className="mb-3 inline-flex items-center gap-1 text-sm font-bold text-ks-blue"><ArrowLeft className="h-4 w-4" /> {adminView ? 'Back to the exam window' : 'My exam windows'}</Link>
       <WorkspaceHeader
         title={`${S(assessment?.subjectName)} — Marks`}
         description={`${S(classInfo?.name, 'Class context unavailable')}${classInfo?.stream ? ` · ${S(classInfo.stream)}` : ''} · ${S(assessment?.examWindow?.name)} · ${S(yearInfo?.name ?? yearInfo?.year, 'Academic year unavailable')} · ${S(termInfo?.name, 'Term unavailable')} · out of ${maxScore}`}
@@ -800,12 +964,21 @@ export function TeacherExamMarksPage() {
 
       <Card className="mb-4 flex flex-wrap items-center gap-2 p-4">
         <Button variant="secondary" onClick={() => downloadMarksTemplateCsv(assessmentId)}><Download className="h-4 w-4" /> Download template</Button>
+        {!locked && (
+          <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-ks-line bg-white px-4 py-2.5 text-sm font-bold text-ks-navy hover:bg-ks-paper">
+            <FileSpreadsheet className="h-4 w-4" /> Upload filled file
+            <input type="file" accept=".csv,.xlsx,.xls" className="sr-only" onChange={(e) => { void onFile(e.target.files?.[0]); e.target.value = ''; }} />
+          </label>
+        )}
+        {grantedRequest && <Button variant="success" onClick={async () => { await decide.mutateAsync({ id: S(grantedRequest.id), decision: 'complete' }); setResult({ message: 'Thank you. This subject is locked again and waiting for the administrator to republish.' }); tpl.refetch(); }} loading={decide.isPending}><CheckCircle2 className="h-4 w-4" /> Finish editing</Button>}
         {!locked && <><Button onClick={() => save(false)} loading={upload.isPending}><Upload className="h-4 w-4" /> Save marks</Button>
           <Button variant="success" onClick={() => save(true)} loading={upload.isPending}><Send className="h-4 w-4" /> Save & submit</Button></>}
-        {locked && <Button variant="secondary" onClick={() => setShowReq((v) => !v)}><Unlock className="h-4 w-4" /> Request edit</Button>}
+        {locked && !adminView && !grantedRequest && <Button variant="secondary" onClick={() => setShowReq((v) => !v)}><Unlock className="h-4 w-4" /> Request permission to edit</Button>}
         <span className="ml-auto text-xs text-ks-muted">{N(data.rosterSize)} students</span>
       </Card>
 
+      {fileMsg && <div className="mb-4"><Banner tone={fileMsg.startsWith('Could not') ? 'rose' : 'emerald'}>{fileMsg}</Banner></div>}
+      {locked && <div className="mb-4"><Banner tone="amber">These marks are locked. {adminView ? 'Reopen the window from the exam window page to correct them.' : 'To change one, ask for permission below. Your Head of Department or an administrator approves it.'}</Banner></div>}
       {showReq && (
         <Card className="mb-4 p-4">
           <Field label="Reason for editing locked results">

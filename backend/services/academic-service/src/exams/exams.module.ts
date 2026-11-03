@@ -17,6 +17,8 @@ import { GradingResolverModule } from './grading-resolver.module';
 import { ResultCalculatorService } from './result-calculator.service';
 import { ExemptionsController } from './exemptions.controller';
 import { ExemptionsService } from './exemptions.service';
+import { PerformanceExportController } from './performance-export.controller';
+import { PerformanceExportService } from './performance-export.service';
 
 @Module({
   imports: [AssessmentModule, ReportCardsModule, GradingResolverModule],
@@ -28,6 +30,7 @@ import { ExemptionsService } from './exemptions.service';
     ReportCompositionController,
     MeritExportController,
     ExemptionsController,
+    PerformanceExportController,
   ],
   providers: [
     ExamTypesService,
@@ -38,6 +41,7 @@ import { ExemptionsService } from './exemptions.service';
     MeritExportService,
     ResultCalculatorService,
     ExemptionsService,
+    PerformanceExportService,
   ],
   exports: [ExamTypesService, ExamWindowsService, ExamResultsService, ExamMarksService, ReportCompositionService],
 })

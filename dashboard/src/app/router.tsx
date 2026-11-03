@@ -297,6 +297,7 @@ import {
   TeacherExamMarksPage,
   TeacherExamWindowsPage,
 } from '../features/exams/pages/ExamPages';
+import { ExamEditRequestsPage, ExamPerformancePage } from '../features/exams/pages/ExamExtraPages';
 import { ProtectedRoute } from './ProtectedRoute';
 import { RoleRedirect } from './roleRedirect';
 
@@ -579,6 +580,9 @@ export const router = createBrowserRouter([
       { path: '/reports/audit', element: <ReportAccessAuditPage /> },
       { path: '/exams', element: <ExamWindowsListPage /> },
       { path: '/exams/types', element: <ExamTypesPage /> },
+      { path: '/exams/performance', element: <ExamPerformancePage /> },
+      { path: '/exams/edit-requests', element: <ExamEditRequestsPage /> },
+      { path: '/exams/marks/:assessmentId', element: <TeacherExamMarksPage /> },
       { path: '/exams/compose', element: <ComposeReportCardsPage /> },
       { path: '/exams/:id', element: <ExamWindowDetailPage /> },
       { path: '/academics/marks/bulk', element: <BulkMarksWorkspacePage /> },

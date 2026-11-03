@@ -192,15 +192,18 @@ export class ExamMarksService {
   async uploadMarks(assessmentId: string, dto: UploadMarksDto, user: RequestUser) {
     const assessment = await this.getAssessmentForTeacher(assessmentId, user);
 
+    const windowOpen = assessment.examWindow?.status === 'OPEN' || assessment.examWindow?.status === 'REOPENED';
     const editable: AssessmentStatus[] = [
       AssessmentStatus.OPEN,
       AssessmentStatus.DRAFT,
       AssessmentStatus.REJECTED,
+      // Submitted but the window has not closed yet: the teacher may still fix a slip without asking anyone.
+      ...(windowOpen ? [AssessmentStatus.SUBMITTED] : []),
     ];
     if (!editable.includes(assessment.status)) {
       throw new BadRequestException(
         `This subject is not open for marks entry (status: ${assessment.status}). ` +
-          `If it is locked, request an edit from the exam administrator.`,
+          `Marks are locked once the window closes or results are published: ask your Head of Department or an administrator for permission to edit.`,
       );
     }
 

@@ -44,3 +44,37 @@ export function useRevokeExemption() {
     onSuccess: () => qc.invalidateQueries({ queryKey: examKeys.all }),
   });
 }
+
+// ─── Performance & student-list export ───────────────────────────────────────
+export type PerformanceParams = {
+  examWindowId?: string;
+  termId?: string;
+  academicYearId?: string;
+  classId?: string;
+  level?: string;
+  educationStage?: string;
+};
+
+const cleanParams = (p: PerformanceParams) => Object.fromEntries(Object.entries(p).filter(([, v]) => v !== undefined && v !== ''));
+
+export function usePerformancePreview(params: PerformanceParams, enabled: boolean) {
+  const clean = cleanParams(params);
+  return useQuery({
+    queryKey: [...examKeys.all, 'performance', clean] as const,
+    enabled,
+    staleTime: 10_000,
+    retry: false,
+    queryFn: () => api.get('/academics/performance-export/preview', { params: clean }).then(payloadOf) as Promise<Record<string, any>>,
+  });
+}
+
+export async function downloadPerformanceExport(format: 'xlsx' | 'pdf' | 'csv', params: PerformanceParams): Promise<void> {
+  const res = await api.get(`/academics/performance-export/${format}`, { params: cleanParams(params), responseType: 'blob' });
+  const blob = res.data as Blob;
+  const cd = String(res.headers?.['content-disposition'] ?? '');
+  const filename = cd.match(/filename="?([^"]+)"?/)?.[1] ?? `student-performance.${format}`;
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+  window.URL.revokeObjectURL(url);
+}

@@ -47,13 +47,13 @@ export class ExamWindowsController {
   }
 
   @Post('exam-windows/edit-requests/:id/grant')
-  @Roles(...ADMIN)
+  @Roles(...ADMIN, ROLES.HEAD_OF_DEPARTMENT)
   grantEditRequest(@Param('id') id: string, @Body() dto: DecideEditRequestDto, @CurrentUser() user: RequestUser) {
     return this.windows.grantEditRequest(id, dto, user);
   }
 
   @Post('exam-windows/edit-requests/:id/reject')
-  @Roles(...ADMIN)
+  @Roles(...ADMIN, ROLES.HEAD_OF_DEPARTMENT)
   rejectEditRequest(@Param('id') id: string, @Body() dto: DecideEditRequestDto, @CurrentUser() user: RequestUser) {
     return this.windows.rejectEditRequest(id, dto, user);
   }
@@ -112,6 +112,18 @@ export class ExamWindowsController {
   @Roles(...ADMIN)
   unpublish(@Param('id') id: string, @Body() body: { reason?: string }, @CurrentUser() user: RequestUser) {
     return this.windows.unpublish(id, user, body?.reason);
+  }
+
+  @Post('exam-windows/:id/reopen')
+  @Roles(...ADMIN)
+  reopen(@Param('id') id: string, @Body() body: { reason?: string }, @CurrentUser() user: RequestUser) {
+    return this.windows.reopen(id, user, body?.reason);
+  }
+
+  @Post('exam-windows/:id/republish')
+  @Roles(...ADMIN)
+  republish(@Param('id') id: string, @CurrentUser() user: RequestUser) {
+    return this.windows.republish(id, user);
   }
 
   @Post('exam-windows/:id/archive')

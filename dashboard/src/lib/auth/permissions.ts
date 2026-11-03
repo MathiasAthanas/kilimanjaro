@@ -67,6 +67,8 @@ export function canAccessRoute(role: UserRole | undefined, route: string) {
   if (route.startsWith('/reports')) return ['TEACHER', 'HOD', 'AQA', 'FINANCE', 'PRINCIPAL', 'ADMIN', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN', 'HEAD_OF_FINANCE'].includes(role);
   if (route.startsWith('/academics')) return ['TEACHER', 'HOD', 'AQA', 'PRINCIPAL', 'ADMIN', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN'].includes(role);
   // Exam lifecycle management surface — admins, principals, AQA & group roles.
+  // Heads of Department decide edit requests for their subjects and export class performance.
+  if (route.startsWith('/exams/edit-requests') || route.startsWith('/exams/performance')) return ['HOD', 'AQA', 'PRINCIPAL', 'ADMIN', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN'].includes(role);
   if (route.startsWith('/exams')) return ['AQA', 'PRINCIPAL', 'ADMIN', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN'].includes(role);
   if (route.startsWith('/analytics')) return ['HOD', 'AQA', 'FINANCE', 'PRINCIPAL', 'ADMIN', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN', 'HEAD_OF_FINANCE'].includes(role);
   if (route.startsWith('/timetables')) return ['TEACHER', 'HOD', 'ADMIN', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN'].includes(role);

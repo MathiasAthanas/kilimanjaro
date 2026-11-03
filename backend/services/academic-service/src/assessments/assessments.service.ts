@@ -382,6 +382,11 @@ export class AssessmentsService {
       throw new NotFoundException('Mark not found');
     }
 
+    if (mark.isLocked && assessment.examWindowId) {
+      // Exam-window marks change only through an approved edit request (or an admin reopening the window).
+      throw new ForbiddenException('These marks are locked. Ask your Head of Department or an administrator to approve an edit, then make the change.');
+    }
+
     if (mark.isLocked && ![ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL, ROLES.HEAD_OF_SCHOOL, ROLES.MANAGER, ROLES.SUPER_ADMIN].includes(user.role as any)) {
       throw new ForbiddenException('Locked marks can only be edited by HOD or Principal');
     }

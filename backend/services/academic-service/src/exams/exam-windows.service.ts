@@ -20,6 +20,8 @@ import {
 import { CreateExamWindowDto, ExamWindowFilterDto, UpdateExamWindowDto } from './dto/exam-window.dto';
 import { CreateEditRequestDto, DecideEditRequestDto } from './dto/edit-request.dto';
 import { ExamResultsService } from './exam-results.service';
+import { AuthClientService } from '../auth-client/auth-client.service';
+import { resolveExpectedStudents } from './engine/expected-students';
 
 export interface ScopeClass {
   id: string;
@@ -43,12 +45,48 @@ export class ExamWindowsService {
     ROLES.ACADEMIC_QA,
   ];
 
+  /** Subject ids a Head of Department is responsible for (department link, else subjects they teach). */
+  private async hodSubjectIds(user: RequestUser): Promise<string[]> {
+    const ids = new Set<string>();
+    try {
+      const dept = await this.studentClient.get<any>(`/students/internal/departments/by-user/${user.id}`, {}, { 'X-User-Id': user.id, 'X-User-Role': user.role });
+      const d = dept?.data ?? dept;
+      if (d?.id) {
+        const subjects = await this.prisma.subject.findMany({ where: { departmentId: d.id }, select: { id: true } });
+        subjects.forEach((x) => ids.add(x.id));
+      }
+    } catch {
+      /* fall back to the subjects they teach */
+    }
+    const own = await this.prisma.classSubject.findMany({ where: { teacherId: user.id }, select: { subjectId: true } });
+    own.forEach((x) => ids.add(x.subjectId));
+    return [...ids];
+  }
+
+  /**
+   * Who may decide an edit request: admins / principals / AQA for any request, a Head of
+   * Department only for a request on a subject of their own department.
+   */
+  private async assertCanDecide(user: RequestUser, request: { subjectId: string | null; assessmentId: string | null }) {
+    if (ExamWindowsService.ADMIN_ROLES.includes(user.role)) return;
+    if (user.role === ROLES.HEAD_OF_DEPARTMENT) {
+      if (!request.subjectId) {
+        throw new ForbiddenException('This request covers the whole window, so only an administrator can decide it.');
+      }
+      const mine = await this.hodSubjectIds(user);
+      if (mine.includes(request.subjectId)) return;
+      throw new ForbiddenException('This subject belongs to another department. Its own Head of Department or an administrator must decide.');
+    }
+    throw new ForbiddenException('Only the Head of Department, an administrator, the principal or academic QA can decide edit requests.');
+  }
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
     private readonly rabbitMq: RabbitMqService,
     private readonly studentClient: StudentClientService,
     private readonly examResults: ExamResultsService,
+    private readonly authClient: AuthClientService,
   ) {}
 
   private unwrap<T>(payload: any): T[] {
@@ -465,6 +503,32 @@ export class ExamWindowsService {
     return window;
   }
 
+  private async rosterIdsByClass(classIds: string[], user: RequestUser): Promise<Map<string, string[]>> {
+    const out = new Map<string, string[]>();
+    for (const classId of classIds) {
+      const payload = await this.studentClient.get<unknown>('/students', { classId, limit: 2000, page: 1 }, this.studentServiceHeaders(user));
+      out.set(classId, this.unwrap<any>(payload).map((s) => s.id as string));
+    }
+    return out;
+  }
+
+  /** Entry progress for each assessment: who must have a mark, how many have one. */
+  private async entryProgress(assessments: any[], user: RequestUser) {
+    const rosters = await this.rosterIdsByClass([...new Set(assessments.map((a) => a.classId))], user);
+    const marks = await this.prisma.mark.groupBy({
+      by: ['assessmentId'],
+      where: { assessmentId: { in: assessments.map((a) => a.id) } },
+      _count: { _all: true },
+    });
+    const enteredBy = new Map(marks.map((m) => [m.assessmentId, m._count._all]));
+    const out = new Map<string, { required: number; entered: number; exempt: number }>();
+    for (const a of assessments) {
+      const { required, exempt } = await resolveExpectedStudents(this.prisma, a, rosters.get(a.classId) ?? []);
+      out.set(a.id, { required: required.size, entered: Math.min(enteredBy.get(a.id) ?? 0, required.size + exempt.size), exempt: exempt.size });
+    }
+    return out;
+  }
+
   async detail(id: string, user: RequestUser) {
     const window = await this.getWindowOrThrow(id, user);
     const assessments = await this.prisma.assessment.findMany({
@@ -478,54 +542,88 @@ export class ExamWindowsService {
       byStatus[a.status] = (byStatus[a.status] ?? 0) + 1;
     }
 
+    const progress = assessments.length ? await this.entryProgress(assessments, user) : new Map();
+    const names = await this.authClient.getUserNames(assessments.map((a) => a.classSubject.teacherId));
+
     const classIds = [...new Set(assessments.map((a) => a.classId))];
     return {
       ...window,
       assessmentCount: assessments.length,
       classCount: classIds.length,
       statusBreakdown: byStatus,
-      assessments,
+      assessments: assessments.map((a) => ({
+        ...a,
+        teacherId: a.classSubject.teacherId,
+        teacherName: names.get(a.classSubject.teacherId) ?? null,
+        entry: progress.get(a.id) ?? { required: 0, entered: 0, exempt: 0 },
+      })),
     };
   }
 
-  /** Windows a teacher can act on right now, with their own subjects surfaced. */
+  /**
+   * The teacher's exam work: open windows first (marks to enter), then recently closed / published
+   * ones so a locked subject is still visible and an edit can be requested from there.
+   */
   async teacherWindows(user: RequestUser) {
+    const since = new Date(Date.now() - 1000 * 60 * 60 * 24 * 120);
     const windows = await this.prisma.examWindow.findMany({
       where: {
         ...schoolScopeFilter(user),
-        status: { in: [ExamWindowStatus.OPEN, ExamWindowStatus.REOPENED] },
+        OR: [
+          { status: { in: [ExamWindowStatus.OPEN, ExamWindowStatus.REOPENED] } },
+          { status: { in: [ExamWindowStatus.CLOSED, ExamWindowStatus.PUBLISHED] }, createdAt: { gte: since } },
+        ],
         assessments: { some: { classSubject: { teacherId: user.id } } },
       },
       include: { examType: true },
-      orderBy: [{ closesAt: 'asc' }, { createdAt: 'desc' }],
+      orderBy: [{ createdAt: 'desc' }],
     });
+    const rank = (s: string) => (s === 'OPEN' || s === 'REOPENED' ? 0 : 1);
+    windows.sort((a, b) => rank(a.status) - rank(b.status) || (a.closesAt?.getTime() ?? Infinity) - (b.closesAt?.getTime() ?? Infinity));
 
     const result: any[] = [];
     for (const w of windows) {
       const myAssessments = await this.prisma.assessment.findMany({
         where: { examWindowId: w.id, classSubject: { teacherId: user.id } },
-        include: { classSubject: { include: { subject: true } }, _count: { select: { marks: true } } },
+        include: { classSubject: { include: { subject: true } } },
         orderBy: [{ classId: 'asc' }],
       });
+      const progress = await this.entryProgress(myAssessments, user);
+      const requests = await this.prisma.resultEditRequest.findMany({
+        where: { examWindowId: w.id, assessmentId: { in: myAssessments.map((a) => a.id) } },
+        orderBy: { createdAt: 'desc' },
+      });
+      const windowOpen = w.status === ExamWindowStatus.OPEN || w.status === ExamWindowStatus.REOPENED;
+      const editable: AssessmentStatus[] = [AssessmentStatus.OPEN, AssessmentStatus.DRAFT, AssessmentStatus.REJECTED, AssessmentStatus.SUBMITTED];
       result.push({
         id: w.id,
         name: w.name,
         examType: w.examType,
         termId: w.termId,
+        academicYearId: w.academicYearId,
         status: w.status,
         opensAt: w.opensAt,
         closesAt: w.closesAt,
         instructions: w.instructions,
         maxScore: w.maxScore,
-        mySubjects: myAssessments.map((a) => ({
-          assessmentId: a.id,
-          subjectId: a.subjectId,
-          subjectName: a.classSubject.subject.name,
-          classId: a.classId,
-          status: a.status,
-          marksEntered: a._count.marks,
-          maxScore: a.maxScore,
-        })),
+        mySubjects: myAssessments.map((a) => {
+          const p = progress.get(a.id) ?? { required: 0, entered: 0, exempt: 0 };
+          const latest = requests.find((r) => r.assessmentId === a.id) ?? null;
+          return {
+            assessmentId: a.id,
+            subjectId: a.subjectId,
+            subjectName: a.classSubject.subject.name,
+            classId: a.classId,
+            status: a.status,
+            marksEntered: p.entered,
+            required: p.required,
+            exempt: p.exempt,
+            complete: p.required > 0 && p.entered >= p.required,
+            canEdit: windowOpen && editable.includes(a.status),
+            maxScore: a.maxScore,
+            editRequest: latest ? { id: latest.id, status: latest.status, reason: latest.reason, decisionNote: latest.decisionNote } : null,
+          };
+        }),
       });
     }
     return result;
@@ -549,6 +647,24 @@ export class ExamWindowsService {
         throw new ForbiddenException('Teachers can only request edits on their own subjects.');
       }
       assessment = { id: a.id, classSubjectId: a.classSubjectId, subjectId: a.subjectId, classId: a.classId, classSubject: a.classSubject };
+    }
+
+    // No permission is needed while the subject is still open for entry.
+    if (assessment && (window.status === ExamWindowStatus.OPEN || window.status === ExamWindowStatus.REOPENED)) {
+      const a = await this.prisma.assessment.findUnique({ where: { id: assessment.id }, select: { status: true } });
+      if (a && ([AssessmentStatus.OPEN, AssessmentStatus.DRAFT, AssessmentStatus.REJECTED, AssessmentStatus.SUBMITTED] as AssessmentStatus[]).includes(a.status)) {
+        throw new BadRequestException('This subject is still open for marks entry. You can edit it now without a request.');
+      }
+    }
+    const pending = await this.prisma.resultEditRequest.findFirst({
+      where: { examWindowId: dto.examWindowId, assessmentId: assessment?.id ?? null, status: { in: ['REQUESTED', 'GRANTED'] } },
+    });
+    if (pending) {
+      throw new BadRequestException(
+        pending.status === 'GRANTED'
+          ? 'An edit has already been approved for this subject. Open it and make your changes.'
+          : 'An edit request for this subject is already waiting for approval.',
+      );
     }
 
     const request = await this.prisma.resultEditRequest.create({
@@ -576,26 +692,35 @@ export class ExamWindowsService {
 
   async listEditRequests(filters: { examWindowId?: string; status?: string }, user: RequestUser) {
     const mineOnly = user.role === ROLES.TEACHER;
-    return this.prisma.resultEditRequest.findMany({
+    let hodScope: Prisma.ResultEditRequestWhereInput | undefined;
+    if (user.role === ROLES.HEAD_OF_DEPARTMENT) {
+      const subjectIds = await this.hodSubjectIds(user);
+      hodScope = { OR: [{ subjectId: { in: subjectIds.length ? subjectIds : ['__none__'] } }, { requestedById: user.id }] };
+    }
+    const rows = await this.prisma.resultEditRequest.findMany({
       where: {
         ...schoolScopeFilter(user),
         examWindowId: filters.examWindowId,
         status: filters.status as any,
         ...(mineOnly ? { requestedById: user.id } : {}),
+        ...(hodScope ?? {}),
       },
       include: { examWindow: { select: { name: true, status: true } } },
       orderBy: [{ createdAt: 'desc' }],
     });
+    // Readable context: who asked, for which subject / class.
+    const names = await this.authClient.getUserNames(rows.map((r) => r.requestedById));
+    const subjects = await this.prisma.subject.findMany({ where: { id: { in: [...new Set(rows.map((r) => r.subjectId).filter(Boolean) as string[])] } }, select: { id: true, name: true } });
+    const subjectName = new Map(subjects.map((s) => [s.id, s.name]));
+    return rows.map((r) => ({ ...r, requestedByName: names.get(r.requestedById) ?? null, subjectName: r.subjectId ? subjectName.get(r.subjectId) ?? null : null }));
   }
 
   /** Admin grants an edit request → the affected assessment(s) unlock & the window reopens/unpublishes. */
   async grantEditRequest(id: string, dto: DecideEditRequestDto, user: RequestUser) {
-    if (!ExamWindowsService.ADMIN_ROLES.includes(user.role)) {
-      throw new ForbiddenException('Only an admin/principal/AQA can grant edit requests.');
-    }
     const request = await this.prisma.resultEditRequest.findUnique({ where: { id } });
     if (!request) throw new NotFoundException('Edit request not found');
     assertSchoolInScope(user, request.schoolId ?? null);
+    await this.assertCanDecide(user, request);
     if (request.status !== 'REQUESTED') {
       throw new BadRequestException(`This request is already ${request.status}.`);
     }
@@ -643,12 +768,10 @@ export class ExamWindowsService {
   }
 
   async rejectEditRequest(id: string, dto: DecideEditRequestDto, user: RequestUser) {
-    if (!ExamWindowsService.ADMIN_ROLES.includes(user.role)) {
-      throw new ForbiddenException('Only an admin/principal/AQA can decide edit requests.');
-    }
     const request = await this.prisma.resultEditRequest.findUnique({ where: { id } });
     if (!request) throw new NotFoundException('Edit request not found');
     assertSchoolInScope(user, request.schoolId ?? null);
+    await this.assertCanDecide(user, request);
     if (request.status !== 'REQUESTED') {
       throw new BadRequestException(`This request is already ${request.status}.`);
     }
@@ -681,9 +804,66 @@ export class ExamWindowsService {
     if (request.status !== 'GRANTED') {
       throw new BadRequestException('Only a granted request can be marked complete.');
     }
-    return this.prisma.resultEditRequest.update({
-      where: { id },
-      data: { status: 'COMPLETED', completedAt: new Date() },
+    // Editing is over for this subject: lock it again so nothing changes behind the scenes.
+    return this.prisma.$transaction(async (tx) => {
+      if (request.assessmentId) {
+        await tx.mark.updateMany({ where: { assessmentId: request.assessmentId }, data: { isLocked: true } });
+        await tx.assessment.update({ where: { id: request.assessmentId }, data: { status: AssessmentStatus.LOCKED, lockedAt: new Date() } });
+      }
+      return tx.resultEditRequest.update({ where: { id }, data: { status: 'COMPLETED', completedAt: new Date() } });
     });
+  }
+
+  /**
+   * Admin-initiated correction: withdraw published results (if any), unlock the window and record
+   * the permission as an approved edit request so the audit trail is identical to the request flow.
+   */
+  async reopen(id: string, user: RequestUser, reason?: string) {
+    if (!ExamWindowsService.ADMIN_ROLES.includes(user.role)) {
+      throw new ForbiddenException('Only an administrator, the principal or academic QA can reopen a window.');
+    }
+    const window = await this.getWindowOrThrow(id, user);
+    if (!([ExamWindowStatus.CLOSED, ExamWindowStatus.PUBLISHED] as ExamWindowStatus[]).includes(window.status)) {
+      throw new BadRequestException(`Only a closed or published window can be reopened for corrections. Current status: ${window.status}.`);
+    }
+    if (!reason || reason.trim().length < 5) {
+      throw new BadRequestException('Give a reason (at least 5 characters) for reopening. It is kept in the audit trail.');
+    }
+    const wasPublished = window.status === ExamWindowStatus.PUBLISHED;
+    const now = new Date();
+    await this.prisma.$transaction(async (tx) => {
+      await tx.examWindowResult.updateMany({ where: { examWindowId: id }, data: { isPublished: false, publishedAt: null } });
+      await tx.mark.updateMany({ where: { assessment: { examWindowId: id } }, data: { isLocked: false } });
+      await tx.assessment.updateMany({ where: { examWindowId: id }, data: { status: AssessmentStatus.OPEN } });
+      await tx.examWindow.update({ where: { id }, data: { status: ExamWindowStatus.REOPENED } });
+      await tx.resultEditRequest.create({
+        data: {
+          schoolId: window.schoolId,
+          examWindowId: id,
+          requestedById: user.id,
+          requestedByRole: user.role,
+          reason: reason.trim(),
+          status: 'GRANTED',
+          decidedById: user.id,
+          decidedByRole: user.role,
+          decidedAt: now,
+          decisionNote: wasPublished ? 'Reopened by administrator (results unpublished)' : 'Reopened by administrator',
+        },
+      });
+    });
+    await this.rabbitMq.publish('exam.window.reopened', { examWindowId: id, reopenedById: user.id, schoolId: window.schoolId });
+    await this.redis.delByPattern(`exam-window:*:${id}`);
+    return { reopened: true, wasPublished };
+  }
+
+  /** One step after corrections: validate + recalculate + close, then publish again. */
+  async republish(id: string, user: RequestUser) {
+    const window = await this.getWindowOrThrow(id, user);
+    let closed: Awaited<ReturnType<ExamWindowsService['close']>> | null = null;
+    if (window.status === ExamWindowStatus.OPEN || window.status === ExamWindowStatus.REOPENED) {
+      closed = await this.close(id, user);
+    }
+    const published = await this.publish(id, user);
+    return { republished: true, closed, published };
   }
 }

@@ -110,6 +110,8 @@ const hodSections: SidebarSection[] = [
       { to: '/hod',                                             icon: Landmark,       label: 'Command Center',  end: true },
       { to: '/hod/approvals',         icon: ClipboardCheck, label: 'Pending Approvals', end: true },
       { to: '/hod/approvals/history', icon: FileText,       label: 'Approval History'           },
+      { to: '/exams/edit-requests',    icon: Lock,           label: 'Edit Requests'              },
+      { to: '/exams/performance',      icon: FileSpreadsheet, label: 'Lists & Performance'       },
     ],
   },
   {
@@ -182,6 +184,8 @@ const aqaSections: SidebarSection[] = [
     title: 'Examinations',
     items: [
       { to: '/exams',         icon: FileSpreadsheet, label: 'Exam Windows',        end: true },
+      { to: '/exams/edit-requests', icon: ClipboardCheck, label: 'Edit Requests' },
+      { to: '/exams/performance', icon: FileSpreadsheet, label: 'Lists & Performance' },
       { to: '/exams/types',   icon: ClipboardCheck,  label: 'Exam Types',          end: true },
       { to: '/exams/compose', icon: FileText,        label: 'Compose Report Cards', end: true },
     ],
@@ -303,6 +307,8 @@ const principalSections: SidebarSection[] = [
     items: [
       { to: '/principal/approvals',       icon: ClipboardCheck,label: 'Marks Approval',  end: true },
       { to: '/exams',                     icon: FileSpreadsheet,label: 'Exam Windows',   end: true },
+      { to: '/exams/edit-requests', icon: ClipboardCheck, label: 'Edit Requests' },
+      { to: '/exams/performance', icon: FileSpreadsheet, label: 'Lists & Performance' },
       { to: '/exams/compose',             icon: FileText,      label: 'Compose Report Cards'       },
       { to: '/principal/results/publish', icon: Lock,          label: 'Publish Results'            },
       { to: '/principal/report-cards',    icon: BookOpen,      label: 'Report Cards',    end: true },
@@ -390,6 +396,8 @@ const adminSections: SidebarSection[] = [
       { to: '/admin/grading',                              icon: FileSpreadsheet, label: 'Grading',             end: true },
       { to: '/admin/assessment-types',                     icon: ClipboardCheck,  label: 'Assessment Types'              },
       { to: '/exams',                                      icon: FileSpreadsheet, label: 'Exam Windows',        end: true },
+      { to: '/exams/edit-requests', icon: ClipboardCheck, label: 'Edit Requests' },
+      { to: '/exams/performance', icon: FileSpreadsheet, label: 'Lists & Performance' },
       { to: '/exams/types',                                icon: ClipboardCheck,  label: 'Exam Types'                    },
       { to: '/admin/academic/stage-config',                icon: BookOpen,        label: 'Stage Config'                  },
       { to: '/admin/academic/promotion/cross-stage',       icon: GraduationCap,   label: 'Cross-Stage Promotion'         },
@@ -535,6 +543,8 @@ const managerSections: SidebarSection[] = [
     items: [
       { to: '/principal/approvals',    icon: ClipboardCheck, label: 'Marks Approval',   end: true },
       { to: '/exams',                  icon: FileSpreadsheet, label: 'Exam Windows',    end: true },
+      { to: '/exams/edit-requests', icon: ClipboardCheck, label: 'Edit Requests' },
+      { to: '/exams/performance', icon: FileSpreadsheet, label: 'Lists & Performance' },
       { to: '/exams/compose',          icon: FileText,       label: 'Compose Report Cards'        },
       { to: '/principal/results/publish', icon: Lock,        label: 'Publish Results'             },
       { to: '/principal/report-cards', icon: BookOpen,       label: 'Report Cards',     end: true },

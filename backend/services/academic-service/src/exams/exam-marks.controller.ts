@@ -55,7 +55,7 @@ export class ExamMarksController {
   }
 
   @Post('exam-windows/assessments/:assessmentId/marks/upload')
-  @Roles(ROLES.TEACHER, ROLES.HEAD_OF_DEPARTMENT)
+  @Roles(...MARKERS)
   upload(
     @Param('assessmentId') assessmentId: string,
     @Body() dto: UploadMarksDto,
