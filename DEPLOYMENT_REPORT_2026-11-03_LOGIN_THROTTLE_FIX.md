@@ -1,7 +1,9 @@
 # Login Throttle and Error Handling Deployment Report
 
-Date: 2026-11-03  
-Application commit: `2515683` (`fix(auth): remove shared login throttles`)  
+Date: 2026-11-03
+
+Application commit: `2515683` (`fix(auth): remove shared login throttles`)
+
 Production release: `/opt/kilimanjaro/releases/2515683-20261103T091920Z`
 
 ## Purpose
