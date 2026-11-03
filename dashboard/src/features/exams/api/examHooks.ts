@@ -114,6 +114,8 @@ export function useWindowAction() {
       qc.invalidateQueries({ queryKey: examKeys.window(v.id) });
       qc.invalidateQueries({ queryKey: [...examKeys.all, 'windows'] });
       qc.invalidateQueries({ queryKey: [...examKeys.all, 'merit', v.id] });
+      qc.invalidateQueries({ queryKey: [...examKeys.all, 'plan', v.id] });
+      qc.invalidateQueries({ queryKey: [...examKeys.all, 'readiness', v.id] });
     },
   });
 }
@@ -245,5 +247,80 @@ export function useComposeReportCards() {
   return useMutation({
     mutationFn: (body: Record<string, unknown>) => api.post('/academics/report-card-compositions', body).then(payloadOf),
     onSuccess: () => qc.invalidateQueries({ queryKey: [...examKeys.all, 'compositions'] }),
+  });
+}
+
+// ─── Subjects & teachers preview, omissions, school-wide rules ───────────────
+export type PlanSubject = {
+  classSubjectId: string; subjectId: string; subjectName: string; subjectCode: string | null;
+  isOptional: boolean; combination: string | null; teacherId: string; teacherName: string | null;
+  state: 'INCLUDED' | 'OMITTED' | 'NOT_ADDED'; assessmentId: string | null; assessmentStatus: string | null; marksEntered: number;
+  exclusion: { id: string; source: 'WINDOW' | 'STANDING'; scope: 'CLASS' | 'ALL_CLASSES'; reason: string; createdAt: string; createdByName: string | null } | null;
+  warnings: string[];
+};
+export type WindowPlan = {
+  window: { id: string; name: string; status: string; opened: boolean; scopeType: string };
+  summary: { classes: number; subjects: number; marksSheets: number; omitted: number; notAdded: number; withoutTeacher: number; teachers: number };
+  editable: boolean;
+  classes: Array<{ classId: string; label: string; level: number | null; stage: string | null; studentCount: number; subjects: PlanSubject[] }>;
+  subjects: Array<{ subjectId: string; subjectName: string; classes: number; included: number; omitted: number; notAdded: number }>;
+  standingRules: Array<{ id: string; subjectId: string; subjectName: string | null; classId: string | null; className: string | null; reason: string; createdAt: string }>;
+  warnings: string[];
+};
+
+export function useWindowPlan(id: string) {
+  return useQuery({
+    queryKey: [...examKeys.all, 'plan', id] as const,
+    enabled: !!id,
+    staleTime: 5_000,
+    queryFn: () => api.get(`/academics/exam-windows/${id}/preview`).then(payloadOf) as Promise<WindowPlan>,
+  });
+}
+
+function invalidateWindow(qc: ReturnType<typeof useQueryClient>, id: string) {
+  qc.invalidateQueries({ queryKey: [...examKeys.all, 'plan', id] });
+  qc.invalidateQueries({ queryKey: examKeys.window(id) });
+  qc.invalidateQueries({ queryKey: [...examKeys.all, 'windows'] });
+  qc.invalidateQueries({ queryKey: [...examKeys.all, 'readiness', id] });
+}
+
+export function useOmitSubject(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { subjectId: string; classIds?: string[]; reason: string; applyToAllWindows?: boolean; discardMarks?: boolean }) =>
+      api.post(`/academics/exam-windows/${id}/subjects/omit`, body).then(payloadOf) as Promise<Record<string, any>>,
+    onSuccess: () => invalidateWindow(qc, id),
+  });
+}
+
+export function useRestoreSubject(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (exclusionId: string) => api.delete(`/academics/exam-windows/${id}/subjects/omissions/${exclusionId}`).then(payloadOf) as Promise<Record<string, any>>,
+    onSuccess: () => invalidateWindow(qc, id),
+  });
+}
+
+export function useSyncSubjects(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post(`/academics/exam-windows/${id}/sync-subjects`, {}).then(payloadOf) as Promise<Record<string, any>>,
+    onSuccess: () => invalidateWindow(qc, id),
+  });
+}
+
+export function useUpdateExamWindow(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Record<string, unknown>) => api.patch(`/academics/exam-windows/${id}`, body).then(payloadOf),
+    onSuccess: () => invalidateWindow(qc, id),
+  });
+}
+
+export function useRemoveStandingRule(windowId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (ruleId: string) => api.delete(`/academics/exam-windows/subject-rules/${ruleId}`).then(payloadOf),
+    onSuccess: () => invalidateWindow(qc, windowId),
   });
 }

@@ -79,7 +79,7 @@ export class ExamWindowsController {
   }
 
   @Get('exam-windows/:id')
-  @Roles(...ADMIN, ROLES.HEAD_OF_DEPARTMENT, ROLES.TEACHER)
+  @Roles(...ADMIN, ROLES.HEAD_OF_DEPARTMENT)
   detail(@Param('id') id: string, @CurrentUser() user: RequestUser) {
     return this.windows.detail(id, user);
   }
@@ -94,6 +94,12 @@ export class ExamWindowsController {
   @Roles(...ADMIN)
   open(@Param('id') id: string, @CurrentUser() user: RequestUser) {
     return this.windows.open(id, user);
+  }
+
+  @Post('exam-windows/:id/sync-subjects')
+  @Roles(...ADMIN)
+  syncSubjects(@Param('id') id: string, @CurrentUser() user: RequestUser) {
+    return this.windows.syncSubjects(id, user);
   }
 
   @Post('exam-windows/:id/close')

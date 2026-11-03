@@ -17,10 +17,11 @@ import {
   useDecideEditRequest, useDeleteExamType, useEditRequests, useExamReference,
   useExamTypes, useExamWindow, useExamWindows, useMarksTemplate, useMeritList,
   useMigrateExamTypes, useSubmitAssessment, useTeacherExamWindows,
-  useUploadMarks, useWindowAction,
+  useUpdateExamWindow, useUploadMarks, useWindowAction,
 } from '../api/examHooks';
 import { useWindowReadiness } from '../api/readinessHooks';
 import { ExemptionsPanel, ReadinessPanel } from './ExamReadiness';
+import { WindowPlanPanel } from './ExamWindowPlan';
 
 // ─── helpers ──────────────────────────────────────────────────────────────
 const S = (v: unknown, d = '') => (v === null || v === undefined ? d : String(v));
@@ -103,10 +104,10 @@ export function ExamWindowsListPage() {
       {showCreate && <CreateWindowForm onDone={() => setShowCreate(false)} />}
 
       <div className="mb-4 flex gap-2">
-        {['', 'DRAFT', 'OPEN', 'CLOSED', 'PUBLISHED'].map((s) => (
+        {['', 'DRAFT', 'OPEN', 'REOPENED', 'CLOSED', 'PUBLISHED', 'ARCHIVED'].map((s) => (
           <button key={s} onClick={() => setStatus(s)}
             className={`rounded-lg px-3 py-1.5 text-xs font-bold ${status === s ? 'bg-ks-blue text-white' : 'bg-ks-mist/30 text-ks-navy'}`}>
-            {s || 'All'}
+            {s ? s.charAt(0) + s.slice(1).toLowerCase() : 'All'}
           </button>
         ))}
       </div>
@@ -123,7 +124,7 @@ export function ExamWindowsListPage() {
                 <tr>
                   <th className="px-4 py-3">Window</th><th className="px-4 py-3">Type</th>
                   <th className="px-4 py-3">Status</th><th className="px-4 py-3">Progress</th>
-                  <th className="px-4 py-3">Classes</th><th className="px-4 py-3"></th>
+                  <th className="px-4 py-3">Classes</th><th className="px-4 py-3">Marks due</th><th className="px-4 py-3"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-ks-line">
@@ -139,11 +140,12 @@ export function ExamWindowsListPage() {
                           <div className="h-2 w-24 overflow-hidden rounded-full bg-ks-mist/40">
                             <div className="h-full bg-ks-emerald" style={{ width: `${N(prog.percentLocked)}%` }} />
                           </div>
-                          <span className="text-xs text-ks-muted">{N(prog.percentSubmitted)}% in · {N(prog.percentLocked)}% locked</span>
+                          <span className="text-xs text-ks-muted">{N(prog.percentSubmitted)}% submitted · {N(prog.percentLocked)}% locked</span>
                         </div>
                       </td>
-                      <td className="px-4 py-3">{N(w.classCount ?? (prog.totalAssessments ? undefined : 0))}</td>
-                      <td className="px-4 py-3 text-right"><Link to={`/exams/${S(w.id)}`}><Button variant="ghost">Manage →</Button></Link></td>
+                      <td className="px-4 py-3 text-ks-navy">{S(w.status) === 'DRAFT' ? scopeLabel(w) : `${N(w.classCount)} class${N(w.classCount) === 1 ? '' : 'es'}`}</td>
+                      <td className={`px-4 py-3 text-xs ${w.closesAt && ['OPEN', 'REOPENED'].includes(S(w.status)) && new Date(S(w.closesAt)) < new Date() ? 'font-bold text-ks-rose' : 'text-ks-muted'}`}>{w.closesAt ? new Date(S(w.closesAt)).toLocaleDateString() : '—'}{w.closesAt && ['OPEN', 'REOPENED'].includes(S(w.status)) && new Date(S(w.closesAt)) < new Date() ? ' · overdue' : ''}</td>
+                      <td className="px-4 py-3 text-right"><Link to={`/exams/${S(w.id)}`}><Button variant="ghost">{S(w.status) === 'DRAFT' ? 'Review & open →' : 'Manage →'}</Button></Link></td>
                     </tr>
                   );
                 })}
@@ -156,12 +158,20 @@ export function ExamWindowsListPage() {
   );
 }
 
+/** "All classes", "Standards 3, 4" or "2 classes": what a window covers, readable before it has any marks sheets. */
+function scopeLabel(w: Record<string, unknown>) {
+  const type = S(w.scopeType);
+  if (type === 'STANDARDS') return `Standards ${((w.scopeLevels ?? []) as number[]).join(', ')}`;
+  if (type === 'STREAMS') { const n = ((w.scopeClassIds ?? []) as unknown[]).length; return `${n} class${n === 1 ? '' : 'es'}`; }
+  return 'All classes';
+}
+
 function CreateWindowForm({ onDone }: { onDone: () => void }) {
   const ref = useExamReference();
   const types = useExamTypes();
   const create = useCreateExamWindow();
   const nav = useNavigate();
-  const [form, setForm] = useState<Record<string, any>>({ scopeType: 'STANDARDS', openNow: true, maxScore: 100 });
+  const [form, setForm] = useState<Record<string, any>>({ scopeType: 'STANDARDS', openNow: false, maxScore: 100 });
   const set = (k: string, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
 
   const terms = (ref.data?.terms ?? []).filter((t: any) => !form.academicYearId || t.academicYearId === form.academicYearId);
@@ -173,6 +183,9 @@ function CreateWindowForm({ onDone }: { onDone: () => void }) {
       examTypeId: form.examTypeId, name: form.name, academicYearId: form.academicYearId, termId: form.termId,
       educationStage: form.educationStage || undefined, scopeType: form.scopeType,
       maxScore: N(form.maxScore, 100), openNow: !!form.openNow,
+      instructions: form.instructions?.trim() || undefined,
+      opensAt: form.opensAt ? new Date(form.opensAt).toISOString() : undefined,
+      closesAt: form.closesAt ? new Date(form.closesAt).toISOString() : undefined,
     };
     if (form.scopeType === 'STANDARDS') body.scopeLevels = (form.scopeLevels ?? []).map(Number);
     if (form.scopeType === 'STREAMS') body.scopeClassIds = form.scopeClassIds ?? [];
@@ -246,13 +259,18 @@ function CreateWindowForm({ onDone }: { onDone: () => void }) {
           </Field>
         )}
       </div>
-      <label className="mt-4 flex items-center gap-2 text-sm font-semibold text-ks-navy">
-        <input type="checkbox" checked={!!form.openNow} onChange={(e) => set('openNow', e.target.checked)} />
-        Open immediately (teachers can start entering marks)
+      <div className="mt-4 grid gap-4 md:grid-cols-3">
+        <Field label="Marks open from (optional)"><input className={inputCls} type="datetime-local" value={form.opensAt ?? ''} onChange={(e) => set('opensAt', e.target.value)} /></Field>
+        <Field label="Marks due by (optional)"><input className={inputCls} type="datetime-local" value={form.closesAt ?? ''} onChange={(e) => set('closesAt', e.target.value)} /></Field>
+        <Field label="Instructions for teachers (optional)"><input className={inputCls} value={form.instructions ?? ''} onChange={(e) => set('instructions', e.target.value)} placeholder="e.g. Mark absent students as Absent" /></Field>
+      </div>
+      <label className="mt-4 flex items-start gap-2 text-sm font-semibold text-ks-navy">
+        <input className="mt-1" type="checkbox" checked={!!form.openNow} onChange={(e) => set('openNow', e.target.checked)} />
+        <span>Open straight away<span className="block text-xs font-normal text-ks-muted">Leave this off to review the subjects and teachers first, leave out anything that should not be examined, then open it.</span></span>
       </label>
       {create.isError && <div className="mt-3"><Banner tone="rose">{S((create.error as any)?.message, 'Could not create window')}</Banner></div>}
       <div className="mt-4 flex gap-2">
-        <Button onClick={submit} loading={create.isPending} disabled={!canSubmit}>Create window</Button>
+        <Button onClick={submit} loading={create.isPending} disabled={!canSubmit}>{form.openNow ? 'Create and open' : 'Create and review subjects'}</Button>
         <Button variant="ghost" onClick={onDone}>Cancel</Button>
       </div>
     </Card>
@@ -267,11 +285,13 @@ export function ExamWindowDetailPage() {
   const win = useExamWindow(id);
   const reference = useExamReference();
   const action = useWindowAction();
+  const nav = useNavigate();
   const [tab, setTab] = useState<'overview' | 'readiness' | 'merit' | 'exemptions' | 'edits'>('overview');
   const [msg, setMsg] = useState<string>('');
   const [reopenReason, setReopenReason] = useState('');
   const [showReopen, setShowReopen] = useState(false);
   const [exemptSeed, setExemptSeed] = useState<{ classId: string; subjectId: string; studentId: string } | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
 
   const w = win.data;
   const status = S(w?.status);
@@ -290,6 +310,8 @@ export function ExamWindowDetailPage() {
       else if (act === 'reopen') { setMsg(`Window reopened${res?.wasPublished ? ' and results unpublished' : ''}. Teachers and admins can now correct marks. When done, use "Close & republish".`); setShowReopen(false); setReopenReason(''); }
       else if (act === 'compute') setMsg(`Recalculated ${N(res?.computed)} students${N(res?.exemptSubjects) ? ` · ${N(res.exemptSubjects)} exempt subject result${N(res.exemptSubjects) === 1 ? '' : 's'}` : ''}.`);
       else if (act === 'publish') setMsg(`Published to ${N(res?.students)} students. Downstream snapshots: ${N(res?.downstream?.snapshots)}.`);
+      else if (act === 'archive') { nav('/exams'); return; }
+      else if (act === 'open') setMsg(`Opened: ${N(res?.assessmentsCreated)} marks sheet(s) created across ${N(res?.classesCovered)} class(es)${N(res?.omitted) ? `, ${N(res.omitted)} subject(s) left out` : ''}. Teachers can start entering marks.`);
       else setMsg(`${act} done.`);
     } catch (e: any) {
       setMsg(`${act} failed: ${e?.message ?? 'please try again'}`);
@@ -305,7 +327,7 @@ export function ExamWindowDetailPage() {
       <Link to="/exams" className="mb-3 inline-flex items-center gap-1 text-sm font-bold text-ks-blue"><ArrowLeft className="h-4 w-4" /> All windows</Link>
       <WorkspaceHeader
         title={S(w.name)}
-        description={`${S((w.examType as any)?.name)} · ${S(academicYear?.name ?? academicYear?.year, 'Academic year unavailable')} · ${S(term?.name, 'Term unavailable')} · ${N(w.assessmentCount)} subject assessments across ${N(w.classCount)} classes`}
+        description={`${S((w.examType as any)?.name)} · ${S(academicYear?.name ?? academicYear?.year, 'Academic year unavailable')} · ${S(term?.name, 'Term unavailable')} · ${status === 'DRAFT' ? 'not opened yet' : `${N(w.assessmentCount)} marks sheets across ${N(w.classCount)} class${N(w.classCount) === 1 ? '' : 'es'}`}${w.closesAt ? ` · marks due ${new Date(S(w.closesAt)).toLocaleDateString()}` : ''}`}
         action={<Badge tone={statusTone(status)}>{status}</Badge>}
       />
       <ExamTaskNavigation active="windows" />
@@ -319,8 +341,12 @@ export function ExamWindowDetailPage() {
         {status === 'CLOSED' && <Button onClick={() => runAction('publish')} variant="success" loading={action.isPending}><CheckCircle2 className="h-4 w-4" /> Publish results</Button>}
         {(status === 'CLOSED' || status === 'PUBLISHED') && <Button onClick={() => setShowReopen((v) => !v)} variant="secondary"><Unlock className="h-4 w-4" /> Reopen for corrections</Button>}
         {status === 'PUBLISHED' && <Button onClick={() => runAction('unpublish')} variant="danger" loading={action.isPending}><Unlock className="h-4 w-4" /> Unpublish</Button>}
+        {status !== 'ARCHIVED' && status !== 'PUBLISHED' && <Button onClick={() => setShowSettings((v) => !v)} variant="secondary">Settings</Button>}
+        {(status === 'DRAFT' || status === 'CLOSED') && <Button onClick={() => { if (window.confirm('Archive this exam window? It will be hidden from the list.')) void runAction('archive'); }} variant="ghost">Archive</Button>}
         <span className="ml-auto text-xs text-ks-muted">Lifecycle: DRAFT → OPEN → CLOSED → PUBLISHED</span>
       </Card>
+      {showSettings && <WindowSettings w={w} status={status} onClose={() => setShowSettings(false)} onSaved={(m) => { setMsg(m); setShowSettings(false); }} />}
+      {status === 'DRAFT' && <div className="mb-5"><Banner tone="amber">This exam is a draft. Teachers cannot see it yet. Check the subjects and teachers below, leave out anything that should not be examined, then press <b>Open for entry</b>.</Banner></div>}
       {showReopen && (
         <Card className="mb-5 p-4">
           <p className="mb-2 text-sm text-ks-muted">Marks are locked after closing. Reopening {status === 'PUBLISHED' ? 'unpublishes the results, ' : ''}unlocks every subject so corrections can be made, and is recorded in the audit trail. Afterwards use <b>Close &amp; republish</b>.</p>
@@ -345,12 +371,12 @@ export function ExamWindowDetailPage() {
       <div className="mb-4 flex gap-2 border-b border-ks-line">
         {(['overview', 'readiness', 'merit', 'exemptions', 'edits'] as const).map((t) => (
           <button key={t} onClick={() => setTab(t)} className={`px-4 py-2 text-sm font-bold ${tab === t ? 'border-b-2 border-ks-blue text-ks-blue' : 'text-ks-muted'}`}>
-            {t === 'overview' ? 'Subjects' : t === 'readiness' ? 'Readiness' : t === 'merit' ? 'Merit List' : t === 'exemptions' ? 'Exemptions' : 'Edit Requests'}
+            {t === 'overview' ? 'Subjects & teachers' : t === 'readiness' ? 'Readiness' : t === 'merit' ? 'Merit List' : t === 'exemptions' ? 'Exemptions' : 'Edit Requests'}
           </button>
         ))}
       </div>
 
-      {tab === 'overview' && <WindowSubjects w={w} classes={reference.data?.classes ?? []} />}
+      {tab === 'overview' && <WindowPlanPanel windowId={id} status={status} entry={Object.fromEntries(((w.assessments ?? []) as Record<string, any>[]).map((a) => [S(a.id), { ...(a.entry ?? {}), status: S(a.status) }]))} />}
       {tab === 'readiness' && (
         status === 'DRAFT'
           ? <EmptyState title="Window not open yet" message="Open the window to see which results are still missing." />
@@ -376,44 +402,55 @@ function ProgressBar({ entered, required }: { entered: number; required: number 
   );
 }
 
-function WindowSubjects({ w, classes }: { w: Record<string, unknown>; classes: Record<string, unknown>[] }) {
-  const assessments = (w.assessments ?? []) as Record<string, any>[];
-  const windowOpen = S(w.status) === 'OPEN' || S(w.status) === 'REOPENED';
-  if (!assessments.length) return <EmptyState title="No subjects yet" message="Open the window to fan out one marks sheet per class-subject in scope." />;
-  const incomplete = assessments.filter((a) => N(a.entry?.entered) < N(a.entry?.required)).length;
+function WindowSettings({ w, status, onClose, onSaved }: { w: Record<string, any>; status: string; onClose: () => void; onSaved: (m: string) => void }) {
+  const update = useUpdateExamWindow(S(w.id));
+  const ref = useExamReference();
+  const local = (iso: unknown) => (iso ? new Date(S(iso)).toISOString().slice(0, 16) : '');
+  const [f, setF] = useState<Record<string, any>>({
+    name: S(w.name), maxScore: N(w.maxScore, 100), weight: N(w.weight, 100), countsToReportCard: w.countsToReportCard !== false,
+    opensAt: local(w.opensAt), closesAt: local(w.closesAt), instructions: S(w.instructions),
+    scopeType: S(w.scopeType, 'ALL_CLASSES'), scopeLevels: (w.scopeLevels ?? []) as number[], scopeClassIds: (w.scopeClassIds ?? []) as string[], educationStage: S(w.educationStage),
+  });
+  const [err, setErr] = useState('');
+  const set = (k: string, v: unknown) => setF((x) => ({ ...x, [k]: v }));
+  const draft = status === 'DRAFT';
+  const levels = [...new Set((ref.data?.classes ?? []).map((c: any) => c.level).filter((l: any) => l != null))].sort((x: any, y: any) => x - y);
+  const toggle = (key: 'scopeLevels' | 'scopeClassIds', v: any) => set(key, (f[key] as any[]).includes(v) ? (f[key] as any[]).filter((x) => x !== v) : [...(f[key] as any[]), v]);
+  const save = async () => {
+    setErr('');
+    const body: Record<string, unknown> = {
+      name: f.name, maxScore: N(f.maxScore, 100), weight: N(f.weight, 100), countsToReportCard: !!f.countsToReportCard, instructions: f.instructions,
+      opensAt: f.opensAt ? new Date(f.opensAt).toISOString() : undefined, closesAt: f.closesAt ? new Date(f.closesAt).toISOString() : undefined,
+    };
+    if (draft) { body.scopeType = f.scopeType; body.educationStage = f.educationStage || undefined; if (f.scopeType === 'STANDARDS') body.scopeLevels = f.scopeLevels; if (f.scopeType === 'STREAMS') body.scopeClassIds = f.scopeClassIds; }
+    try { await update.mutateAsync(body); onSaved('Exam settings saved.'); } catch (e: any) { setErr(S(e?.message, 'Could not save the settings')); }
+  };
   return (
-    <div className="space-y-3">
-      {windowOpen && (
-        <p className={`text-sm font-semibold ${incomplete ? 'text-[#7a5200]' : 'text-ks-emerald'}`}>
-          {incomplete ? `${incomplete} of ${assessments.length} subjects still waiting for marks. You can enter marks on a teacher's behalf with "Enter marks".` : 'All subjects have marks. The window is ready to close.'}
-        </p>
-      )}
-      <Card className="overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-ks-paper text-left text-[11px] uppercase tracking-wider text-ks-muted">
-              <tr><th className="px-4 py-3">Subject</th><th className="px-4 py-3">Class</th><th className="px-4 py-3">Teacher</th><th className="px-4 py-3">Progress</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Max</th><th /></tr>
-            </thead>
-            <tbody className="divide-y divide-ks-line">
-              {assessments.map((a) => (
-                <tr key={S(a.id)}>
-                  <td className="px-4 py-3 font-semibold text-ks-navy">{S(a.classSubject?.subject?.name)}</td>
-                  <td className="px-4 py-3 text-ks-muted">{(() => {
-                    const klass = classes.find((item) => S(item.id) === S(a.classId));
-                    return klass ? `${S(klass.name)}${klass.stream ? ` · ${S(klass.stream)}` : ''}` : 'Class context unavailable';
-                  })()}</td>
-                  <td className="px-4 py-3 text-ks-muted">{S(a.teacherName, 'Unassigned')}</td>
-                  <td className="px-4 py-3"><ProgressBar entered={N(a.entry?.entered)} required={N(a.entry?.required)} /></td>
-                  <td className="px-4 py-3"><Badge tone={S(a.status) === 'LOCKED' ? 'emerald' : S(a.status) === 'SUBMITTED' || S(a.status) === 'HOD_APPROVED' ? 'amber' : 'slate'}>{S(a.status)}</Badge></td>
-                  <td className="px-4 py-3">{N(a.maxScore)}</td>
-                  <td className="px-4 py-3 text-right">{windowOpen && ['OPEN', 'DRAFT', 'REJECTED', 'SUBMITTED'].includes(S(a.status)) && <Link to={`/exams/marks/${S(a.id)}`} className="text-xs font-bold text-ks-blue hover:underline">Enter marks →</Link>}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+    <Card className="mb-5 p-5">
+      <h3 className="mb-3 font-display text-lg font-bold text-ks-navy">Exam settings</h3>
+      <div className="grid gap-4 md:grid-cols-3">
+        <Field label="Name"><input className={inputCls} value={f.name} onChange={(e) => set('name', e.target.value)} /></Field>
+        <Field label="Max score per subject"><input className={inputCls} type="number" value={f.maxScore} disabled={status === 'CLOSED'} onChange={(e) => set('maxScore', e.target.value)} /></Field>
+        <Field label="Report-card weight %"><input className={inputCls} type="number" value={f.weight} onChange={(e) => set('weight', e.target.value)} /></Field>
+        <Field label="Marks open from"><input className={inputCls} type="datetime-local" value={f.opensAt} onChange={(e) => set('opensAt', e.target.value)} /></Field>
+        <Field label="Marks due by"><input className={inputCls} type="datetime-local" value={f.closesAt} onChange={(e) => set('closesAt', e.target.value)} /></Field>
+        <Field label="Instructions for teachers"><input className={inputCls} value={f.instructions} onChange={(e) => set('instructions', e.target.value)} /></Field>
+      </div>
+      <label className="mt-3 flex items-center gap-2 text-sm font-semibold text-ks-navy"><input type="checkbox" checked={f.countsToReportCard} onChange={(e) => set('countsToReportCard', e.target.checked)} /> Counts towards the term report card</label>
+      {draft ? (
+        <div className="mt-4 grid gap-4 md:grid-cols-3">
+          <Field label="Which classes">
+            <select className={inputCls} value={f.scopeType} onChange={(e) => set('scopeType', e.target.value)}>
+              <option value="ALL_CLASSES">All classes</option><option value="STANDARDS">Selected standards (levels)</option><option value="STREAMS">Selected classes</option>
+            </select>
+          </Field>
+          {f.scopeType === 'STANDARDS' && <Field label="Standards"><div className="flex flex-wrap gap-2">{levels.map((lv: any) => <button type="button" key={lv} onClick={() => toggle('scopeLevels', lv)} className={`rounded-lg px-3 py-1.5 text-xs font-bold ${f.scopeLevels.includes(lv) ? 'bg-ks-blue text-white' : 'bg-ks-mist/30 text-ks-navy'}`}>L{lv}</button>)}</div></Field>}
+          {f.scopeType === 'STREAMS' && <Field label="Classes"><div className="flex max-h-28 flex-wrap gap-2 overflow-y-auto">{(ref.data?.classes ?? []).map((c: any) => <button type="button" key={S(c.id)} onClick={() => toggle('scopeClassIds', c.id)} className={`rounded-lg px-3 py-1.5 text-xs font-bold ${f.scopeClassIds.includes(c.id) ? 'bg-ks-blue text-white' : 'bg-ks-mist/30 text-ks-navy'}`}>{S(c.name)}{c.stream ? ` ${c.stream}` : ''}</button>)}</div></Field>}
         </div>
-      </Card>
-    </div>
+      ) : <p className="mt-3 text-xs text-ks-muted">Which classes the exam covers is fixed once it opens. To leave a subject or class out, use the Subjects &amp; teachers tab.{status !== 'CLOSED' ? ' Changing the maximum score updates every marks sheet that is not locked.' : ' Reopen the window to change the maximum score.'}</p>}
+      {err && <div className="mt-3"><Banner tone="rose">{err}</Banner></div>}
+      <div className="mt-4 flex gap-2"><Button onClick={save} loading={update.isPending} disabled={!f.name.trim()}>Save settings</Button><Button variant="ghost" onClick={onClose}>Cancel</Button></div>
+    </Card>
   );
 }
 
@@ -963,17 +1000,25 @@ export function TeacherExamMarksPage() {
       const ci = { reg: col(/^(registration_number|admno|adm\.?_?no)$/), score: col(/^score|marks?$/), abs: col(/^is_absent|absent$/), ns: col(/^not_sat|notsat$/) };
       const yes = (v: unknown) => ['yes', 'y', 'true', '1', 'x'].includes(String(v ?? '').trim().toLowerCase());
       const known = new Set((data.rows as any[]).map((r) => S(r.registrationNumber).toUpperCase()));
+      const isFlag = (v: unknown) => /^(yes|y|true|1|x|no|n|false|0)?$/i.test(String(v ?? '').trim());
       const next = { ...rows };
-      let applied = 0; const unknown: string[] = [];
+      let applied = 0; const unknown: string[] = []; const misplaced: string[] = [];
       for (const row of grid.slice(hi + 1)) {
         const reg = S(row[ci.reg]).trim();
         if (!reg) continue;
         if (!known.has(reg.toUpperCase())) { unknown.push(reg); continue; }
         const key = (data.rows as any[]).find((r) => S(r.registrationNumber).toUpperCase() === reg.toUpperCase()).registrationNumber;
+        // A number (or any text) under is_absent / not_sat means the marks were typed into the wrong column.
+        if ((ci.abs >= 0 && !isFlag(row[ci.abs])) || (ci.ns >= 0 && !isFlag(row[ci.ns]))) { misplaced.push(reg); continue; }
         const score = ci.score >= 0 ? String(row[ci.score] ?? '').trim() : '';
         const status: EntryStatus = ci.ns >= 0 && yes(row[ci.ns]) ? 'NOT_SAT' : ci.abs >= 0 && yes(row[ci.abs]) ? 'ABSENT' : 'SCORED';
         next[S(key)] = { score: status === 'SCORED' ? score : '', status };
         applied += 1;
+      }
+      if (misplaced.length > 0) {
+        setFileMsg(`Could not use ${misplaced.length} row(s): the "is_absent" or "not_sat" column holds something other than yes / no (for example ${S(grid[hi + 1 + 0]?.[ci.abs] ?? '')}). Scores go in the "score" column. Move them over and upload the file again. ${applied ? `${applied} other row(s) were loaded.` : 'Nothing was loaded.'}`);
+        if (applied) setRows(next);
+        return;
       }
       setRows(next);
       setFileMsg(`Loaded ${applied} row(s) from ${file.name}.${unknown.length ? ` ${unknown.length} registration number(s) are not in this class and were ignored: ${unknown.slice(0, 5).join(', ')}.` : ''} Review the marks below, then click "Save marks".`);

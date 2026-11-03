@@ -22,6 +22,7 @@ import { CreateEditRequestDto, DecideEditRequestDto } from './dto/edit-request.d
 import { ExamResultsService } from './exam-results.service';
 import { AuthClientService } from '../auth-client/auth-client.service';
 import { resolveExpectedStudents } from './engine/expected-students';
+import { matchExclusion } from './engine/subject-exclusions';
 
 export interface ScopeClass {
   id: string;
@@ -145,6 +146,36 @@ export class ExamWindowsService {
     return classes;
   }
 
+  /** Shared checks for creating / editing a window, so a bad window is caught before teachers see it. */
+  private assertDates(opensAt?: string | Date | null, closesAt?: string | Date | null) {
+    if (opensAt && closesAt && new Date(closesAt).getTime() <= new Date(opensAt).getTime()) {
+      throw new BadRequestException('The closing date must be after the opening date.');
+    }
+  }
+
+  private async assertTermInYear(academicYearId: string, termId: string, user: RequestUser) {
+    const payload = await this.studentClient.get<unknown>('/students/terms', {}, this.studentServiceHeaders(user));
+    const term = this.unwrap<any>(payload).find((t) => t.id === termId);
+    if (!term) throw new BadRequestException('The selected term does not exist.');
+    if (term.academicYearId !== academicYearId) {
+      throw new BadRequestException('The selected term does not belong to the selected academic year.');
+    }
+  }
+
+  private async assertNameFree(schoolId: string | null, termId: string, name: string, exceptId?: string) {
+    const clash = await this.prisma.examWindow.findFirst({
+      where: {
+        schoolId,
+        termId,
+        name: { equals: name.trim(), mode: 'insensitive' },
+        status: { not: ExamWindowStatus.ARCHIVED },
+        ...(exceptId ? { id: { not: exceptId } } : {}),
+      },
+      select: { id: true },
+    });
+    if (clash) throw new BadRequestException(`An exam window called "${name.trim()}" already exists in this term. Choose a different name.`);
+  }
+
   async create(dto: CreateExamWindowDto, user: RequestUser) {
     const schoolId = requireWriteSchoolId(user, 'exam window');
 
@@ -154,11 +185,22 @@ export class ExamWindowsService {
     }
     assertSchoolInScope(user, examType.schoolId ?? null);
 
+    this.assertDates(dto.opensAt, dto.closesAt);
+    await this.assertTermInYear(dto.academicYearId, dto.termId, user);
+    await this.assertNameFree(schoolId, dto.termId, dto.name);
+    const scope = await this.resolveScopeClasses(
+      { academicYearId: dto.academicYearId, educationStage: dto.educationStage ?? null, scopeType: dto.scopeType, scopeLevels: dto.scopeLevels ?? [], scopeClassIds: dto.scopeClassIds ?? [] },
+      user,
+    );
+    if (!scope.length) {
+      throw new BadRequestException('The selected scope matches no classes in this academic year. Check the stage, standards or classes.');
+    }
+
     const window = await this.prisma.examWindow.create({
       data: {
         schoolId,
         examTypeId: dto.examTypeId,
-        name: dto.name,
+        name: dto.name.trim(),
         academicYearId: dto.academicYearId,
         termId: dto.termId,
         educationStage: dto.educationStage as any,
@@ -176,7 +218,7 @@ export class ExamWindowsService {
       },
     });
 
-    let fanOut: { assessmentsCreated: number; classesCovered: number; subjectsCovered: number } | null = null;
+    let fanOut: { assessmentsCreated: number; classesCovered: number; subjectsCovered: number; omitted: number } | null = null;
     if (dto.openNow) {
       fanOut = await this.open(window.id, user);
     }
@@ -184,35 +226,68 @@ export class ExamWindowsService {
     return { ...(await this.detail(window.id, user)), fanOut };
   }
 
-  /** Fan out one Assessment per class-subject in scope, and set the window OPEN. */
-  async open(id: string, user: RequestUser) {
-    const window = await this.getWindowOrThrow(id, user);
-    if (!([ExamWindowStatus.DRAFT, ExamWindowStatus.REOPENED] as ExamWindowStatus[]).includes(window.status)) {
-      throw new BadRequestException(`Only a DRAFT or REOPENED window can be (re)opened. Current status: ${window.status}.`);
-    }
+  /** A window the caller may see (school scope enforced). Public for the subject-planning service. */
+  getWindow(id: string, user?: RequestUser) {
+    return this.getWindowOrThrow(id, user);
+  }
 
+  /** Omissions that apply to a window: its own, plus the school's standing rules. */
+  private loadExclusions(window: { id: string; schoolId: string | null }) {
+    return this.prisma.examSubjectExclusion.findMany({
+      where: { OR: [{ examWindowId: window.id }, { examWindowId: null, schoolId: window.schoolId }] },
+    });
+  }
+
+  /**
+   * Create the missing marks sheets (one Assessment per class-subject in scope), skipping every subject the
+   * admin has omitted. Safe to repeat: existing sheets are left alone, so it also adds subjects assigned
+   * after the window opened.
+   */
+  private async fanOut(window: Awaited<ReturnType<ExamWindowsService['getWindowOrThrow']>>, user: RequestUser) {
     const classes = await this.resolveScopeClasses(window, user);
     if (!classes.length) {
       throw new BadRequestException('The selected scope matched no classes. Check the classes exist for this academic year.');
     }
     const classIds = classes.map((c) => c.id);
 
-    const classSubjects = await this.prisma.classSubject.findMany({
+    const all = await this.prisma.classSubject.findMany({
       where: { academicYearId: window.academicYearId, isActive: true, classId: { in: classIds } },
       include: { subject: true },
     });
+    const classSubjects = all.filter((cs) => cs.subject.isActive);
     if (!classSubjects.length) {
       throw new BadRequestException('No subjects are assigned to the classes in scope. Assign class-subjects first.');
     }
 
+    const rules = await this.loadExclusions(window);
+    const firstOpen = window.openedAt == null;
+    const included: typeof classSubjects = [];
+    const seedFromStanding: Array<{ subjectId: string; classId: string | null; reason: string }> = [];
+    for (const cs of classSubjects) {
+      const hit = matchExclusion(rules, cs.subjectId, cs.classId, { windowOpened: !firstOpen });
+      if (!hit) { included.push(cs); continue; }
+      if (hit.source === 'STANDING' && !seedFromStanding.some((x) => x.subjectId === hit.row.subjectId && x.classId === hit.row.classId)) {
+        seedFromStanding.push({ subjectId: hit.row.subjectId, classId: hit.row.classId, reason: `School rule: ${hit.row.reason}` });
+      }
+    }
+    if (!included.length) {
+      throw new BadRequestException('Every subject in scope has been omitted, so there is nothing to examine. Restore at least one subject.');
+    }
+
     let created = 0;
     await this.prisma.$transaction(async (tx) => {
-      for (const cs of classSubjects) {
+      // The first time a window opens, the school's standing rules become this window's own (history stays stable).
+      for (const rule of seedFromStanding) {
+        await tx.examSubjectExclusion.create({
+          data: { schoolId: window.schoolId, examWindowId: window.id, subjectId: rule.subjectId, classId: rule.classId, reason: rule.reason, createdById: user.id },
+        });
+      }
+      for (const cs of included) {
         const existing = await tx.assessment.findUnique({
-          where: { classSubjectId_examWindowId: { classSubjectId: cs.id, examWindowId: id } },
+          where: { classSubjectId_examWindowId: { classSubjectId: cs.id, examWindowId: window.id } },
         });
         if (existing) {
-          if (existing.status === AssessmentStatus.LOCKED) {
+          if (existing.status === AssessmentStatus.LOCKED && window.status === ExamWindowStatus.REOPENED) {
             // reopening: allow edits again
             await tx.assessment.update({ where: { id: existing.id }, data: { status: AssessmentStatus.OPEN } });
           }
@@ -221,7 +296,7 @@ export class ExamWindowsService {
         await tx.assessment.create({
           data: {
             classSubjectId: cs.id,
-            examWindowId: id,
+            examWindowId: window.id,
             classId: cs.classId,
             subjectId: cs.subjectId,
             educationStage: cs.educationStage,
@@ -239,10 +314,25 @@ export class ExamWindowsService {
       }
 
       await tx.examWindow.update({
-        where: { id },
-        data: { status: ExamWindowStatus.OPEN, openedAt: window.openedAt ?? new Date() },
+        where: { id: window.id },
+        data: {
+          status: window.status === ExamWindowStatus.DRAFT ? ExamWindowStatus.OPEN : window.status,
+          openedAt: window.openedAt ?? new Date(),
+          ...(created > 0 ? { subjectsChangedAt: new Date() } : {}),
+        },
       });
     });
+
+    return { assessmentsCreated: created, classesCovered: classIds.length, subjectsCovered: included.length, omitted: classSubjects.length - included.length, classIds };
+  }
+
+  /** Fan out one Assessment per class-subject in scope (minus omitted subjects), and set the window OPEN. */
+  async open(id: string, user: RequestUser) {
+    const window = await this.getWindowOrThrow(id, user);
+    if (!([ExamWindowStatus.DRAFT, ExamWindowStatus.REOPENED] as ExamWindowStatus[]).includes(window.status)) {
+      throw new BadRequestException(`Only a DRAFT or REOPENED window can be (re)opened. Current status: ${window.status}.`);
+    }
+    const { classIds, ...summary } = await this.fanOut(window, user);
 
     await this.rabbitMq.publish('exam.window.opened', {
       examWindowId: id,
@@ -253,7 +343,18 @@ export class ExamWindowsService {
       schoolId: window.schoolId,
     });
 
-    return { assessmentsCreated: created, classesCovered: classIds.length, subjectsCovered: classSubjects.length };
+    return summary;
+  }
+
+  /** Add marks sheets for subjects assigned after the window opened (omitted subjects stay omitted). */
+  async syncSubjects(id: string, user: RequestUser) {
+    const window = await this.getWindowOrThrow(id, user);
+    if (!([ExamWindowStatus.OPEN, ExamWindowStatus.REOPENED] as ExamWindowStatus[]).includes(window.status)) {
+      throw new BadRequestException(`Subjects can only be added while the window is OPEN or REOPENED. Current status: ${window.status}.`);
+    }
+    const { classIds: _c, ...summary } = await this.fanOut(window, user);
+    await this.redis.delByPattern(`exam-window:*:${id}`);
+    return summary;
   }
 
   /**
@@ -317,9 +418,10 @@ export class ExamWindowsService {
           },
         }),
       ]);
-      if (staleMarks || staleExemptions) {
+      const staleSubjects = window.subjectsChangedAt && window.subjectsChangedAt > window.computedAt;
+      if (staleMarks || staleExemptions || staleSubjects) {
         throw new BadRequestException(
-          'Marks or exemptions changed after the last calculation. Recalculate results before publishing.',
+          'Marks, exemptions or the subject list changed after the last calculation. Recalculate results before publishing.',
         );
       }
     }
@@ -403,23 +505,81 @@ export class ExamWindowsService {
     if (window.status === ExamWindowStatus.PUBLISHED) {
       throw new BadRequestException('Unpublish the window before editing its settings.');
     }
-    await this.prisma.examWindow.update({
-      where: { id },
-      data: {
-        name: dto.name,
-        maxScore: dto.maxScore,
-        weight: dto.weight,
-        countsToReportCard: dto.countsToReportCard,
-        instructions: dto.instructions,
-        opensAt: dto.opensAt ? new Date(dto.opensAt) : undefined,
-        closesAt: dto.closesAt ? new Date(dto.closesAt) : undefined,
-      },
+    if (window.status === ExamWindowStatus.ARCHIVED) {
+      throw new BadRequestException('An archived window cannot be edited.');
+    }
+    const scopeEdit = dto.scopeType !== undefined || dto.scopeLevels !== undefined || dto.scopeClassIds !== undefined || dto.educationStage !== undefined;
+    if (scopeEdit && window.status !== ExamWindowStatus.DRAFT) {
+      throw new BadRequestException('Which classes an exam covers can only change while it is a DRAFT. Once teachers have marks sheets, omit subjects instead.');
+    }
+    this.assertDates(dto.opensAt ?? window.opensAt, dto.closesAt ?? window.closesAt);
+    if (dto.name && dto.name.trim().toLowerCase() !== window.name.toLowerCase()) {
+      await this.assertNameFree(window.schoolId, window.termId, dto.name, id);
+    }
+
+    const scopeType = (dto.scopeType ?? window.scopeType) as string;
+    if (scopeEdit) {
+      const classes = await this.resolveScopeClasses(
+        {
+          academicYearId: window.academicYearId,
+          educationStage: (dto.educationStage ?? window.educationStage) as string | null,
+          scopeType,
+          scopeLevels: dto.scopeLevels ?? window.scopeLevels,
+          scopeClassIds: dto.scopeClassIds ?? window.scopeClassIds,
+        },
+        user,
+      );
+      if (!classes.length) throw new BadRequestException('The selected scope matches no classes in this academic year.');
+    }
+
+    const maxChange = dto.maxScore !== undefined && dto.maxScore !== window.maxScore;
+    if (maxChange && window.status === ExamWindowStatus.CLOSED) {
+      throw new BadRequestException('Results are already calculated. Reopen the window before changing the maximum score.');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      if (maxChange && window.status !== ExamWindowStatus.DRAFT) {
+        // Marks sheets copy the maximum when they are created, so an open window has to carry the change down.
+        const tooHigh = await tx.mark.count({ where: { assessment: { examWindowId: id }, score: { gt: dto.maxScore! } } });
+        if (tooHigh > 0) {
+          throw new BadRequestException(`${tooHigh} mark(s) already entered are above ${dto.maxScore}. Correct them first, or keep the current maximum.`);
+        }
+        await tx.assessment.updateMany({ where: { examWindowId: id, status: { not: AssessmentStatus.LOCKED } }, data: { maxScore: dto.maxScore! } });
+      }
+      await tx.examWindow.update({
+        where: { id },
+        data: {
+          name: dto.name?.trim(),
+          maxScore: dto.maxScore,
+          weight: dto.weight,
+          countsToReportCard: dto.countsToReportCard,
+          instructions: dto.instructions,
+          opensAt: dto.opensAt ? new Date(dto.opensAt) : undefined,
+          closesAt: dto.closesAt ? new Date(dto.closesAt) : undefined,
+          ...(scopeEdit
+            ? {
+                educationStage: (dto.educationStage ?? window.educationStage) as any,
+                scopeType: scopeType as any,
+                scopeLevels: scopeType === 'STANDARDS' ? dto.scopeLevels ?? window.scopeLevels : [],
+                scopeClassIds: scopeType === 'STREAMS' ? dto.scopeClassIds ?? window.scopeClassIds : [],
+              }
+            : {}),
+        },
+      });
     });
+    await this.redis.delByPattern(`exam-window:*:${id}`);
     return this.detail(id, user);
   }
 
   async archive(id: string, user: RequestUser) {
-    await this.getWindowOrThrow(id, user);
+    const window = await this.getWindowOrThrow(id, user);
+    if (!([ExamWindowStatus.DRAFT, ExamWindowStatus.CLOSED] as ExamWindowStatus[]).includes(window.status)) {
+      throw new BadRequestException(
+        window.status === ExamWindowStatus.ARCHIVED
+          ? 'This window is already archived.'
+          : `A ${window.status} window cannot be archived. Close it (or unpublish it) first.`,
+      );
+    }
     await this.prisma.examWindow.update({ where: { id }, data: { status: ExamWindowStatus.ARCHIVED } });
     return { archived: true };
   }
@@ -430,7 +590,7 @@ export class ExamWindowsService {
       academicYearId: filters.academicYearId,
       termId: filters.termId,
       examTypeId: filters.examTypeId,
-      status: filters.status as any,
+      status: filters.status ? (filters.status as any) : { not: ExamWindowStatus.ARCHIVED },
       ...(filters.search
         ? { name: { contains: filters.search, mode: 'insensitive' } }
         : {}),

@@ -8,7 +8,10 @@ async function login(email, password) {
   if (!d.accessToken) throw new Error('login failed ' + email + ' ' + JSON.stringify(j).slice(0, 300));
   return { token: d.accessToken, user: d.user, raw: d };
 }
+// The dev gateway allows ~60 requests a minute per user. E2E_CALL_DELAY_MS (e.g. 1100) keeps a long script under it.
+const DELAY = Number(process.env.E2E_CALL_DELAY_MS || 0);
 async function call(token, method, path, body, extraHeaders = {}) {
+  if (DELAY > 0) await new Promise((r) => setTimeout(r, DELAY));
   const r = await fetch(BASE + path, { method, headers: { 'content-type': 'application/json', authorization: 'Bearer ' + token, ...extraHeaders }, body: body ? JSON.stringify(body) : undefined });
   const t = await r.text();
   let j; try { j = JSON.parse(t); } catch { j = t; }

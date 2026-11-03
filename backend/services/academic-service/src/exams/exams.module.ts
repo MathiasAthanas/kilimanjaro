@@ -3,6 +3,8 @@ import { AssessmentModule } from '../assessments/assessments.module';
 import { ReportCardsModule } from '../report-cards/report-cards.module';
 import { ExamTypesController } from './exam-types.controller';
 import { ExamTypesService } from './exam-types.service';
+import { ExamWindowSubjectsController } from './exam-window-subjects.controller';
+import { ExamWindowSubjectsService } from './exam-window-subjects.service';
 import { ExamWindowsController } from './exam-windows.controller';
 import { ExamWindowsService } from './exam-windows.service';
 import { ExamResultsController } from './exam-results.controller';
@@ -24,6 +26,7 @@ import { PerformanceExportService } from './performance-export.service';
   imports: [AssessmentModule, ReportCardsModule, GradingResolverModule],
   controllers: [
     ExamTypesController,
+    ExamWindowSubjectsController,
     ExamWindowsController,
     ExamResultsController,
     ExamMarksController,
@@ -35,6 +38,7 @@ import { PerformanceExportService } from './performance-export.service';
   providers: [
     ExamTypesService,
     ExamWindowsService,
+    ExamWindowSubjectsService,
     ExamResultsService,
     ExamMarksService,
     ReportCompositionService,

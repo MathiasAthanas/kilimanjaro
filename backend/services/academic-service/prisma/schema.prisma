@@ -727,6 +727,8 @@ model ExamWindow {
   openedAt           DateTime?
   closedAt           DateTime?
   computedAt         DateTime?
+  /// Last time subjects were omitted from / restored to this window (results older than this are stale).
+  subjectsChangedAt  DateTime?
   publishedAt        DateTime?
   publishedById      String?
   createdById        String?
@@ -737,10 +739,31 @@ model ExamWindow {
   results            ExamWindowResult[]
   editRequests       ResultEditRequest[]
   exemptions         ResultCalculationExemption[]
+  subjectExclusions  ExamSubjectExclusion[]
 
   @@index([schoolId, academicYearId, termId])
   @@index([status])
   @@index([examTypeId])
+  @@schema("academics")
+}
+
+/// A subject left out of an exam window. `examWindowId` null = a standing school rule that seeds
+/// every window opened afterwards; `classId` null = every class in the window's scope.
+model ExamSubjectExclusion {
+  id             String      @id @default(uuid())
+  schoolId       String?
+  examWindowId   String?
+  subjectId      String
+  classId        String?
+  reason         String
+  /// Marks that had already been entered and were discarded when the subject was omitted.
+  discardedMarks Int         @default(0)
+  createdById    String
+  createdAt      DateTime    @default(now())
+  examWindow     ExamWindow? @relation(fields: [examWindowId], references: [id], onDelete: Cascade)
+
+  @@index([examWindowId])
+  @@index([schoolId, subjectId])
   @@schema("academics")
 }
 

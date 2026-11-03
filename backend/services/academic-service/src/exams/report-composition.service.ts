@@ -120,8 +120,9 @@ export class ReportCompositionService {
           where: { termId: w.termId, academicYearId: w.academicYearId, OR: [{ examWindowId: null }, { examWindowId: w.id }], updatedAt: { gt: w.computedAt } },
         }),
       ]);
-      if (staleMarks || staleExemptions) {
-        throw new BadRequestException(`Window "${w.name}" has marks or exemptions changed since it was last calculated. Recalculate it before composing report cards.`);
+      const staleSubjects = w.subjectsChangedAt && w.subjectsChangedAt > w.computedAt;
+      if (staleMarks || staleExemptions || staleSubjects) {
+        throw new BadRequestException(`Window "${w.name}" has marks, exemptions or subjects changed since it was last calculated. Recalculate it before composing report cards.`);
       }
     }
     return { windows, weightByWindow };

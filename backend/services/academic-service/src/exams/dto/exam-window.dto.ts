@@ -103,6 +103,26 @@ export class UpdateExamWindowDto {
   @IsNotEmpty()
   name?: string;
 
+  /** Scope can only change while the window is a DRAFT. */
+  @IsOptional()
+  @IsEnum(EducationStageDto)
+  educationStage?: EducationStageDto;
+
+  @IsOptional()
+  @IsEnum(ExamWindowScopeTypeDto)
+  scopeType?: ExamWindowScopeTypeDto;
+
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  @Type(() => Number)
+  scopeLevels?: number[];
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  scopeClassIds?: string[];
+
   @IsOptional()
   @IsNumber()
   @Min(1)

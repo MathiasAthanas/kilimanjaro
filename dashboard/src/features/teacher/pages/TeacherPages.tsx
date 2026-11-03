@@ -441,13 +441,20 @@ function parseMarksFile(rows: Array<{ id: string; registration: string }>, grid:
   const byReg = new Map(rows.map((r) => [r.registration.toUpperCase(), r.id]));
   const out: Record<string, MarkEdit> = {};
   const unknown: string[] = [];
+  const misplaced: string[] = [];
+  const isFlag = (v: unknown) => /^(yes|y|true|1|x|no|n|false|0)?$/i.test(String(v ?? '').trim());
   for (const row of grid.slice(hi + 1)) {
     const reg = String(row[ci.reg] ?? '').trim();
     if (!reg) continue;
     const id = byReg.get(reg.toUpperCase());
     if (!id) { unknown.push(reg); continue; }
+    // A number under is_absent / not_sat means the marks were typed into the wrong column.
+    if ((ci.abs >= 0 && !isFlag(row[ci.abs])) || (ci.ns >= 0 && !isFlag(row[ci.ns]))) { misplaced.push(reg); continue; }
     const status = ci.ns >= 0 && yes(row[ci.ns]) ? 'NOT_SAT' : ci.abs >= 0 && yes(row[ci.abs]) ? 'ABSENT' : 'SCORED';
     out[id] = { status, score: status === 'SCORED' && ci.score >= 0 ? String(row[ci.score] ?? '').trim() : '' };
+  }
+  if (misplaced.length > 0) {
+    return { error: `Could not use ${misplaced.length} row(s): the "is_absent" or "not_sat" column holds something other than yes / no. Scores go in the "score" column. Move them over and upload the file again.` as const };
   }
   return { out, unknown };
 }
