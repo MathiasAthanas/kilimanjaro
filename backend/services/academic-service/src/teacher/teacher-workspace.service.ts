@@ -2,6 +2,7 @@ import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/commo
 import { PrismaService } from '../prisma/prisma.service';
 import { StudentClientService } from '../student-client/student-client.service';
 import { RequestUser } from '../common/interfaces/request-user.interface';
+import { formatClassLabel } from '../common/helpers/class-label.helper';
 import { schoolScopeFilter } from '../common/helpers/school-scope.helper';
 import { resolveExpectedStudents } from '../exams/engine/expected-students';
 import { GradingResolverService } from '../exams/grading-resolver.service';
@@ -54,7 +55,7 @@ export class TeacherWorkspaceService {
 
   private classLabel(c: Row | undefined): string {
     if (!c) return '';
-    return `${c.name ?? ''}${c.stream ? ` ${c.stream}` : ''}`.trim();
+    return formatClassLabel(c.name as string | null | undefined, c.stream as string | null | undefined);
   }
 
   private async rosterOf(classId: string, user: RequestUser): Promise<Row[]> {

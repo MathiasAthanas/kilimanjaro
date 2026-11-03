@@ -1,4 +1,5 @@
 import 'json_num.dart';
+import '../core/utils/class_label.dart';
 
 class ChildSummary {
   const ChildSummary({
@@ -71,7 +72,7 @@ class ChildSummary {
 
     final stream = enrolledClass['stream'] as String?;
     final enrolledClassLabel = enrolledClass['name'] is String
-        ? '${enrolledClass['name']}${stream != null && stream.isNotEmpty ? ' $stream' : ''}'
+        ? formatClassLabel(enrolledClass['name'], stream)
         : null;
 
     return ChildSummary(

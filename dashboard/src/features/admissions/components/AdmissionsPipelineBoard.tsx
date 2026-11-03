@@ -8,6 +8,7 @@ import { Button } from '../../../components/common/Button';
 import { EmptyState } from '../../../components/feedback/EmptyState';
 import { SkeletonCards } from '../../../components/common/SkeletonCards';
 import { toast } from '../../../lib/toast';
+import { formatClassLabel } from '../../../lib/classLabel';
 import {
   useApplicants,
   useOfferDecisionMutation,
@@ -58,7 +59,7 @@ function ApplicantCard({
   const stage = applicant.stage;
   const daysInPipeline = Math.max(0, Math.round((Date.now() - new Date(applicant.createdAt).getTime()) / 86_400_000));
   const classLabel = applicant.prospectiveClass
-    ? `${applicant.prospectiveClass.name}${applicant.prospectiveClass.stream ? ` ${applicant.prospectiveClass.stream}` : ''}`
+    ? formatClassLabel(applicant.prospectiveClass.name, applicant.prospectiveClass.stream)
     : 'Class not set';
   const events = applicant.stageEvents ?? [];
 

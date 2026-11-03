@@ -5,6 +5,7 @@ import { StudentClientService } from '../student-client/student-client.service';
 import { RequestUser } from '../common/interfaces/request-user.interface';
 import { schoolScopeFilter } from '../common/helpers/school-scope.helper';
 import { competitionRanks, round } from './engine/result-engine';
+import { formatClassLabel } from '../common/helpers/class-label.helper';
 
 // esModuleInterop is off in this service — use the require form for a usable constructor.
 import PDFDocument = require('pdfkit');
@@ -245,7 +246,7 @@ export class PerformanceExportService {
       const classIds = [...new Set(visible.map((r) => r.classId))];
       for (const cid of classIds) {
         const sRows = visible.filter((r) => r.classId === cid).sort(sortFn);
-        streams.push({ classId: cid, label: `${sRows[0].className}${sRows[0].stream ? ` ${sRows[0].stream}` : ''}`.trim(), stream: sRows[0].stream, rows: sRows });
+        streams.push({ classId: cid, label: formatClassLabel(sRows[0].className, sRows[0].stream), stream: sRows[0].stream, rows: sRows });
       }
       streams.sort((a, b) => a.label.localeCompare(b.label));
       standards.push({

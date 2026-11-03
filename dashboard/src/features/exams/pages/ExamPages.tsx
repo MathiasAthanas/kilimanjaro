@@ -11,6 +11,7 @@ import { Badge } from '../../../components/common/Badge';
 import { EmptyState } from '../../../components/common/EmptyState';
 import { ErrorState } from '../../../components/common/ErrorState';
 import { WorkspaceHeader } from '../../../components/layout/WorkspaceHeader';
+import { formatClassLabel } from '../../../lib/classLabel';
 import {
   downloadMarksTemplateCsv, downloadMeritExport,
   useComposeReportCards, useCreateEditRequest, useCreateExamType, useCreateExamWindow,
@@ -253,7 +254,7 @@ function CreateWindowForm({ onDone }: { onDone: () => void }) {
               {classesForStreams.map((c: any) => {
                 const on = (form.scopeClassIds ?? []).includes(c.id);
                 return <button type="button" key={S(c.id)} onClick={() => set('scopeClassIds', on ? (form.scopeClassIds ?? []).filter((x: any) => x !== c.id) : [...(form.scopeClassIds ?? []), c.id])}
-                  className={`rounded-lg px-3 py-1.5 text-xs font-bold ${on ? 'bg-ks-blue text-white' : 'bg-ks-mist/30 text-ks-navy'}`}>{S(c.name)}{c.stream ? ` ${c.stream}` : ''}</button>;
+                  className={`rounded-lg px-3 py-1.5 text-xs font-bold ${on ? 'bg-ks-blue text-white' : 'bg-ks-mist/30 text-ks-navy'}`}>{formatClassLabel(S(c.name), c.stream)}</button>;
               })}
             </div>
           </Field>
@@ -445,7 +446,7 @@ function WindowSettings({ w, status, onClose, onSaved }: { w: Record<string, any
             </select>
           </Field>
           {f.scopeType === 'STANDARDS' && <Field label="Standards"><div className="flex flex-wrap gap-2">{levels.map((lv: any) => <button type="button" key={lv} onClick={() => toggle('scopeLevels', lv)} className={`rounded-lg px-3 py-1.5 text-xs font-bold ${f.scopeLevels.includes(lv) ? 'bg-ks-blue text-white' : 'bg-ks-mist/30 text-ks-navy'}`}>L{lv}</button>)}</div></Field>}
-          {f.scopeType === 'STREAMS' && <Field label="Classes"><div className="flex max-h-28 flex-wrap gap-2 overflow-y-auto">{(ref.data?.classes ?? []).map((c: any) => <button type="button" key={S(c.id)} onClick={() => toggle('scopeClassIds', c.id)} className={`rounded-lg px-3 py-1.5 text-xs font-bold ${f.scopeClassIds.includes(c.id) ? 'bg-ks-blue text-white' : 'bg-ks-mist/30 text-ks-navy'}`}>{S(c.name)}{c.stream ? ` ${c.stream}` : ''}</button>)}</div></Field>}
+          {f.scopeType === 'STREAMS' && <Field label="Classes"><div className="flex max-h-28 flex-wrap gap-2 overflow-y-auto">{(ref.data?.classes ?? []).map((c: any) => <button type="button" key={S(c.id)} onClick={() => toggle('scopeClassIds', c.id)} className={`rounded-lg px-3 py-1.5 text-xs font-bold ${f.scopeClassIds.includes(c.id) ? 'bg-ks-blue text-white' : 'bg-ks-mist/30 text-ks-navy'}`}>{formatClassLabel(S(c.name), c.stream)}</button>)}</div></Field>}
         </div>
       ) : <p className="mt-3 text-xs text-ks-muted">Which classes the exam covers is fixed once it opens. To leave a subject or class out, use the Subjects &amp; teachers tab.{status !== 'CLOSED' ? ' Changing the maximum score updates every marks sheet that is not locked.' : ' Reopen the window to change the maximum score.'}</p>}
       {err && <div className="mt-3"><Banner tone="rose">{err}</Banner></div>}
@@ -541,7 +542,7 @@ function SummaryTables({ summaries, gradeCodes }: { summaries: any; gradeCodes: 
           <tbody className="divide-y divide-ks-line">
             {recs.map((rec, i) => (
               <tr key={i}>
-                <td className="px-3 py-2 font-semibold text-ks-navy">{S(rec.className ? `${rec.className} ${S(rec.stream)}`.trim() : rec.subjectName ?? rec.gender)}</td>
+                <td className="px-3 py-2 font-semibold text-ks-navy">{S(rec.className ? formatClassLabel(rec.className, rec.stream) : rec.subjectName ?? rec.gender)}</td>
                 {gradeCodes.map((g) => <td key={g} className="px-2 py-2 text-center">{N((rec.distribution ?? {})[g])}</td>)}
                 <td className="px-2 py-2 text-center">{N(rec.entries)}</td><td className="px-2 py-2 text-center">{N(rec.meanMarks)}</td>
                 <td className="px-2 py-2 text-center font-bold">{S(rec.grade ?? '')}</td>
@@ -864,7 +865,7 @@ export function TeacherExamWindowsPage() {
                       <div className="flex flex-wrap items-center gap-3">
                         <div className="min-w-0 flex-1">
                           <span className="font-semibold text-ks-navy">{S(s.subjectName)}</span>
-                          <span className="block text-xs text-ks-muted">{klass ? `${S(klass.name)}${klass.stream ? ` · ${S(klass.stream)}` : ''}` : 'Class'}</span>
+                          <span className="block text-xs text-ks-muted">{klass ? formatClassLabel(S(klass.name), klass.stream, ' · ') : 'Class'}</span>
                         </div>
                         <ProgressBar entered={N(s.marksEntered)} required={N(s.required)} />
                         {s.canEdit
@@ -1033,7 +1034,7 @@ export function TeacherExamMarksPage() {
       <Link to={adminView ? `/exams/${S(assessment?.examWindow?.id)}` : '/teacher/exams'} className="mb-3 inline-flex items-center gap-1 text-sm font-bold text-ks-blue"><ArrowLeft className="h-4 w-4" /> {adminView ? 'Back to the exam window' : 'My exam windows'}</Link>
       <WorkspaceHeader
         title={`${S(assessment?.subjectName)} — Marks`}
-        description={[`${S(classInfo?.name, 'Class')}${classInfo?.stream ? ` · ${S(classInfo.stream)}` : ''}`, S(assessment?.examWindow?.name), S(yearInfo?.name ?? yearInfo?.year), S(termInfo?.name), `out of ${maxScore}`].filter(Boolean).join(' · ')}
+        description={[formatClassLabel(S(classInfo?.name, 'Class'), classInfo?.stream, ' · '), S(assessment?.examWindow?.name), S(yearInfo?.name ?? yearInfo?.year), S(termInfo?.name), `out of ${maxScore}`].filter(Boolean).join(' · ')}
         action={<Badge tone={statusTone(status === 'OPEN' ? 'OPEN' : status)}>{status}</Badge>}
       />
 

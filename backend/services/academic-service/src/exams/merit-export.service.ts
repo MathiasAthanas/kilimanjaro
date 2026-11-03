@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RequestUser } from '../common/interfaces/request-user.interface';
 import { ExamResultsService } from './exam-results.service';
 import { GradingResolverService } from './grading-resolver.service';
+import { formatClassLabel } from '../common/helpers/class-label.helper';
 
 // esModuleInterop is off in this service — use the require form for a usable constructor.
 import PDFDocument = require('pdfkit');
@@ -204,7 +205,7 @@ export class MeritExportService {
     };
 
     const byStream = (merit.summaries.byStream as any[]).map((s) => ({
-      label: `${s.className ?? ''}${s.stream ? ' ' + s.stream : ''}`.trim() || s.classId,
+      label: formatClassLabel(s.className, s.stream) || s.classId,
       entries: s.entries,
       meanMarks: s.meanMarks,
       distribution: s.distribution,
@@ -367,7 +368,7 @@ export class MeritExportService {
           doc.y = yy + 10;
         };
 
-        section('Grade Breakdown (by stream)', 'Class', (merit.summaries.byStream as any[]).map((s) => ({ label: `${s.className ?? ''}${s.stream ? ' ' + s.stream : ''}`.trim() || s.classId, entries: s.entries, meanMarks: s.meanMarks, distribution: s.distribution })));
+        section('Grade Breakdown (by stream)', 'Class', (merit.summaries.byStream as any[]).map((s) => ({ label: formatClassLabel(s.className, s.stream) || s.classId, entries: s.entries, meanMarks: s.meanMarks, distribution: s.distribution })));
         section('Class Grade Summary (by subject)', 'Subject', (merit.summaries.bySubject as any[]).map((s) => ({ label: s.subjectName, entries: s.entries, meanMarks: s.meanMarks, distribution: s.distribution })));
         section('Gender Summary', 'Gender', (merit.summaries.byGender as any[]).map((s) => ({ label: s.gender, entries: s.entries, meanMarks: s.meanMarks, distribution: s.distribution })));
 

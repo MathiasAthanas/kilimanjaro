@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { createPdf } from './pdf.helper';
+import { formatClassLabel } from '../../common/helpers/class-label.helper';
 
 @Injectable()
 export class FinanceCollectionGenerator {
@@ -27,7 +28,7 @@ export class FinanceCollectionGenerator {
       );
     const classBullets = (data.byClass || [])
       .slice(0, 10)
-      .map((row: any) => `${row.className}${row.stream ? ` ${row.stream}` : ''}: ${Number(row.collectionRate || 0).toFixed(2)}% collected, ${money(row.totalCollected)} received, ${row.overdueCount || 0} overdue invoices.`);
+      .map((row: any) => `${formatClassLabel(row.className, row.stream)}: ${Number(row.collectionRate || 0).toFixed(2)}% collected, ${money(row.totalCollected)} received, ${row.overdueCount || 0} overdue invoices.`);
     const trendBullets = (data.collectionTrend || [])
       .slice(-6)
       .map((row: any) => `${row.period}: ${Number(row.rate || 0).toFixed(2)}% collection (${money(row.collected)} collected against ${money(row.billed)} billed).`);

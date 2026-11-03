@@ -9,6 +9,7 @@ import { assertSchoolInScope, requireWriteSchoolId, schoolScopeFilter } from '..
 import { ExamWindowsService } from './exam-windows.service';
 import { OmitSubjectDto } from './dto/omit-subject.dto';
 import { matchExclusion } from './engine/subject-exclusions';
+import { formatClassLabel } from '../common/helpers/class-label.helper';
 
 type SubjectState = 'INCLUDED' | 'OMITTED' | 'NOT_ADDED';
 
@@ -44,7 +45,7 @@ export class ExamWindowSubjectsService {
   }
 
   private label(c: any): string {
-    return c ? `${c.name ?? ''}${c.stream ? ` ${c.stream}` : ''}`.trim() : 'Class';
+    return c ? formatClassLabel(c.name, c.stream) : 'Class';
   }
 
   // ── Preview ────────────────────────────────────────────────────────────────

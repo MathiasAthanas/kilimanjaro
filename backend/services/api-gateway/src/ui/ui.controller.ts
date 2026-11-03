@@ -2,6 +2,7 @@ import { BadRequestException, Body, Controller, Get, NotFoundException, Param, P
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { GatewayUser, UiApiService, UiEnvelope } from './ui-api.service';
+import { formatClassLabel } from '../common/helpers/class-label.helper';
 
 const STUDENT_ROLES = ['STUDENT', 'SYSTEM_ADMIN'];
 const PARENT_ROLES = ['PARENT', 'GUARDIAN', 'SYSTEM_ADMIN'];
@@ -416,7 +417,7 @@ export class UiController {
     const map = new Map<string, { label: string; studentCount: number }>();
     for (const c of this.ui.asArray(res.data) as Record<string, any>[]) {
       map.set(String(c.id), {
-        label: `${c.name ?? ''}${c.stream ? ` ${c.stream}` : ''}`.trim(),
+        label: formatClassLabel(c.name, c.stream),
         studentCount: Number(c.studentCount ?? c._count?.enrolments ?? 0),
       });
     }
@@ -677,7 +678,7 @@ export class UiController {
         syllabusCompletion: Number(a.syllabusCompletionAverage ?? 0),
         atRiskStudents: Array.isArray(a.atRiskStudents) ? a.atRiskStudents.length : 0,
         classes: (Array.isArray(a.byClass) ? a.byClass : []).map((c: Record<string, any>) => ({
-          classLabel: `${c.className ?? ''} ${c.stream ?? ''}`.trim(),
+          classLabel: formatClassLabel(c.className, c.stream),
           teacherName: teacherName(c.teacherName),
           average: Number(c.average ?? 0),
           studentCount: Number(c.studentCount ?? 0),

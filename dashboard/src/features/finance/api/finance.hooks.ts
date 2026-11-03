@@ -1,6 +1,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../lib/api/client';
 import { arrayFromApi, payloadOf } from '../../../lib/api/response';
+import { formatClassLabel } from '../../../lib/classLabel';
 
 // ─── Query key factory ────────────────────────────────────────────────────────
 
@@ -447,7 +448,7 @@ async function getClassNameMap(): Promise<Map<string, string>> {
     const rows = await api.get('/students/classes').then((r) => arrayFromApi(payloadOf(r), ['items', 'classes']));
     rows.forEach((c) => {
       const o = c as Record<string, unknown>;
-      const name = [strOf(o.name), strOf(o.stream)].filter(Boolean).join(' ').trim();
+      const name = formatClassLabel(strOf(o.name), strOf(o.stream));
       map.set(strOf(o.id), name);
     });
   } catch { /* best-effort */ }

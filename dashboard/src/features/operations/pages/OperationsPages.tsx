@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { NavLink, useNavigate, useParams } from 'react-router-dom';
 import { toast } from '../../../lib/toast';
+import { formatClassLabel } from '../../../lib/classLabel';
 import { Badge } from '../../../components/common/Badge';
 import { Button } from '../../../components/common/Button';
 import { DataError } from '../../../components/feedback/DataError';
@@ -283,7 +284,7 @@ export function ClassResultsReviewPage() {
   const { classId } = useParams();
   const { data, isLoading } = useClassAnalytics(classId) as { data: Record<string, unknown> | undefined; isLoading: boolean };
   const subjects = (data?.subjectSummaries ?? []) as Array<Record<string, unknown>>;
-  const className = data?.className ? `${String(data.className)}${data?.stream ? ` ${String(data.stream)}` : ''}` : 'Class';
+  const className = data?.className ? formatClassLabel(String(data.className), data?.stream ? String(data.stream) : null) : 'Class';
   return (
     <OperationsShell title={`${className} Results`} eyebrow="Term results review">
       {isLoading ? <SkeletonTable cols={4} /> : subjects.length > 0 ? (
@@ -453,7 +454,7 @@ export function ClassAnalyticsDetailPage() {
   const { classId } = useParams();
   const { data, isLoading, isError, refetch } = useClassAnalytics(classId) as { data: Record<string, unknown> | undefined; isLoading: boolean; isError: boolean; refetch: () => void };
   const subjects = (data?.subjectSummaries ?? []) as Array<Record<string, unknown>>;
-  const className = data?.className ? `${String(data.className)}${data?.stream ? ` ${String(data.stream)}` : ''}` : 'Class';
+  const className = data?.className ? formatClassLabel(String(data.className), data?.stream ? String(data.stream) : null) : 'Class';
   return (
     <OperationsShell title={`${className} Analytics`} eyebrow="Class drilldown">
       {isLoading ? <SkeletonTable cols={2} /> : isError ? <DataError onRetry={refetch} /> : (

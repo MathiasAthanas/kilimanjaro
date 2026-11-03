@@ -7,6 +7,7 @@ import { Badge } from '../../../components/common/Badge';
 import { EmptyState } from '../../../components/common/EmptyState';
 import { ErrorState } from '../../../components/common/ErrorState';
 import { WorkspaceHeader } from '../../../components/layout/WorkspaceHeader';
+import { formatClassLabel } from '../../../lib/classLabel';
 import { useEditRequests, useExamReference, useExamWindows } from '../api/examHooks';
 import { downloadPerformanceExport, usePerformancePreview } from '../api/readinessHooks';
 import { EditRequestCard, ExamTaskNavigation } from './ExamPages';
@@ -143,7 +144,7 @@ export function ExamPerformancePage() {
           <label className="flex flex-col gap-1 text-sm"><span className="font-bold text-ks-navy">Stream</span>
             <select className={inputCls} value={classId} onChange={(e) => setClassId(e.target.value)} disabled={!standard}>
               <option value="">All streams</option>
-              {streams.map((c: any) => <option key={S(c.id)} value={S(c.id)}>{S(c.name)}{c.stream ? ` · ${S(c.stream)}` : ''}</option>)}
+              {streams.map((c: any) => <option key={S(c.id)} value={S(c.id)}>{formatClassLabel(S(c.name), c.stream, ' · ')}</option>)}
             </select></label>
         </div>
         <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -191,7 +192,7 @@ export function ExamPerformancePage() {
                       <td className="px-3 py-2">{S(r.registrationNumber)}</td>
                       <td className="px-3 py-2 font-semibold text-ks-navy">{S(r.name)}</td>
                       <td className="px-3 py-2">{S(r.gender)}</td>
-                      <td className="px-3 py-2">{S(r.className)}{r.stream ? ` ${S(r.stream)}` : ''}</td>
+                      <td className="px-3 py-2">{formatClassLabel(S(r.className), r.stream)}</td>
                       {!roster && (report.subjects as any[]).map((s) => {
                         const c = r.subjects?.[s.key];
                         const text = !c ? '·' : c.status === 'EXEMPT' ? 'EXEMPT' : c.status === 'NOT_SAT' ? 'NS' : c.status === 'ABSENT' ? 'ABS' : `${Math.round(N(c.percentage))} ${S(c.grade)}`;

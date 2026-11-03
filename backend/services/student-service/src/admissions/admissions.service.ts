@@ -19,6 +19,7 @@ import { TransitionStageDto } from './dto/transition-stage.dto';
 import { RecordAssessmentDto, ScheduleAssessmentDto } from './dto/assessment.dto';
 import { IssueOfferDto, OfferDecisionDto } from './dto/offer.dto';
 import { ConvertApplicantDto } from './dto/convert-applicant.dto';
+import { formatClassLabel } from '../common/helpers/class-label.helper';
 
 /** Allowed pipeline moves. ENROLLED is only reachable through convert(). */
 const STAGE_TRANSITIONS: Record<AdmissionStage, AdmissionStage[]> = {
@@ -522,7 +523,7 @@ export class AdmissionsService {
       const filled = cls._count.enrolments;
       return {
         classId: cls.id,
-        className: cls.stream ? `${cls.name} ${cls.stream}` : cls.name,
+        className: formatClassLabel(cls.name, cls.stream),
         level: cls.level,
         educationStage: cls.educationStage,
         capacity: cls.capacity,

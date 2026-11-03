@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { createPdf } from './pdf.helper';
+import { formatClassLabel } from '../../common/helpers/class-label.helper';
 
 @Injectable()
 export class AttendanceSummaryGenerator {
@@ -9,7 +10,7 @@ export class AttendanceSummaryGenerator {
       .slice(0, 15)
       .map(
         (row: any) =>
-          `${row.className}${row.stream ? ` ${row.stream}` : ''}: ${Number(row.attendanceRate || 0).toFixed(2)}% attendance, ${row.totalAbsent || 0} absences, ${row.studentsBelow80 || 0} learners below 80%.`,
+          `${formatClassLabel(row.className, row.stream)}: ${Number(row.attendanceRate || 0).toFixed(2)}% attendance, ${row.totalAbsent || 0} absences, ${row.studentsBelow80 || 0} learners below 80%.`,
       );
     const dayBullets = (data.byDay || [])
       .filter((row: any) => Number(row.rate || 0) > 0)

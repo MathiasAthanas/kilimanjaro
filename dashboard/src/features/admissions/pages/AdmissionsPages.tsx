@@ -10,6 +10,7 @@ import { DataError } from '../../../components/feedback/DataError';
 import { EmptyState } from '../../../components/feedback/EmptyState';
 import { SkeletonTable } from '../../../components/common/SkeletonTable';
 import { toast } from '../../../lib/toast';
+import { formatClassLabel } from '../../../lib/classLabel';
 import {
   useAdmissionsAnalytics,
   useAdmissionsClasses,
@@ -138,7 +139,7 @@ export function AdmissionsApplicantsPage() {
                   {applicantFullName(applicant)}
                 </NavLink>
               </Td>
-              <Td>{applicant.prospectiveClass ? `${applicant.prospectiveClass.name}${applicant.prospectiveClass.stream ? ` ${applicant.prospectiveClass.stream}` : ''}` : '—'}</Td>
+              <Td>{applicant.prospectiveClass ? formatClassLabel(applicant.prospectiveClass.name, applicant.prospectiveClass.stream) : '—'}</Td>
               <Td>
                 <div className="font-black text-[#0f172a]">{applicant.guardianFirstName} {applicant.guardianLastName}</div>
                 <div className="text-[11px] text-[#64748b]">{applicant.guardianPhone}</div>
@@ -254,7 +255,7 @@ function IdentityCard({ applicant }: { applicant: ApplicantRow }) {
   };
 
   const classLabel = applicant.prospectiveClass
-    ? `${applicant.prospectiveClass.name}${applicant.prospectiveClass.stream ? ` ${applicant.prospectiveClass.stream}` : ''}`
+    ? formatClassLabel(applicant.prospectiveClass.name, applicant.prospectiveClass.stream)
     : '—';
 
   return (
@@ -311,7 +312,7 @@ function IdentityCard({ applicant }: { applicant: ApplicantRow }) {
               className="mt-2 h-11 w-full rounded-xl border border-[#d5dde6] bg-white px-3 font-semibold outline-none focus:border-[#00334f]">
               <option value="">Select…</option>
               {classes.map((cls) => (
-                <option key={cls.id} value={cls.id}>{cls.name}{cls.stream ? ` ${cls.stream}` : ''}</option>
+                <option key={cls.id} value={cls.id}>{formatClassLabel(cls.name, cls.stream)}</option>
               ))}
             </select>
           </label>
@@ -536,7 +537,7 @@ function OfferCard({ applicant }: { applicant: ApplicantRow }) {
               className="mt-2 h-11 w-full rounded-xl border border-[#d5dde6] bg-white px-3 font-semibold outline-none focus:border-[#00334f]">
               <option value="">Select…</option>
               {classes.map((cls) => (
-                <option key={cls.id} value={cls.id}>{cls.name}{cls.stream ? ` ${cls.stream}` : ''}</option>
+                <option key={cls.id} value={cls.id}>{formatClassLabel(cls.name, cls.stream)}</option>
               ))}
             </select>
           </label>
@@ -680,7 +681,7 @@ function NextStepCard({ applicant }: { applicant: ApplicantRow }) {
       ) : !confirming ? (
         <>
           <p className="text-sm font-semibold text-[#475569]">
-            This creates the student record, assigns <span className="font-black">{applicant.prospectiveClass ? `${applicant.prospectiveClass.name}${applicant.prospectiveClass.stream ? ` ${applicant.prospectiveClass.stream}` : ''}` : 'the offered class'}</span>, creates or reuses the parent account by phone, and triggers the admission invoice and welcome message automatically.
+            This creates the student record, assigns <span className="font-black">{applicant.prospectiveClass ? formatClassLabel(applicant.prospectiveClass.name, applicant.prospectiveClass.stream) : 'the offered class'}</span>, creates or reuses the parent account by phone, and triggers the admission invoice and welcome message automatically.
           </p>
           <Button className="mt-4 w-full rounded-xl bg-emerald-600 hover:bg-emerald-700" onClick={() => setConfirming(true)}>
             <GraduationCap className="h-4 w-4" /> Convert to Enrolled Student
@@ -925,7 +926,7 @@ export function AdmissionsIntakePage() {
               <label><span className="text-xs font-black uppercase text-[#64748b]">Interested Class</span>
                 <select value={form.prospectiveClassId} onChange={set('prospectiveClassId')} className={selectField}>
                   <option value="">Not decided yet</option>
-                  {classes.map((cls) => <option key={cls.id} value={cls.id}>{cls.name}{cls.stream ? ` ${cls.stream}` : ''}</option>)}
+                  {classes.map((cls) => <option key={cls.id} value={cls.id}>{formatClassLabel(cls.name, cls.stream)}</option>)}
                 </select></label>
               <label className="md:col-span-3"><span className="text-xs font-black uppercase text-[#64748b]">Previous School</span>
                 <input value={form.previousSchool} onChange={set('previousSchool')} placeholder="e.g. Moshi Primary School" className={field} /></label>

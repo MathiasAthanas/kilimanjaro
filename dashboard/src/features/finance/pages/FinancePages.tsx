@@ -46,6 +46,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { downloadReportWhenReady, useGenerateReportMutation } from '../../operations/api/operations.hooks';
 import { toast } from '../../../lib/toast';
+import { formatClassLabel } from '../../../lib/classLabel';
 import { Badge } from '../../../components/common/Badge';
 import { Button } from '../../../components/common/Button';
 import {
@@ -785,7 +786,7 @@ export function GenerateInvoicesPage() {
                   onClick={() => toggleClass(c.id)}
                   className={`rounded-full border px-3 py-1 text-xs font-black transition ${classIds.includes(c.id) ? 'border-[#00334f] bg-[#00334f] text-white' : 'border-[#d5dde6] bg-white text-[#334155] hover:border-[#00334f]'}`}
                 >
-                  {c.name}{c.stream ? ` ${c.stream}` : ''}
+                  {formatClassLabel(c.name, c.stream)}
                 </button>
               ))}
             </div>
@@ -3437,7 +3438,7 @@ export function CreateFeeStructurePage() {
                     {list.map((c) => (
                       <label key={c.id} className={`flex cursor-pointer items-center gap-2 rounded border px-3 py-2 text-sm font-bold transition ${selectedClasses.includes(c.id) ? 'border-[#00334f] bg-[#eef5f8] text-[#00334f]' : 'border-[#d5dde6] bg-white text-[#475569]'}`}>
                         <input type="checkbox" checked={selectedClasses.includes(c.id)} onChange={() => toggleClass(c.id)} className="accent-[#00334f]" />
-                        {c.name}{c.stream ? ` ${c.stream}` : ''}
+                        {formatClassLabel(c.name, c.stream)}
                       </label>
                     ))}
                   </div>

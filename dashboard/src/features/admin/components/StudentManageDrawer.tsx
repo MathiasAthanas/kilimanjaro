@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { X } from 'lucide-react';
 import { Button } from '../../../components/common/Button';
 import { toast } from '../../../lib/toast';
+import { formatClassLabel } from '../../../lib/classLabel';
 import {
   useUpdateStudentMutation,
   useChangeStudentStatusMutation,
@@ -165,7 +166,7 @@ export function StudentManageDrawer({
               <select className={input} value={transferTo} onChange={(e) => setTransferTo(e.target.value)}>
                 <option value="">— Choose destination class —</option>
                 {classes.filter((c) => c.id !== undefined).map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}{c.stream ? ` · ${c.stream}` : ''} ({String(c.educationStage ?? '').replace('_', '-')})</option>
+                  <option key={c.id} value={c.id}>{formatClassLabel(c.name, c.stream, ' · ')} ({String(c.educationStage ?? '').replace('_', '-')})</option>
                 ))}
               </select>
               <Button className="rounded-xl px-4 py-2 text-sm" disabled={!transferTo || promote.isPending} onClick={doTransfer}>{promote.isPending ? '…' : 'Transfer'}</Button>

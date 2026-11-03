@@ -8,6 +8,7 @@ import { toast } from '../../../lib/toast';
 import { api } from '../../../lib/api/client';
 import { payloadOf, arrayFromApi } from '../../../lib/api/response';
 import { useSchoolStore } from '../../../lib/school/schoolStore';
+import { formatClassLabel } from '../../../lib/classLabel';
 import { StudentManageDrawer, type ManageStudent } from '../components/StudentManageDrawer';
 import {
   useClassStudents,
@@ -147,7 +148,7 @@ export function ClassStudentsAdminPage() {
     setTimeout(() => URL.revokeObjectURL(url), 10_000);
   }
 
-  const title = report?.class ? `${report.class.name}${report.class.stream ? ` · ${report.class.stream}` : ''}` : 'Class Students';
+  const title = report?.class ? formatClassLabel(report.class.name, report.class.stream, ' · ') : 'Class Students';
   const subtitle = report?.class
     ? `${report.school?.name ?? ''} · ${String(report.class.educationStage ?? '').replace('_', '-')}${report.class.combinationCode ? ` · ${report.class.combinationCode}` : ''} · ${report.class.academicYearName ?? ''}`
     : 'Students in this class';

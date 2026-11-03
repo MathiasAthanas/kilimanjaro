@@ -3,6 +3,7 @@ import { Prisma } from '../../generated/prisma';
 import { PrismaService } from '../prisma/prisma.service';
 import { RequestUser } from '../common/interfaces/request-user.interface';
 import { schoolScopeFilter } from '../common/helpers/school-scope.helper';
+import { formatClassLabel } from '../common/helpers/class-label.helper';
 
 export type PeriodType = 'weekly' | 'monthly' | 'quarterly' | 'yearly' | 'custom';
 
@@ -214,7 +215,7 @@ export class FinancialStatementService {
     };
     const className = (id: string) => {
       const c = classes.find((row) => row.id === id);
-      return c ? [c.name, c.stream].filter(Boolean).join(' ') : 'Unknown class';
+      return c ? formatClassLabel(c.name, c.stream) : 'Unknown class';
     };
     const daysOverdue = (due: Date) => Math.max(0, Math.floor((now.getTime() - due.getTime()) / 86400000));
     const ageingDefs = [

@@ -1,4 +1,5 @@
 import 'json_num.dart';
+import '../core/utils/class_label.dart';
 
 // Admissions pipeline models — mirror the `/admissions/*` API contracts.
 
@@ -34,7 +35,6 @@ class AdmissionsSummary {
     );
   }
 }
-
 class AdmissionStageEvent {
   const AdmissionStageEvent({
     required this.toStage,
@@ -158,7 +158,7 @@ class AdmissionApplicant {
     final cls = json['prospectiveClass'] as Map<String, dynamic>?;
     final classLabel = cls == null
         ? null
-        : '${cls['name'] as String? ?? ''} ${cls['stream'] as String? ?? ''}'.trim();
+        : formatClassLabel(cls['name'], cls['stream']);
     final events = (json['stageEvents'] as List<dynamic>? ?? const [])
         .map((item) => AdmissionStageEvent.fromJson(item as Map<String, dynamic>))
         .toList();

@@ -4,6 +4,7 @@ import { Copy, Eye, EyeOff } from 'lucide-react';
 import { downloadReportWhenReady } from '../../operations/api/operations.hooks';
 import { NavLink, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { toast } from '../../../lib/toast';
+import { formatClassLabel } from '../../../lib/classLabel';
 import { buildCreateTermPayload } from '../utils/termPayload';
 import { Badge } from '../../../components/common/Badge';
 import { Button } from '../../../components/common/Button';
@@ -1473,7 +1474,7 @@ export function ClassSubjectsPage() {
   const sortedClasses = scopedClasses.slice().sort((a: any, b: any) =>
     String(a.name ?? '').localeCompare(String(b.name ?? '')));
   const classOptions = sortedClasses.map((c: any) => ({
-    value: String(c.id), label: `${String(c.name)}${String(c.stream ?? '').trim() ? ` — ${String(c.stream).trim()}` : ''}`,
+    value: String(c.id), label: formatClassLabel(c.name, c.stream, ' — '),
   }));
 
   const selectedClass = scopedClasses.find((c: any) => String(c.id) === selectedClassId);
@@ -1605,7 +1606,7 @@ export function ClassSubjectsPage() {
         {selectedClassId && selectedClass && (
           <div className="mt-5 space-y-5">
             <div className="flex items-center gap-3">
-              <p className="font-black text-slate-900">{selectedClass.name}{selectedClass.stream ? ` — ${selectedClass.stream}` : ''}</p>
+              <p className="font-black text-slate-900">{formatClassLabel(selectedClass.name, selectedClass.stream, ' — ')}</p>
               <Badge tone={selectedClass.stage === 'Primary' ? 'emerald' : selectedClass.stage === 'A-Level' ? 'amber' : 'blue'}>
                 {String(selectedClass.stage ?? selectedClass.educationStage ?? '')}
               </Badge>
@@ -2110,7 +2111,7 @@ export function ClassesPage() {
     .sort((a: any, b: any) => classSortValue(a) - classSortValue(b) || String(a.name).localeCompare(String(b.name)))
     .map((item: any) => ({
       value: String(item.id),
-      label: `${String(item.name)}${String(item.stream ?? '').trim() ? ` - ${String(item.stream).trim()}` : ''}`,
+      label: formatClassLabel(item.name, item.stream, ' - '),
     }));
   const transitionOptions = [
     { value: 'PROMOTION', label: 'Promotion' },

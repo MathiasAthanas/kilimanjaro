@@ -8,6 +8,7 @@ import { assertSchoolInScope, SchoolScope, schoolWhere, scopeCacheKey, scopeValu
 import { DownstreamService } from '../downstream/downstream.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
+import { formatClassLabel } from '../common/helpers/class-label.helper';
 
 @Injectable()
 export class StudentsService {
@@ -931,7 +932,7 @@ export class StudentsService {
       },
       class: {
         id: reportCard.classId,
-        name: cls ? (cls.stream ? `${cls.name} ${cls.stream}` : cls.name) : 'N/A',
+        name: cls ? formatClassLabel(cls.name, cls.stream) : 'N/A',
         level,
         stageLabel,
       },

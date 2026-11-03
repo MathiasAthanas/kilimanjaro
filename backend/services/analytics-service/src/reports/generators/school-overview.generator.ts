@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { createPdf } from './pdf.helper';
+import { formatClassLabel } from '../../common/helpers/class-label.helper';
 
 @Injectable()
 export class SchoolOverviewGenerator {
@@ -50,7 +51,7 @@ export class SchoolOverviewGenerator {
           ['Growth Rate (%)', data.enrolment?.enrolmentGrowthRate ?? 0],
         ],
         bullets: enrolmentByClass.map(
-          (row: any) => `${row.className}${row.stream ? ` ${row.stream}` : ''}: ${Number(row.count || 0).toLocaleString('en-US')} active learners`,
+          (row: any) => `${formatClassLabel(row.className, row.stream)}: ${Number(row.count || 0).toLocaleString('en-US')} active learners`,
         ),
       },
       {

@@ -1,4 +1,5 @@
 import { api } from '../../../lib/api/client';
+import { formatClassLabel } from '../../../lib/classLabel';
 
 type Row = Record<string, unknown>;
 type Column = [header: string, value: (row: Row) => unknown];
@@ -117,7 +118,7 @@ export async function exportFinanceCsv(key: ExportKey): Promise<number> {
         api.get('/students/classes').then((r) => rowsOf(payload(r))),
         api.get('/students/terms').then((r) => rowsOf(payload(r))),
       ]);
-      const className = new Map(classes.map((c) => [text(c.id), [text(c.name), text(c.stream)].filter(Boolean).join(' ')]));
+      const className = new Map(classes.map((c) => [text(c.id), formatClassLabel(text(c.name), text(c.stream))]));
       const termName = new Map(terms.map((t) => [text(t.id), text(t.name)]));
       download(`fee-structures-${stamp()}.csv`, structures, [
         ['Fee category', (r) => nested(r.feeCategory, 'name')], ['Class', (r) => className.get(text(r.classId)) ?? ''], ['Stage', (r) => r.educationStage],

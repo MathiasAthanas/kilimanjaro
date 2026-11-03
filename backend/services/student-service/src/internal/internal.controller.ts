@@ -6,6 +6,7 @@ import { RedisService } from '../redis/redis.service';
 import { DepartmentsService } from '../departments/departments.service';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { RequestUser } from '../common/interfaces/request-user.interface';
+import { formatClassLabel } from '../common/helpers/class-label.helper';
 
 @ApiTags('Internal')
 @Controller('students/internal')
@@ -153,7 +154,7 @@ export class InternalController {
         registrationNumber: student.registrationNumber,
         status: student.status,
         classId: cls?.id ?? null,
-        classLabel: cls ? `${cls.name}${cls.stream ? ` ${cls.stream}` : ''}` : null,
+        classLabel: cls ? formatClassLabel(cls.name, cls.stream) : null,
         educationStage: cls?.educationStage ?? null,
         academicYear: enrolment?.academicYear?.name ?? null,
         guardianId: guardian.id,
