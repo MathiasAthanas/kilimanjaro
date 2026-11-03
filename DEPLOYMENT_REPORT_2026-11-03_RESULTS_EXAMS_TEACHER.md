@@ -35,6 +35,8 @@ The academic migration ledger did not contain historical academic entries even t
 
 Both the academic and e-learning Prisma migration checks report that the database is up to date.
 
+A direct academic schema comparison reports index-only metadata differences. The school-scoped assessment migration deliberately creates a PostgreSQL `NULLS NOT DISTINCT` unique index that Prisma 5 cannot express in the schema model, and two supporting indexes use explicit migration names. The deployed tables and columns match the application. Do not use `prisma db push` to remove this stronger database constraint; production changes must continue through reviewed migrations.
+
 ## Deployment
 
 - Backend release: `/opt/kilimanjaro/releases/46428d1-20261103T074117Z`
