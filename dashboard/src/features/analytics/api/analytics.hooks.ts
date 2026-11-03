@@ -144,8 +144,9 @@ export function useTeacherMyDashboard(params?: Record<string, string>) {
   const p = buildParams(params);
   return useQuery({
     queryKey: analyticsKeys.teacherDashboard(p),
-    queryFn: () => api.get('/analytics/teacher/my-dashboard', { params: p }).then(payloadOf),
-    staleTime: 180_000,
+    // Built from the teacher's own marks (academic-service), so it works whether or not the analytics read-model is populated.
+    queryFn: () => api.get('/academics/teacher/analytics', { params: p }).then(payloadOf),
+    staleTime: 60_000,
   });
 }
 

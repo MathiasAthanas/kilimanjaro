@@ -6,8 +6,8 @@ const journeys: Partial<Record<UserRole, WorkflowStep[]>> = {
   TEACHER: [
     { label: 'My Classes', to: '/teacher/classes' },
     { label: 'Attendance', to: '/teacher/attendance' },
-    { label: 'Assessments & Marks', to: '/teacher/assessments' },
-    { label: 'Exam Windows', to: '/teacher/exams' },
+    { label: 'Exam Marks', to: '/teacher/exams' },
+    { label: 'Assessments', to: '/teacher/assessments' },
     { label: 'Syllabus', to: '/teacher/syllabus' },
     { label: 'Timetable', to: '/teacher/timetable' },
     { label: 'Report Remarks', to: '/teacher/report-remarks' },

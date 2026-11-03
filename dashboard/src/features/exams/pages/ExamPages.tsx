@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
@@ -754,6 +754,8 @@ export function ComposeReportCardsPage() {
 // ═══════════════════════════════════════════════════════════════════════════
 // TEACHER: open windows
 // ═══════════════════════════════════════════════════════════════════════════
+import { SchoolBadge } from '../../teacher/components/TeacherBits';
+
 export function TeacherExamWindowsPage() {
   const windows = useTeacherExamWindows();
   const reference = useExamReference();
@@ -763,7 +765,10 @@ export function TeacherExamWindowsPage() {
   const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
 
-  const all = (windows.data ?? []) as any[];
+  const everything = (windows.data ?? []) as any[];
+  const isOpen = (w: any) => w.status === 'OPEN' || w.status === 'REOPENED';
+  // Windows still collecting marks come first; the finished ones sit below.
+  const all = [...everything.filter(isOpen), ...everything.filter((w) => !isOpen(w))];
   const todo = all
     .filter((w) => w.status === 'OPEN' || w.status === 'REOPENED')
     .flatMap((w) => (w.mySubjects as any[]).filter((s) => s.canEdit && !s.complete));
@@ -794,14 +799,17 @@ export function TeacherExamWindowsPage() {
       {msg && <div className="mb-4"><Banner tone="emerald">{msg}</Banner></div>}
       {windows.data && windows.data.length === 0 && <EmptyState title="No exam windows" message="When an exam window is opened for a class you teach, your subjects appear here." />}
       <div className="grid gap-4 lg:grid-cols-2">
-        {all.map((w) => {
+        {all.map((w, wi) => {
           const open = w.status === 'OPEN' || w.status === 'REOPENED';
           const overdue = open && w.closesAt && new Date(w.closesAt) < new Date();
+          const firstClosed = !open && (wi === 0 || isOpen(all[wi - 1]));
           return (
-            <Card key={S(w.id)} className="p-5">
+            <Fragment key={S(w.id)}>
+            {firstClosed && <h2 className="col-span-full mt-2 font-display text-lg font-black text-ks-navy lg:col-span-2">Closed or published</h2>}
+            <Card className="p-5">
               <div className="mb-3 flex items-start justify-between gap-2">
                 <div>
-                  <h3 className="font-display text-lg font-bold text-ks-navy">{S(w.name)}</h3>
+                  <h3 className="flex flex-wrap items-center gap-2 font-display text-lg font-bold text-ks-navy">{S(w.name)} <SchoolBadge schoolId={w.schoolId} /></h3>
                   <p className="text-xs text-ks-muted">{S(w.examType?.name)}{w.termId ? ` · ${S(reference.data?.terms.find((term) => S(term.id) === S(w.termId))?.name, 'Term')}` : ''} · out of {N(w.maxScore)}</p>
                   {w.closesAt && <p className={`text-xs font-semibold ${overdue ? 'text-ks-rose' : 'text-ks-muted'}`}>{overdue ? 'Deadline passed: ' : 'Marks due: '}{new Date(w.closesAt).toLocaleDateString()}</p>}
                 </div>
@@ -823,7 +831,7 @@ export function TeacherExamWindowsPage() {
                         </div>
                         <ProgressBar entered={N(s.marksEntered)} required={N(s.required)} />
                         {s.canEdit
-                          ? <Link to={`/teacher/exams/marks/${S(s.assessmentId)}`} className="rounded-lg bg-ks-blue px-3 py-2 text-xs font-bold text-white hover:opacity-90">{s.complete ? 'Review marks' : 'Enter marks'}</Link>
+                          ? <Link to={`/teacher/exams/marks/${S(s.assessmentId)}`} className="rounded-lg bg-ks-blue px-3 py-2 text-xs font-bold text-white hover:opacity-90">{s.complete ? (S(s.status) === 'SUBMITTED' ? 'Review marks' : 'Review & submit') : 'Enter marks'}</Link>
                           : <Link to={`/teacher/exams/marks/${S(s.assessmentId)}`} className="rounded-lg border border-ks-line px-3 py-2 text-xs font-bold text-ks-navy hover:bg-ks-paper">View</Link>}
                       </div>
                       <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
@@ -852,6 +860,7 @@ export function TeacherExamWindowsPage() {
                 })}
               </div>
             </Card>
+            </Fragment>
           );
         })}
       </div>
@@ -907,16 +916,37 @@ export function TeacherExamMarksPage() {
 
   const save = async (autoSubmit = false) => {
     setResult(null);
-    const payload = (data?.rows as any[]).map((r, i) => {
-      const local = rows[S(r.registrationNumber)] ?? { score: '', status: 'SCORED' as EntryStatus };
+    const all = data?.rows as any[];
+    const localOf = (r: any) => rows[S(r.registrationNumber)] ?? { score: '', status: 'SCORED' as EntryStatus };
+    const isBlank = (r: any) => { const l = localOf(r); return l.status === 'SCORED' && l.score.trim() === ''; };
+    // Catch obvious slips here, naming the student, instead of failing the whole save on the server.
+    const outOfRange = all.filter((r) => { const l = localOf(r); if (l.status !== 'SCORED' || l.score.trim() === '') return false; const n = Number(l.score); return !Number.isFinite(n) || n < 0 || n > maxScore; });
+    if (outOfRange.length) {
+      setResult({ warn: true, message: `Fix ${outOfRange.length} score${outOfRange.length === 1 ? '' : 's'} outside 0–${maxScore}: ${outOfRange.slice(0, 4).map((r) => S(r.studentName)).join(', ')}${outOfRange.length > 4 ? '…' : ''}.` });
+      return;
+    }
+    const blanks = all.filter(isBlank).length;
+    if (autoSubmit && blanks > 0) {
+      setResult({ warn: true, message: `${blanks} student${blanks === 1 ? ' still has' : 's still have'} no result. Enter a score, or choose Absent / Not sat, before submitting. You can use Save marks to keep your progress.` });
+      return;
+    }
+    // A draft save keeps whatever is filled in; blanks are simply left for later.
+    const filled = all.filter((r) => !isBlank(r));
+    if (!filled.length) { setResult({ warn: true, message: 'Nothing to save yet. Enter at least one score.' }); return; }
+    const payload = filled.map((r) => {
+      const local = localOf(r);
       return {
         registrationNumber: S(r.registrationNumber),
-        score: local.status !== 'SCORED' ? undefined : (local.score === '' ? '' : Number(local.score)),
-        isAbsent: local.status === 'ABSENT', notSat: local.status === 'NOT_SAT', row: i + 2,
+        score: local.status !== 'SCORED' ? undefined : Number(local.score),
+        isAbsent: local.status === 'ABSENT', notSat: local.status === 'NOT_SAT', row: all.indexOf(r) + 2,
       };
     });
-    const res = await upload.mutateAsync({ assessmentId, rows: payload, autoSubmit });
-    setResult(res);
+    try {
+      const res = await upload.mutateAsync({ assessmentId, rows: payload, autoSubmit });
+      setResult(blanks > 0 && !autoSubmit ? { ...(res as object), message: `${S((res as any)?.message, 'Saved.')} ${blanks} student${blanks === 1 ? ' is' : 's are'} still without a result.` } : res);
+    } catch (e: any) {
+      setResult({ warn: true, message: S(e?.message, 'Could not save. Please try again.') });
+    }
   };
 
   /** Fill the grid from a CSV / Excel file (the downloaded template, filled in). Nothing is saved until the teacher clicks Save. */
@@ -958,7 +988,7 @@ export function TeacherExamMarksPage() {
       <Link to={adminView ? `/exams/${S(assessment?.examWindow?.id)}` : '/teacher/exams'} className="mb-3 inline-flex items-center gap-1 text-sm font-bold text-ks-blue"><ArrowLeft className="h-4 w-4" /> {adminView ? 'Back to the exam window' : 'My exam windows'}</Link>
       <WorkspaceHeader
         title={`${S(assessment?.subjectName)} — Marks`}
-        description={`${S(classInfo?.name, 'Class context unavailable')}${classInfo?.stream ? ` · ${S(classInfo.stream)}` : ''} · ${S(assessment?.examWindow?.name)} · ${S(yearInfo?.name ?? yearInfo?.year, 'Academic year unavailable')} · ${S(termInfo?.name, 'Term unavailable')} · out of ${maxScore}`}
+        description={[`${S(classInfo?.name, 'Class')}${classInfo?.stream ? ` · ${S(classInfo.stream)}` : ''}`, S(assessment?.examWindow?.name), S(yearInfo?.name ?? yearInfo?.year), S(termInfo?.name), `out of ${maxScore}`].filter(Boolean).join(' · ')}
         action={<Badge tone={statusTone(status === 'OPEN' ? 'OPEN' : status)}>{status}</Badge>}
       />
 
@@ -993,7 +1023,7 @@ export function TeacherExamMarksPage() {
 
       {result && (
         <div className="mb-4">
-          <Banner tone={(result.errors?.length ?? 0) > 0 ? 'amber' : 'emerald'}>
+          <Banner tone={result.warn || (result.errors?.length ?? 0) > 0 ? 'amber' : 'emerald'}>
             {S(result.message, 'Saved.')}
             {result.autoSubmitted ? ' Submitted for approval.' : ''}
           </Banner>

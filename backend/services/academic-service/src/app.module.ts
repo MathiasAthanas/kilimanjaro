@@ -20,6 +20,7 @@ import { ResultsModule } from './results/results.module';
 import { StudentClientModule } from './student-client/student-client.module';
 import { SubjectsModule } from './subjects/subjects.module';
 import { SyllabusModule } from './syllabus/syllabus.module';
+import { TeacherModule } from './teacher/teacher.module';
 import { TimetableModule } from './timetable/timetable.module';
 import { InternalApiGuard } from './common/guards/internal-api.guard';
 import { RolesGuard } from './common/guards/roles.guard';
@@ -53,6 +54,7 @@ import { AuthClientModule } from './auth-client/auth-client.module';
     ResultsModule,
     ReportCardsModule,
     TimetableModule,
+    TeacherModule,
     SyllabusModule,
     PerformanceModule,
     ImportModule,

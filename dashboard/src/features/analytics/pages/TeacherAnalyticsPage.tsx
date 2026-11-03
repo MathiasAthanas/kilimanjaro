@@ -3,6 +3,8 @@ import { BarChart3, CheckCircle2, FileDown } from 'lucide-react';
 import { Badge } from '../../../components/common/Badge';
 import { useAcademicYears, useTerms } from '../../admin/api/admin.hooks';
 import { TeacherWorkspaceShell } from '../../teacher/components/TeacherWorkspaceShell';
+import { useTeacherSchools } from '../../teacher/components/TeacherBits';
+import { usePerformanceAlerts } from '../../teacher/api/teacher.hooks';
 import { useTeacherMyDashboard } from '../api/analytics.hooks';
 import { BarChart, LineChart, StatCard, ChartSkeleton, StatSkeleton } from '../components/Charts';
 import { getLogoBase64 } from '../../finance/components/FinanceWorkspaceShell';
@@ -106,7 +108,7 @@ function AttentionQueue({ queue }: { queue: any[] }) {
         <table className="w-full text-sm">
           <thead className="bg-ks-paper">
             <tr>
-              {['Student', 'Class', 'Subject', 'Alert', 'Priority'].map((h) => (
+              {['Student', 'School', 'Subject', 'Alert', 'Priority'].map((h) => (
                 <th key={h} className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-wider text-ks-muted">{h}</th>
               ))}
             </tr>
@@ -252,9 +254,14 @@ export function TeacherAnalyticsPage() {
   const { data: dashboard, isLoading } = useTeacherMyDashboard(params);
   const d = dashboard as any;
 
+  const { data: alerts = [] } = usePerformanceAlerts();
+  const { nameOf, multi, visible } = useTeacherSchools();
   const summary = d?.summary || {};
-  const courses: any[] = d?.courses || [];
-  const attentionQueue: any[] = d?.attentionQueue || [];
+  const courses: any[] = visible((d?.courses || []) as Array<{ schoolId?: string }>);
+  // The same flagged students the Student Support page shows, so the two never disagree.
+  const attentionQueue: any[] = visible(alerts as unknown as Array<{ schoolId?: string }>).map((a: any) => ({
+    studentName: a.student, className: multi ? nameOf(a.schoolId) : '—', subjectName: a.subject, alertType: a.type, severity: a.severity === 'CRITICAL' ? 'HIGH' : 'MEDIUM',
+  }));
   const termTrend: any[] = d?.termTrend || [];
 
   return (

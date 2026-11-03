@@ -53,50 +53,48 @@ export type SidebarSection = {
 
 const teacherSections: SidebarSection[] = [
   {
-    title: 'Teacher Desk',
+    title: 'My Day',
     items: [
-      { to: '/teacher',            icon: LayoutDashboard, label: 'Home Dashboard', end: true },
-      { to: '/teacher/classes',    icon: Users,           label: 'My Classes',     end: true },
-      { to: '/teacher/assessments',icon: BookOpen,        label: 'Assessments',    end: true },
-      { to: '/teacher/attendance', icon: CalendarCheck,   label: 'Attendance',     end: true },
+      { to: '/teacher',            icon: LayoutDashboard, label: 'Home',       end: true },
+      { to: '/teacher/attendance', icon: CalendarCheck,   label: 'Attendance'              },
+      { to: '/teacher/timetable',  icon: CalendarCheck,   label: 'Timetable',  end: true },
     ],
   },
   {
-    title: 'Academic Work',
+    title: 'My Classes',
     items: [
-      { to: '/teacher/assessments',    icon: FileSpreadsheet,   label: 'Marks Entry',         end: true },
-      { to: '/teacher/exams',          icon: ClipboardCheck,    label: 'Exam Windows',        end: true },
-      { to: '/teacher/syllabus',       icon: Target,            label: 'Syllabus Tracker',    end: true },
-      { to: '/teacher/timetable',      icon: CalendarCheck,     label: 'Timetable',           end: true },
+      { to: '/teacher/classes',  icon: Users,  label: 'My Classes',       end: true },
+      { to: '/teacher/syllabus', icon: Target, label: 'Syllabus Tracker', end: true },
+    ],
+  },
+  {
+    title: 'Marks & Results',
+    items: [
+      { to: '/teacher/exams',          icon: ClipboardCheck,    label: 'Exam Marks',          end: true },
+      { to: '/teacher/assessments',    icon: FileSpreadsheet,   label: 'All Assessments'                 },
       { to: '/teacher/report-remarks', icon: MessageSquarePlus, label: 'Report Card Remarks', end: true },
-    ],
-  },
-  {
-    title: 'E-Learning',
-    items: [
-      { to: '/teacher/elearning', icon: GraduationCap, label: 'E-Learning Center', end: true },
     ],
   },
   {
     title: 'Student Support',
     items: [
-      { to: '/teacher/performance/alerts',   icon: AlertTriangle,    label: 'Performance Alerts', end: true },
-      { to: '/teacher/performance/pairings', icon: Users,            label: 'Peer Pairings',      end: true },
-      { to: '/teacher/interventions/create', icon: MessageSquarePlus,label: 'Create Intervention'           },
+      { to: '/teacher/performance/alerts',   icon: AlertTriangle,    label: 'Students Needing Help', end: true },
+      { to: '/teacher/performance/pairings', icon: Users,            label: 'Peer Pairings'                    },
+      { to: '/teacher/interventions/create', icon: MessageSquarePlus,label: 'Plan Support'                     },
     ],
   },
   {
-    title: 'Analytics',
+    title: 'Teach Online',
     items: [
-      { to: '/teacher/analytics', icon: BarChart3, label: 'My Analytics', end: true },
+      { to: '/teacher/elearning', icon: GraduationCap, label: 'E-Learning Center', end: true },
     ],
   },
   {
-    title: 'Communication',
+    title: 'Share & Report',
     items: [
-      { to: '/teacher/announcements',        icon: Megaphone,        label: 'Announcements',      end: true },
-      { to: '/teacher/announcements/create', icon: MessageSquarePlus,label: 'Create Announcement'           },
-      { to: '/teacher/exports',              icon: Download,         label: 'Export Center'                 },
+      { to: '/teacher/announcements', icon: Megaphone, label: 'Announcements'               },
+      { to: '/teacher/analytics',     icon: BarChart3, label: 'My Analytics', end: true     },
+      { to: '/teacher/exports',       icon: Download,  label: 'Downloads'                   },
     ],
   },
 ];
@@ -119,6 +117,8 @@ const hodSections: SidebarSection[] = [
     items: [
       { to: '/teacher',            icon: LayoutDashboard, label: 'Teacher Dashboard', end: true },
       { to: '/teacher/classes',    icon: Users,           label: 'My Classes',        end: true },
+      { to: '/teacher/attendance', icon: CalendarCheck,   label: 'Attendance'                         },
+      { to: '/teacher/exams',      icon: ClipboardCheck,  label: 'Exam Marks',        end: true },
       { to: '/teacher/assessments',icon: BookOpen,        label: 'My Assessments',    end: true },
     ],
   },

@@ -16,6 +16,11 @@ vi.mock('framer-motion', () => ({
 
 // ─── Mock teacher hooks ───────────────────────────────────────────────────────
 vi.mock('../api/teacher.hooks', () => ({
+  assessmentMarksPath:             (a: { id: string }) => `/teacher/assessments/${a.id}/marks`,
+  useTeacherRegisters:             () => ({ data: [], isLoading: false, isError: false, refetch: vi.fn() }),
+  useRegisterStudents:             () => ({ data: [], isLoading: false, isError: false, refetch: vi.fn() }),
+  useMyInterventions:              () => ({ data: [], isLoading: false }),
+  useStudentBasic:                 () => ({ data: undefined }),
   useTeacherClasses:               () => ({ data: [], isLoading: false, isError: false, refetch: vi.fn() }),
   useTeacherAssessments:           () => ({ data: [], isLoading: false, isError: false, refetch: vi.fn() }),
   useTeacherTimetable:             () => ({ data: [], isLoading: false }),
@@ -42,6 +47,11 @@ vi.mock('../api/teacher.hooks', () => ({
   useUpdateReportCardCommentsMutation: () => ({ mutate: vi.fn(), isPending: false }),
   useAssessmentDetail:             () => ({ data: undefined, isLoading: false }),
   useMarksReview:                  () => ({ data: [], isLoading: false }),
+}));
+
+// ─── Mock school list (teacher pages ask which schools the teacher belongs to) ───
+vi.mock('../../manager/api/manager.hooks', () => ({
+  useSchools: () => ({ data: [], isLoading: false }),
 }));
 
 // ─── Mock operations hooks ────────────────────────────────────────────────────

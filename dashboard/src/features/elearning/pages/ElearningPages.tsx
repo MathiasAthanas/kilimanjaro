@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import { toast } from '../../../lib/toast';
+import { errorMessage } from '../../../lib/api/errors';
 import {
   BarChart3,
   Bell,
@@ -102,6 +103,7 @@ import {
 } from '../api/elearning.hooks';
 import { useAcademicYears, useTerms } from '../../admin/api/admin.hooks';
 import { useTeacherClasses } from '../../teacher/api/teacher.hooks';
+import { useTeacherSchools } from '../../teacher/components/TeacherBits';
 import { ElButton, ElearningShell, ElStat, ProgressBar, PublishBadge } from '../components/ElearningShell';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -420,11 +422,12 @@ export function CourseBuilderPage() {
 
   // Dropdown data for create mode
   const { data: apiClasses = [] } = useTeacherClasses();
+  const teacherSchools = useTeacherSchools();
   const { data: rawYears = [] } = useAcademicYears();
   const { data: rawTerms = [] } = useTerms();
   const years = rawYears as { id: string; name: string }[];
   const allTerms = rawTerms as { id: string; name: string; academicYearId?: string }[];
-  const classSubjectOptions = apiClasses as { id: string; className: string; subject: string }[];
+  const classSubjectOptions = apiClasses as { id: string; className: string; subject: string; schoolId: string }[];
 
   const [form, setForm] = useState({ classSubjectId: '', academicYearId: '', termId: '' });
   const selectedCS = classSubjectOptions.find((c) => c.id === form.classSubjectId);
@@ -480,7 +483,7 @@ export function CourseBuilderPage() {
                   >
                     <option value="">Select your class-subject…</option>
                     {classSubjectOptions.map((c) => (
-                      <option key={c.id} value={c.id}>{c.className} — {c.subject}</option>
+                      <option key={c.id} value={c.id}>{c.className} — {c.subject}{teacherSchools.multi ? ` (${teacherSchools.codeOf(c.schoolId) || teacherSchools.nameOf(c.schoolId)})` : ''}</option>
                     ))}
                   </select>
                 </label>
@@ -594,7 +597,8 @@ export function LessonEditorPage() {
   const { data: course } = useElearningCourse(courseId);
   const { data: lessons = [] } = useElearningLessons(courseId);
   const { data: materials = [], isLoading: loadingMaterials } = useElearningMaterials(courseId, lessonId);
-  const lesson = lessons.find((l) => l.id === lessonId) ?? (lessonId ? undefined : lessons[0]);
+  // "New lesson" starts empty. It must never be pre-filled with (and then duplicate) an existing lesson.
+  const lesson = lessonId ? lessons.find((l) => l.id === lessonId) : undefined;
   const activeLessonId = lessonId ?? lesson?.id;
   const display = course ? mapApiCourse(course) : null;
   const createMut = useCreateLesson();
@@ -612,9 +616,10 @@ export function LessonEditorPage() {
   }, [lesson?.id]);
 
   function handleSave() {
-    const body = { title: form.title, topic: form.topic || undefined, week: form.week ? Number(form.week) : undefined, estimatedMinutes: form.estimatedMinutes ? Number(form.estimatedMinutes) : undefined, description: description || undefined };
+    if (!form.title.trim()) { toast('Give the lesson a title first', 'warning'); return; }
+    const body = { title: form.title.trim(), topic: form.topic.trim() || undefined, weekNumber: form.week ? Number(form.week) : undefined, estimatedMinutes: form.estimatedMinutes ? Number(form.estimatedMinutes) : undefined, description: description || undefined };
     if (lessonId) {
-      updateMut.mutate({ courseId: courseId!, lessonId, body }, { onSuccess: () => toast('Lesson saved', 'success'), onError: () => toast('Failed to save lesson', 'error') });
+      updateMut.mutate({ courseId: courseId!, lessonId, body }, { onSuccess: () => toast('Lesson saved', 'success'), onError: (err) => toast(errorMessage(err, 'Failed to save lesson'), 'error') });
     } else {
       createMut.mutate({
         courseId: courseId!,
@@ -625,7 +630,7 @@ export function LessonEditorPage() {
           toast('Lesson created', 'success');
           navigate(createdLessonId ? `/teacher/elearning/courses/${courseId}/lessons/${createdLessonId}` : `/teacher/elearning/courses/${courseId}/lessons`);
         },
-        onError: () => toast('Failed to create lesson', 'error'),
+        onError: (err) => toast(errorMessage(err, 'Failed to create lesson'), 'error'),
       });
     }
   }

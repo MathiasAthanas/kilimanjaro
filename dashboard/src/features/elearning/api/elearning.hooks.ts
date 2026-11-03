@@ -557,7 +557,7 @@ export function useElearningLessons(courseId: string | undefined) {
               courseSpaceId: String(l.courseSpaceId ?? l.courseId ?? l.course_space_id ?? ''),
               title: String(l.title ?? l.name ?? l.lessonTitle ?? ''),
               topic: l.topic != null ? String(l.topic) : undefined,
-              week: l.week != null ? Number(l.week) : undefined,
+              week: (l.weekNumber ?? l.week) != null ? Number(l.weekNumber ?? l.week) : undefined,
               orderIndex: Number(l.orderIndex ?? l.order ?? l.order_index ?? 0),
               estimatedMinutes: l.estimatedMinutes != null ? Number(l.estimatedMinutes) : undefined,
               status: String(l.status ?? 'DRAFT'),
@@ -943,15 +943,21 @@ export function useResolveDiscussion() {
 export function useUploadFile() {
   return useMutation({
     mutationFn: (payload: { fileName: string; contentBase64: string; mimeType: string; domain?: string }) =>
-      api.post<{ fileKey: string; url: string }>('/elearning/uploads/local', payload).then((r) => r.data),
+      api.post<{ fileKey: string; url: string }>('/elearning/uploads/local', payload).then((r) => unwrapData<{ fileKey: string; url: string }>(r.data)),
   });
+}
+
+/** Create calls answer with { success, data }; the created record is the inner object. */
+function unwrapData<T>(body: unknown): T {
+  const b = body as { data?: unknown } | null;
+  return ((b && typeof b === 'object' && 'data' in b && b.data !== undefined ? b.data : body) as T);
 }
 
 export function useCreateLesson() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ courseId, body }: { courseId: string; body: Record<string, unknown> }) =>
-      api.post<ElearningLesson>(`/elearning/courses/${courseId}/lessons`, body).then((r) => r.data),
+      api.post<ElearningLesson>(`/elearning/courses/${courseId}/lessons`, body).then((r) => unwrapData<ElearningLesson>(r.data)),
     onSuccess: (_d, { courseId }) => qc.invalidateQueries({ queryKey: elKeys.lessons(courseId) }),
   });
 }
@@ -960,7 +966,7 @@ export function useCreateAssignment() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ courseId, body }: { courseId: string; body: Record<string, unknown> }) =>
-      api.post<ElearningAssignment>(`/elearning/courses/${courseId}/assignments`, body).then((r) => r.data),
+      api.post<ElearningAssignment>(`/elearning/courses/${courseId}/assignments`, body).then((r) => unwrapData<ElearningAssignment>(r.data)),
     onSuccess: (_d, { courseId }) => qc.invalidateQueries({ queryKey: elKeys.assignments(courseId) }),
   });
 }
@@ -969,7 +975,7 @@ export function useCreateQuiz() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ courseId, body }: { courseId: string; body: Record<string, unknown> }) =>
-      api.post<ElearningQuiz>(`/elearning/courses/${courseId}/quizzes`, body).then((r) => r.data),
+      api.post<ElearningQuiz>(`/elearning/courses/${courseId}/quizzes`, body).then((r) => unwrapData<ElearningQuiz>(r.data)),
     onSuccess: (_d, { courseId }) => qc.invalidateQueries({ queryKey: elKeys.quizzes(courseId) }),
   });
 }
@@ -978,7 +984,7 @@ export function useAddQuizQuestion() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ quizId, body }: { quizId: string; courseId: string; body: Record<string, unknown> }) =>
-      api.post<ElearningQuizQuestion>(`/elearning/quizzes/${quizId}/questions`, body).then((r) => r.data),
+      api.post<ElearningQuizQuestion>(`/elearning/quizzes/${quizId}/questions`, body).then((r) => unwrapData<ElearningQuizQuestion>(r.data)),
     onSuccess: (_d, { courseId, quizId }) =>
       qc.invalidateQueries({ queryKey: elKeys.quiz(courseId, quizId) }),
   });

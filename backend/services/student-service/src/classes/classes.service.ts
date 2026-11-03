@@ -272,6 +272,7 @@ export class ClassesService {
         id: klass.id, name: klass.name, stream: klass.stream, educationStage: klass.educationStage,
         combinationCode: klass.combinationCode, academicYearId: klass.academicYearId,
         academicYearName: klass.academicYear?.name ?? null,
+        classTeacherId: klass.classTeacherId ?? null,
       },
       school: { id: klass.schoolId, name: klass.school?.name ?? null, gender: klass.school?.gender ?? null },
       overview,

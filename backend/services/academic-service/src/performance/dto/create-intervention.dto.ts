@@ -14,6 +14,11 @@ export class CreateInterventionDto {
   @IsNotEmpty()
   studentId!: string;
 
+  /** The school the student belongs to (needed when a teacher works in more than one school). */
+  @IsOptional()
+  @IsString()
+  schoolId?: string;
+
   @IsOptional()
   @IsString()
   subjectId?: string;

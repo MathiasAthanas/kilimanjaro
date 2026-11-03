@@ -396,6 +396,7 @@ export class ElearningService {
           courseSpaceId: newCourse.id,
           title: lesson.title,
           description: lesson.description,
+          topic: lesson.topic,
           weekNumber: lesson.weekNumber,
           orderIndex: lesson.orderIndex,
           estimatedMinutes: lesson.estimatedMinutes,
@@ -551,6 +552,7 @@ export class ElearningService {
         courseSpaceId: courseId,
         title: this.required(body.title, 'title'),
         description: this.optionalString(body.description),
+        topic: this.optionalString(body.topic),
         weekNumber: this.optionalNumber(body.weekNumber),
         orderIndex: this.optionalNumber(body.orderIndex) ?? await this.prisma.lesson.count({ where: { courseSpaceId: courseId } }),
         estimatedMinutes: this.optionalNumber(body.estimatedMinutes),
@@ -562,7 +564,7 @@ export class ElearningService {
 
   async updateLesson(user: RequestUser, courseId: string, id: string, body: Record<string, unknown>) {
     await this.assertCourseOwnerFromCourseId(user, courseId);
-    const lesson = await this.prisma.lesson.update({ where: { id }, data: this.clean(body, ['title', 'description', 'orderIndex', 'weekNumber', 'estimatedMinutes']) });
+    const lesson = await this.prisma.lesson.update({ where: { id }, data: this.clean(body, ['title', 'description', 'topic', 'orderIndex', 'weekNumber', 'estimatedMinutes']) });
     await this.audit(user, 'LESSON_UPDATED', 'Lesson', id, body);
     return lesson;
   }

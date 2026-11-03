@@ -1,10 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RequestUser } from '../common/interfaces/request-user.interface';
 import { CreateInterventionDto } from './dto/create-intervention.dto';
 import { UpdateInterventionDto } from './dto/update-intervention.dto';
 import { ROLES } from '../common/constants/roles';
 import { AccessControlService } from '../common/helpers/access-control.service';
+import { assertSchoolInScope, schoolScopeFilter } from '../common/helpers/school-scope.helper';
 
 @Injectable()
 export class InterventionsService {
@@ -14,7 +15,9 @@ export class InterventionsService {
   ) {}
 
   create(dto: CreateInterventionDto, user: RequestUser) {
-    const schoolId = user.scope === 'SCHOOL' ? (user.activeSchoolId ?? user.schoolIds?.[0] ?? null) : null;
+    // A teacher in several schools names the student's school; it must be one of theirs.
+    if (dto.schoolId) assertSchoolInScope(user, dto.schoolId);
+    const schoolId = dto.schoolId ?? (user.scope === 'SCHOOL' ? (user.activeSchoolId ?? user.schoolIds?.[0] ?? null) : null);
     return this.prisma.academicIntervention.create({
       data: {
         ...dto,
@@ -47,7 +50,25 @@ export class InterventionsService {
     });
   }
 
-  update(id: string, dto: UpdateInterventionDto) {
+  /** The caller's own interventions (a teacher's follow-up list), within their schools. */
+  mine(user: RequestUser) {
+    return this.prisma.academicIntervention.findMany({
+      where: { performedById: user.id, ...schoolScopeFilter(user) },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+    });
+  }
+
+  async update(id: string, dto: UpdateInterventionDto, user?: RequestUser) {
+    const row = await this.prisma.academicIntervention.findUnique({ where: { id } });
+    if (!row) throw new NotFoundException('Intervention not found');
+    if (user) {
+      assertSchoolInScope(user, row.schoolId ?? undefined);
+      // Teachers and heads of department only change interventions they recorded themselves.
+      if ([ROLES.TEACHER, ROLES.HEAD_OF_DEPARTMENT].includes(user.role as any) && row.performedById !== user.id) {
+        throw new ForbiddenException('You can only update interventions you recorded');
+      }
+    }
     return this.prisma.academicIntervention.update({
       where: { id },
       data: {
@@ -66,7 +87,8 @@ export class InterventionsService {
     }
 
     const items = await this.prisma.academicIntervention.findMany({
-      where: { studentId },
+      // Parents/students are authorised by ownership above; staff are limited to their schools.
+      where: { studentId, ...([ROLES.PARENT, ROLES.STUDENT].includes(user?.role as any) ? {} : schoolScopeFilter(user)) },
       orderBy: { createdAt: 'desc' },
     });
 

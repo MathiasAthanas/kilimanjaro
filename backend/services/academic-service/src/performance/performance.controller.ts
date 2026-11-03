@@ -163,10 +163,16 @@ export class PerformanceController {
     return this.interventionsService.create(dto, user!);
   }
 
+  @Get('interventions/mine')
+  @Roles(ROLES.TEACHER, ROLES.HEAD_OF_DEPARTMENT)
+  myInterventions(@CurrentUser() user?: RequestUser) {
+    return this.interventionsService.mine(user!);
+  }
+
   @Patch('interventions/:id')
   @Roles(ROLES.TEACHER, ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA)
-  updateIntervention(@Param('id') id: string, @Body() dto: UpdateInterventionDto) {
-    return this.interventionsService.update(id, dto);
+  updateIntervention(@Param('id') id: string, @Body() dto: UpdateInterventionDto, @CurrentUser() user?: RequestUser) {
+    return this.interventionsService.update(id, dto, user);
   }
 
   @Get('interventions/student/:studentId')

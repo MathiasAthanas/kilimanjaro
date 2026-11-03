@@ -462,6 +462,15 @@ export class ReportCardsService {
     }
     assertSchoolInScope(user, (existing as { schoolId?: string | null }).schoolId ?? null);
 
+    // The report-card comment belongs to the class teacher. Where a class has no class teacher
+    // assigned, a teacher of that class may write it instead. Nobody else can overwrite it.
+    if (user.role === ROLES.TEACHER) {
+      if (existing.isPublished) {
+        throw new ForbiddenException('This report card is published. Ask an administrator to unpublish it before changing the remark.');
+      }
+      await this.assertMayCommentOnCard(existing.classId, user);
+    }
+
     const data: any = {};
     if (user.role === ROLES.TEACHER && dto.teacherComment !== undefined) {
       data.teacherComment = dto.teacherComment;
@@ -478,6 +487,31 @@ export class ReportCardsService {
     // call was O(students × 5 HTTP calls + PDF file writes) for a single comment update.
     await this.regenerateSingleStudentPdf(existing.studentId, existing.termId, user.id, updated);
     return updated;
+  }
+
+  private async assertMayCommentOnCard(classId: string, user: RequestUser): Promise<void> {
+    let classTeacherId: string | null = null;
+    try {
+      const payload: any = await this.studentClient.get<unknown>(`/students/classes/${classId}/students`, { limit: 1 }, {
+        'X-User-Id': user.id,
+        'X-User-Role': user.role,
+        'X-User-Scope': user.scope ?? 'GROUP',
+        'X-User-School-Ids': user.scope === 'SCHOOL' ? (user.schoolIds ?? []).join(',') : '*',
+        ...(user.activeSchoolId ? { 'X-Active-School': user.activeSchoolId } : {}),
+      });
+      const cls = (payload?.data ?? payload)?.class;
+      classTeacherId = cls?.classTeacherId ?? null;
+    } catch {
+      /* fall through to the assignment check */
+    }
+    if (classTeacherId) {
+      if (classTeacherId !== user.id) {
+        throw new ForbiddenException('Only the class teacher can write the report card comment for this class');
+      }
+      return;
+    }
+    const teaches = await this.prisma.classSubject.count({ where: { classId, teacherId: user.id, isActive: true } });
+    if (!teaches) throw new ForbiddenException('You do not teach this class');
   }
 
   private async regenerateSingleStudentPdf(

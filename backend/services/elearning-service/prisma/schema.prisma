@@ -147,6 +147,7 @@ model Lesson {
   courseSpace      CourseSpace   @relation(fields: [courseSpaceId], references: [id], onDelete: Cascade)
   title            String
   description      String?
+  topic            String?
   orderIndex       Int           @default(0)
   weekNumber       Int?
   status           PublishStatus @default(DRAFT)

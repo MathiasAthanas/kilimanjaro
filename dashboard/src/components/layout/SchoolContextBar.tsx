@@ -37,6 +37,8 @@ export function SchoolContextBar() {
   const scopedIds = useMemo(() => session?.user.schoolIds ?? [], [session]);
   const multiSchoolUser = !groupRole && scopedIds.length > 1;
   const showSwitcher = groupRole || multiSchoolUser;
+  // A teacher or head working in several schools sees "All my schools", never the group wording.
+  const allLabel = groupRole ? 'All Schools (Group)' : 'All my schools';
 
   const { data: schools } = useSchools();
   const visibleSchools = useMemo(() => (schools ?? []).filter((s) => canSelectSchool(session?.user.scope, scopedIds, s.id)), [schools, session, scopedIds]);
@@ -67,14 +69,14 @@ export function SchoolContextBar() {
     <div id="school-context" className="border-b border-[#d5dde6] bg-white px-5 py-2">
       <div className="flex flex-wrap items-center gap-3">
         <span className="text-[11px] font-black uppercase tracking-wider text-ks-muted">
-          {activeSchool ? 'Current school' : 'Current scope'}
+          {activeSchool ? 'Current school' : multiSchoolUser ? 'Showing' : 'Current scope'}
         </span>
         <div className="relative min-w-0" onKeyDown={(event) => { if (event.key === 'Escape') setOpen(false); }}>
           <button
             type="button"
             onClick={() => showSwitcher && setOpen((v) => !v)}
             aria-expanded={showSwitcher ? open : undefined}
-            aria-label={showSwitcher ? `Switch school; current selection ${activeSchool?.name ?? 'All Schools (Group)'}` : `Current school ${activeSchool?.name ?? 'All Schools (Group)'}`}
+            aria-label={showSwitcher ? `Switch school; current selection ${activeSchool?.name ?? allLabel}` : `Current school ${activeSchool?.name ?? allLabel}`}
             className={`flex max-w-[calc(100vw-2.5rem)] items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-black transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0284c7] ${
               activeSchool
                 ? 'border-[#d59a1b]/50 bg-[#fffbeb] text-[#7a5200]'
@@ -82,7 +84,7 @@ export function SchoolContextBar() {
             } ${showSwitcher ? 'hover:shadow' : 'cursor-default'}`}
           >
             {activeSchool ? <SchoolIcon className="h-4 w-4" /> : <Globe2 className="h-4 w-4" />}
-            <span className="truncate">{activeSchool ? activeSchool.name : 'All Schools (Group)'}</span>
+            <span className="truncate">{activeSchool ? activeSchool.name : allLabel}</span>
             {showSwitcher && <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />}
           </button>
 
@@ -98,6 +100,19 @@ export function SchoolContextBar() {
                   <div>
                     <p className="font-black text-[#00334f]">All Schools (Group)</p>
                     <p className="text-[11px] font-semibold text-[#64748b]">Whole-group dashboards and totals</p>
+                  </div>
+                </button>
+              )}
+              {multiSchoolUser && (
+                <button
+                  type="button"
+                  onClick={() => { setActiveSchool(null); setOpen(false); }}
+                  className={`flex w-full items-center gap-3 border-b border-[#eef2f6] px-4 py-3 text-left hover:bg-[#eef5f8] ${activeSchool ? '' : 'bg-[#eef5f8]'}`}
+                >
+                  <Globe2 className="h-5 w-5 text-[#00334f]" />
+                  <div>
+                    <p className="font-black text-[#00334f]">All my schools</p>
+                    <p className="text-[11px] font-semibold text-[#64748b]">Everything you do across your {scopedIds.length} schools, together</p>
                   </div>
                 </button>
               )}

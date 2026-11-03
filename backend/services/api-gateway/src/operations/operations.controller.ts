@@ -794,9 +794,10 @@ export class OperationsController {
   @Roles(...TEACHERS)
   async teacherClassAnalytics(@CurrentUser() user: GatewayUser, @Param('classSubjectId') classSubjectId: string): Promise<UiEnvelope> {
     const { data, warnings } = await this.ui.collect({
-      classSubjects: { service: 'academic', path: '/academics/class-subjects', fallback: [] },
+      // Only the caller's own assignments: a teacher must never receive other teachers' classes.
+      classSubjects: { service: 'academic', path: '/academics/class-subjects', params: { teacherId: user.id }, fallback: [] },
       alerts: { service: 'academic', path: '/academics/performance/alerts', fallback: [] },
-      assessments: { service: 'academic', path: '/academics/assessments', fallback: [] },
+      assessments: { service: 'academic', path: '/academics/assessments', params: { teacherId: user.id }, fallback: [] },
     }, user);
     return this.ui.envelope({ classSubjectId, ...data }, warnings);
   }

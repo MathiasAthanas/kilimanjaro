@@ -1,16 +1,21 @@
-import { Lock, Mail, ShieldCheck, UserRound } from 'lucide-react';
+import { Lock, Mail, School as SchoolIcon, ShieldCheck, UserRound } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Badge } from '../../components/common/Badge';
 import { Button } from '../../components/common/Button';
 import { Card } from '../../components/common/Card';
 import { AdvancedIcon } from '../../components/icons/AdvancedIcon';
 import { useAuthStore } from '../../lib/auth/authStore';
+import { useSchools } from '../manager/api/manager.hooks';
 import { useUnreadCount } from './common.hooks';
 import { MetricCard, PageScaffold } from './PageScaffold';
 
 export function ProfilePage() {
   const user = useAuthStore((state) => state.session?.user);
   const { data: unreadCount = 0 } = useUnreadCount() as unknown as { data: number };
+  const { data: allSchools = [] } = useSchools();
+  // The schools this person works in (group roles work across all of them).
+  const schoolIds = user?.scope === 'GROUP' ? [] : (user?.schoolIds ?? []).filter((id) => id && id !== '*');
+  const mySchools = allSchools.filter((s) => schoolIds.includes(String(s.id)));
 
   return (
     <PageScaffold
@@ -40,6 +45,11 @@ export function ProfilePage() {
             <Info icon={UserRound} label="Role" value={user?.role ?? 'not available'} />
             <Info icon={ShieldCheck} label="Account status" value={user?.status ?? 'ACTIVE'} />
             <Info icon={Lock} label="Gateway" value="/api/v1 secured" />
+            {mySchools.length > 0 && (
+              <div className="md:col-span-2">
+                <Info icon={SchoolIcon} label={mySchools.length > 1 ? `My schools (${mySchools.length})` : 'My school'} value={mySchools.map((s) => String(s.name)).join(' · ')} />
+              </div>
+            )}
           </div>
         </Card>
         <div className="grid gap-6">

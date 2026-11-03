@@ -8,25 +8,27 @@ import { Badge } from '../../../components/common/Badge';
 import { Button } from '../../../components/common/Button';
 import { Card } from '../../../components/common/Card';
 import type { Alert, Assessment, ClassSubject, MarkRow, Pairing, Student, TimetableEntry } from '../types/teacher.types';
-import { validateScore } from '../utils/marks';
 import { useAuthStore } from '../../../lib/auth/authStore';
+import { useSchoolStore } from '../../../lib/school/schoolStore';
+import { SchoolBadge, useTeacherSchools } from './TeacherBits';
 
 export function TeacherWorkspaceShell({ title, eyebrow, children, action }: { title: string; eyebrow: string; children: ReactNode; action?: ReactNode }) {
   const session = useAuthStore((state) => state.session);
+  const activeSchool = useSchoolStore((state) => state.activeSchool);
+  const { multi } = useTeacherSchools();
   const teacherName = session?.user?.name ?? 'Teacher';
+  // A teacher in several schools always sees which school the page is showing.
+  const scopeLabel = multi ? (activeSchool ? activeSchool.name : 'All my schools') : 'Teacher Portal';
   return (
     <div className="space-y-gutter">
-      <section className="overflow-hidden rounded-xl border border-ks-navy/15 bg-[linear-gradient(135deg,#00334f,#0c4a6e_58%,#083855)] p-8 text-white shadow-layer">
+      <section className="overflow-hidden rounded-xl border border-ks-navy/15 bg-[linear-gradient(135deg,#00334f,#0c4a6e_58%,#083855)] p-6 text-white shadow-layer sm:p-8">
         <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
-          <div>
+          <div className="min-w-0">
             <p className="text-[11px] font-black uppercase tracking-[0.22em] text-ks-gold">{eyebrow}</p>
-            <h1 className="mt-2 font-display text-[44px] font-bold leading-[52px] tracking-[-0.02em]">{title}</h1>
-            <p className="mt-1 max-w-3xl text-sm font-semibold text-ks-mist/70">{teacherName} · Teacher Portal</p>
+            <h1 className="mt-2 font-display text-[32px] font-bold leading-[40px] tracking-[-0.02em] sm:text-[44px] sm:leading-[52px]">{title}</h1>
+            <p className="mt-1 max-w-3xl text-sm font-semibold text-ks-mist/70">{teacherName} · {scopeLabel}</p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge tone="blue">Autosave on</Badge>
-            {action}
-          </div>
+          {action ? <div className="flex flex-wrap items-center gap-2">{action}</div> : null}
         </div>
       </section>
       {children}
@@ -77,46 +79,54 @@ export function TeacherMetricStrip({ items }: { items: MetricItem[] }) {
 
 export function ClassSubjectCard({ item }: { item: ClassSubject }) {
   const riskTone = item.risk === 'HIGH' ? 'bg-ks-rose' : item.risk === 'MEDIUM' ? 'bg-ks-amber' : 'bg-ks-emerald';
-  const badgeTone = item.risk === 'HIGH' ? 'rose' : item.risk === 'MEDIUM' ? 'amber' : 'emerald';
   return (
-    <Card className="group overflow-hidden rounded-xl transition hover:-translate-y-0.5 hover:shadow-layer">
+    <Card className="group flex flex-col overflow-hidden rounded-xl transition hover:-translate-y-0.5 hover:shadow-layer">
       <div className={`h-1.5 ${riskTone}`} />
-      <div className="p-5">
+      <div className="flex flex-1 flex-col p-5">
         <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-xs font-black uppercase tracking-wider text-ks-muted">{item.subject}</p>
+          <div className="min-w-0">
+            <p className="truncate text-xs font-black uppercase tracking-wider text-ks-muted">{item.subject}{item.isOptional ? ' · optional' : ''}</p>
             <h3 className="mt-1 font-display text-2xl font-black text-ks-slate">{item.className}</h3>
           </div>
-          <Badge tone={badgeTone}>{`${item.risk} RISK`}</Badge>
+          <div className="flex shrink-0 flex-col items-end gap-1">
+            <SchoolBadge schoolId={item.schoolId} />
+            {item.isClassTeacher && <Badge tone="blue">Class teacher</Badge>}
+          </div>
         </div>
-        <div className="mt-stack-md grid grid-cols-2 gap-2.5 text-sm">
-          <MiniStat label="Assessments" value={String(item.assessmentCount)} />
-          <MiniStat label="Open marks" value={String(item.openAssessments)} color={item.openAssessments > 0 ? 'text-ks-amber' : 'text-ks-emerald'} />
+        <div className="mt-stack-md grid grid-cols-3 gap-2.5 text-sm">
+          <MiniStat label="Students" value={String(item.students)} />
+          <MiniStat label="Average" value={item.average > 0 ? `${item.average}%` : '—'} color={item.average >= 60 ? 'text-ks-emerald' : item.average > 0 ? 'text-ks-amber' : 'text-ks-muted'} />
+          <MiniStat label="To enter" value={String(item.openAssessments)} color={item.openAssessments > 0 ? 'text-ks-amber' : 'text-ks-emerald'} />
         </div>
         <div className="mt-3">
           <div className="mb-1 flex items-center justify-between text-xs font-semibold text-ks-muted">
-            <span>Syllabus coverage</span><span>{item.syllabus}%</span>
+            <span>Syllabus covered</span><span>{item.syllabusTotal > 0 ? `${item.syllabusCovered}/${item.syllabusTotal} topics · ${item.syllabus}%` : 'Not started'}</span>
           </div>
           <ProgressBar value={item.syllabus} tone={item.syllabus >= 70 ? 'bg-ks-emerald' : item.syllabus >= 50 ? 'bg-ks-amber' : 'bg-ks-rose'} />
         </div>
-        <NavLink to={`/teacher/classes/${item.id}`} className="mt-4 inline-flex items-center gap-2 text-sm font-black text-ks-blue hover:underline">
-          Open workspace <ChevronRight className="h-4 w-4" />
-        </NavLink>
+        <div className="mt-auto flex flex-wrap items-center gap-x-4 gap-y-1 pt-4 text-sm font-black text-ks-blue">
+          <NavLink to={`/teacher/classes/${item.id}`} className="inline-flex items-center gap-1 hover:underline">
+            Open class <ChevronRight className="h-4 w-4" />
+          </NavLink>
+          <NavLink to={`/teacher/attendance?class=${item.classId}`} className="hover:underline">Attendance</NavLink>
+          <NavLink to={`/teacher/classes/${item.id}/students`} className="hover:underline">Students</NavLink>
+        </div>
       </div>
     </Card>
   );
 }
 
 export function AssessmentStatusBadge({ status }: { status: Assessment['status'] }) {
-  const map: Record<Assessment['status'], { tone: 'blue' | 'amber' | 'emerald' | 'rose' | 'slate'; label: string }> = {
-    OPEN: { tone: 'blue', label: 'Open' },
-    SUBMITTED: { tone: 'amber', label: 'Submitted' },
+  const map: Record<string, { tone: 'blue' | 'amber' | 'emerald' | 'rose' | 'slate'; label: string }> = {
+    OPEN: { tone: 'blue', label: 'Open for marks' },
+    SUBMITTED: { tone: 'amber', label: 'Waiting for approval' },
+    HOD_APPROVED: { tone: 'emerald', label: 'Approved' },
     APPROVED: { tone: 'emerald', label: 'Approved' },
-    REJECTED: { tone: 'rose', label: 'Rejected' },
+    REJECTED: { tone: 'rose', label: 'Sent back to you' },
     DRAFT: { tone: 'slate', label: 'Draft' },
     LOCKED: { tone: 'slate', label: 'Locked' },
   };
-  const { tone, label } = map[status] ?? { tone: 'slate', label: status };
+  const { tone, label } = map[status] ?? { tone: 'slate', label: String(status) };
   return <Badge tone={tone}>{label}</Badge>;
 }
 
@@ -135,11 +145,11 @@ export function AlertTypeBadge({ type, severity }: { type: string; severity: Ale
   );
 }
 
-export function TeacherTable({ columns, children }: { columns: string[]; children: ReactNode }) {
+export function TeacherTable({ columns, children, minWidth = 900 }: { columns: string[]; children: ReactNode; minWidth?: number }) {
   return (
     <div className="overflow-hidden rounded-xl border border-ks-line bg-white shadow-sm">
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[900px] text-left text-sm">
+        <table className="w-full text-left text-sm" style={{ minWidth }}>
           <thead className="sticky top-0 z-10 border-b border-ks-line bg-ks-mist/30 text-[11px] font-black uppercase tracking-wider text-ks-navy">
             <tr>{columns.map((column) => <th key={column} className="px-4 py-3">{column}</th>)}</tr>
           </thead>
@@ -150,15 +160,45 @@ export function TeacherTable({ columns, children }: { columns: string[]; childre
   );
 }
 
-export function MarksGrid({ rows, maxScore }: { rows: MarkRow[]; maxScore: number }) {
+export type MarkEntryStatus = 'SCORED' | 'ABSENT' | 'NOT_SAT';
+export type MarkEdit = { score: string; status: MarkEntryStatus };
+
+function cellMessage(row: MarkRow, edit: MarkEdit, maxScore: number): { tone: 'emerald' | 'amber' | 'rose' | 'slate' | 'blue'; text: string } {
+  if (row.exempt) return { tone: 'blue', text: 'Exempt' };
+  if (edit.status === 'ABSENT') return { tone: 'slate', text: 'Absent · counts 0' };
+  if (edit.status === 'NOT_SAT') return { tone: 'slate', text: 'Not sat · counts 0' };
+  if (edit.score.trim() === '') return { tone: 'rose', text: 'Enter a score' };
+  const n = Number(edit.score);
+  if (!Number.isFinite(n)) return { tone: 'rose', text: 'Not a number' };
+  if (n < 0) return { tone: 'rose', text: 'Cannot be negative' };
+  if (n > maxScore) return { tone: 'rose', text: `Out of ${maxScore}` };
+  return { tone: 'emerald', text: `${Math.round((n / maxScore) * 100)}%` };
+}
+
+/** Controlled marks grid. Enter / arrow-down moves to the next student; readOnly shows a finished sheet. */
+export function MarksGrid({
+  rows, edits, maxScore, readOnly = false, onChange,
+}: {
+  rows: MarkRow[];
+  edits: Record<string, MarkEdit>;
+  maxScore: number;
+  readOnly?: boolean;
+  onChange?: (studentId: string, next: MarkEdit) => void;
+}) {
+  const focusRow = (index: number) => {
+    const el = document.querySelector<HTMLInputElement>(`[data-mark-row="${index}"]`);
+    if (el) { el.focus(); el.select(); }
+  };
   return (
-    <TeacherTable columns={['#', 'Student', 'Registration', 'Score', 'Absent', 'Note', 'Status']}>
+    <TeacherTable columns={['#', 'Student', 'Registration', 'Score', 'Status', 'Check']} minWidth={680}>
       {rows.map((row, index) => {
-        const validation = validateScore(row.score, maxScore, row.absent);
+        const edit = edits[row.id] ?? { score: '', status: 'SCORED' as MarkEntryStatus };
+        const msg = cellMessage(row, edit, maxScore);
+        const disabled = readOnly || row.exempt;
         return (
-          <tr key={row.id} className="group transition hover:bg-ks-paper">
-            <td className="px-4 py-3 font-black text-ks-muted">{index + 1}</td>
-            <td className="px-4 py-3">
+          <tr key={row.id} className={`group transition hover:bg-ks-paper ${msg.tone === 'rose' && !readOnly ? 'bg-ks-rose/5' : ''}`}>
+            <td className="px-4 py-2.5 font-black text-ks-muted">{index + 1}</td>
+            <td className="px-4 py-2.5">
               <div className="flex items-center gap-2.5">
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-ks-mist text-xs font-black text-ks-blue">
                   {row.name.split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase()}
@@ -166,30 +206,55 @@ export function MarksGrid({ rows, maxScore }: { rows: MarkRow[]; maxScore: numbe
                 <span className="font-bold text-ks-slate">{row.name}</span>
               </div>
             </td>
-            <td className="px-4 py-3 font-mono text-xs text-ks-muted">{row.registration}</td>
-            <td className="px-4 py-3">
+            <td className="px-4 py-2.5 font-mono text-xs text-ks-muted">{row.registration}</td>
+            <td className="px-4 py-2.5">
               <input
-                className={`h-9 w-24 rounded-md border px-3 font-black outline-none transition focus:border-ks-blue focus:ring-2 focus:ring-ks-blue/15 ${
-                  validation.valid ? 'border-ks-line bg-white' : 'border-ks-rose bg-ks-rose/5'
-                }`}
-                defaultValue={row.score}
-                disabled={row.absent}
+                type="number" inputMode="decimal" min={0} max={maxScore} step="any"
+                data-mark-row={index}
+                className={`h-9 w-24 rounded-md border px-3 font-black outline-none transition focus:border-ks-blue focus:ring-2 focus:ring-ks-blue/15 disabled:bg-ks-paper disabled:text-ks-muted ${msg.tone === 'rose' && edit.score !== '' ? 'border-ks-rose bg-ks-rose/5' : 'border-ks-line bg-white'}`}
+                value={edit.status === 'SCORED' ? edit.score : ''}
+                disabled={disabled || edit.status !== 'SCORED'}
                 aria-label={`Score for ${row.name}`}
+                onChange={(e) => onChange?.(row.id, { ...edit, score: e.target.value })}
                 onKeyDown={(event) => {
-                  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') event.preventDefault();
+                  if (event.key === 'Enter' || event.key === 'ArrowDown') { event.preventDefault(); focusRow(index + 1); }
+                  if (event.key === 'ArrowUp') { event.preventDefault(); focusRow(index - 1); }
                 }}
               />
             </td>
-            <td className="px-4 py-3">
-              <input className="h-4 w-4 rounded border-ks-line text-ks-blue focus:ring-ks-blue" type="checkbox" defaultChecked={row.absent} aria-label={`Absent for ${row.name}`} />
+            <td className="px-4 py-2.5">
+              <select
+                className="h-9 rounded-md border border-ks-line bg-white px-2 text-xs font-bold text-ks-slate disabled:bg-ks-paper"
+                value={edit.status}
+                disabled={disabled}
+                aria-label={`Status for ${row.name}`}
+                onChange={(e) => onChange?.(row.id, { score: e.target.value === 'SCORED' ? edit.score : '', status: e.target.value as MarkEntryStatus })}
+              >
+                <option value="SCORED">Scored</option>
+                <option value="ABSENT">Absent</option>
+                <option value="NOT_SAT">Not sat</option>
+              </select>
             </td>
-            <td className="px-4 py-3 text-ks-muted">{row.note || <span className="text-ks-line">—</span>}</td>
-            <td className="px-4 py-3"><Badge tone={validation.tone}>{validation.message}</Badge></td>
+            <td className="px-4 py-2.5"><Badge tone={msg.tone}>{msg.text}</Badge></td>
           </tr>
         );
       })}
     </TeacherTable>
   );
+}
+
+/** How many rows still need a score, and how many are invalid. Exempt rows need nothing. */
+export function marksProgress(rows: MarkRow[], edits: Record<string, MarkEdit>, maxScore: number) {
+  let complete = 0, blank = 0, invalid = 0, exempt = 0;
+  for (const row of rows) {
+    if (row.exempt) { exempt += 1; continue; }
+    const edit = edits[row.id] ?? { score: '', status: 'SCORED' as MarkEntryStatus };
+    if (edit.status !== 'SCORED') { complete += 1; continue; }
+    if (edit.score.trim() === '') { blank += 1; continue; }
+    const n = Number(edit.score);
+    if (!Number.isFinite(n) || n < 0 || n > maxScore) invalid += 1; else complete += 1;
+  }
+  return { complete, blank, invalid, exempt, required: rows.length - exempt };
 }
 
 const ATTENDANCE_STATUS_MAP: Record<string, string> = { P: 'PRESENT', A: 'ABSENT', L: 'LATE', E: 'EXCUSED' };
@@ -218,26 +283,32 @@ export function AttendanceGrid({
     );
   }
   return (
-    <TeacherTable columns={['Roll', 'Student', 'Present', 'Absent', 'Late', 'Excused', 'Note']}>
-      {students.map((student) => {
+    <TeacherTable columns={['Student', 'P', 'A', 'L', 'E']} minWidth={320}>
+      {students.map((student, index) => {
         const current = statuses[student.id] ?? '';
         return (
-          <tr key={student.id} className="hover:bg-ks-paper">
-            <td className="px-4 py-3 font-mono text-xs text-ks-muted">{student.roll}</td>
-            <td className="px-4 py-3">
+          <tr key={student.id} className={`hover:bg-ks-paper ${current === '' ? 'bg-ks-amber/5' : ''}`}>
+            <td className="px-3 py-3 sm:px-4">
               <div className="flex items-center gap-2.5">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-ks-mist text-xs font-black text-ks-blue">
+                <span className="w-5 shrink-0 text-right font-mono text-[11px] text-ks-muted">{index + 1}</span>
+                <div className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-md bg-ks-mist text-xs font-black text-ks-blue sm:flex">
                   {student.name.split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase()}
                 </div>
-                <span className="font-bold text-ks-slate">{student.name}</span>
+                <div>
+                  <span className="font-bold text-ks-slate">{student.name}</span>
+                  <span className="block font-mono text-[11px] text-ks-muted">{student.registration}</span>
+                </div>
               </div>
             </td>
             {(['P', 'A', 'L', 'E'] as const).map((label) => {
               const value = ATTENDANCE_STATUS_MAP[label];
               const isActive = current === value;
               return (
-                <td key={label} className="px-4 py-3">
+                <td key={label} className="px-2 py-3 sm:px-4">
                   <button
+                    type="button"
+                    aria-pressed={isActive}
+                    aria-label={`${student.name}: ${value.toLowerCase()}`}
                     onClick={() => onStatusChange(student.id, isActive ? '' : value)}
                     className={`h-8 w-8 rounded-md border text-xs font-black transition active:scale-95 ${
                       isActive ? ATTENDANCE_ACTIVE_STYLES[value] : 'border-ks-line text-ks-muted hover:bg-ks-mist/40'
@@ -248,7 +319,6 @@ export function AttendanceGrid({
                 </td>
               );
             })}
-            <td className="px-4 py-3 text-ks-muted">—</td>
           </tr>
         );
       })}
@@ -256,44 +326,54 @@ export function AttendanceGrid({
   );
 }
 
+function minutesOf(value: string): number {
+  const m = String(value).trim().match(/^(\d{1,2}):(\d{2})/);
+  return m ? Number(m[1]) * 60 + Number(m[2]) : 0;
+}
+
+/** The teacher's real week: one column per day taught, one row per period that actually exists. */
 export function TimetableBoard({ entries }: { entries: TimetableEntry[] }) {
-  const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
-  const times = ['08:00', '09:10', '10:20', '12:10'];
-  const subjectColors: Record<string, string> = {
-    Mathematics: 'text-ks-blue',
-    Physics: 'text-ks-emerald',
-  };
+  const dayOrder = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const short = (d: string) => d.slice(0, 3);
+  const usedDays = new Set(entries.map((e) => short(e.day)));
+  const days = dayOrder.filter((d) => ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].includes(d) || usedDays.has(d));
+  const periods = [...new Set(entries.map((e) => e.time))].sort((a, b) => minutesOf(a) - minutesOf(b));
+  const todayShort = dayOrder[(new Date().getDay() + 6) % 7];
+  if (entries.length === 0) {
+    return (
+      <div className="rounded-xl border border-dashed border-ks-line bg-ks-paper py-16 text-center">
+        <p className="text-sm font-bold text-ks-muted">No periods on your timetable yet.</p>
+        <p className="mt-1 text-xs text-ks-muted">Your timetable appears here once the school schedules your lessons.</p>
+      </div>
+    );
+  }
   return (
     <div className="overflow-x-auto rounded-xl border border-ks-line bg-white shadow-sm">
-      <div className="grid min-w-[980px] grid-cols-[80px_repeat(5,1fr)] gap-2 p-4">
+      <div className="grid min-w-[760px] gap-2 p-4" style={{ gridTemplateColumns: `96px repeat(${days.length}, minmax(0, 1fr))` }}>
         <div />
         {days.map((day) => (
-          <div key={day} className="rounded-lg bg-ks-navy px-3 py-2 text-center text-xs font-black uppercase tracking-wider text-white">{day}</div>
+          <div key={day} className={`rounded-lg px-3 py-2 text-center text-xs font-black uppercase tracking-wider ${day === todayShort ? 'bg-ks-gold text-ks-slate' : 'bg-ks-navy text-white'}`}>
+            {day}{day === todayShort ? ' · today' : ''}
+          </div>
         ))}
-        {times.map((time) => (
+        {periods.map((time) => (
           <div key={time} className="contents">
             <div className="flex items-center py-1 text-xs font-black text-ks-muted">{time}</div>
             {days.map((day) => {
-              const period = entries.find((e) => e.day === day && e.time === time);
+              const here = entries.filter((e) => short(e.day) === day && e.time === time);
               return (
                 <div
                   key={`${day}-${time}`}
-                  className={`min-h-[88px] rounded-lg border p-3 transition ${
-                    period?.current
-                      ? 'border-ks-gold bg-ks-gold/10 shadow-md shadow-ks-gold/10'
-                      : period
-                      ? 'border-ks-line bg-ks-paper/80 hover:border-ks-blue/30 hover:bg-ks-mist/20'
-                      : 'border-dashed border-ks-line/60 bg-ks-paper/30'
-                  }`}
+                  className={`min-h-[84px] space-y-1.5 rounded-lg border p-2.5 transition ${here.length ? 'border-ks-line bg-ks-paper/80' : 'border-dashed border-ks-line/60 bg-ks-paper/30'}`}
                 >
-                  {period ? (
-                    <>
-                      {period.current && <span className="mb-1.5 inline-block rounded-full bg-ks-gold px-2 py-0.5 text-[9px] font-black uppercase text-ks-slate">Live now</span>}
-                      <p className={`text-xs font-black uppercase tracking-wide ${subjectColors[period.subject] ?? 'text-ks-blue'}`}>{period.subject}</p>
-                      <p className="mt-0.5 font-bold text-ks-slate">{period.className}</p>
-                      <p className="text-[11px] text-ks-muted">{period.room}</p>
-                    </>
-                  ) : null}
+                  {here.map((period) => (
+                    <div key={period.id} className={`rounded-md p-1.5 ${period.current ? 'border border-ks-gold bg-ks-gold/10' : ''}`}>
+                      {period.current && <span className="mb-1 inline-block rounded-full bg-ks-gold px-2 py-0.5 text-[9px] font-black uppercase text-ks-slate">Live now</span>}
+                      <p className="text-xs font-black uppercase tracking-wide text-ks-blue">{period.subject}</p>
+                      <p className="font-bold text-ks-slate">{period.className}</p>
+                      <p className="flex flex-wrap items-center gap-1 text-[11px] text-ks-muted">{period.room}<SchoolBadge schoolId={period.schoolId} /></p>
+                    </div>
+                  ))}
                 </div>
               );
             })}
@@ -304,29 +384,34 @@ export function TimetableBoard({ entries }: { entries: TimetableEntry[] }) {
   );
 }
 
-export function AlertStaffCard({ alert }: { alert: Alert }) {
+export function AlertStaffCard({ alert, hideActions = false }: { alert: Alert; hideActions?: boolean }) {
   const styles = {
     CRITICAL: 'border-l-ks-rose bg-ks-rose/5',
     AT_RISK: 'border-l-ks-amber bg-ks-amber/5',
     INFO: 'border-l-ks-sky bg-ks-sky/5',
   };
   return (
-    <Card className={`rounded-xl border-l-4 p-4 transition hover:shadow-layer ${styles[alert.severity]}`}>
+    <Card className={`rounded-xl border-l-4 p-4 transition hover:shadow-layer ${styles[alert.severity] ?? styles.INFO}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <AlertTypeBadge type={alert.type} severity={alert.severity} />
+          <div className="flex flex-wrap items-center gap-1.5">
+            <AlertTypeBadge type={alert.type.replaceAll('_', ' ').toLowerCase()} severity={alert.severity} />
+            <SchoolBadge schoolId={alert.schoolId} />
+          </div>
           <h3 className="mt-2 font-display text-xl font-black text-ks-slate">{alert.student}</h3>
-          <p className="mt-0.5 text-sm font-semibold text-ks-muted">{alert.className} · {alert.subject}</p>
+          <p className="mt-0.5 text-sm font-semibold text-ks-muted">{[alert.className, alert.subject].filter(Boolean).join(' · ')}</p>
         </div>
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-ks-mist text-xs font-black text-ks-blue">
           {alert.student.split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase()}
         </div>
       </div>
       <p className="mt-3 text-sm leading-5 text-ks-muted">{alert.reason}</p>
-      <div className="mt-4 flex gap-2">
-        <Button variant="secondary" className="py-1.5 text-xs">View detail</Button>
-        <Button variant="quiet" className="py-1.5 text-xs">{alert.action}</Button>
-      </div>
+      {!hideActions && (
+        <div className="mt-4 flex flex-wrap gap-2">
+          <NavLink to={`/teacher/performance/alerts/${alert.id}`}><Button variant="secondary" className="py-1.5 text-xs">View detail</Button></NavLink>
+          <NavLink to={`/teacher/interventions/create?student=${alert.studentId}&alert=${alert.id}`}><Button variant="quiet" className="py-1.5 text-xs">Plan support</Button></NavLink>
+        </div>
+      )}
     </Card>
   );
 }
@@ -349,21 +434,18 @@ export function PairingCard({ pairing }: { pairing: Pairing }) {
       </div>
       <div className="mt-3">
         <p className="font-bold text-ks-navy">
-          {pairing.mentor} <span className="font-semibold text-ks-muted">& {pairing.support}</span>
+          {pairing.mentor} <span className="font-semibold text-ks-muted">helps {pairing.support}</span>
         </p>
-        <p className="text-xs text-ks-muted">{pairing.className} · {pairing.subject}</p>
+        <p className="text-xs text-ks-muted">{[pairing.className, pairing.subject].filter(Boolean).join(' · ')}</p>
       </div>
       <p className="mt-3 rounded-lg border border-ks-sky/15 bg-ks-mist/50 p-2.5 text-xs italic leading-5 text-ks-navy">
         "{pairing.reason}"
       </p>
       <div className="mt-4 flex items-center justify-between gap-3">
         <Badge tone={pairing.status === 'SUGGESTED' ? 'blue' : pairing.status === 'ACTIVE' ? 'emerald' : 'slate'}>
-          {pairing.status}
+          {pairing.status === 'SUGGESTED' ? 'Suggested' : pairing.status === 'ACTIVE' ? 'Active' : pairing.status === 'COMPLETED' ? 'Completed' : pairing.status}
         </Badge>
-        <div className="flex gap-2">
-          <Button variant="success" className="py-1.5 text-xs">Activate</Button>
-          <Button variant="secondary" className="py-1.5 text-xs">Decline</Button>
-        </div>
+        <span className="text-xs font-black text-ks-blue">{pairing.status === 'SUGGESTED' ? 'Review & activate →' : 'Open →'}</span>
       </div>
     </Card>
   );
