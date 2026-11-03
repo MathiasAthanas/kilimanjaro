@@ -14,7 +14,7 @@ import { WorkspaceHeader } from '../../../components/layout/WorkspaceHeader';
 import { formatClassLabel } from '../../../lib/classLabel';
 import {
   downloadMarksTemplateCsv, downloadMeritExport,
-  useComposeReportCards, useCreateEditRequest, useCreateExamType, useCreateExamWindow,
+  useAddExamWindowClasses, useComposeReportCards, useCreateEditRequest, useCreateExamType, useCreateExamWindow,
   useDecideEditRequest, useDeleteExamType, useEditRequests, useExamReference,
   useExamTypes, useExamWindow, useExamWindows, useMarksTemplate, useMeritList,
   useMigrateExamTypes, useSubmitAssessment, useTeacherExamWindows,
@@ -23,6 +23,7 @@ import {
 import { useWindowReadiness } from '../api/readinessHooks';
 import { ExemptionsPanel, ReadinessPanel } from './ExamReadiness';
 import { WindowPlanPanel } from './ExamWindowPlan';
+import { eligibleExamClasses, includedExamClassIds } from '../utils/examWindowClasses';
 
 // ─── helpers ──────────────────────────────────────────────────────────────
 const S = (v: unknown, d = '') => (v === null || v === undefined ? d : String(v));
@@ -176,8 +177,11 @@ function CreateWindowForm({ onDone }: { onDone: () => void }) {
   const set = (k: string, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
 
   const terms = (ref.data?.terms ?? []).filter((t: any) => !form.academicYearId || t.academicYearId === form.academicYearId);
-  const levels = [...new Set((ref.data?.classes ?? []).map((c: any) => c.level).filter((l: any) => l != null))].sort((a: any, b: any) => a - b);
-  const classesForStreams = (ref.data?.classes ?? []).filter((c: any) => !form.educationStage || c.educationStage === form.educationStage);
+  const classesForStreams = (ref.data?.classes ?? []).filter((c: any) =>
+    (!form.academicYearId || c.academicYearId === form.academicYearId)
+    && (!form.educationStage || c.educationStage === form.educationStage),
+  );
+  const levels = [...new Set(classesForStreams.map((c: any) => c.level).filter((l: any) => l != null))].sort((a: any, b: any) => a - b);
 
   const submit = async () => {
     const body: Record<string, unknown> = {
@@ -213,7 +217,7 @@ function CreateWindowForm({ onDone }: { onDone: () => void }) {
         <Field label="Window name"><input className={inputCls} placeholder="e.g. Terminal Exam" value={form.name ?? ''} onChange={(e) => set('name', e.target.value)} /></Field>
         <Field label="Max score per subject"><input className={inputCls} type="number" value={form.maxScore ?? 100} onChange={(e) => set('maxScore', e.target.value)} /></Field>
         <Field label="Academic year">
-          <select className={inputCls} value={form.academicYearId ?? ''} onChange={(e) => { set('academicYearId', e.target.value); set('termId', ''); }}>
+          <select className={inputCls} value={form.academicYearId ?? ''} onChange={(e) => setForm((current) => ({ ...current, academicYearId: e.target.value, termId: '', scopeLevels: [], scopeClassIds: [] }))}>
             <option value="">Select year…</option>
             {(ref.data?.years ?? []).map((y: any) => <option key={S(y.id)} value={S(y.id)}>{S(y.name)}</option>)}
           </select>
@@ -225,7 +229,7 @@ function CreateWindowForm({ onDone }: { onDone: () => void }) {
           </select>
         </Field>
         <Field label="Stage (optional filter)">
-          <select className={inputCls} value={form.educationStage ?? ''} onChange={(e) => set('educationStage', e.target.value)}>
+          <select className={inputCls} value={form.educationStage ?? ''} onChange={(e) => setForm((current) => ({ ...current, educationStage: e.target.value, scopeLevels: [], scopeClassIds: [] }))}>
             <option value="">All stages</option>
             {['NURSERY', 'PRIMARY', 'O_LEVEL', 'A_LEVEL'].map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
@@ -293,6 +297,7 @@ export function ExamWindowDetailPage() {
   const [showReopen, setShowReopen] = useState(false);
   const [exemptSeed, setExemptSeed] = useState<{ classId: string; subjectId: string; studentId: string } | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [showClasses, setShowClasses] = useState(false);
 
   const w = win.data;
   const status = S(w?.status);
@@ -343,10 +348,12 @@ export function ExamWindowDetailPage() {
         {(status === 'CLOSED' || status === 'PUBLISHED') && <Button onClick={() => setShowReopen((v) => !v)} variant="secondary"><Unlock className="h-4 w-4" /> Reopen for corrections</Button>}
         {status === 'PUBLISHED' && <Button onClick={() => runAction('unpublish')} variant="danger" loading={action.isPending}><Unlock className="h-4 w-4" /> Unpublish</Button>}
         {status !== 'ARCHIVED' && status !== 'PUBLISHED' && <Button onClick={() => setShowSettings((v) => !v)} variant="secondary">Settings</Button>}
+        {status !== 'ARCHIVED' && <Button onClick={() => setShowClasses((v) => !v)} variant="secondary"><Plus className="h-4 w-4" /> Manage classes</Button>}
         {(status === 'DRAFT' || status === 'CLOSED') && <Button onClick={() => { if (window.confirm('Archive this exam window? It will be hidden from the list.')) void runAction('archive'); }} variant="ghost">Archive</Button>}
         <span className="ml-auto text-xs text-ks-muted">Lifecycle: DRAFT → OPEN → CLOSED → PUBLISHED</span>
       </Card>
       {showSettings && <WindowSettings w={w} status={status} onClose={() => setShowSettings(false)} onSaved={(m) => { setMsg(m); setShowSettings(false); }} />}
+      {showClasses && <WindowClassesManager w={w} status={status} onClose={() => setShowClasses(false)} onAdded={(m) => setMsg(m)} />}
       {status === 'DRAFT' && <div className="mb-5"><Banner tone="amber">This exam is a draft. Teachers cannot see it yet. Check the subjects and teachers below, leave out anything that should not be examined, then press <b>Open for entry</b>.</Banner></div>}
       {showReopen && (
         <Card className="mb-5 p-4">
@@ -415,7 +422,8 @@ function WindowSettings({ w, status, onClose, onSaved }: { w: Record<string, any
   const [err, setErr] = useState('');
   const set = (k: string, v: unknown) => setF((x) => ({ ...x, [k]: v }));
   const draft = status === 'DRAFT';
-  const levels = [...new Set((ref.data?.classes ?? []).map((c: any) => c.level).filter((l: any) => l != null))].sort((x: any, y: any) => x - y);
+  const eligibleClasses = eligibleExamClasses((ref.data?.classes ?? []) as Record<string, unknown>[], w);
+  const levels = [...new Set(eligibleClasses.map((c: any) => c.level).filter((l: any) => l != null))].sort((x: any, y: any) => x - y);
   const toggle = (key: 'scopeLevels' | 'scopeClassIds', v: any) => set(key, (f[key] as any[]).includes(v) ? (f[key] as any[]).filter((x) => x !== v) : [...(f[key] as any[]), v]);
   const save = async () => {
     setErr('');
@@ -446,11 +454,79 @@ function WindowSettings({ w, status, onClose, onSaved }: { w: Record<string, any
             </select>
           </Field>
           {f.scopeType === 'STANDARDS' && <Field label="Standards"><div className="flex flex-wrap gap-2">{levels.map((lv: any) => <button type="button" key={lv} onClick={() => toggle('scopeLevels', lv)} className={`rounded-lg px-3 py-1.5 text-xs font-bold ${f.scopeLevels.includes(lv) ? 'bg-ks-blue text-white' : 'bg-ks-mist/30 text-ks-navy'}`}>L{lv}</button>)}</div></Field>}
-          {f.scopeType === 'STREAMS' && <Field label="Classes"><div className="flex max-h-28 flex-wrap gap-2 overflow-y-auto">{(ref.data?.classes ?? []).map((c: any) => <button type="button" key={S(c.id)} onClick={() => toggle('scopeClassIds', c.id)} className={`rounded-lg px-3 py-1.5 text-xs font-bold ${f.scopeClassIds.includes(c.id) ? 'bg-ks-blue text-white' : 'bg-ks-mist/30 text-ks-navy'}`}>{formatClassLabel(S(c.name), c.stream)}</button>)}</div></Field>}
+          {f.scopeType === 'STREAMS' && <Field label="Classes"><div className="flex max-h-28 flex-wrap gap-2 overflow-y-auto">{eligibleClasses.map((c: any) => <button type="button" key={S(c.id)} onClick={() => toggle('scopeClassIds', c.id)} className={`rounded-lg px-3 py-1.5 text-xs font-bold ${f.scopeClassIds.includes(c.id) ? 'bg-ks-blue text-white' : 'bg-ks-mist/30 text-ks-navy'}`}>{formatClassLabel(S(c.name), c.stream)}</button>)}</div></Field>}
         </div>
       ) : <p className="mt-3 text-xs text-ks-muted">Which classes the exam covers is fixed once it opens. To leave a subject or class out, use the Subjects &amp; teachers tab.{status !== 'CLOSED' ? ' Changing the maximum score updates every marks sheet that is not locked.' : ' Reopen the window to change the maximum score.'}</p>}
       {err && <div className="mt-3"><Banner tone="rose">{err}</Banner></div>}
       <div className="mt-4 flex gap-2"><Button onClick={save} loading={update.isPending} disabled={!f.name.trim()}>Save settings</Button><Button variant="ghost" onClick={onClose}>Cancel</Button></div>
+    </Card>
+  );
+}
+
+function WindowClassesManager({ w, status, onClose, onAdded }: { w: Record<string, any>; status: string; onClose: () => void; onAdded: (message: string) => void }) {
+  const ref = useExamReference();
+  const addClasses = useAddExamWindowClasses(S(w.id));
+  const [selected, setSelected] = useState<string[]>([]);
+  const [err, setErr] = useState('');
+  const canAdd = ['DRAFT', 'OPEN', 'REOPENED'].includes(status);
+  const eligible = eligibleExamClasses((ref.data?.classes ?? []) as Record<string, unknown>[], w);
+  const included = includedExamClassIds(eligible, w);
+  const available = eligible.filter((item) => !included.has(S(item.id)));
+  const toggle = (classId: string) => setSelected((current) => current.includes(classId) ? current.filter((id) => id !== classId) : [...current, classId]);
+
+  const add = async () => {
+    setErr('');
+    try {
+      const result = await addClasses.mutateAsync(selected) as Record<string, unknown>;
+      setSelected([]);
+      onAdded(S(result.message, `${N(result.addedClasses)} class(es) added to the exam window.`));
+    } catch (error: any) {
+      setErr(S(error?.message, 'Could not add the selected classes.'));
+    }
+  };
+
+  return (
+    <Card className="mb-5 p-5">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="font-display text-lg font-bold text-ks-navy">Manage exam classes</h3>
+          <p className="mt-1 text-sm text-ks-muted">Included classes stay unchanged. Adding an open class creates its subject marks sheets immediately.</p>
+        </div>
+        <Button variant="ghost" onClick={onClose}>Close</Button>
+      </div>
+      {ref.isLoading && <p className="text-sm text-ks-muted">Loading classes...</p>}
+      {ref.isError && <ErrorState title="Could not load classes" message={S((ref.error as any)?.message, 'Refresh and try again.')} onRetry={() => ref.refetch()} />}
+      {!canAdd && <Banner tone="amber">Reopen this window before adding classes. Closed or published results must not change silently.</Banner>}
+      {!ref.isLoading && !ref.isError && (
+        <>
+          <div className="mb-3 flex flex-wrap gap-2 text-xs font-bold">
+            <span className="rounded-lg bg-ks-emerald/10 px-3 py-1.5 text-ks-emerald">{included.size} included</span>
+            <span className="rounded-lg bg-ks-mist/40 px-3 py-1.5 text-ks-navy">{available.length} available</span>
+          </div>
+          <div className="grid max-h-72 gap-2 overflow-y-auto sm:grid-cols-2 lg:grid-cols-3">
+            {eligible.map((item: any) => {
+              const classId = S(item.id);
+              const isIncluded = included.has(classId);
+              const isSelected = selected.includes(classId);
+              return (
+                <button type="button" key={classId} disabled={isIncluded || !canAdd} onClick={() => toggle(classId)}
+                  className={`flex items-center justify-between rounded-lg border px-3 py-2 text-left text-sm font-bold transition ${isIncluded ? 'border-ks-emerald/30 bg-ks-emerald/5 text-ks-emerald' : isSelected ? 'border-ks-blue bg-ks-blue text-white' : 'border-ks-line bg-white text-ks-navy hover:border-ks-blue'}`}>
+                  <span>{formatClassLabel(S(item.name), item.stream)}</span>
+                  <span className={`ml-2 text-[11px] ${isSelected ? 'text-white/80' : 'text-ks-muted'}`}>{isIncluded ? 'Included' : `${N(item.studentCount)} students`}</span>
+                </button>
+              );
+            })}
+          </div>
+          {!eligible.length && <EmptyState title="No eligible classes" message="No classes match this exam's school, academic year and stage." />}
+          {!!eligible.length && !available.length && <p className="mt-3 text-sm font-semibold text-ks-emerald">All eligible classes are already included.</p>}
+          {!!selected.length && <div className="mt-4 rounded-lg border border-ks-blue/20 bg-ks-blue/5 px-4 py-3 text-sm text-ks-navy">This will add <b>{selected.length}</b> class{selected.length === 1 ? '' : 'es'}. Existing marks will not be changed or removed.</div>}
+          {err && <div className="mt-3"><Banner tone="rose">{err}</Banner></div>}
+          <div className="mt-4 flex gap-2">
+            <Button onClick={add} loading={addClasses.isPending} disabled={!canAdd || !selected.length}><Plus className="h-4 w-4" /> Add selected classes</Button>
+            <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          </div>
+        </>
+      )}
     </Card>
   );
 }

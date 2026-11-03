@@ -17,7 +17,7 @@ import {
   requireWriteSchoolId,
   schoolScopeFilter,
 } from '../common/helpers/school-scope.helper';
-import { CreateExamWindowDto, ExamWindowFilterDto, UpdateExamWindowDto } from './dto/exam-window.dto';
+import { AddExamWindowClassesDto, CreateExamWindowDto, ExamWindowFilterDto, UpdateExamWindowDto } from './dto/exam-window.dto';
 import { CreateEditRequestDto, DecideEditRequestDto } from './dto/edit-request.dto';
 import { ExamResultsService } from './exam-results.service';
 import { AuthClientService } from '../auth-client/auth-client.service';
@@ -355,6 +355,135 @@ export class ExamWindowsService {
     const { classIds: _c, ...summary } = await this.fanOut(window, user);
     await this.redis.delByPattern(`exam-window:*:${id}`);
     return summary;
+  }
+
+  /**
+   * Append classes without disturbing the classes, marks sheets or marks already in the window.
+   * Once a window is open its scope becomes an explicit class list so future class creation cannot
+   * silently change an exam that is already running.
+   */
+  async addClasses(id: string, dto: AddExamWindowClassesDto, user: RequestUser) {
+    const window = await this.getWindowOrThrow(id, user);
+    if (!([ExamWindowStatus.DRAFT, ExamWindowStatus.OPEN, ExamWindowStatus.REOPENED] as ExamWindowStatus[]).includes(window.status)) {
+      throw new BadRequestException(
+        `Classes can only be added while the window is DRAFT, OPEN or REOPENED. Current status: ${window.status}. Reopen it first.`,
+      );
+    }
+
+    const eligible = await this.resolveScopeClasses(
+      {
+        academicYearId: window.academicYearId,
+        educationStage: window.educationStage,
+        scopeType: 'ALL_CLASSES',
+        scopeLevels: [],
+        scopeClassIds: [],
+      },
+      user,
+    );
+    const eligibleById = new Map(eligible.map((item) => [item.id, item]));
+    const requestedIds = [...new Set(dto.classIds)];
+    const invalidIds = requestedIds.filter((classId) => !eligibleById.has(classId));
+    if (invalidIds.length) {
+      throw new BadRequestException(
+        `${invalidIds.length} selected class${invalidIds.length === 1 ? ' is' : 'es are'} not in this window's school, academic year and stage. Refresh the class list and try again.`,
+      );
+    }
+
+    const current = await this.resolveScopeClasses(window, user);
+    const currentIds = new Set(current.map((item) => item.id));
+    const addedIds = requestedIds.filter((classId) => !currentIds.has(classId));
+    if (!addedIds.length) {
+      return {
+        ...(await this.detail(id, user)),
+        addedClasses: 0,
+        assessmentsCreated: 0,
+        message: 'Every selected class is already included in this exam window.',
+      };
+    }
+
+    const classSubjects = await this.prisma.classSubject.findMany({
+      where: {
+        academicYearId: window.academicYearId,
+        classId: { in: addedIds },
+        isActive: true,
+        subject: { isActive: true },
+      },
+      include: { subject: true },
+    });
+    const classesWithSubjects = new Set(classSubjects.map((item) => item.classId));
+    const withoutSubjects = addedIds.filter((classId) => !classesWithSubjects.has(classId));
+    if (withoutSubjects.length) {
+      const labels = withoutSubjects.map((classId) => eligibleById.get(classId)?.name ?? classId);
+      throw new BadRequestException(
+        `${labels.join(', ')} ${labels.length === 1 ? 'has' : 'have'} no active subjects assigned. Assign subjects first, then add ${labels.length === 1 ? 'the class' : 'those classes'} to the exam.`,
+      );
+    }
+
+    const opened = window.status !== ExamWindowStatus.DRAFT;
+    const rules = opened ? await this.loadExclusions(window) : [];
+    const included = opened
+      ? classSubjects.filter((item) => !matchExclusion(rules, item.subjectId, item.classId, { windowOpened: true }))
+      : [];
+    if (opened) {
+      const classesWithIncludedSubjects = new Set(included.map((item) => item.classId));
+      const fullyOmitted = addedIds.filter((classId) => !classesWithIncludedSubjects.has(classId));
+      if (fullyOmitted.length) {
+        const labels = fullyOmitted.map((classId) => eligibleById.get(classId)?.name ?? classId);
+        throw new BadRequestException(
+          `Every subject is omitted for ${labels.join(', ')}. Restore at least one subject before adding ${labels.length === 1 ? 'this class' : 'these classes'}.`,
+        );
+      }
+    }
+
+    const nextIds = [...currentIds, ...addedIds];
+    const assessmentsCreated = await this.prisma.$transaction(async (tx) => {
+      await tx.examWindow.update({
+        where: { id },
+        data: {
+          scopeType: 'STREAMS',
+          scopeLevels: [],
+          scopeClassIds: nextIds,
+          ...(opened && included.length ? { subjectsChangedAt: new Date() } : {}),
+        },
+      });
+      if (!opened) return 0;
+
+      const result = await tx.assessment.createMany({
+        data: included.map((item) => ({
+          classSubjectId: item.id,
+          examWindowId: id,
+          classId: item.classId,
+          subjectId: item.subjectId,
+          educationStage: item.educationStage,
+          classLevel: item.classLevel,
+          combinationId: item.combinationId,
+          termId: window.termId,
+          academicYearId: window.academicYearId,
+          schoolId: item.schoolId ?? window.schoolId,
+          name: `${item.subject.name} - ${window.name}`,
+          maxScore: window.maxScore,
+          status: AssessmentStatus.OPEN,
+        })),
+        skipDuplicates: true,
+      });
+      return result.count;
+    });
+
+    await this.redis.delByPattern(`exam-window:*:${id}`);
+    await this.rabbitMq.publish('exam.window.classes.added', {
+      examWindowId: id,
+      classIds: addedIds,
+      addedById: user.id,
+      schoolId: window.schoolId,
+      assessmentsCreated,
+    });
+
+    return {
+      ...(await this.detail(id, user)),
+      addedClasses: addedIds.length,
+      assessmentsCreated,
+      message: `${addedIds.length} class${addedIds.length === 1 ? '' : 'es'} added${opened ? ` and ${assessmentsCreated} marks sheet${assessmentsCreated === 1 ? '' : 's'} created` : ''}.`,
+    };
   }
 
   /**

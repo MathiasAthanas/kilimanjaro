@@ -4,7 +4,7 @@ import { ROLES } from '../common/constants/roles';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RequestUser } from '../common/interfaces/request-user.interface';
-import { CreateExamWindowDto, ExamWindowFilterDto, UpdateExamWindowDto } from './dto/exam-window.dto';
+import { AddExamWindowClassesDto, CreateExamWindowDto, ExamWindowFilterDto, UpdateExamWindowDto } from './dto/exam-window.dto';
 import { CreateEditRequestDto, DecideEditRequestDto } from './dto/edit-request.dto';
 import { ExamWindowsService } from './exam-windows.service';
 
@@ -88,6 +88,12 @@ export class ExamWindowsController {
   @Roles(...ADMIN)
   update(@Param('id') id: string, @Body() dto: UpdateExamWindowDto, @CurrentUser() user: RequestUser) {
     return this.windows.update(id, dto, user);
+  }
+
+  @Post('exam-windows/:id/classes')
+  @Roles(...ADMIN)
+  addClasses(@Param('id') id: string, @Body() dto: AddExamWindowClassesDto, @CurrentUser() user: RequestUser) {
+    return this.windows.addClasses(id, dto, user);
   }
 
   @Post('exam-windows/:id/open')

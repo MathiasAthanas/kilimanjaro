@@ -151,6 +151,13 @@ export class UpdateExamWindowDto {
   closesAt?: string;
 }
 
+export class AddExamWindowClassesDto {
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsString({ each: true })
+  classIds!: string[];
+}
+
 export class ExamWindowFilterDto {
   @IsOptional()
   @IsString()

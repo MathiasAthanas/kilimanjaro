@@ -317,6 +317,14 @@ export function useUpdateExamWindow(id: string) {
   });
 }
 
+export function useAddExamWindowClasses(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (classIds: string[]) => api.post(`/academics/exam-windows/${id}/classes`, { classIds }).then(payloadOf),
+    onSuccess: () => invalidateWindow(qc, id),
+  });
+}
+
 export function useRemoveStandingRule(windowId: string) {
   const qc = useQueryClient();
   return useMutation({
