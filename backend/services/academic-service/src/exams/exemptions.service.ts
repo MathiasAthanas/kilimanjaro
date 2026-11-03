@@ -3,6 +3,7 @@ import { ExamWindowStatus, ExemptionScope, ExemptionStatus, Prisma } from '../..
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { RabbitMqService } from '../rabbitmq/rabbitmq.service';
+import { StudentClientService } from '../student-client/student-client.service';
 import { RequestUser } from '../common/interfaces/request-user.interface';
 import { ROLES } from '../common/constants/roles';
 import { assertSchoolInScope, requireWriteSchoolId, schoolScopeFilter } from '../common/helpers/school-scope.helper';
@@ -25,7 +26,28 @@ export class ExemptionsService {
     private readonly redis: RedisService,
     private readonly rabbitMq: RabbitMqService,
     private readonly calculator: ResultCalculatorService,
+    private readonly studentClient: StudentClientService,
   ) {}
+
+  private studentServiceHeaders(user: RequestUser): Record<string, string> {
+    return {
+      'X-User-Id': user.id,
+      'X-User-Role': user.role,
+      'X-User-Scope': user.scope ?? 'GROUP',
+      'X-User-School-Ids': user.scope === 'SCHOOL' ? (user.schoolIds ?? []).join(',') : '*',
+      ...(user.activeSchoolId ? { 'X-Active-School': user.activeSchoolId } : {}),
+    };
+  }
+
+  private unwrapRows(payload: any): any[] {
+    if (Array.isArray(payload)) return payload;
+    const root = payload?.data ?? payload ?? {};
+    if (Array.isArray(root)) return root;
+    for (const value of [root.items, root.students, root.data]) {
+      if (Array.isArray(value)) return value;
+    }
+    return [];
+  }
 
   private assertApprover(user: RequestUser) {
     if (!APPROVER_ROLES.includes(user.role)) {
@@ -40,7 +62,11 @@ export class ExemptionsService {
     } catch (err) {
       const owner = dto.examWindowId
         ? await this.prisma.examWindow.findUnique({ where: { id: dto.examWindowId }, select: { schoolId: true } })
-        : await this.prisma.assessment.findFirst({ where: { classId: dto.classId, termId: dto.termId }, select: { schoolId: true } });
+        : (await this.prisma.classSubject.findFirst({
+            where: { classId: dto.classId, academicYearId: dto.academicYearId, isActive: true },
+            select: { schoolId: true },
+          })) ??
+          (await this.prisma.assessment.findFirst({ where: { classId: dto.classId, termId: dto.termId }, select: { schoolId: true } }));
       if (!owner?.schoolId) throw err;
       assertSchoolInScope(user, owner.schoolId);
       return owner.schoolId;
@@ -77,17 +103,66 @@ export class ExemptionsService {
     }
   }
 
-  private async validateTarget(dto: CreateExemptionDto) {
+  private async validateTarget(dto: CreateExemptionDto, user: RequestUser, schoolId: string) {
     if (dto.scope === 'STUDENT' && !(dto.studentIds?.length)) {
       throw new BadRequestException('Select at least one student for a student exemption.');
     }
     const subject = await this.prisma.subject.findUnique({ where: { id: dto.subjectId } });
     if (!subject) throw new BadRequestException('Subject not found.');
+    let window: { id: string; schoolId: string | null; termId: string; academicYearId: string } | null = null;
     if (dto.examWindowId) {
-      const w = await this.prisma.examWindow.findUnique({ where: { id: dto.examWindowId } });
+      window = await this.prisma.examWindow.findUnique({
+        where: { id: dto.examWindowId },
+        select: { id: true, schoolId: true, termId: true, academicYearId: true },
+      });
+      const w = window;
       if (!w) throw new BadRequestException('Exam window not found.');
+      assertSchoolInScope(user, w.schoolId ?? null);
+      if (w.schoolId && w.schoolId !== schoolId) {
+        throw new BadRequestException('The exam window does not belong to the selected school.');
+      }
       if (w.termId !== dto.termId || w.academicYearId !== dto.academicYearId) {
         throw new BadRequestException('The exam window does not belong to the selected term.');
+      }
+    }
+
+    const classSubject = await this.prisma.classSubject.findFirst({
+      where: {
+        classId: dto.classId,
+        subjectId: dto.subjectId,
+        academicYearId: dto.academicYearId,
+        isActive: true,
+        OR: [{ schoolId }, { schoolId: null }],
+      },
+      select: { id: true, schoolId: true },
+    });
+    if (!classSubject) {
+      throw new BadRequestException('The selected subject is not assigned to this class for the academic year.');
+    }
+    if (classSubject.schoolId && classSubject.schoolId !== schoolId) {
+      throw new BadRequestException('The selected class subject does not belong to the selected school.');
+    }
+
+    if (window) {
+      const assessment = await this.prisma.assessment.findFirst({
+        where: { examWindowId: window.id, classId: dto.classId, subjectId: dto.subjectId },
+        select: { id: true },
+      });
+      if (!assessment) {
+        throw new BadRequestException('The selected class subject is not included in this exam window.');
+      }
+    }
+
+    if (dto.scope === 'STUDENT') {
+      const rosterPayload = await this.studentClient.get<unknown>(
+        '/students',
+        { classId: dto.classId, page: 1, limit: 2000 },
+        this.studentServiceHeaders(user),
+      );
+      const rosterIds = new Set(this.unwrapRows(rosterPayload).map((student) => String(student.id)));
+      const invalid = [...new Set(dto.studentIds ?? [])].filter((studentId) => !rosterIds.has(studentId));
+      if (invalid.length) {
+        throw new BadRequestException(`${invalid.length} selected student(s) are not enrolled in this class.`);
       }
     }
     return subject;
@@ -96,7 +171,8 @@ export class ExemptionsService {
   /** What-if: which students are affected and how their averages/divisions change. */
   async preview(dto: CreateExemptionDto, user: RequestUser) {
     this.assertApprover(user);
-    const subject = await this.validateTarget(dto);
+    const schoolId = await this.resolveSchoolId(dto, user);
+    const subject = await this.validateTarget(dto, user, schoolId);
 
     const windows = await this.prisma.examWindow.findMany({
       where: {
@@ -166,7 +242,7 @@ export class ExemptionsService {
     if (!dto.reason || dto.reason.trim().length < 5) {
       throw new BadRequestException('A reason (at least 5 characters) is required for an exemption.');
     }
-    await this.validateTarget(dto);
+    await this.validateTarget(dto, user, schoolId);
     await this.assertNotPublished({ termId: dto.termId, academicYearId: dto.academicYearId, examWindowId: dto.examWindowId, classId: dto.classId });
 
     const targets: Array<string | null> = dto.scope === 'CLASS' ? [null] : [...new Set(dto.studentIds!)];
