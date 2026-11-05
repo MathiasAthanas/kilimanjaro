@@ -2949,7 +2949,7 @@ export function SubjectsPage() {
     <AdminShell title="Subject Management" eyebrow="Subjects, departments, assignments">
       <AdminFormSection
         title="Add Subject"
-        subtitle="Subjects can be assigned to classes and selected into A-Level combinations."
+        subtitle="Subjects are shared across schools and can be assigned to any class at the same stage. A code may be reused in a different education stage."
       >
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <Field label="Subject Name" value={form.name} onChange={set('name')} placeholder="e.g. Physics" />

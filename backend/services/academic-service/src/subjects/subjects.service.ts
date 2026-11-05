@@ -74,9 +74,25 @@ export class SubjectsService {
   }
 
   async createSubject(dto: CreateSubjectDto) {
-    const subject = await this.prisma.subject.create({ data: dto });
-    await this.redis.del('subjects:all');
-    return subject;
+    const data = this.normaliseSubject(dto);
+    const duplicate = await this.prisma.subject.findFirst({
+      where: { code: data.code, educationStage: data.educationStage ?? null },
+      select: { id: true, name: true },
+    });
+    if (duplicate) {
+      throw this.subjectCodeConflict(data.code, data.educationStage, duplicate.name);
+    }
+
+    try {
+      const subject = await this.prisma.subject.create({ data });
+      await this.redis.del('subjects:all');
+      return subject;
+    } catch (error) {
+      if (this.isUniqueConstraintError(error)) {
+        throw this.subjectCodeConflict(data.code, data.educationStage);
+      }
+      throw error;
+    }
   }
 
   async listSubjects(filters: { isActive?: string; isCompulsory?: string; educationStage?: string }) {
@@ -110,9 +126,54 @@ export class SubjectsService {
       throw new NotFoundException('Subject not found');
     }
 
-    const subject = await this.prisma.subject.update({ where: { id }, data: dto });
-    await this.redis.del('subjects:all');
-    return subject;
+    const data = this.normaliseSubject({
+      ...dto,
+      name: dto.name ?? existing.name,
+      code: dto.code ?? existing.code,
+      educationStage: dto.educationStage ?? (existing.educationStage as CreateSubjectDto['educationStage']) ?? undefined,
+    });
+    const duplicate = await this.prisma.subject.findFirst({
+      where: {
+        id: { not: id },
+        code: data.code,
+        educationStage: data.educationStage ?? null,
+      },
+      select: { id: true, name: true },
+    });
+    if (duplicate) {
+      throw this.subjectCodeConflict(data.code, data.educationStage, duplicate.name);
+    }
+
+    try {
+      const subject = await this.prisma.subject.update({ where: { id }, data });
+      await this.redis.del('subjects:all');
+      return subject;
+    } catch (error) {
+      if (this.isUniqueConstraintError(error)) {
+        throw this.subjectCodeConflict(data.code, data.educationStage);
+      }
+      throw error;
+    }
+  }
+
+  private normaliseSubject(dto: CreateSubjectDto): CreateSubjectDto {
+    return {
+      ...dto,
+      name: dto.name.trim(),
+      code: dto.code.trim().toUpperCase(),
+    };
+  }
+
+  private isUniqueConstraintError(error: unknown): boolean {
+    return typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002';
+  }
+
+  private subjectCodeConflict(code: string, stage?: string | null, existingName?: string): ConflictException {
+    const stageLabel = stage ? stage.replace('_', '-') : 'stage-neutral subjects';
+    const existing = existingName ? ` as "${existingName}"` : '';
+    return new ConflictException(
+      `Subject code ${code} already exists for ${stageLabel}${existing}. Use the existing subject or choose a different code.`,
+    );
   }
 
   async deleteSubject(id: string): Promise<void> {
@@ -396,16 +457,19 @@ export class SubjectsService {
    */
   private async ensureSubject(name: string, preferredCode: string): Promise<{ id: string }> {
     const byName = await this.prisma.subject.findFirst({
-      where: { name: { equals: name, mode: 'insensitive' } },
+      where: { name: { equals: name, mode: 'insensitive' }, educationStage: 'A_LEVEL' },
       select: { id: true },
     });
     if (byName) return byName;
-    const byCode = await this.prisma.subject.findUnique({ where: { code: preferredCode }, select: { id: true } });
+    const byCode = await this.prisma.subject.findFirst({
+      where: { code: preferredCode, educationStage: 'A_LEVEL' },
+      select: { id: true },
+    });
     if (byCode) return byCode;
     let code = preferredCode;
     let n = 1;
     // eslint-disable-next-line no-await-in-loop
-    while (await this.prisma.subject.findUnique({ where: { code }, select: { id: true } })) {
+    while (await this.prisma.subject.findFirst({ where: { code, educationStage: 'A_LEVEL' }, select: { id: true } })) {
       code = `${preferredCode}${n++}`;
     }
     return this.prisma.subject.create({

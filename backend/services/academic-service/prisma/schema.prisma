@@ -174,7 +174,7 @@ enum SubjectRole {
 model Subject {
   id                  String                      @id @default(uuid())
   name                String
-  code                String                      @unique
+  code                String
   description         String?
   educationStage      EducationStage?
   isCompulsory        Boolean                     @default(true)
@@ -189,6 +189,7 @@ model Subject {
   assessments         Assessment[]
   timetable           Timetable[]
 
+  @@unique([code, educationStage])
   @@schema("academics")
 }
 
