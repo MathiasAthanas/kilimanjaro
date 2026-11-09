@@ -514,14 +514,16 @@ export class ReportCardPdfService {
   private renderFooter(doc: PDFKit.PDFDocument, input: ReportCardPdfInput) {
     const margin = 48;
     const contentWidth = doc.page.width - margin * 2;
-    const footerY = doc.page.height - 48;
+    // Keep the text above PDFKit's bottom margin. Writing below that boundary
+    // makes PDFKit add a second page containing only the footer.
+    const footerY = doc.page.height - 64;
 
     doc.moveTo(margin, footerY).lineTo(margin + contentWidth, footerY).stroke('#E2E8F0');
     doc.fillColor('#9CA3AF').fontSize(7.5).font('Helvetica')
       .text(
         `Generated: ${input.generatedAt.toISOString().slice(0, 10)}   |   Kilimanjaro Schools — Official Academic Document   |   ${input.registrationNumber}`,
         margin, footerY + 6,
-        { width: contentWidth, align: 'center' },
+        { width: contentWidth, align: 'center', lineBreak: false },
       );
   }
 }
