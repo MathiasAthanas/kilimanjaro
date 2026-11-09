@@ -63,4 +63,62 @@ describe('ReportCardPdfService', () => {
     expect(pageObjects).toHaveLength(1);
     expect(pdf).toContain('/Count 1');
   });
+
+  const buildInput = (overrides: Partial<ReportCardPdfInput>): ReportCardPdfInput => ({
+    studentId: 'student-2',
+    termId: 'term-1',
+    academicYearId: 'year-1',
+    studentName: 'Test Student',
+    registrationNumber: 'KSS-TEST',
+    className: 'Form 4 A',
+    termName: 'Term 1',
+    academicYearName: '2026',
+    generatedAt: new Date('2026-11-09T00:00:00.000Z'),
+    results: [],
+    average: 70,
+    overallGrade: 'B',
+    ...overrides,
+  });
+
+  const pageCount = (fileName: string) =>
+    (readFileSync(join(directory, fileName), 'latin1').match(/\/Type \/Page\b/g) ?? []).length;
+
+  it('paginates a long subject list instead of overflowing the page', async () => {
+    const config = { get: jest.fn().mockReturnValue(directory) } as unknown as ConfigService;
+    const service = new ReportCardPdfService(config);
+    const results = Array.from({ length: 30 }, (_, i) => ({
+      subjectName: `Subject ${i + 1}`,
+      total: 60 + (i % 20),
+      grade: 'B',
+      remark: 'Good',
+      status: 'SCORED',
+    }));
+
+    const fileName = await service.generatePdf(buildInput({ results, reportTemplateCode: 'O_LEVEL_TERM' }));
+
+    expect(pageCount(fileName)).toBeGreaterThan(1);
+  });
+
+  it.each(['PRIMARY_STANDARD', 'O_LEVEL_TERM', 'O_LEVEL_NATIONAL_READY', 'A_LEVEL_COMBINATION', 'A_LEVEL_NATIONAL_READY'])(
+    'renders the %s template, including an empty result set, without throwing',
+    async (reportTemplateCode) => {
+      const config = { get: jest.fn().mockReturnValue(directory) } as unknown as ConfigService;
+      const service = new ReportCardPdfService(config);
+
+      const fileName = await service.generatePdf(
+        buildInput({
+          reportTemplateCode,
+          studentId: `student-${reportTemplateCode}`,
+          divisionSummary: { mode: 'X', division: 'Division II', descriptor: 'Credit', totalPoints: 18 },
+          results: [{ subjectName: 'Physics', subjectRole: 'PRINCIPAL', total: 71, grade: 'B', remark: 'Good', gradePoints: 4 }],
+        }),
+      );
+      const empty = await service.generatePdf(
+        buildInput({ reportTemplateCode, studentId: `empty-${reportTemplateCode}`, results: [] }),
+      );
+
+      expect(pageCount(fileName)).toBe(1);
+      expect(pageCount(empty)).toBe(1);
+    },
+  );
 });
