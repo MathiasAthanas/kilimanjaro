@@ -11,7 +11,9 @@ import {
   IsOptional,
   IsString,
   Max,
+  MaxLength,
   Min,
+  MinLength,
   ValidateIf,
 } from 'class-validator';
 import { EducationStageDto } from '../../grading/dto/create-grading-scale.dto';
@@ -156,6 +158,20 @@ export class AddExamWindowClassesDto {
   @ArrayNotEmpty()
   @IsString({ each: true })
   classIds!: string[];
+}
+
+export class PreviewExamWindowClassExclusionDto extends AddExamWindowClassesDto {}
+
+export class ExcludeExamWindowClassesDto extends AddExamWindowClassesDto {
+  @IsString()
+  @IsNotEmpty()
+  @MinLength(3)
+  @MaxLength(500)
+  reason!: string;
+
+  @IsOptional()
+  @IsBoolean()
+  discardMarks?: boolean;
 }
 
 export class ExamWindowFilterDto {

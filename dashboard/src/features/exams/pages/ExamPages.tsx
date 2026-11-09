@@ -16,9 +16,9 @@ import {
   downloadMarksTemplateCsv, downloadMeritExport,
   useAddExamWindowClasses, useComposeReportCards, useCreateEditRequest, useCreateExamType, useCreateExamWindow,
   useDecideEditRequest, useDeleteExamType, useEditRequests, useExamReference,
-  useExamTypes, useExamWindow, useExamWindows, useMarksTemplate, useMeritList,
+  useExamTypes, useExamWindow, useExamWindows, useExcludeExamWindowClasses, useMarksTemplate, useMeritList,
   useMigrateExamTypes, useSubmitAssessment, useTeacherExamWindows,
-  useUpdateExamWindow, useUploadMarks, useWindowAction,
+  usePreviewExamWindowClassExclusion, useUpdateExamWindow, useUploadMarks, useWindowAction,
 } from '../api/examHooks';
 import { useWindowReadiness } from '../api/readinessHooks';
 import { ExemptionsPanel, ReadinessPanel } from './ExamReadiness';
@@ -466,22 +466,72 @@ function WindowSettings({ w, status, onClose, onSaved }: { w: Record<string, any
 function WindowClassesManager({ w, status, onClose, onAdded }: { w: Record<string, any>; status: string; onClose: () => void; onAdded: (message: string) => void }) {
   const ref = useExamReference();
   const addClasses = useAddExamWindowClasses(S(w.id));
-  const [selected, setSelected] = useState<string[]>([]);
+  const previewExclusion = usePreviewExamWindowClassExclusion(S(w.id));
+  const excludeClasses = useExcludeExamWindowClasses(S(w.id));
+  const [selectedToAdd, setSelectedToAdd] = useState<string[]>([]);
+  const [selectedToExclude, setSelectedToExclude] = useState<string[]>([]);
+  const [impact, setImpact] = useState<Awaited<ReturnType<typeof previewExclusion.mutateAsync>> | null>(null);
+  const [reason, setReason] = useState('');
+  const [confirmation, setConfirmation] = useState('');
+  const [discardMarks, setDiscardMarks] = useState(false);
   const [err, setErr] = useState('');
-  const canAdd = ['DRAFT', 'OPEN', 'REOPENED'].includes(status);
+  const canChange = ['DRAFT', 'OPEN', 'REOPENED'].includes(status);
   const eligible = eligibleExamClasses((ref.data?.classes ?? []) as Record<string, unknown>[], w);
   const included = includedExamClassIds(eligible, w);
   const available = eligible.filter((item) => !included.has(S(item.id)));
-  const toggle = (classId: string) => setSelected((current) => current.includes(classId) ? current.filter((id) => id !== classId) : [...current, classId]);
+  const resetImpact = () => {
+    setImpact(null);
+    setReason('');
+    setConfirmation('');
+    setDiscardMarks(false);
+  };
+  const toggle = (classId: string, isIncluded: boolean) => {
+    setErr('');
+    if (isIncluded) {
+      resetImpact();
+      setSelectedToExclude((current) => current.includes(classId) ? current.filter((id) => id !== classId) : [...current, classId]);
+      return;
+    }
+    setSelectedToAdd((current) => current.includes(classId) ? current.filter((id) => id !== classId) : [...current, classId]);
+  };
 
   const add = async () => {
     setErr('');
     try {
-      const result = await addClasses.mutateAsync(selected) as Record<string, unknown>;
-      setSelected([]);
+      const result = await addClasses.mutateAsync(selectedToAdd) as Record<string, unknown>;
+      setSelectedToAdd([]);
       onAdded(S(result.message, `${N(result.addedClasses)} class(es) added to the exam window.`));
     } catch (error: any) {
       setErr(S(error?.message, 'Could not add the selected classes.'));
+    }
+  };
+
+  const reviewExclusion = async () => {
+    setErr('');
+    try {
+      setImpact(await previewExclusion.mutateAsync(selectedToExclude));
+      setReason('');
+      setConfirmation('');
+      setDiscardMarks(false);
+    } catch (error: any) {
+      setErr(S(error?.message, 'Could not review the selected classes.'));
+    }
+  };
+
+  const exclude = async () => {
+    if (!impact) return;
+    setErr('');
+    try {
+      const result = await excludeClasses.mutateAsync({
+        classIds: impact.classIds,
+        reason: reason.trim(),
+        discardMarks: impact.requiresDiscardConfirmation ? discardMarks : false,
+      }) as Record<string, unknown>;
+      setSelectedToExclude([]);
+      resetImpact();
+      onAdded(S(result.message, `${N(result.excludedClasses)} class(es) excluded from the exam window.`));
+    } catch (error: any) {
+      setErr(S(error?.message, 'Could not exclude the selected classes. Review the impact again.'));
     }
   };
 
@@ -490,13 +540,13 @@ function WindowClassesManager({ w, status, onClose, onAdded }: { w: Record<strin
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="font-display text-lg font-bold text-ks-navy">Manage exam classes</h3>
-          <p className="mt-1 text-sm text-ks-muted">Included classes stay unchanged. Adding an open class creates its subject marks sheets immediately.</p>
+          <p className="mt-1 text-sm text-ks-muted">Add classes that sat this exam, or select included classes to leave them out. Excluding never deletes the school class, students or accounts.</p>
         </div>
         <Button variant="ghost" onClick={onClose}>Close</Button>
       </div>
       {ref.isLoading && <p className="text-sm text-ks-muted">Loading classes...</p>}
       {ref.isError && <ErrorState title="Could not load classes" message={S((ref.error as any)?.message, 'Refresh and try again.')} onRetry={() => ref.refetch()} />}
-      {!canAdd && <Banner tone="amber">Reopen this window before adding classes. Closed or published results must not change silently.</Banner>}
+      {!canChange && <Banner tone="amber">Reopen this window before changing its classes. Closed or published results must not change silently.</Banner>}
       {!ref.isLoading && !ref.isError && (
         <>
           <div className="mb-3 flex flex-wrap gap-2 text-xs font-bold">
@@ -507,22 +557,45 @@ function WindowClassesManager({ w, status, onClose, onAdded }: { w: Record<strin
             {eligible.map((item: any) => {
               const classId = S(item.id);
               const isIncluded = included.has(classId);
-              const isSelected = selected.includes(classId);
+              const isSelected = isIncluded ? selectedToExclude.includes(classId) : selectedToAdd.includes(classId);
               return (
-                <button type="button" key={classId} disabled={isIncluded || !canAdd} onClick={() => toggle(classId)}
-                  className={`flex items-center justify-between rounded-lg border px-3 py-2 text-left text-sm font-bold transition ${isIncluded ? 'border-ks-emerald/30 bg-ks-emerald/5 text-ks-emerald' : isSelected ? 'border-ks-blue bg-ks-blue text-white' : 'border-ks-line bg-white text-ks-navy hover:border-ks-blue'}`}>
+                <button type="button" key={classId} disabled={!canChange} onClick={() => toggle(classId, isIncluded)}
+                  className={`flex items-center justify-between rounded-lg border px-3 py-2 text-left text-sm font-bold transition ${isIncluded && isSelected ? 'border-ks-rose bg-ks-rose/10 text-ks-rose' : isIncluded ? 'border-ks-emerald/30 bg-ks-emerald/5 text-ks-emerald hover:border-ks-rose/60' : isSelected ? 'border-ks-blue bg-ks-blue text-white' : 'border-ks-line bg-white text-ks-navy hover:border-ks-blue'}`}>
                   <span>{formatClassLabel(S(item.name), item.stream)}</span>
-                  <span className={`ml-2 text-[11px] ${isSelected ? 'text-white/80' : 'text-ks-muted'}`}>{isIncluded ? 'Included' : `${N(item.studentCount)} students`}</span>
+                  <span className={`ml-2 text-[11px] ${!isIncluded && isSelected ? 'text-white/80' : 'text-ks-muted'}`}>{isIncluded ? (isSelected ? 'Leave out' : 'Included') : `${N(item.studentCount)} students`}</span>
                 </button>
               );
             })}
           </div>
           {!eligible.length && <EmptyState title="No eligible classes" message="No classes match this exam's school, academic year and stage." />}
           {!!eligible.length && !available.length && <p className="mt-3 text-sm font-semibold text-ks-emerald">All eligible classes are already included.</p>}
-          {!!selected.length && <div className="mt-4 rounded-lg border border-ks-blue/20 bg-ks-blue/5 px-4 py-3 text-sm text-ks-navy">This will add <b>{selected.length}</b> class{selected.length === 1 ? '' : 'es'}. Existing marks will not be changed or removed.</div>}
+          {!!selectedToAdd.length && <div className="mt-4 rounded-lg border border-ks-blue/20 bg-ks-blue/5 px-4 py-3 text-sm text-ks-navy">This will add <b>{selectedToAdd.length}</b> class{selectedToAdd.length === 1 ? '' : 'es'}. Existing marks will not be changed or removed.</div>}
+          {!!selectedToExclude.length && !impact && <div className="mt-4 rounded-lg border border-ks-amber/30 bg-ks-amber/10 px-4 py-3 text-sm text-[#6b4b00]">
+            <b>{selectedToExclude.length}</b> included class{selectedToExclude.length === 1 ? '' : 'es'} selected to leave out. Review the exact marks sheets, entered marks and calculated results before confirming.
+          </div>}
+          {impact && <div className="mt-4 space-y-4 rounded-lg border border-ks-rose/30 bg-ks-rose/5 p-4">
+            <div>
+              <h4 className="font-bold text-ks-navy">Final exclusion review</h4>
+              <p className="mt-1 text-sm text-ks-muted">Classes: {impact.classes.map((item) => formatClassLabel(item.name, item.stream)).join(', ')}</p>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-3">
+              <div className="rounded-lg bg-white p-3"><div className="text-xs text-ks-muted">Marks sheets removed</div><div className="text-xl font-bold text-ks-navy">{impact.marksSheets}</div></div>
+              <div className="rounded-lg bg-white p-3"><div className="text-xs text-ks-muted">Entered marks removed</div><div className="text-xl font-bold text-ks-rose">{impact.marksEntered}</div></div>
+              <div className="rounded-lg bg-white p-3"><div className="text-xs text-ks-muted">Calculated results removed</div><div className="text-xl font-bold text-ks-navy">{impact.calculatedResults}</div></div>
+            </div>
+            <Banner tone="amber">Only this exam window changes. The classes, enrolments, students, guardians and login accounts remain unchanged. The class can be added back later.</Banner>
+            <Field label="Reason for leaving these classes out"><input className={inputCls} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Example: Class did not sit this exam" /></Field>
+            {impact.requiresDiscardConfirmation && <label className="flex items-start gap-2 text-sm font-semibold text-ks-rose"><input className="mt-1" type="checkbox" checked={discardMarks} onChange={(e) => setDiscardMarks(e.target.checked)} /> I understand that {impact.marksEntered} entered mark{impact.marksEntered === 1 ? '' : 's'} will be permanently removed from this exam.</label>}
+            <Field label={`Type ${impact.confirmationText} to confirm`}><input className={inputCls} value={confirmation} onChange={(e) => setConfirmation(e.target.value)} /></Field>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="danger" onClick={exclude} loading={excludeClasses.isPending} disabled={reason.trim().length < 3 || confirmation !== impact.confirmationText || (impact.requiresDiscardConfirmation && !discardMarks)}><XCircle className="h-4 w-4" /> Exclude from this exam</Button>
+              <Button variant="ghost" onClick={() => { resetImpact(); setSelectedToExclude([]); }}>Cancel exclusion</Button>
+            </div>
+          </div>}
           {err && <div className="mt-3"><Banner tone="rose">{err}</Banner></div>}
-          <div className="mt-4 flex gap-2">
-            <Button onClick={add} loading={addClasses.isPending} disabled={!canAdd || !selected.length}><Plus className="h-4 w-4" /> Add selected classes</Button>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button onClick={add} loading={addClasses.isPending} disabled={!canChange || !selectedToAdd.length}><Plus className="h-4 w-4" /> Add selected classes</Button>
+            <Button variant="secondary" onClick={reviewExclusion} loading={previewExclusion.isPending} disabled={!canChange || !selectedToExclude.length || !!impact}><XCircle className="h-4 w-4" /> Review class exclusion</Button>
             <Button variant="ghost" onClick={onClose}>Cancel</Button>
           </div>
         </>

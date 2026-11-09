@@ -4,7 +4,14 @@ import { ROLES } from '../common/constants/roles';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RequestUser } from '../common/interfaces/request-user.interface';
-import { AddExamWindowClassesDto, CreateExamWindowDto, ExamWindowFilterDto, UpdateExamWindowDto } from './dto/exam-window.dto';
+import {
+  AddExamWindowClassesDto,
+  CreateExamWindowDto,
+  ExamWindowFilterDto,
+  ExcludeExamWindowClassesDto,
+  PreviewExamWindowClassExclusionDto,
+  UpdateExamWindowDto,
+} from './dto/exam-window.dto';
 import { CreateEditRequestDto, DecideEditRequestDto } from './dto/edit-request.dto';
 import { ExamWindowsService } from './exam-windows.service';
 
@@ -94,6 +101,26 @@ export class ExamWindowsController {
   @Roles(...ADMIN)
   addClasses(@Param('id') id: string, @Body() dto: AddExamWindowClassesDto, @CurrentUser() user: RequestUser) {
     return this.windows.addClasses(id, dto, user);
+  }
+
+  @Post('exam-windows/:id/classes/exclusion-preview')
+  @Roles(...ADMIN)
+  previewClassExclusion(
+    @Param('id') id: string,
+    @Body() dto: PreviewExamWindowClassExclusionDto,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.windows.previewClassExclusion(id, dto, user);
+  }
+
+  @Post('exam-windows/:id/classes/exclude')
+  @Roles(...ADMIN)
+  excludeClasses(
+    @Param('id') id: string,
+    @Body() dto: ExcludeExamWindowClassesDto,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.windows.excludeClasses(id, dto, user);
   }
 
   @Post('exam-windows/:id/open')

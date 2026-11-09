@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   Logger,
@@ -17,7 +18,14 @@ import {
   requireWriteSchoolId,
   schoolScopeFilter,
 } from '../common/helpers/school-scope.helper';
-import { AddExamWindowClassesDto, CreateExamWindowDto, ExamWindowFilterDto, UpdateExamWindowDto } from './dto/exam-window.dto';
+import {
+  AddExamWindowClassesDto,
+  CreateExamWindowDto,
+  ExamWindowFilterDto,
+  ExcludeExamWindowClassesDto,
+  PreviewExamWindowClassExclusionDto,
+  UpdateExamWindowDto,
+} from './dto/exam-window.dto';
 import { CreateEditRequestDto, DecideEditRequestDto } from './dto/edit-request.dto';
 import { ExamResultsService } from './exam-results.service';
 import { AuthClientService } from '../auth-client/auth-client.service';
@@ -483,6 +491,172 @@ export class ExamWindowsService {
       addedClasses: addedIds.length,
       assessmentsCreated,
       message: `${addedIds.length} class${addedIds.length === 1 ? '' : 'es'} added${opened ? ` and ${assessmentsCreated} marks sheet${assessmentsCreated === 1 ? '' : 's'} created` : ''}.`,
+    };
+  }
+
+  private assertClassScopeCanChange(status: ExamWindowStatus) {
+    if (!([ExamWindowStatus.DRAFT, ExamWindowStatus.OPEN, ExamWindowStatus.REOPENED] as ExamWindowStatus[]).includes(status)) {
+      throw new BadRequestException(
+        `Classes can only be excluded while the window is DRAFT, OPEN or REOPENED. Current status: ${status}. Reopen it first.`,
+      );
+    }
+  }
+
+  private async classExclusionImpact(
+    window: Awaited<ReturnType<ExamWindowsService['getWindowOrThrow']>>,
+    classIds: string[],
+    user: RequestUser,
+  ) {
+    this.assertClassScopeCanChange(window.status);
+    const requestedIds = [...new Set(classIds)];
+    if (!requestedIds.length) {
+      throw new BadRequestException('Select at least one class to exclude.');
+    }
+    const current = await this.resolveScopeClasses(window, user);
+    const currentById = new Map(current.map((item) => [item.id, item]));
+    const invalidIds = requestedIds.filter((classId) => !currentById.has(classId));
+    if (invalidIds.length) {
+      throw new BadRequestException(
+        `${invalidIds.length} selected class${invalidIds.length === 1 ? ' is' : 'es are'} not included in this exam window. Refresh and try again.`,
+      );
+    }
+    if (requestedIds.length >= current.length) {
+      throw new BadRequestException('An exam window must keep at least one class. Archive this window instead if the whole exam was cancelled.');
+    }
+
+    const sheets = await this.prisma.assessment.findMany({
+      where: { examWindowId: window.id, classId: { in: requestedIds } },
+      select: { id: true, classId: true, _count: { select: { marks: true } } },
+    });
+    const marksEntered = sheets.reduce((total, sheet) => total + sheet._count.marks, 0);
+    const calculatedResults = await this.prisma.examWindowResult.count({
+      where: { examWindowId: window.id, classId: { in: requestedIds } },
+    });
+
+    return {
+      classIds: requestedIds,
+      classes: requestedIds.map((classId) => ({
+        id: classId,
+        name: currentById.get(classId)?.name ?? classId,
+        stream: currentById.get(classId)?.stream ?? null,
+      })),
+      remainingClassIds: current.filter((item) => !requestedIds.includes(item.id)).map((item) => item.id),
+      marksSheets: sheets.length,
+      marksEntered,
+      calculatedResults,
+      requiresDiscardConfirmation: marksEntered > 0,
+      confirmationText: `EXCLUDE ${requestedIds.length} ${requestedIds.length === 1 ? 'CLASS' : 'CLASSES'}`,
+    };
+  }
+
+  async previewClassExclusion(id: string, dto: PreviewExamWindowClassExclusionDto, user: RequestUser) {
+    const window = await this.getWindowOrThrow(id, user);
+    return this.classExclusionImpact(window, dto.classIds, user);
+  }
+
+  /**
+   * Remove classes from this exam only. School classes, enrolments and users are untouched.
+   * Existing marks are never discarded unless the caller explicitly confirms that impact.
+   */
+  async excludeClasses(id: string, dto: ExcludeExamWindowClassesDto, user: RequestUser) {
+    const window = await this.getWindowOrThrow(id, user);
+    const impact = await this.classExclusionImpact(window, dto.classIds, user);
+    const reason = dto.reason.trim();
+    if (reason.length < 3) {
+      throw new BadRequestException('Give a short reason. It is kept in the audit trail.');
+    }
+    if (impact.marksEntered > 0 && !dto.discardMarks) {
+      throw new ConflictException(
+        `${impact.marksEntered} entered mark${impact.marksEntered === 1 ? '' : 's'} would be permanently removed. Review the impact and confirm that entered marks may be discarded.`,
+      );
+    }
+
+    const schoolId = window.schoolId ?? requireWriteSchoolId(user, 'exam class exclusion');
+    const now = new Date();
+    const removed = await this.prisma.$transaction(
+      async (tx) => {
+        const fresh = await tx.examWindow.findUnique({ where: { id }, select: { status: true } });
+        if (!fresh) throw new NotFoundException('Exam window not found');
+        this.assertClassScopeCanChange(fresh.status);
+
+        // Prevent a teacher save racing this review: FK checks for a new Mark wait
+        // until these assessment rows are either retained or removed.
+        await tx.$queryRaw(
+          Prisma.sql`SELECT "id" FROM "academics"."Assessment"
+            WHERE "examWindowId" = ${id}
+              AND "classId" IN (${Prisma.join(impact.classIds)})
+            FOR UPDATE`,
+        );
+        const sheets = await tx.assessment.findMany({
+          where: { examWindowId: id, classId: { in: impact.classIds } },
+          select: { id: true, _count: { select: { marks: true } } },
+        });
+        const marksEntered = sheets.reduce((total, sheet) => total + sheet._count.marks, 0);
+        if (marksEntered > 0 && !dto.discardMarks) {
+          throw new ConflictException(
+            `${marksEntered} entered mark${marksEntered === 1 ? '' : 's'} would be permanently removed. Review the updated impact and confirm that entered marks may be discarded.`,
+          );
+        }
+
+        const results = await tx.examWindowResult.deleteMany({
+          where: { examWindowId: id, classId: { in: impact.classIds } },
+        });
+        const assessments = await tx.assessment.deleteMany({
+          where: { examWindowId: id, classId: { in: impact.classIds } },
+        });
+        const scopeUpdate = await tx.examWindow.updateMany({
+          where: { id, updatedAt: window.updatedAt },
+          data: {
+            scopeType: 'STREAMS',
+            scopeLevels: [],
+            scopeClassIds: impact.remainingClassIds,
+            subjectsChangedAt: now,
+            computedAt: null,
+          },
+        });
+        if (scopeUpdate.count !== 1) {
+          throw new ConflictException('This exam window changed while you were reviewing it. Refresh the class list and review the impact again.');
+        }
+        await tx.academicAuditLog.create({
+          data: {
+            schoolId,
+            action: 'EXAM_WINDOW_CLASSES_EXCLUDED',
+            performedById: user.id,
+            payload: {
+              examWindowId: id,
+              classIds: impact.classIds,
+              classes: impact.classes,
+              reason,
+              marksSheetsRemoved: assessments.count,
+              marksDiscarded: marksEntered,
+              calculatedResultsRemoved: results.count,
+            },
+          },
+        });
+        return {
+          marksSheetsRemoved: assessments.count,
+          marksDiscarded: marksEntered,
+          calculatedResultsRemoved: results.count,
+        };
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 20_000, timeout: 120_000 },
+    );
+
+    await this.redis.delByPattern(`exam-window:*:${id}`);
+    await this.rabbitMq.publish('exam.window.classes.excluded', {
+      examWindowId: id,
+      classIds: impact.classIds,
+      excludedById: user.id,
+      schoolId,
+      reason,
+      ...removed,
+    });
+
+    return {
+      ...(await this.detail(id, user)),
+      excludedClasses: impact.classIds.length,
+      ...removed,
+      message: `${impact.classIds.length} class${impact.classIds.length === 1 ? '' : 'es'} excluded from this exam. School classes, students and accounts were not changed.`,
     };
   }
 

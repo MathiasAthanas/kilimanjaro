@@ -325,6 +325,32 @@ export function useAddExamWindowClasses(id: string) {
   });
 }
 
+export type ExamClassExclusionImpact = {
+  classIds: string[];
+  classes: Array<{ id: string; name: string; stream?: string | null }>;
+  remainingClassIds: string[];
+  marksSheets: number;
+  marksEntered: number;
+  calculatedResults: number;
+  requiresDiscardConfirmation: boolean;
+  confirmationText: string;
+};
+
+export function usePreviewExamWindowClassExclusion(id: string) {
+  return useMutation({
+    mutationFn: (classIds: string[]) => api.post(`/academics/exam-windows/${id}/classes/exclusion-preview`, { classIds }).then(payloadOf) as Promise<ExamClassExclusionImpact>,
+  });
+}
+
+export function useExcludeExamWindowClasses(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { classIds: string[]; reason: string; discardMarks?: boolean }) =>
+      api.post(`/academics/exam-windows/${id}/classes/exclude`, body).then(payloadOf),
+    onSuccess: () => invalidateWindow(qc, id),
+  });
+}
+
 export function useRemoveStandingRule(windowId: string) {
   const qc = useQueryClient();
   return useMutation({
