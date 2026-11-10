@@ -4,6 +4,7 @@ import { Copy, Eye, EyeOff } from 'lucide-react';
 import { downloadReportWhenReady } from '../../operations/api/operations.hooks';
 import { NavLink, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { toast } from '../../../lib/toast';
+import { errorMessage } from '../../../lib/api/errors';
 import { formatClassLabel } from '../../../lib/classLabel';
 import { buildCreateTermPayload } from '../utils/termPayload';
 import { Badge } from '../../../components/common/Badge';
@@ -2920,10 +2921,22 @@ export function ClassDetailPage() {
 
 export function SubjectsPage() {
   const createSubjectMutation = useCreateSubjectMutation();
+  const { data: existingSubjects = [] } = useAdminSubjects() as unknown as { data: Array<Record<string, unknown>> };
   const { data: deptList = [] } = useDepartments();
   const [form, setForm] = useState({ name: '', code: '', stage: 'O_LEVEL', departmentId: '', department: '' });
   const set = (k: 'name' | 'code') => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((f) => ({ ...f, [k]: k === 'code' ? e.target.value.toUpperCase() : e.target.value }));
+  const matchingSubject = useMemo(() => {
+    const code = form.code.trim().toUpperCase();
+    if (!code) return undefined;
+    return existingSubjects.find((subject) =>
+      String(subject.code ?? '').trim().toUpperCase() === code
+      && String(subject.stage ?? subject.educationStage ?? '') === form.stage,
+    );
+  }, [existingSubjects, form.code, form.stage]);
+  const matchingName = String(matchingSubject?.name ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+  const requestedName = form.name.trim().replace(/\s+/g, ' ').toLowerCase();
+  const isExactExistingSubject = Boolean(matchingSubject && requestedName && matchingName === requestedName);
 
   const submit = () => {
     if (!form.name.trim() || !form.code.trim()) {
@@ -2937,11 +2950,17 @@ export function SubjectsPage() {
       departmentId: form.departmentId || undefined,
       department: form.department || undefined,
     }, {
-      onSuccess: () => {
-        toast(`Subject "${form.name}" created successfully.`, 'success');
+      onSuccess: (subject: any) => {
+        toast(
+          subject?.reused
+            ? `"${subject.name}" already exists and is ready to assign to classes in this school.`
+            : `Subject "${form.name}" created successfully and is available across schools.`,
+          subject?.reused ? 'info' : 'success',
+          subject?.reused ? 5500 : 3500,
+        );
         setForm({ name: '', code: '', stage: 'O_LEVEL', departmentId: '', department: '' });
       },
-      onError: (err) => toast(err instanceof Error ? err.message : 'Failed to create subject', 'error'),
+      onError: (err) => toast(errorMessage(err, 'Failed to create subject.'), 'error', 5500),
     });
   };
 
@@ -2973,9 +2992,16 @@ export function SubjectsPage() {
             ]}
           />
         </div>
+        {matchingSubject && (
+          <div className={`mt-4 rounded-lg border px-4 py-3 text-sm ${isExactExistingSubject ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-amber-200 bg-amber-50 text-amber-950'}`}>
+            {isExactExistingSubject
+              ? `This subject already exists for ${form.stage.replace('_', '-')} and can be reused in every school. Continue to use the existing subject.`
+              : `Code ${form.code.trim().toUpperCase()} is already used by "${String(matchingSubject.name ?? '')}" for ${form.stage.replace('_', '-')}. Use that subject or enter a different code.`}
+          </div>
+        )}
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <Button className="rounded-xl bg-[#4338CA]" loading={createSubjectMutation.isPending} onClick={submit}>
-            <Plus className="h-4 w-4" /> Add Subject
+            <Plus className="h-4 w-4" /> {isExactExistingSubject ? 'Use Existing Subject' : 'Add Subject'}
           </Button>
           <NavLink className="text-sm font-black text-[#4338CA] hover:underline" to="/admin/classes">
             ← Back to Classes &amp; Combinations

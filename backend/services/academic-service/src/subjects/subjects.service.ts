@@ -77,10 +77,9 @@ export class SubjectsService {
     const data = this.normaliseSubject(dto);
     const duplicate = await this.prisma.subject.findFirst({
       where: { code: data.code, educationStage: data.educationStage ?? null },
-      select: { id: true, name: true },
     });
     if (duplicate) {
-      throw this.subjectCodeConflict(data.code, data.educationStage, duplicate.name);
+      return this.reuseMatchingSubject(duplicate, data);
     }
 
     try {
@@ -89,6 +88,12 @@ export class SubjectsService {
       return subject;
     } catch (error) {
       if (this.isUniqueConstraintError(error)) {
+        const concurrentDuplicate = await this.prisma.subject.findFirst({
+          where: { code: data.code, educationStage: data.educationStage ?? null },
+        });
+        if (concurrentDuplicate) {
+          return this.reuseMatchingSubject(concurrentDuplicate, data);
+        }
         throw this.subjectCodeConflict(data.code, data.educationStage);
       }
       throw error;
@@ -159,9 +164,21 @@ export class SubjectsService {
   private normaliseSubject(dto: CreateSubjectDto): CreateSubjectDto {
     return {
       ...dto,
-      name: dto.name.trim(),
+      name: dto.name.trim().replace(/\s+/g, ' '),
       code: dto.code.trim().toUpperCase(),
     };
+  }
+
+  private reuseMatchingSubject<T extends { name: string }>(existing: T, requested: CreateSubjectDto): T & { reused: true } {
+    const existingName = existing.name.trim().replace(/\s+/g, ' ').toLowerCase();
+    const requestedName = requested.name.trim().replace(/\s+/g, ' ').toLowerCase();
+    if (existingName !== requestedName) {
+      throw this.subjectCodeConflict(requested.code, requested.educationStage, existing.name);
+    }
+
+    // Subjects form a shared catalogue. School-specific teachers, classes,
+    // marks and exams remain attached through school-scoped ClassSubject rows.
+    return { ...existing, reused: true };
   }
 
   private isUniqueConstraintError(error: unknown): boolean {
