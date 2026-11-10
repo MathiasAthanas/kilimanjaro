@@ -37,6 +37,10 @@ import {
   useServiceHealth,
   useSystemSettings,
   useUpdateSystemSettingsMutation,
+  useReportCardPolicy,
+  useReportCardRecalculationPreview,
+  useUpdateReportCardPolicyMutation,
+  useRecalculateReportCardsMutation,
   useSubjectCombinations,
   useDeactivateUserMutation,
   useActivateUserMutation,
@@ -121,6 +125,7 @@ import { DataError } from '../../../components/feedback/DataError';
 import { EmptyState } from '../../../components/feedback/EmptyState';
 import { useTableControls, TableToolbar, SortHeader, DataPagination } from '../../../components/common/table';
 import { SkeletonTable } from '../../../components/common/SkeletonTable';
+import { ConfirmDialog } from '../../../components/feedback/ConfirmDialog';
 import { BulkUserEditDialog } from '../components/BulkUserEditDialog';
 
 // â"€â"€â"€ Home â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
@@ -5040,14 +5045,13 @@ export function AdminAnnouncementsPage() {
 
 const STAGE_DESCRIPTIONS: Record<string, { label: string; note: string; tone: 'emerald' | 'blue' | 'amber' | 'violet' | 'rose' }> = {
   NURSERY:  { label: 'Nursery', note: 'Baby Class, KG 1 and KG 2. Developmental assessment uses the EE/ME/AE/BE scale. Registration prefix: KEMS-N-.', tone: 'violet' },
-  PRIMARY:  { label: 'Primary School', note: 'Class 1 up to terminal year (Class 6 or 7). Pass mark: 50%. PSLE national exam at terminal year. Registration prefix: KEMS-P-.', tone: 'emerald' },
+  PRIMARY:  { label: 'Primary School', note: 'Class 1 up to terminal year (Class 6 or 7). Report-card rules are managed under Configuration > Report Cards. PSLE national exam at terminal year. Registration prefix: KEMS-P-.', tone: 'emerald' },
   O_LEVEL:  { label: 'Secondary O-Level', note: 'Form 1 to Form 4. CSEE national exam at Form 4. Registration prefix: KEMS-O-.', tone: 'blue' },
   A_LEVEL:  { label: 'Advanced Level', note: 'Form 5 and Form 6. ACSEE national exam at Form 6. Combination-based subjects. Registration prefix: KEMS-A-.', tone: 'amber' },
 };
 
 type StageConfigState = {
   terminalPrimary: string;
-  primaryPassMark: string;
   primaryPrefix: string;
   primaryPsleIndex: boolean;
   primaryHolistic: boolean;
@@ -5064,7 +5068,6 @@ type StageConfigState = {
 
 const DEFAULT_STAGE_CONFIG: StageConfigState = {
   terminalPrimary: '7',
-  primaryPassMark: '50',
   primaryPrefix: 'KEMS-P',
   primaryPsleIndex: true,
   primaryHolistic: true,
@@ -5120,7 +5123,7 @@ export function StageConfigPage() {
     setConfig((current) => ({ ...current, [key]: value }));
   };
   const saveStageConfig = () => {
-    const percentages = [config.primaryPassMark, config.oLevelFailure, config.oLevelRisk, config.aLevelFailure, config.aLevelRisk].map(Number);
+    const percentages = [config.oLevelFailure, config.oLevelRisk, config.aLevelFailure, config.aLevelRisk].map(Number);
     if (!percentages.every((value) => Number.isFinite(value) && value >= 0 && value <= 100)) {
       toast('All percentage thresholds must be between 0 and 100.', 'warning');
       return;
@@ -5181,7 +5184,7 @@ export function StageConfigPage() {
             ]}
             onChange={(value) => setConfigValue('terminalPrimary', value)}
           />
-          <Field label="Primary Pass Mark (%)" type="number" value={config.primaryPassMark} onChange={(event) => setConfigValue('primaryPassMark', event.target.value)} />
+          <Field label="Report Card Rules" value="Managed under Configuration > Report Cards" readOnly />
           <Field label="Primary Registration Prefix" value={config.primaryPrefix} onChange={(event) => setConfigValue('primaryPrefix', event.target.value.toUpperCase())} />
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-2">
@@ -5238,6 +5241,175 @@ export function StageConfigPage() {
 }
 
 // â"€â"€â"€ Cross-Stage Promotion (Gap 11) â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
+
+type ReportCardPolicyForm = {
+  primaryPassMark: string;
+  oLevelPassMark: string;
+  aLevelPassMark: string;
+  showSubjectSupport: boolean;
+  hideExemptSubjects: boolean;
+  autoAlternativeSubjectExemptions: boolean;
+};
+
+const DEFAULT_REPORT_CARD_POLICY: ReportCardPolicyForm = {
+  primaryPassMark: '50',
+  oLevelPassMark: '40',
+  aLevelPassMark: '25',
+  showSubjectSupport: true,
+  hideExemptSubjects: true,
+  autoAlternativeSubjectExemptions: true,
+};
+
+export function ReportCardPolicyPage() {
+  const { data: storedPolicy, isLoading, isError, refetch } = useReportCardPolicy() as {
+    data?: Record<string, unknown>;
+    isLoading: boolean;
+    isError: boolean;
+    refetch: () => void;
+  };
+  const { data: terms = [] } = useTerms() as unknown as { data: Array<Record<string, unknown>> };
+  const updatePolicy = useUpdateReportCardPolicyMutation();
+  const recalculate = useRecalculateReportCardsMutation();
+  const [form, setForm] = useState<ReportCardPolicyForm>(DEFAULT_REPORT_CARD_POLICY);
+  const [selectedTermId, setSelectedTermId] = useState('');
+  const [confirmRecalculation, setConfirmRecalculation] = useState(false);
+
+  useEffect(() => {
+    if (!storedPolicy) return;
+    setForm({
+      primaryPassMark: String(storedPolicy.primaryPassMark ?? 50),
+      oLevelPassMark: String(storedPolicy.oLevelPassMark ?? 40),
+      aLevelPassMark: String(storedPolicy.aLevelPassMark ?? 25),
+      showSubjectSupport: storedPolicy.showSubjectSupport !== false,
+      hideExemptSubjects: storedPolicy.hideExemptSubjects !== false,
+      autoAlternativeSubjectExemptions: storedPolicy.autoAlternativeSubjectExemptions !== false,
+    });
+  }, [storedPolicy]);
+
+  useEffect(() => {
+    if (selectedTermId || !terms.length) return;
+    const active = terms.find((term) => Boolean(term.isActive ?? term.active)) ?? terms[0];
+    setSelectedTermId(String(active.id ?? ''));
+  }, [selectedTermId, terms]);
+
+  const { data: preview } = useReportCardRecalculationPreview(selectedTermId) as {
+    data?: Record<string, unknown>;
+  };
+  const requiresSchool = Boolean(storedPolicy?.requiresSchoolSelection);
+  const setNumber = (key: 'primaryPassMark' | 'oLevelPassMark' | 'aLevelPassMark') =>
+    (event: React.ChangeEvent<HTMLInputElement>) => setForm((current) => ({ ...current, [key]: event.target.value }));
+  const setToggle = (key: keyof Pick<ReportCardPolicyForm, 'showSubjectSupport' | 'hideExemptSubjects' | 'autoAlternativeSubjectExemptions'>) =>
+    (value: boolean) => setForm((current) => ({ ...current, [key]: value }));
+
+  const save = () => {
+    const thresholds = [form.primaryPassMark, form.oLevelPassMark, form.aLevelPassMark].map(Number);
+    if (!thresholds.every((value) => Number.isFinite(value) && value >= 0 && value <= 100)) {
+      toast('Pass marks must be between 0 and 100.', 'warning');
+      return;
+    }
+    updatePolicy.mutate({
+      ...form,
+      primaryPassMark: thresholds[0],
+      oLevelPassMark: thresholds[1],
+      aLevelPassMark: thresholds[2],
+    }, {
+      onSuccess: () => toast('Report-card configuration saved.', 'success'),
+      onError: (error) => toast(errorMessage(error, 'Failed to save report-card configuration.'), 'error'),
+    });
+  };
+
+  const runRecalculation = () => {
+    setConfirmRecalculation(false);
+    recalculate.mutate(selectedTermId, {
+      onSuccess: (result) => {
+        const data = result as Record<string, unknown>;
+        toast(`${Number(data.reportCardsRegenerated ?? 0)} report cards recalculated.`, 'success');
+      },
+      onError: (error) => toast(errorMessage(error, 'Report-card recalculation failed.'), 'error'),
+    });
+  };
+
+  if (isLoading) return <AdminShell title="Report Card Configuration" eyebrow="Promotion, support and subject inclusion rules"><SkeletonTable cols={3} /></AdminShell>;
+  if (isError) return <AdminShell title="Report Card Configuration" eyebrow="Promotion, support and subject inclusion rules"><DataError onRetry={refetch} /></AdminShell>;
+
+  const termOptions = terms.map((term) => {
+    const year = term.academicYear && typeof term.academicYear === 'object'
+      ? String((term.academicYear as Record<string, unknown>).name ?? '')
+      : String(term.academicYearName ?? '');
+    return { value: String(term.id ?? ''), label: `${String(term.name ?? 'Term')} ${year}`.trim() };
+  });
+  const conflicts = Number(preview?.alternativeConflicts ?? 0);
+  const cardCount = Number(preview?.reportCards ?? 0);
+
+  return (
+    <AdminShell title="Report Card Configuration" eyebrow="Promotion, support and subject inclusion rules">
+      {requiresSchool && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">
+          Select a school from the workspace switcher before saving or recalculating report cards.
+        </div>
+      )}
+
+      <AdminMetricStrip items={[
+        { label: 'Primary pass mark', value: `${form.primaryPassMark}%`, detail: 'Below this needs intervention', tone: 'green' },
+        { label: 'Subject support', value: form.showSubjectSupport ? 'Visible' : 'Hidden', detail: 'Separate from overall promotion', tone: 'blue' },
+        { label: 'Excluded subjects', value: form.hideExemptSubjects ? 'Hidden' : 'Visible', detail: 'Never used in averages', tone: 'amber' },
+      ]} />
+
+      <AdminFormSection title="Overall result rules" subtitle="Overall intervention is based on the configured stage pass mark">
+        <div className="grid gap-4 md:grid-cols-3">
+          <Field label="Primary Pass Mark (%)" type="number" value={form.primaryPassMark} onChange={setNumber('primaryPassMark')} />
+          <Field label="O-Level Pass Mark (%)" type="number" value={form.oLevelPassMark} onChange={setNumber('oLevelPassMark')} />
+          <Field label="A-Level Pass Mark (%)" type="number" value={form.aLevelPassMark} onChange={setNumber('aLevelPassMark')} />
+        </div>
+        <div className="mt-4">
+          <StageToggle label="Show subject support separately" description="Students above the overall pass mark remain promotable while failed subjects are shown as support needs." checked={form.showSubjectSupport} onChange={setToggle('showSubjectSupport')} />
+        </div>
+      </AdminFormSection>
+
+      <AdminFormSection title="Subject inclusion" subtitle="Controls which subjects count and appear on a report card">
+        <div className="grid gap-3 md:grid-cols-2">
+          <StageToggle label="Hide exempt subjects" description="Exempt and non-applicable subjects are excluded from averages, rankings and printed report cards." checked={form.hideExemptSubjects} onChange={setToggle('hideExemptSubjects')} />
+          <StageToggle label="Apply alternative-subject exemptions" description="When IRE is scored, CRE is excluded; when CRE is scored, IRE is excluded." checked={form.autoAlternativeSubjectExemptions} onChange={setToggle('autoAlternativeSubjectExemptions')} />
+        </div>
+        <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+          Absent and Not Sat results count as zero. Approved exemptions and subjects omitted from the selected exam do not count.
+        </div>
+      </AdminFormSection>
+
+      <div className="flex justify-end">
+        <Button loading={updatePolicy.isPending} disabled={requiresSchool} onClick={save}>Save Report Card Configuration</Button>
+      </div>
+
+      <AdminFormSection title="Recalculate generated report cards" subtitle="Applies the current rules without changing valid marks or publication status">
+        <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_repeat(3,minmax(120px,0.5fr))]">
+          <SelectField key={selectedTermId} label="Term" value={selectedTermId} options={termOptions} onChange={setSelectedTermId} />
+          <Field label="Report Cards" value={String(preview?.reportCards ?? 0)} readOnly />
+          <Field label="Published" value={String(preview?.publishedCards ?? 0)} readOnly />
+          <Field label="Alternatives to Exclude" value={String(preview?.alternativeRowsToExempt ?? 0)} readOnly />
+        </div>
+        {conflicts > 0 && (
+          <div className="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800">
+            {conflicts} student record(s) contain scores in both alternatives and must be reviewed before recalculation.
+          </div>
+        )}
+        <div className="mt-4 flex justify-end">
+          <Button variant="secondary" loading={recalculate.isPending} disabled={requiresSchool || !selectedTermId || cardCount === 0 || conflicts > 0} onClick={() => setConfirmRecalculation(true)}>
+            Recalculate Report Cards
+          </Button>
+        </div>
+      </AdminFormSection>
+
+      {confirmRecalculation && (
+        <ConfirmDialog
+          title="Recalculate report cards?"
+          message={`This will regenerate ${cardCount} report card(s) using the current configuration. Valid marks and publication status will be preserved.`}
+          onCancel={() => setConfirmRecalculation(false)}
+          onConfirm={runRecalculation}
+        />
+      )}
+    </AdminShell>
+  );
+}
 
 const CROSS_STAGE_FLOWS = [
   {

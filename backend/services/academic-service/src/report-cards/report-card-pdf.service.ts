@@ -90,6 +90,8 @@ export type ReportCardPdfInput = {
   /** Subjects counted in the average vs. subjects the student was expected to take. */
   subjectsAssessed?: number;
   subjectsExpected?: number;
+  failingSubjectCount?: number;
+  showSubjectSupport?: boolean;
   reportTemplateCode?: string;
   divisionSummary?: unknown;
   rank?: number | null;
@@ -805,10 +807,14 @@ export class ReportCardPdfService {
     const assessed = input.subjectsAssessed as number;
     const expected = input.subjectsExpected as number;
     const exempt = expected - assessed;
-    const text =
+    const assessmentText =
       exempt > 0
         ? `Subjects assessed: ${assessed} of ${expected}. Average calculated from ${assessed} subject${assessed === 1 ? '' : 's'} (${exempt} exempt).`
         : `Subjects assessed: ${assessed} of ${expected}.`;
+    const supportCount = input.showSubjectSupport ? input.failingSubjectCount ?? 0 : 0;
+    const text = supportCount > 0
+      ? `${assessmentText} Support needed in ${supportCount} subject${supportCount === 1 ? '' : 's'}.`
+      : assessmentText;
 
     doc.save().roundedRect(M, y, CW, ctx.u.note, 9).fill('#E6F0FA').restore();
     this.icon(doc, 'info', M + 12, y + 5, 14, NAVY, 1.7);

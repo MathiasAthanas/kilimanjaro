@@ -211,17 +211,19 @@ export interface DivisionResult {
  *
  *  O-Level: best 7 by grade-point (lower better). 7–17 I | 18–21 II | 22–25 III | 26–33 IV | ≥34 0
  *  A-Level: best 3 PRINCIPAL (higher better). 13–15 I | 10–12 II | 7–9 III | 4–6 IV | ≤3 0
- *  Primary: "Promotable" when every eligible subject passes.
+ *  Primary: "Promotable" when the overall average reaches the configured pass mark.
  */
 export function computeDivision(
   stage: string | null | undefined,
   rows: DivisionRow[],
   principalSubjectIds?: Set<string>,
   direction: PointsDirection = 'HIGHER_BETTER',
+  options: { overallAverage?: number; primaryPassMark?: number } = {},
 ): DivisionResult {
   if (stage === 'PRIMARY') {
     const totalPoints = rows.reduce((sum, r) => sum + r.gradePoints, 0);
-    const promotable = rows.length > 0 && rows.every((r) => r.isPassing);
+    const primaryPassMark = options.primaryPassMark ?? 50;
+    const promotable = rows.length > 0 && (options.overallAverage ?? 0) >= primaryPassMark;
     return {
       mode: 'PRIMARY',
       division: null,
@@ -335,6 +337,7 @@ export function summarizeStudent(
   outcomes: SubjectOutcome[],
   principalSubjectIds?: Set<string>,
   direction: PointsDirection = 'HIGHER_BETTER',
+  primaryPassMark = 50,
 ): StudentSummary {
   const counted = outcomes.filter(isCounted);
   const total = counted.reduce((s, o) => s + o.score, 0);
@@ -345,6 +348,7 @@ export function summarizeStudent(
     counted.map((o) => ({ subjectId: o.subjectId, grade: o.grade, gradePoints: o.points, isPassing: o.isPassing })),
     principalSubjectIds,
     direction,
+    { overallAverage: mean, primaryPassMark },
   );
   return {
     subjectsExpected: outcomes.length,

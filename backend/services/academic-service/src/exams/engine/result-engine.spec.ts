@@ -197,9 +197,16 @@ describe('divisions', () => {
     expect(few.division.note).toMatch(/fewer than 3 eligible principal/);
   });
 
-  it('Primary: promotable only when every eligible subject passes', () => {
-    expect(computeDivision('PRIMARY', [{ subjectId: 'a', grade: 'B', gradePoints: 4, isPassing: true }]).descriptor).toBe('Promotable');
-    expect(computeDivision('PRIMARY', [{ subjectId: 'a', grade: 'E', gradePoints: 1, isPassing: false }]).descriptor).toBe('Needs intervention');
+  it('Primary: overall pass mark determines the promotion verdict', () => {
+    const rows = [
+      { subjectId: 'a', grade: 'A', gradePoints: 5, isPassing: true },
+      { subjectId: 'b', grade: 'E', gradePoints: 1, isPassing: false },
+    ];
+
+    expect(computeDivision('PRIMARY', rows, undefined, 'HIGHER_BETTER', { overallAverage: 87.6, primaryPassMark: 50 }).descriptor)
+      .toBe('Promotable');
+    expect(computeDivision('PRIMARY', rows, undefined, 'HIGHER_BETTER', { overallAverage: 49.9, primaryPassMark: 50 }).descriptor)
+      .toBe('Needs intervention');
   });
 });
 

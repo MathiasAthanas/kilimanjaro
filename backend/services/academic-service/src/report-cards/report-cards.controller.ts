@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Patch, Post, Res, Body, NotFoundException } from '@nestjs/common';
+import { Controller, Get, Param, Patch, Post, Res, Body, NotFoundException, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Response } from 'express';
 import { constants } from 'fs';
@@ -12,14 +12,42 @@ import { RequestUser } from '../common/interfaces/request-user.interface';
 import { GenerateReportCardsDto } from './dto/generate-report-cards.dto';
 import { UpdateCommentsDto } from './dto/update-comments.dto';
 import { ReportCardsService } from './report-cards.service';
+import { ReportCardPolicyService } from './report-card-policy.service';
+import { UpdateReportCardPolicyDto } from './dto/update-report-card-policy.dto';
+import { RecalculateReportCardsDto } from './dto/recalculate-report-cards.dto';
 
 @ApiTags('Academic - Report Cards')
 @Controller('academics')
 export class ReportCardsController {
   constructor(
     private readonly reportCardsService: ReportCardsService,
+    private readonly reportCardPolicyService: ReportCardPolicyService,
     private readonly configService: ConfigService,
   ) {}
+
+  @Get('report-card-policy')
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.SUPER_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL)
+  getPolicy(@CurrentUser() user?: RequestUser) {
+    return this.reportCardPolicyService.getForUser(user!);
+  }
+
+  @Patch('report-card-policy')
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.SUPER_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL)
+  updatePolicy(@Body() dto: UpdateReportCardPolicyDto, @CurrentUser() user?: RequestUser) {
+    return this.reportCardPolicyService.update(dto, user!);
+  }
+
+  @Get('report-card-policy/recalculation-preview')
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.SUPER_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL)
+  previewRecalculation(@Query('termId') termId: string, @CurrentUser() user?: RequestUser) {
+    return this.reportCardsService.previewRecalculation(termId, user!);
+  }
+
+  @Post('report-card-policy/recalculate')
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.SUPER_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL)
+  recalculate(@Body() dto: RecalculateReportCardsDto, @CurrentUser() user?: RequestUser) {
+    return this.reportCardsService.recalculateExisting(dto.termId, user!);
+  }
 
   @Post('report-cards/generate')
   @Roles(ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA)

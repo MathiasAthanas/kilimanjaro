@@ -890,6 +890,23 @@ model ReportCardComposition {
   @@schema("academics")
 }
 
+/// School-owned policy used by report composition, promotion verdicts and PDF rendering.
+model ReportCardPolicy {
+  id                               String   @id @default(uuid())
+  schoolId                         String   @unique
+  primaryPassMark                  Float    @default(50)
+  oLevelPassMark                   Float    @default(40)
+  aLevelPassMark                   Float    @default(25)
+  showSubjectSupport               Boolean  @default(true)
+  hideExemptSubjects               Boolean  @default(true)
+  autoAlternativeSubjectExemptions Boolean  @default(true)
+  updatedById                      String?
+  createdAt                        DateTime @default(now())
+  updatedAt                        DateTime @updatedAt
+
+  @@schema("academics")
+}
+
 /// An approved, audited exemption that removes one subject from a student's (or a
 /// whole class's) result calculation. `examWindowId = null` means the whole term;
 /// otherwise only that window. Existing marks are preserved but ignored while the

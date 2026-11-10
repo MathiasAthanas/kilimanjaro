@@ -1,6 +1,6 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { schoolScopeFilter, assertSchoolInScope } from '../common/helpers/school-scope.helper';
+import { schoolScopeFilter, assertSchoolInScope, requireWriteSchoolId } from '../common/helpers/school-scope.helper';
 import { RedisService } from '../redis/redis.service';
 import { StudentClientService } from '../student-client/student-client.service';
 import { RabbitMqService } from '../rabbitmq/rabbitmq.service';
@@ -12,6 +12,7 @@ import { UpdateCommentsDto } from './dto/update-comments.dto';
 import { ReportCardPdfService } from './report-card-pdf.service';
 import { GradingResolverService } from '../exams/grading-resolver.service';
 import { competitionRanks, computeDivision, round, scaleDirection } from '../exams/engine/result-engine';
+import { ReportCardPolicyService, ReportCardPolicyValues } from './report-card-policy.service';
 
 @Injectable()
 export class ReportCardsService {
@@ -23,6 +24,7 @@ export class ReportCardsService {
     private readonly pdfService: ReportCardPdfService,
     private readonly accessControl: AccessControlService,
     private readonly grading: GradingResolverService,
+    private readonly policyService: ReportCardPolicyService,
   ) {}
 
   private unwrap<T>(payload: any): T {
@@ -53,6 +55,7 @@ export class ReportCardsService {
     rows: Array<{ subjectId: string; weightedTotal: number; gradePoints: number; grade: string; isPassing: boolean; resultStatus?: string | null; educationStage: any; classLevel: number | null; academicYearId: string }>,
     principalSubjectIds: Set<string> | undefined,
     schoolId: string | null,
+    policy: ReportCardPolicyValues,
   ) {
     const counted = rows.filter((r) => (r.resultStatus ?? 'SCORED') !== 'EXEMPT');
     const avg = counted.length ? round(counted.reduce((s, r) => s + r.weightedTotal, 0) / counted.length) : 0;
@@ -72,6 +75,7 @@ export class ReportCardsService {
       counted.map((r) => ({ subjectId: r.subjectId, grade: r.grade, gradePoints: r.gradePoints, isPassing: r.isPassing })),
       principalSubjectIds,
       direction,
+      { overallAverage: avg, primaryPassMark: policy.primaryPassMark },
     );
     const divisionSummary = {
       ...division,
@@ -88,6 +92,32 @@ export class ReportCardsService {
       exemptSubjectCount: rows.length - counted.length,
       failingSubjectCount: counted.filter((r) => !r.isPassing).length,
     };
+  }
+
+  private applyAlternativeSubjectPolicy<T extends {
+    subjectId: string;
+    subjectName: string;
+    resultStatus?: string | null;
+    weightedTotal: number;
+    grade: string;
+    gradePoints: number;
+    remark: string;
+    isPassing: boolean;
+  }>(rows: T[], policy: ReportCardPolicyValues): T[] {
+    if (!policy.autoAlternativeSubjectExemptions) return rows;
+    const decision = this.policyService.alternativeDecision(rows);
+    const exemptIds = new Set(decision.exemptSubjectIds);
+    return rows.map((row) => exemptIds.has(row.subjectId)
+      ? {
+          ...row,
+          resultStatus: 'EXEMPT',
+          weightedTotal: 0,
+          grade: 'EXEMPT',
+          gradePoints: 0,
+          remark: 'Exempt',
+          isPassing: true,
+        }
+      : row);
   }
 
   private reportTemplateFor(stage: string | null, classLevel: number | null): string {
@@ -121,6 +151,7 @@ export class ReportCardsService {
       where: { classId, termId },
       orderBy: [{ studentId: 'asc' }, { weightedTotal: 'desc' }],
     });
+    const policy = await this.policyService.getForSchool(termResults[0]?.schoolId ?? null);
 
     const byStudent = new Map<string, typeof termResults>();
     for (const row of termResults) {
@@ -128,6 +159,9 @@ export class ReportCardsService {
         byStudent.set(row.studentId, []);
       }
       byStudent.get(row.studentId)!.push(row);
+    }
+    for (const [studentId, rows] of byStudent.entries()) {
+      byStudent.set(studentId, this.applyAlternativeSubjectPolicy(rows, policy));
     }
 
     // Pre-fetch PRINCIPAL subject IDs per A-Level combination so the ACSEE
@@ -183,7 +217,7 @@ export class ReportCardsService {
       const schoolId = (firstRow as any).schoolId ?? null;
       const reportTemplateCode = this.reportTemplateFor(firstRow.educationStage, firstRow.classLevel);
       const principalSubjectIds = firstRow.combinationId ? principalsByCombo.get(firstRow.combinationId) : undefined;
-      const card = await this.summarizeRows(rows as any, principalSubjectIds, schoolId);
+      const card = await this.summarizeRows(rows as any, principalSubjectIds, schoolId, policy);
       const { avg, resolved, divisionSummary } = card;
       const subjectCount = card.subjectsAssessed;
       const failingSubjectCount = card.failingSubjectCount;
@@ -254,6 +288,9 @@ export class ReportCardsService {
         ? performance.pairings.some((item: any) => ['ACTIVE', 'SUGGESTED'].includes(item.status))
         : false;
 
+      const visibleRows = policy.hideExemptSubjects
+        ? rows.filter((row) => row.resultStatus !== 'EXEMPT')
+        : rows;
       const pdfUrl = await this.pdfService.generatePdf({
         studentId,
         termId,
@@ -263,7 +300,7 @@ export class ReportCardsService {
         registrationNumber: studentProfile?.registrationNumber || '-',
         className,
         generatedAt: new Date(),
-        results: rows.map((row) => {
+        results: visibleRows.map((row) => {
           const role = principalSubjectIds
             ? (principalSubjectIds.has(row.subjectId) ? 'PRINCIPAL' : 'SUBSIDIARY')
             : undefined;
@@ -280,7 +317,9 @@ export class ReportCardsService {
         }),
         average: avg,
         subjectsAssessed: card.subjectsAssessed,
-        subjectsExpected: card.subjectsExpected,
+        subjectsExpected: policy.hideExemptSubjects ? card.subjectsAssessed : card.subjectsExpected,
+        failingSubjectCount: card.failingSubjectCount,
+        showSubjectSupport: policy.showSubjectSupport,
         overallGrade: resolved.grade,
         reportTemplateCode,
         divisionSummary,
@@ -503,6 +542,129 @@ export class ReportCardsService {
     return reportCard.pdfUrl;
   }
 
+  private async buildRecalculationPlan(termId: string, user: RequestUser) {
+    const schoolId = requireWriteSchoolId(user, 'report-card recalculation');
+    const policy = await this.policyService.getForSchool(schoolId);
+    const [cards, rows] = await Promise.all([
+      this.prisma.reportCard.findMany({
+        where: { schoolId, termId },
+        select: { classId: true, studentId: true, isPublished: true },
+      }),
+      this.prisma.termResult.findMany({
+        where: { schoolId, termId },
+        select: {
+          id: true,
+          studentId: true,
+          subjectId: true,
+          subjectName: true,
+          resultStatus: true,
+        },
+      }),
+    ]);
+    const byStudent = new Map<string, typeof rows>();
+    for (const row of rows) {
+      const current = byStudent.get(row.studentId) ?? [];
+      current.push(row);
+      byStudent.set(row.studentId, current);
+    }
+
+    const rowsToExempt = new Set<string>();
+    const conflicts: string[] = [];
+    if (policy.autoAlternativeSubjectExemptions) {
+      for (const [studentId, studentRows] of byStudent.entries()) {
+        const decision = this.policyService.alternativeDecision(studentRows);
+        const exemptSubjectIds = new Set(decision.exemptSubjectIds);
+        for (const row of studentRows) {
+          if (exemptSubjectIds.has(row.subjectId) && row.resultStatus !== 'EXEMPT') {
+            rowsToExempt.add(row.id);
+          }
+        }
+        if (decision.conflicts.length) conflicts.push(studentId);
+      }
+    }
+
+    return {
+      schoolId,
+      termId,
+      policy,
+      cards,
+      rowsToExempt: [...rowsToExempt],
+      conflicts,
+      classIds: [...new Set(cards.map((card) => card.classId))],
+    };
+  }
+
+  async previewRecalculation(termId: string, user: RequestUser) {
+    const plan = await this.buildRecalculationPlan(termId, user);
+    return {
+      termId,
+      schoolId: plan.schoolId,
+      reportCards: plan.cards.length,
+      publishedCards: plan.cards.filter((card) => card.isPublished).length,
+      classes: plan.classIds.length,
+      alternativeRowsToExempt: plan.rowsToExempt.length,
+      alternativeConflicts: plan.conflicts.length,
+      publicationStateWillBePreserved: true,
+    };
+  }
+
+  async recalculateExisting(termId: string, user: RequestUser) {
+    const plan = await this.buildRecalculationPlan(termId, user);
+    if (!plan.cards.length) {
+      throw new BadRequestException('No generated report cards exist for the selected term and school.');
+    }
+    if (plan.conflicts.length) {
+      throw new BadRequestException(
+        `${plan.conflicts.length} student(s) have scored results in both alternative subjects. Resolve those records before recalculating.`,
+      );
+    }
+
+    if (plan.rowsToExempt.length) {
+      await this.prisma.termResult.updateMany({
+        where: { id: { in: plan.rowsToExempt } },
+        data: {
+          resultStatus: 'EXEMPT',
+          weightedTotal: 0,
+          grade: 'EXEMPT',
+          gradePoints: 0,
+          remark: 'Exempt',
+          isPassing: true,
+        },
+      });
+    }
+
+    let regenerated = 0;
+    const failures: string[] = [];
+    for (const classId of plan.classIds) {
+      try {
+        const result = await this.generateForClassTerm(classId, termId, user.id);
+        regenerated += result.generated;
+      } catch (error) {
+        failures.push(`${classId}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    if (failures.length) {
+      throw new BadRequestException(`Recalculation did not complete for every class. ${failures[0]}`);
+    }
+
+    await this.redis.delByPattern(`report-card:*:${termId}`);
+    await this.rabbitMq.publish('reportcard.policy.recalculated', {
+      schoolId: plan.schoolId,
+      termId,
+      reportCards: regenerated,
+      alternativeRowsExempted: plan.rowsToExempt.length,
+      recalculatedById: user.id,
+    });
+
+    return {
+      termId,
+      schoolId: plan.schoolId,
+      reportCardsRegenerated: regenerated,
+      alternativeRowsExempted: plan.rowsToExempt.length,
+      publishedCardsPreserved: plan.cards.filter((card) => card.isPublished).length,
+    };
+  }
+
   async signReportCard(id: string, signatureText: string, user: RequestUser) {
     const existing = await this.prisma.reportCard.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Report card not found');
@@ -593,13 +755,15 @@ export class ReportCardsService {
     actorId: string,
     currentCard: any,
   ): Promise<void> {
-    const rows = await this.prisma.termResult.findMany({
+    const storedRows = await this.prisma.termResult.findMany({
       where: { studentId, termId, classId: currentCard.classId },
       orderBy: { weightedTotal: 'desc' },
     });
-    if (!rows.length) return;
+    if (!storedRows.length) return;
 
-    const firstRow = rows[0];
+    const firstRow = storedRows[0];
+    const policy = await this.policyService.getForSchool((firstRow as any).schoolId ?? null);
+    const rows = this.applyAlternativeSubjectPolicy(storedRows, policy);
 
     // Resolve A-Level principal subjects for this student (if applicable).
     let principalSubjectIds: Set<string> | undefined;
@@ -611,7 +775,7 @@ export class ReportCardsService {
       principalSubjectIds = new Set(comboSubjects.map((cs) => cs.subjectId));
     }
 
-    const card = await this.summarizeRows(rows as any, principalSubjectIds, (firstRow as any).schoolId ?? null);
+    const card = await this.summarizeRows(rows as any, principalSubjectIds, (firstRow as any).schoolId ?? null, policy);
     const { avg, resolved, divisionSummary } = card;
 
     const [studentProfilePayload, attendancePayload, performancePayload] = await Promise.all([
@@ -637,6 +801,9 @@ export class ReportCardsService {
     const className = studentProfile?.enrolments?.[0]?.class?.name || firstRow.classId;
 
     const labels = await this.termLabels(termId, actorId);
+    const visibleRows = policy.hideExemptSubjects
+      ? rows.filter((row) => row.resultStatus !== 'EXEMPT')
+      : rows;
     const pdfUrl = await this.pdfService.generatePdf({
       studentId,
       termId,
@@ -646,7 +813,7 @@ export class ReportCardsService {
       registrationNumber: studentProfile?.registrationNumber || '-',
       className,
       generatedAt: new Date(),
-      results: rows.map((row) => {
+      results: visibleRows.map((row) => {
         const role = principalSubjectIds
           ? (principalSubjectIds.has(row.subjectId) ? 'PRINCIPAL' : 'SUBSIDIARY')
           : undefined;
@@ -663,7 +830,9 @@ export class ReportCardsService {
       }),
       average: avg,
       subjectsAssessed: card.subjectsAssessed,
-      subjectsExpected: card.subjectsExpected,
+      subjectsExpected: policy.hideExemptSubjects ? card.subjectsAssessed : card.subjectsExpected,
+      failingSubjectCount: card.failingSubjectCount,
+      showSubjectSupport: policy.showSubjectSupport,
       overallGrade: resolved.grade,
       reportTemplateCode,
       divisionSummary,

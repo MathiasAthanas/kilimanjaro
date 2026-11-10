@@ -33,6 +33,7 @@ describe('ReportCardsService family access', () => {
       {} as any,
       accessControl as any,
       {} as any,
+      {} as any,
     );
     return { service, accessControl };
   }
@@ -85,6 +86,7 @@ describe('ReportCardsService family access', () => {
       prisma as any,
       {} as any,
       studentClient as any,
+      {} as any,
       {} as any,
       {} as any,
       {} as any,

@@ -400,6 +400,7 @@ const adminSections: SidebarSection[] = [
       { to: '/exams/performance', icon: FileSpreadsheet, label: 'Lists & Performance' },
       { to: '/exams/types',                                icon: ClipboardCheck,  label: 'Exam Types'                    },
       { to: '/admin/academic/stage-config',                icon: BookOpen,        label: 'Stage Config'                  },
+      { to: '/admin/academic/report-cards',                icon: FileText,        label: 'Report Cards'                 },
       { to: '/admin/academic/promotion/cross-stage',       icon: GraduationCap,   label: 'Cross-Stage Promotion'         },
       { to: '/admin/finance/fee-categories',               icon: WalletCards,     label: 'Fee Categories'                },
       { to: '/admin/performance/engine',                   icon: TrendingUp,      label: 'Performance Engine'            },

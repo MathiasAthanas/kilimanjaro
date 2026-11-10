@@ -8,6 +8,7 @@ import { ReportCardsService } from '../report-cards/report-cards.service';
 import { GradingResolverService } from './grading-resolver.service';
 import { ComposeReportCardsDto } from './dto/compose-report-cards.dto';
 import { blendWindows, resolveBand, SubjectOutcome, SubjectStatus, validateWeights, WindowContribution } from './engine/result-engine';
+import { ReportCardPolicyService } from '../report-cards/report-card-policy.service';
 
 interface ClassSubjectMeta {
   classSubjectId: string;
@@ -72,6 +73,7 @@ export class ReportCompositionService {
     private readonly rabbitMq: RabbitMqService,
     private readonly grading: GradingResolverService,
     private readonly reportCards: ReportCardsService,
+    private readonly reportCardPolicy: ReportCardPolicyService,
   ) {}
 
   /** Validate the selected windows and resolve their effective weights (must be positive and total exactly 100%). */
@@ -246,6 +248,34 @@ export class ReportCompositionService {
     }
 
     // ── Per-subject rank within class (exempt rows are not ranked) ─────────
+    const reportPolicy = await this.reportCardPolicy.getForSchool(schoolId);
+    if (reportPolicy.autoAlternativeSubjectExemptions) {
+      const rowsByStudent = new Map<string, BlendedRow[]>();
+      for (const row of rows) {
+        const current = rowsByStudent.get(row.studentId) ?? [];
+        current.push(row);
+        rowsByStudent.set(row.studentId, current);
+      }
+      for (const [studentId, studentRows] of rowsByStudent.entries()) {
+        const decision = this.reportCardPolicy.alternativeDecision(studentRows);
+        if (decision.conflicts.length) {
+          throw new BadRequestException(
+            `Student ${studentId} has scored results in both alternative subjects. Resolve the subject assignment before composing report cards.`,
+          );
+        }
+        const exemptSubjectIds = new Set(decision.exemptSubjectIds);
+        for (const row of studentRows) {
+          if (!exemptSubjectIds.has(row.subjectId)) continue;
+          row.status = 'EXEMPT';
+          row.blended = 0;
+          row.grade = 'EXEMPT';
+          row.points = 0;
+          row.remark = 'Exempt';
+          row.isPassing = true;
+        }
+      }
+    }
+
     const groups = new Map<string, BlendedRow[]>();
     for (const r of rows) {
       if (r.status === 'EXEMPT') continue;
@@ -375,7 +405,7 @@ export class ReportCompositionService {
 
       const cards = await this.prisma.reportCard.findMany({
         where: { classId: { in: classIds }, termId: dto.termId },
-        select: { classId: true, studentId: true, overallAverage: true, failingSubjectCount: true },
+        select: { classId: true, studentId: true, educationStage: true, overallAverage: true, failingSubjectCount: true },
       });
       const byClass = new Map<string, typeof cards>();
       for (const c of cards) {
@@ -385,7 +415,10 @@ export class ReportCompositionService {
       }
       for (const [classId, group] of byClass.entries()) {
         const avg = group.reduce((s, c) => s + c.overallAverage, 0) / Math.max(group.length, 1);
-        const passRate = (group.filter((c) => c.failingSubjectCount === 0).length / Math.max(group.length, 1)) * 100;
+        const passRate = (
+          group.filter((card) => card.overallAverage >= this.reportCardPolicy.passMarkForStage(reportPolicy, card.educationStage)).length
+          / Math.max(group.length, 1)
+        ) * 100;
         await this.rabbitMq.publish('results.published', {
           classId,
           termId: dto.termId,

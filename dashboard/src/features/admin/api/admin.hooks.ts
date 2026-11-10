@@ -292,6 +292,8 @@ export const adminKeys = {
   audit: () => [...adminKeys.all, 'audit'] as const,
   reportJobs: () => [...adminKeys.all, 'report-jobs'] as const,
   systemSettings: () => [...adminKeys.all, 'system', 'settings'] as const,
+  reportCardPolicy: () => [...adminKeys.all, 'report-card-policy'] as const,
+  reportCardRecalculation: (termId: string) => [...adminKeys.reportCardPolicy(), 'recalculation', termId] as const,
   featureFlags: () => [...adminKeys.all, 'system', 'feature-flags'] as const,
   academicYears: () => [...adminKeys.all, 'academic-years'] as const,
   terms: () => [...adminKeys.all, 'terms'] as const,
@@ -813,6 +815,46 @@ export function useUpdateSystemSettingsMutation() {
     mutationFn: (settings: Record<string, unknown>) =>
       api.patch('/admin/system/settings', { settings }).then((r) => r.data?.data ?? r.data),
     onSuccess: () => qc.invalidateQueries({ queryKey: adminKeys.systemSettings() }),
+  });
+}
+
+export function useReportCardPolicy() {
+  const activeSchoolKey = useActiveSchoolKey();
+  return useQuery({
+    queryKey: [...adminKeys.reportCardPolicy(), activeSchoolKey] as const,
+    queryFn: () => api.get('/academics/report-card-policy').then(payloadOf),
+    staleTime: 30_000,
+  });
+}
+
+export function useReportCardRecalculationPreview(termId: string) {
+  const activeSchoolKey = useActiveSchoolKey();
+  return useQuery({
+    queryKey: [...adminKeys.reportCardRecalculation(termId), activeSchoolKey] as const,
+    queryFn: () => api.get('/academics/report-card-policy/recalculation-preview', { params: { termId } }).then(payloadOf),
+    enabled: !!termId,
+    staleTime: 10_000,
+  });
+}
+
+export function useUpdateReportCardPolicyMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (policy: Record<string, unknown>) =>
+      api.patch('/academics/report-card-policy', policy).then(payloadOf),
+    onSuccess: () => qc.invalidateQueries({ queryKey: adminKeys.reportCardPolicy() }),
+  });
+}
+
+export function useRecalculateReportCardsMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (termId: string) =>
+      api.post('/academics/report-card-policy/recalculate', { termId }).then(payloadOf),
+    onSuccess: (_data, termId) => {
+      qc.invalidateQueries({ queryKey: adminKeys.reportCardPolicy() });
+      qc.invalidateQueries({ queryKey: adminKeys.reportCardRecalculation(termId) });
+    },
   });
 }
 
