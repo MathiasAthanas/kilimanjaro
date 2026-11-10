@@ -40,6 +40,18 @@ export class ReportCardsController {
     return this.reportCardsService.listForStudent(studentId, user!);
   }
 
+  @Get('report-cards/available/classes')
+  @Roles(
+    ROLES.SYSTEM_ADMIN,
+    ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN,
+    ROLES.ACADEMIC_QA,
+    ROLES.HEAD_OF_DEPARTMENT,
+    ROLES.TEACHER,
+  )
+  listAvailableClasses(@CurrentUser() user?: RequestUser) {
+    return this.reportCardsService.listAvailableClasses(user!);
+  }
+
   @Get('report-cards/class/:classId/term/:termId')
   @Roles(
     ROLES.SYSTEM_ADMIN,

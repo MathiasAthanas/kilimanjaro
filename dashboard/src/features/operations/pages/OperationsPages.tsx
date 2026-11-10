@@ -22,6 +22,7 @@ import {
   useEnrolmentAnalytics,
   useClassAnalytics,
   useClassReportCards,
+  useAvailableReportCardClasses,
   useGenerateReportMutation,
   useStudentAnalyticsProfile,
   useSubjectAnalytics,
@@ -312,19 +313,30 @@ export function ResultsPublishingSupportPage() {
 }
 
 export function ReportCardGenerationCenterPage() {
-  const { data: readiness, isLoading } = usePublishReadiness() as { data: { classes?: Array<Record<string, unknown>> } | undefined; isLoading: boolean };
-  const apiResultClasses = (readiness?.classes ?? []) as Array<Record<string, unknown>>;
+  const { data: apiResultClasses = [], isLoading, isError, refetch } = useAvailableReportCardClasses() as {
+    data: Array<Record<string, unknown>>;
+    isLoading: boolean;
+    isError: boolean;
+    refetch: () => void;
+  };
   return (
     <OperationsShell title="Report Card Generation Center" eyebrow="Generate, preview, download">
-      {isLoading ? <SkeletonTable cols={3} /> : apiResultClasses.length === 0 ? (
-        <EmptyState title="No classes ready" description="Classes will appear here once marks are finalised." />
+      {isLoading ? <SkeletonTable cols={3} /> : isError ? <DataError message="Could not load generated report cards." onRetry={refetch} /> : apiResultClasses.length === 0 ? (
+        <EmptyState title="No report cards generated" description="Compose report cards from a closed exam window first. Generated classes will then appear here." />
       ) : (
         <div className="grid gap-gutter xl:grid-cols-3">
           {apiResultClasses.map((item) => {
             const classId = String(item.classId ?? item.id ?? '');
             const termId = String(item.termId ?? 'current');
+            const total = Number(item.reportCards ?? item.students ?? 0);
+            const published = Number(item.publishedCards ?? 0);
             return (
-              <ReportTile key={classId} title={String(item.className ?? classId)} detail={`${String(item.students ?? '—')} cards / ${String(item.readiness ?? item.reportCardReadiness ?? '—')}% ready`} to={`/academics/report-cards/${classId}/${termId}`} />
+              <ReportTile
+                key={`${classId}:${termId}`}
+                title={formatClassLabel(String(item.className ?? classId), item.stream ? String(item.stream) : null)}
+                detail={`${total} card${total === 1 ? '' : 's'} / ${published} published`}
+                to={`/academics/report-cards/${classId}/${termId}`}
+              />
             );
           })}
         </div>

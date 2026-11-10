@@ -378,6 +378,79 @@ export class ReportCardsService {
     });
   }
 
+  /** Classes and terms that already have generated report cards in the caller's school scope. */
+  async listAvailableClasses(user: RequestUser) {
+    const cards = await this.prisma.reportCard.findMany({
+      where: schoolScopeFilter(user),
+      select: {
+        classId: true,
+        termId: true,
+        academicYearId: true,
+        schoolId: true,
+        educationStage: true,
+        isPublished: true,
+        updatedAt: true,
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
+    if (!cards.length) return [];
+
+    const classesPayload = await this.studentClient.get<any>(
+      '/students/classes',
+      {},
+      this.internalHeaders(user.id),
+    );
+    const classesData = this.unwrap<any>(classesPayload);
+    const classes = Array.isArray(classesData)
+      ? classesData
+      : Array.isArray(classesData?.items)
+        ? classesData.items
+        : Array.isArray(classesData?.classes)
+          ? classesData.classes
+          : [];
+    const classById = new Map<string, any>(classes.map((item: any) => [String(item.id), item]));
+
+    const groups = new Map<string, {
+      classId: string;
+      className: string;
+      stream: string | null;
+      termId: string;
+      academicYearId: string;
+      schoolId: string | null;
+      educationStage: string;
+      reportCards: number;
+      publishedCards: number;
+      updatedAt: Date;
+    }>();
+    for (const card of cards) {
+      const key = `${card.classId}:${card.termId}`;
+      const current = groups.get(key);
+      if (current) {
+        current.reportCards += 1;
+        if (card.isPublished) current.publishedCards += 1;
+        if (card.updatedAt > current.updatedAt) current.updatedAt = card.updatedAt;
+        continue;
+      }
+      const classRecord = classById.get(card.classId);
+      groups.set(key, {
+        classId: card.classId,
+        className: classRecord?.name ?? card.classId,
+        stream: classRecord?.stream ?? null,
+        termId: card.termId,
+        academicYearId: card.academicYearId,
+        schoolId: card.schoolId ?? null,
+        educationStage: card.educationStage,
+        reportCards: 1,
+        publishedCards: card.isPublished ? 1 : 0,
+        updatedAt: card.updatedAt,
+      });
+    }
+
+    return [...groups.values()].sort((a, b) =>
+      b.updatedAt.getTime() - a.updatedAt.getTime() || a.className.localeCompare(b.className),
+    );
+  }
+
   /**
    * All report cards for a class + term, enriched with student identity so
    * the dashboard report-card centre can list and download per student.

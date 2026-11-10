@@ -61,4 +61,48 @@ describe('ReportCardsService family access', () => {
     await expect(service.getReportCard('student-1', 'term-1', user))
       .rejects.toThrow(new ForbiddenException('Report card not published'));
   });
+
+  it('lists generated report-card classes from real cards within the active school scope', async () => {
+    const updatedAt = new Date('2026-11-10T12:00:00.000Z');
+    const prisma = {
+      reportCard: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            classId: 'class-1', termId: 'term-1', academicYearId: 'year-1', schoolId: 'school-1',
+            educationStage: 'PRIMARY', isPublished: true, updatedAt,
+          },
+          {
+            classId: 'class-1', termId: 'term-1', academicYearId: 'year-1', schoolId: 'school-1',
+            educationStage: 'PRIMARY', isPublished: true, updatedAt,
+          },
+        ]),
+      },
+    };
+    const studentClient = {
+      get: jest.fn().mockResolvedValue([{ id: 'class-1', name: 'Class 1 A', stream: 'A' }]),
+    };
+    const service = new ReportCardsService(
+      prisma as any,
+      {} as any,
+      studentClient as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+    );
+    const user = {
+      id: 'admin-1', role: 'SYSTEM_ADMIN', scope: 'SCHOOL',
+      schoolIds: ['school-1'], activeSchoolId: 'school-1',
+    } as any;
+
+    await expect(service.listAvailableClasses(user)).resolves.toEqual([
+      expect.objectContaining({
+        classId: 'class-1', className: 'Class 1 A', stream: 'A', termId: 'term-1',
+        reportCards: 2, publishedCards: 2,
+      }),
+    ]);
+    expect(prisma.reportCard.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { schoolId: 'school-1' },
+    }));
+  });
 });

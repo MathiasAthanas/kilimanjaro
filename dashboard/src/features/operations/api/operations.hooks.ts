@@ -277,6 +277,17 @@ export function useClassReportCards(classId: string | undefined, termId: string 
   });
 }
 
+export function useAvailableReportCardClasses() {
+  return useQuery({
+    queryKey: [...operationsKeys.all, 'report-cards', 'available-classes'] as const,
+    queryFn: () =>
+      api
+        .get('/academics/report-cards/available/classes')
+        .then((r) => arrayFromApi(payloadOf(r), ['classes', 'reportCards'])),
+    staleTime: 15_000,
+  });
+}
+
 export function useClassAnalytics(classId: string | undefined) {
   return useQuery({
     queryKey: [...operationsKeys.all, 'analytics', 'class', classId ?? ''] as const,
