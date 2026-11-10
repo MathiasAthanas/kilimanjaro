@@ -1,8 +1,9 @@
-import { Controller, Get, Param, Patch, Post, Res, Body } from '@nestjs/common';
+import { Controller, Get, Param, Patch, Post, Res, Body, NotFoundException } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Response } from 'express';
-import { createReadStream } from 'fs';
-import { join } from 'path';
+import { constants } from 'fs';
+import { access } from 'fs/promises';
+import { resolve } from 'path';
 import { ConfigService } from '@nestjs/config';
 import { ROLES } from '../common/constants/roles';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -96,11 +97,17 @@ export class ReportCardsController {
   ) {
     const fileName = await this.reportCardsService.getReportPdfPath(studentId, termId, user);
     const storageRoot = this.configService.get<string>('PDF_STORAGE_PATH', './storage/report-cards');
-    const absolutePath = join(storageRoot, fileName);
+    const absolutePath = resolve(storageRoot, fileName);
+
+    try {
+      await access(absolutePath, constants.R_OK);
+    } catch {
+      throw new NotFoundException('The report card PDF is unavailable. Compose the report card again.');
+    }
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="${fileName}"`);
-    return createReadStream(absolutePath).pipe(res);
+    return res.sendFile(absolutePath);
   }
 
   @Patch('report-cards/:id/sign')

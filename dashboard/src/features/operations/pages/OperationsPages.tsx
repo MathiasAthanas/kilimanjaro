@@ -23,6 +23,7 @@ import {
   useClassAnalytics,
   useClassReportCards,
   useAvailableReportCardClasses,
+  downloadOfficialReportCard,
   useGenerateReportMutation,
   useStudentAnalyticsProfile,
   useSubjectAnalytics,
@@ -348,7 +349,6 @@ export function ReportCardGenerationCenterPage() {
 export function ReportCardPreviewPage() {
   const { classId, termId } = useParams();
   const { data: cards = [], isLoading, isError, refetch } = useClassReportCards(classId, termId) as { data: Array<Record<string, unknown>>; isLoading: boolean; isError: boolean; refetch: () => void };
-  const generateReport = useGenerateReportMutation();
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
   const handleDownload = async (card: Record<string, unknown>) => {
@@ -356,17 +356,14 @@ export function ReportCardPreviewPage() {
     const studentName = String(card.studentName ?? 'student');
     setDownloadingId(studentId);
     try {
-      const result = (await generateReport.mutateAsync({
-        reportType: 'REPORT_CARD',
-        scope: 'student',
-        scopeId: studentId,
-        termId,
-        academicYearId: card.academicYearId ? String(card.academicYearId) : undefined,
-      })) as Record<string, unknown>;
-      await downloadReportWhenReady(String(result.reportId), `Report_Card_${studentName.replace(/\s+/g, '_')}.pdf`);
+      await downloadOfficialReportCard(
+        studentId,
+        String(termId),
+        `Report_Card_${studentName.replace(/\s+/g, '_')}.pdf`,
+      );
       toast('Report card PDF downloaded', 'success');
     } catch {
-      toast('Report card generation failed. Please try again.', 'error');
+      toast('Report card download failed. Please try again.', 'error');
     } finally {
       setDownloadingId(null);
     }

@@ -288,6 +288,27 @@ export function useAvailableReportCardClasses() {
   });
 }
 
+/** Downloads the PDF stored with the composed report card. */
+export async function downloadOfficialReportCard(
+  studentId: string,
+  termId: string,
+  filename: string,
+): Promise<void> {
+  const response = await api.get(
+    `/academics/report-cards/${studentId}/term/${termId}/pdf`,
+    { responseType: 'blob' },
+  );
+  const blob = response.data as Blob;
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30_000);
+}
+
 export function useClassAnalytics(classId: string | undefined) {
   return useQuery({
     queryKey: [...operationsKeys.all, 'analytics', 'class', classId ?? ''] as const,
