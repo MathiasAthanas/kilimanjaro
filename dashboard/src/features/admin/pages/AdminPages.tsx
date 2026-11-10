@@ -5261,6 +5261,7 @@ const DEFAULT_REPORT_CARD_POLICY: ReportCardPolicyForm = {
 };
 
 export function ReportCardPolicyPage() {
+  const navigate = useNavigate();
   const { data: storedPolicy, isLoading, isError, refetch } = useReportCardPolicy() as {
     data?: Record<string, unknown>;
     isLoading: boolean;
@@ -5376,7 +5377,8 @@ export function ReportCardPolicyPage() {
         </div>
       </AdminFormSection>
 
-      <div className="flex justify-end">
+      <div className="flex flex-wrap justify-end gap-3">
+        <Button variant="secondary" onClick={() => navigate('/academics/report-cards')}>View Generated Report Cards</Button>
         <Button loading={updatePolicy.isPending} disabled={requiresSchool} onClick={save}>Save Report Card Configuration</Button>
       </div>
 

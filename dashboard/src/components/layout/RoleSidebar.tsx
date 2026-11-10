@@ -431,8 +431,9 @@ const adminSections: SidebarSection[] = [
     // generator and the finance audit belong to the Manager (see managerSections).
     title: 'Reports & Audit',
     items: [
-      { to: '/admin/audit/system', icon: Shield,      label: 'System Audit'    },
-      { to: '/reports',            icon: Download,    label: 'Shared Reports'  },
+      { to: '/academics/report-cards', icon: FileText, label: 'Report Cards'    },
+      { to: '/admin/audit/system',    icon: Shield,   label: 'System Audit'     },
+      { to: '/reports',               icon: Download, label: 'Shared Reports'   },
     ],
   },
 ];
