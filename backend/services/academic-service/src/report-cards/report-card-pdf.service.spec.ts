@@ -64,6 +64,32 @@ describe('ReportCardPdfService', () => {
     expect(pdf).toContain('/Count 1');
   });
 
+  it('keeps holistic and attendance details off the printed report card', async () => {
+    const config = { get: jest.fn().mockReturnValue(directory) } as unknown as ConfigService;
+    const service = new ReportCardPdfService(config);
+    const holistic = jest.spyOn(service as any, 'renderHolistic');
+    const attendance = jest.spyOn(service as any, 'renderAttendance');
+
+    await service.generatePdf({
+      studentId: 'student-private-details',
+      termId: 'term-1',
+      academicYearId: 'year-1',
+      studentName: 'Test Student',
+      registrationNumber: 'KEMS-P-TEST',
+      className: 'Class 2 A',
+      generatedAt: new Date('2026-11-10T00:00:00.000Z'),
+      results: [{ subjectName: 'Mathematics', total: 80, grade: 'A', remark: 'Excellent' }],
+      average: 80,
+      overallGrade: 'A',
+      reportTemplateCode: 'PRIMARY_STANDARD',
+      behaviourGrade: 'A',
+      attendance: { total: 90, present: 87, absent: 2, late: 1, attendanceRate: 96.7, belowThreshold: false },
+    });
+
+    expect(holistic).not.toHaveBeenCalled();
+    expect(attendance).not.toHaveBeenCalled();
+  });
+
   const buildInput = (overrides: Partial<ReportCardPdfInput>): ReportCardPdfInput => ({
     studentId: 'student-2',
     termId: 'term-1',

@@ -29,6 +29,12 @@ export class RecipientResolverService {
     return data;
   }
 
+  async resolveResultRecipients(studentIds: string[]): Promise<any[]> {
+    const unique = [...new Set(studentIds)].filter(Boolean).slice(0, 500);
+    if (!unique.length) return [];
+    return this.downstream.notificationRecipients(unique);
+  }
+
   async resolveUser(authUserId: string): Promise<any | null> {
     const key = `notif:user:${authUserId}`;
     const cached = await this.redis.get<any>(key);

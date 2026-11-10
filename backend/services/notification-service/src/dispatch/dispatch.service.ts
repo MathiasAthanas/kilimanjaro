@@ -39,10 +39,23 @@ export class DispatchService {
         const staff = await this.resolver.resolveUser(payload.enteredById);
         if (staff?.id || staff?.authUserId) recipients.push({ userId: staff.id || staff.authUserId, role: staff.role || 'FINANCE', email: staff.email, phone: staff.phone });
       }
-    } else if (eventType === 'results.published' || eventType === 'report_card.generated') {
-      const guardian = payload.studentId ? await this.resolver.resolveGuardian(payload.studentId) : null;
-      if (guardian?.authUserId) recipients.push({ userId: guardian.authUserId, role: 'PARENT', email: guardian.email, phone: guardian.phone });
-      if (payload.studentAuthUserId) recipients.push({ userId: payload.studentAuthUserId, role: 'STUDENT' });
+    } else if (eventType === 'results.published') {
+      const studentIds = [...new Set([
+        ...(Array.isArray(payload.studentIds) ? payload.studentIds : []),
+        ...(payload.studentId ? [payload.studentId] : []),
+      ].filter(Boolean))] as string[];
+      const resolved = await this.resolver.resolveResultRecipients(studentIds);
+      for (const item of resolved) {
+        if (item.studentAuthUserId) recipients.push({ userId: item.studentAuthUserId, role: 'STUDENT' });
+        if (item.guardianAuthUserId) {
+          recipients.push({
+            userId: item.guardianAuthUserId,
+            role: 'PARENT',
+            email: item.guardianEmail,
+            phone: item.guardianPhone,
+          });
+        }
+      }
     } else if (eventType.startsWith('performance.alert') || eventType === 'alert.escalated') {
       if (payload.teacherId) {
         const teacher = await this.resolver.resolveUser(payload.teacherId);

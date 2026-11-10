@@ -521,7 +521,7 @@ export class ReportCardsService {
     currentCard: any,
   ): Promise<void> {
     const rows = await this.prisma.termResult.findMany({
-      where: { studentId, termId },
+      where: { studentId, termId, classId: currentCard.classId },
       orderBy: { weightedTotal: 'desc' },
     });
     if (!rows.length) return;

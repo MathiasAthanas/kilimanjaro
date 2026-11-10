@@ -112,6 +112,43 @@ export class InternalController {
     }));
   }
 
+  @Get('notification-recipients')
+  @ApiOperation({ summary: 'Resolve student and primary-guardian accounts for notification dispatch' })
+  async notificationRecipients(@Query('ids') ids?: string) {
+    const list = [...new Set(String(ids ?? '').split(',').map((id) => id.trim()).filter(Boolean))].slice(0, 500);
+    if (!list.length) return [];
+
+    const students = await this.prisma.student.findMany({
+      where: { id: { in: list } },
+      select: {
+        id: true,
+        authUserId: true,
+        parentLinks: {
+          where: { isActive: true },
+          orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+          take: 1,
+          select: {
+            guardian: {
+              select: {
+                authUserId: true,
+                email: true,
+                phoneNumber: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    return students.map((student) => ({
+      studentId: student.id,
+      studentAuthUserId: student.authUserId,
+      guardianAuthUserId: student.parentLinks[0]?.guardian.authUserId ?? null,
+      guardianEmail: student.parentLinks[0]?.guardian.email ?? null,
+      guardianPhone: student.parentLinks[0]?.guardian.phoneNumber ?? null,
+    }));
+  }
+
   @Get('guardian-by-auth/:authUserId')
   @ApiOperation({ summary: 'List a guardian\'s children (by guardian auth user id)' })
   async guardianByAuth(@Param('authUserId') authUserId: string) {

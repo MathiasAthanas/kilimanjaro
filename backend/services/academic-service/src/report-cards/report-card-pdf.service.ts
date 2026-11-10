@@ -26,17 +26,17 @@ const PAGE_W = 595.28;
 const PAGE_H = 841.89;
 const M = 20;
 const CW = PAGE_W - M * 2;
-/** Content may not extend below this line: the mountain + footer live underneath. */
-const BOTTOM = 738;
+/** Content may not extend below this line: the compact document footer lives underneath. */
+const BOTTOM = 794;
 const CONTINUATION_TOP = 74;
 
 const TABLE_HEADER_H = 22;
 const LABEL_H = 22;
 
-/** Block heights. Dense cards (many subjects + division + attendance) switch to the compact set to stay on one page. */
+/** Block heights. Dense cards with many subjects switch to the compact set to stay on one page. */
 type Metrics = { bar: number; summary: number; note: number; comment: number; division: number; compact: boolean };
 const NORMAL: Metrics = { bar: 29, summary: 62, note: 24, comment: 88, division: 52, compact: false };
-const COMPACT: Metrics = { bar: 24, summary: 54, note: 22, comment: 72, division: 44, compact: true };
+const COMPACT: Metrics = { bar: 24, summary: 50, note: 20, comment: 66, division: 44, compact: true };
 const BLOCK_GAP = 10;
 const AFTER_TABLE_GAP = 17;
 
@@ -439,8 +439,6 @@ export class ReportCardPdfService {
       ctx.y += BLOCK_GAP;
     }
 
-    if (template === 'PRIMARY_STANDARD') this.renderHolistic(ctx);
-    this.renderAttendance(ctx);
     this.renderComments(ctx);
   }
 
@@ -476,11 +474,6 @@ export class ReportCardPdfService {
     if (ds?.division && (template === 'O_LEVEL_NATIONAL_READY' || template === 'A_LEVEL_NATIONAL_READY')) h += u.division + BLOCK_GAP;
     h += u.summary + BLOCK_GAP;
     if (this.hasAssessmentNote(input)) h += u.note + BLOCK_GAP;
-    if (template === 'PRIMARY_STANDARD') {
-      const n = this.holisticFields(input).length;
-      if (n) h += LABEL_H + Math.ceil(n / 3) * 36 + BLOCK_GAP;
-    }
-    if (input.attendance) h += LABEL_H + 34 + (input.attendance.belowThreshold ? 16 : 0) + BLOCK_GAP;
     h += LABEL_H + u.comment;
     return h;
   }
@@ -497,12 +490,13 @@ export class ReportCardPdfService {
     rows = Math.max(rows, 1);
     const tableTop = 156 + 90 + 16; // below the student panel
 
-    // Prefer the roomy layout, then the compact one; both need rows of at least 15pt to stay readable.
+    // Prefer the roomy layout, then the compact one. Compact rows remain readable at 13.5pt.
     for (const u of [NORMAL, COMPACT]) {
       const overhead = tables * (u.bar + 6 + TABLE_HEADER_H) + (tables - 1) * BLOCK_GAP;
       const available = BOTTOM - tableTop - overhead - this.heightBelowTables(input, template, u);
       const fitted = Math.floor((available / rows) * 2) / 2;
-      if (fitted >= 15) return { rowH: Math.min(20, fitted), u };
+      const minimum = u.compact ? 13.5 : 15;
+      if (fitted >= minimum) return { rowH: Math.min(20, fitted), u };
     }
     // Too many subjects for one page: keep the roomy layout, use a readable row height and paginate.
     return { rowH: 18, u: NORMAL };
@@ -528,7 +522,7 @@ export class ReportCardPdfService {
     if (ctx.y + h > BOTTOM) this.newPage(ctx);
   }
 
-  /** Mountain illustration and footer, drawn on every page once pagination is known. */
+  /** Compact document footer, drawn on every page once pagination is known. */
   private renderPageDecor(ctx: Ctx) {
     const { doc, input } = ctx;
     const range = doc.bufferedPageRange();
@@ -538,7 +532,12 @@ export class ReportCardPdfService {
 
     for (let i = 0; i < range.count; i++) {
       doc.switchToPage(range.start + i);
-      this.drawMountain(doc);
+
+      doc.save();
+      doc.rect(0, 805, PAGE_W, PAGE_H - 805).fill(PANEL);
+      doc.rect(M, 805, CW * 0.72, 1.5).fill(NAVY_MID);
+      doc.rect(M + CW * 0.72, 805, CW * 0.28, 1.5).fill(RED);
+      doc.restore();
 
       const parts = [`Generated ${date}`, 'Official Academic Document', input.registrationNumber];
       if (range.count > 1) parts.push(`Page ${i + 1} of ${range.count}`);
@@ -546,12 +545,8 @@ export class ReportCardPdfService {
       doc.font('Helvetica').fontSize(9);
       const tw = doc.widthOfString(text);
       const tx = (PAGE_W - tw) / 2;
-      const ty = 818;
+      const ty = 817;
       doc.fillColor(NAVY).text(text, tx, ty, { lineBreak: false });
-      doc.save().lineWidth(0.9).strokeColor(RED);
-      doc.moveTo(M + 6, ty + 5).lineTo(Math.max(M + 20, tx - 12), ty + 5).stroke();
-      doc.moveTo(tx + tw + 12, ty + 5).lineTo(PAGE_W - M - 6, ty + 5).stroke();
-      doc.restore();
     }
   }
 
@@ -695,6 +690,9 @@ export class ReportCardPdfService {
   private rowValues(row: PdfResult, headers: string[], showGradePoints: boolean): string[] {
     if (row.status === 'EXEMPT') {
       return headers.map((h) => (h === 'Subject' ? row.subjectName : h === 'Total' || h === 'Grade' ? 'EXEMPT' : h === 'Remark' ? 'Exempt' : '-'));
+    }
+    if (row.status === 'ABSENT' || row.status === 'NOT_SAT') {
+      return headers.map((h) => (h === 'Subject' ? row.subjectName : '-'));
     }
     return headers.map((h) => {
       switch (h) {
@@ -871,23 +869,25 @@ export class ReportCardPdfService {
     if (!fields.length) return;
 
     const rows = Math.ceil(fields.length / 3);
-    this.ensureSpace(ctx, LABEL_H + rows * 36);
+    const rowH = ctx.u.compact ? 32 : 36;
+    const boxH = ctx.u.compact ? 27 : 30;
+    this.ensureSpace(ctx, LABEL_H + rows * rowH);
     this.renderLabel(ctx, 'HOLISTIC ASSESSMENT');
 
     const gap = 8;
     const cw = (CW - gap * 2) / 3;
     fields.forEach(([label, value], i) => {
       const x = M + (i % 3) * (cw + gap);
-      const y = ctx.y + Math.floor(i / 3) * 36;
-      doc.save().roundedRect(x, y, cw, 30, 7).fill(PANEL).restore();
-      doc.save().roundedRect(x, y, cw, 30, 7).lineWidth(0.9).strokeColor(BORDER).stroke().restore();
+      const y = ctx.y + Math.floor(i / 3) * rowH;
+      doc.save().roundedRect(x, y, cw, boxH, 7).fill(PANEL).restore();
+      doc.save().roundedRect(x, y, cw, boxH, 7).lineWidth(0.9).strokeColor(BORDER).stroke().restore();
       doc.font('Helvetica-Bold').fontSize(7.5).fillColor(MUTED)
         .text(label.toUpperCase(), x + 10, y + 5, { characterSpacing: 0.5, lineBreak: false });
       const t = this.fitText(doc, value, 'Helvetica-Bold', 10.5, cw - 20, 7);
       doc.font('Helvetica-Bold').fontSize(t.size).fillColor(NAVY).text(t.text, x + 10, y + 16, { lineBreak: false });
     });
     doc.fillColor(INK);
-    ctx.y += rows * 36 + 6;
+    ctx.y += rows * rowH + 6;
   }
 
   private renderAttendance(ctx: Ctx) {
@@ -963,7 +963,7 @@ export class ReportCardPdfService {
       const hasComment = !!(comment && comment.trim());
       doc.font(hasComment ? 'Helvetica' : 'Helvetica-Oblique').fontSize(9.5).fillColor(hasComment ? INK : MUTED)
         .text(hasComment ? (comment as string).trim() : 'No comment provided.', x + 12, y + headH + 7, {
-          width: bw - 24, height: ctx.u.comment - headH - 28, ellipsis: true,
+          width: bw - 24, height: ctx.u.comment - headH - (compact ? 22 : 28), ellipsis: true,
         });
 
       // Blank line left for a handwritten signature
@@ -973,235 +973,6 @@ export class ReportCardPdfService {
     });
     doc.fillColor(INK);
     ctx.y = y + ctx.u.comment;
-  }
-
-  // ─── Mountain illustration ─────────────────────────────────────────────────
-
-  /**
-   * Vector Kilimanjaro: Kibo's crater rim and glaciers, Shira and Mawenzi behind it,
-   * a cloud band, savanna scrub, acacias and a small elephant herd. Deterministic.
-   */
-  private drawMountain(doc: Doc) {
-    const base = 808;
-    doc.save();
-
-    // Soft sky glow so the white summit reads against the white page
-    const glow = doc.radialGradient(308, 772, 0, 308, 772, 175);
-    glow.stop(0, '#D3E5F6', 0.7).stop(0.55, '#E6F0FA', 0.4).stop(1, '#FFFFFF', 0);
-    doc.rect(90, 728, 440, 90).fill(glow);
-
-    // A few birds
-    doc.save().lineWidth(0.9).lineCap('round').strokeColor('#8AA3C3').strokeOpacity(0.85);
-    [[236, 754, 1], [250, 748, 0.8], [378, 752, 0.9], [392, 746, 0.7], [404, 756, 0.6]].forEach(([bx, by, bs]) => {
-      doc.save().translate(bx, by).scale(bs);
-      doc.moveTo(-5, 1).quadraticCurveTo(-2.5, -3, 0, 0).quadraticCurveTo(2.5, -3, 5, 1).stroke();
-      doc.restore();
-    });
-    doc.restore();
-
-    // Distant rolling hills
-    doc.save();
-    doc.path(`M 0 800 C 60 792 110 797 170 790 C 220 785 250 792 290 790 C 340 788 380 795 440 790 C 500 786 550 794 ${PAGE_W} 790 L ${PAGE_W} ${base} L 0 ${base} Z`)
-      .fillColor('#D5E1EF').fillOpacity(0.7).fill();
-    doc.restore();
-
-    // Shira plateau (left) and jagged Mawenzi (right) behind Kibo
-    doc.save();
-    doc.path(`M 50 ${base} C 95 794 140 782 188 782 C 222 782 246 787 266 793 L 266 ${base} Z`).fillColor('#BDCEE3').fillOpacity(0.65).fill();
-    doc.path(`M 410 ${base} L 436 794 L 458 779 L 465 783 L 477 763 L 486 774 L 494 769 L 512 790 L 538 797 L 570 ${base} Z`).fillColor('#A6BBD6').fillOpacity(0.7).fill();
-    doc.path('M 466 783 L 477 763 L 486 774 L 480 778 Z').fillColor('#FFFFFF').fillOpacity(0.9).fill();
-    doc.restore();
-
-    // Kibo: broad dome; the rim dips into the crater between Uhuru (left) and Gillman's Point (right)
-    const topEdge =
-      'M 0 806 C 40 805 80 803 120 800 C 160 797 195 792 222 783 ' +
-      'C 244 776 262 764 276 754 C 283 749 288 745 294 743 L 299 742.2 C 302 742.2 304 744.5 308 746 ' +
-      'L 316 747 C 320 746 323 744.5 328 744.2 L 334 744.5 C 340 746 344 749 349 753 ' +
-      'C 363 762 381 772 405 780 C 433 789 470 796 515 800 C 550 803 575 805 595.28 806';
-    const kibo = `${topEdge} L ${PAGE_W} ${base} L 0 ${base} Z`;
-    const body = doc.linearGradient(0, 742, 0, base);
-    body.stop(0, '#46678F').stop(0.45, '#7A97C0').stop(1, '#D2E0EF');
-    doc.path(kibo).fill(body);
-
-    doc.save();
-    doc.path(kibo).clip();
-
-    // Sunlit left flank
-    const lit = doc.linearGradient(232, 0, 312, 0);
-    lit.stop(0, '#FFFFFF', 0).stop(0.7, '#FFFFFF', 0.28).stop(1, '#FFFFFF', 0);
-    doc.rect(232, 740, 80, 70).fill(lit);
-
-    // Shaded right flank
-    const shade = doc.linearGradient(296, 0, 450, 0);
-    shade.stop(0, '#2B4A7B', 0).stop(0.2, '#2B4A7B', 0.42).stop(1, '#2B4A7B', 0.04);
-    doc.path('M 296 742 L 334 744.5 C 340 746 344 749 349 753 C 363 762 381 772 405 780 C 433 789 470 796 515 800 L 296 808 Z').fill(shade);
-
-    // Rock ribs and gullies running down from the snow line
-    doc.lineWidth(0.8).strokeColor('#3F5F8F').strokeOpacity(0.4);
-    [
-      [270, 772, 250, 786, 222, 795], [284, 776, 276, 788, 264, 803], [298, 780, 292, 792, 286, 805],
-      [312, 782, 310, 793, 306, 805], [328, 780, 338, 790, 352, 803], [344, 776, 366, 787, 394, 797],
-      [358, 772, 384, 783, 420, 793], [372, 774, 404, 786, 446, 797],
-    ].forEach(([x1, y1, cx, cy, x2, y2]) => {
-      doc.moveTo(x1, y1).quadraticCurveTo(cx, cy, x2, y2).stroke();
-    });
-
-    // Ice-cliff shadow just under the glacier edge, then the snow field itself
-    const edgePts: Array<[number, number]> = [
-      [396, 772], [382, 770], [374, 766], [366, 775], [359, 768], [352, 779], [346, 770], [340, 783], [332, 772],
-      [325, 777], [318, 772], [311, 785], [304, 774], [297, 781], [290, 770], [283, 780], [276, 773], [268, 777],
-      [258, 774], [246, 770],
-    ];
-    // Rounded glacier lobes: quadratic curves through the midpoints of the ragged edge points.
-    const snowEdge = (dy: number) => {
-      const pts = edgePts.map(([x, y]) => [x, y + dy] as [number, number]);
-      let d = `M 226 700 L 396 700 L ${pts[0][0]} ${pts[0][1]}`;
-      for (let i = 1; i < pts.length - 1; i++) {
-        const mx = (pts[i][0] + pts[i + 1][0]) / 2;
-        const my = (pts[i][1] + pts[i + 1][1]) / 2;
-        d += ` Q ${pts[i][0]} ${pts[i][1]} ${mx} ${my}`;
-      }
-      const last = pts[pts.length - 1];
-      return `${d} L ${last[0]} ${last[1]} L 226 ${last[1] - 10} Z`;
-    };
-    doc.save().path(snowEdge(4)).fillColor('#7F9CC6').fillOpacity(0.5).fill().restore();
-    const snow = doc.linearGradient(226, 0, 396, 0);
-    snow.stop(0, '#DCE7F5').stop(0.28, '#FFFFFF').stop(0.66, '#FFFFFF').stop(1, '#C3D4EA');
-    doc.path(snowEdge(0)).fill(snow);
-
-    // Glacier flutes and crevasse lines in the snow
-    doc.lineWidth(0.9).strokeColor('#7F9DC8').strokeOpacity(0.6);
-    [
-      [296, 747, 294, 760, 292, 774], [306, 747, 308, 760, 309, 776], [318, 748, 321, 761, 324, 774],
-      [330, 748, 336, 760, 341, 771], [286, 752, 282, 763, 279, 773], [340, 752, 348, 761, 355, 768],
-      [350, 757, 358, 764, 364, 770], [272, 762, 268, 769, 264, 776],
-    ].forEach(([x1, y1, cx, cy, x2, y2]) => {
-      doc.moveTo(x1, y1).quadraticCurveTo(cx, cy, x2, y2).stroke();
-    });
-    // Soft shade across the right of the snow
-    const snowShade = doc.linearGradient(322, 744, 380, 772);
-    snowShade.stop(0, '#6F90BE', 0.22).stop(1, '#6F90BE', 0);
-    doc.path('M 322 744 C 334 745 342 749 352 756 L 376 772 L 332 774 Z').fill(snowShade);
-    doc.restore();
-
-    // Crisp outline along the whole silhouette
-    doc.path(topEdge).lineWidth(0.9).strokeColor('#6B8AB5').strokeOpacity(0.9).stroke();
-
-    // Thin cirrus drifting past the summit
-    doc.save().fillColor('#FFFFFF').fillOpacity(0.9);
-    doc.ellipse(412, 748, 34, 1.6).fill();
-    doc.ellipse(430, 752, 26, 1.2).fill();
-    doc.ellipse(212, 757, 28, 1.3).fill();
-    doc.restore();
-
-    // Mist at the foot of the mountain
-    const mist = doc.linearGradient(0, 790, 0, base + 2);
-    mist.stop(0, '#FFFFFF', 0).stop(1, '#FFFFFF', 0.9);
-    doc.rect(0, 790, PAGE_W, base + 2 - 790).fill(mist);
-
-    // Cloud band hugging the lower slopes
-    this.cloud(doc, 92, 799, 1.25);
-    this.cloud(doc, 196, 795, 1.1);
-    this.cloud(doc, 262, 799, 0.8);
-    this.cloud(doc, 372, 796, 0.9);
-    this.cloud(doc, 446, 799, 1.15);
-    this.cloud(doc, 540, 796, 1.2);
-
-    // Savanna scrub: two soft silhouettes (deterministic, so every card is identical)
-    let seed = 20261109;
-    const rnd = () => {
-      seed = (seed + 0x6d2b79f5) | 0;
-      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-    };
-    const scrub = (step: number, color: string, opacity: number, lift: number) => {
-      let d = `M 0 ${base + 2}`;
-      for (let x = 0; x <= PAGE_W + step; x += step) {
-        const edge = Math.min(x, PAGE_W - x);
-        const boost = edge < 170 ? (170 - edge) / 170 : 0;
-        const h = 1.2 + rnd() * 2.4 + boost * lift;
-        d += ` L ${x} ${base - h}`;
-      }
-      d += ` L ${PAGE_W + step} ${base + 2} Z`;
-      doc.path(d).fillColor(color).fillOpacity(opacity).fill();
-    };
-    scrub(3, '#B1C4DA', 0.6, 3.5);
-    scrub(2.2, '#97AECA', 0.5, 2.5);
-    doc.fillOpacity(1);
-
-    // Grass tufts in the foreground
-    doc.save().lineWidth(0.6).lineCap('round').strokeColor('#8FA7C4').strokeOpacity(0.7);
-    for (let i = 0; i < 46; i++) {
-      const gx = rnd() * PAGE_W;
-      const gh = 2.5 + rnd() * 3;
-      doc.moveTo(gx, base + 1).quadraticCurveTo(gx - 1, base - gh * 0.6, gx - 1.8, base - gh).stroke();
-      doc.moveTo(gx, base + 1).quadraticCurveTo(gx + 0.5, base - gh * 0.7, gx + 1.2, base - gh * 1.1).stroke();
-    }
-    doc.restore();
-
-    // Flat-topped acacias
-    this.acacia(doc, 44, base, 1.5);
-    this.acacia(doc, 98, base, 1.0);
-    this.acacia(doc, 142, base, 0.6);
-    this.acacia(doc, 552, base, 1.45);
-    this.acacia(doc, 506, base, 0.95);
-    this.acacia(doc, 462, base, 0.55);
-
-    // A small herd of elephants crossing the plain, echoing the school crest
-    this.elephant(doc, 214, base + 0.5, 0.95, false);
-    this.elephant(doc, 244, base + 0.5, 0.7, false);
-    this.elephant(doc, 392, base + 0.5, 0.8, true);
-
-    doc.restore();
-  }
-
-  private cloud(doc: Doc, x: number, y: number, s: number) {
-    doc.save().translate(x, y).scale(s);
-    doc.fillColor('#B8CBE1').fillOpacity(0.35).ellipse(0, 2.2, 30, 3).fill();
-    doc.fillColor('#FFFFFF').fillOpacity(0.85);
-    doc.ellipse(-12, 0, 13, 3.4).fill();
-    doc.ellipse(4, -1.2, 16, 4.2).fill();
-    doc.ellipse(18, 0.4, 12, 3.2).fill();
-    doc.restore();
-  }
-
-  private elephant(doc: Doc, x: number, y: number, s: number, flip: boolean) {
-    doc.save().translate(x, y).scale(flip ? -s : s, s);
-    const body = '#86A0BE';
-    doc.fillColor(body).fillOpacity(0.9).strokeColor(body).strokeOpacity(0.9);
-    // legs
-    [[-8, 0], [-3.5, 0.6], [3.5, 0.6], [8, 0]].forEach(([lx, ly]) => doc.rect(lx - 1.2, -8 + ly, 2.5, 8 - ly).fill());
-    // body and head
-    doc.ellipse(0, -11, 11.5, 6.8).fill();
-    doc.ellipse(11.5, -13.5, 5, 5.4).fill();
-    // trunk
-    doc.lineWidth(2.2).lineCap('round');
-    doc.moveTo(15, -11.5).bezierCurveTo(18, -9, 18.5, -5.5, 16.5, -2.5).stroke();
-    // ear and tail
-    doc.fillColor('#6F8BAE').fillOpacity(0.85).ellipse(9, -12.5, 3, 4).fill();
-    doc.lineWidth(0.7).moveTo(-11.5, -12).quadraticCurveTo(-14, -9, -13.5, -5).stroke();
-    doc.restore();
-  }
-
-  private acacia(doc: Doc, x: number, y: number, s: number) {
-    doc.save();
-    doc.translate(x, y).scale(s);
-    const dark = '#8AA2BE';
-    // Slender trunk and limbs
-    doc.lineCap('round').lineJoin('round').strokeColor(dark).strokeOpacity(0.9);
-    doc.lineWidth(1.5).moveTo(0, 0).bezierCurveTo(-1, -8, -2, -15, -6, -23).stroke();
-    doc.lineWidth(1.0).moveTo(-3, -14).bezierCurveTo(2, -20, 6, -25, 11, -29).stroke();
-    doc.lineWidth(0.9).moveTo(-5, -20).bezierCurveTo(-9, -23, -12, -25, -15, -27).stroke();
-    // Layered umbrella canopy
-    doc.fillColor(dark).fillOpacity(0.85);
-    doc.ellipse(-12, -28, 16, 3).fill();
-    doc.ellipse(11, -31, 19, 3.4).fill();
-    doc.ellipse(-1, -25, 12, 2.4).fill();
-    doc.fillOpacity(0.7).ellipse(0, -35, 14, 3).fill();
-    doc.fillColor('#B9CADD').fillOpacity(0.6).ellipse(2, -36.2, 11, 1.4).fill();
-    doc.ellipse(13, -32.6, 14, 1.2).fill();
-    doc.restore();
   }
 
   // ─── Drawing helpers ───────────────────────────────────────────────────────

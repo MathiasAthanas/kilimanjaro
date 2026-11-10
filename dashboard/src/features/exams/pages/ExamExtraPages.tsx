@@ -163,8 +163,11 @@ export function ExamPerformancePage() {
 
       {report && (report.standards as any[]).map((st) => {
         const active = tab[st.key] ?? 'ALL';
-        const rows: any[] = active === 'ALL' ? st.overall : (st.streams.find((x: any) => x.classId === active)?.rows ?? []);
+        const activeStream = st.streams.find((x: any) => x.classId === active);
+        const rows: any[] = active === 'ALL' ? st.overall : (activeStream?.rows ?? []);
+        const subjects: any[] = active === 'ALL' ? (st.subjects ?? report.subjects) : (activeStream?.subjects ?? st.subjects ?? report.subjects);
         const roster = report.source === 'ROSTER';
+        const showDivision = st.stage === 'O_LEVEL' || st.stage === 'A_LEVEL';
         return (
           <Card key={st.key} className="mb-5 overflow-hidden">
             <div className="flex flex-wrap items-center gap-2 border-b border-ks-line bg-ks-paper px-4 py-3">
@@ -179,30 +182,32 @@ export function ExamPerformancePage() {
               <table className="w-full text-xs">
                 <thead className="bg-ks-navy text-left text-white">
                   <tr>
-                    {roster ? <th className="px-3 py-2">#</th> : <><th className="px-3 py-2">STR</th><th className="px-3 py-2">OVR</th></>}
+                    <th className="px-3 py-2">No.</th>
                     <th className="px-3 py-2">ADMNO</th><th className="px-3 py-2">Name</th><th className="px-3 py-2">Sex</th><th className="px-3 py-2">Class</th>
-                    {!roster && (report.subjects as any[]).map((s) => <th key={s.key} className="px-2 py-2 text-center" title={s.label}>{S(s.label).slice(0, 6)}</th>)}
-                    {!roster && <><th className="px-2 py-2 text-center">SBJ</th><th className="px-2 py-2 text-center">AVG %</th><th className="px-2 py-2 text-center">GR</th><th className="px-2 py-2">Division</th></>}
+                    {!roster && subjects.map((s) => <th key={s.key} className="px-2 py-2 text-center" title={s.label}>{S(s.label).slice(0, 6)}</th>)}
+                    {!roster && <><th className="px-2 py-2 text-center">SBJ</th><th className="px-2 py-2 text-center">AVG %</th><th className="px-2 py-2 text-center">GR</th>{showDivision && <th className="px-2 py-2">Division</th>}<th className="px-2 py-2 text-center">STR</th><th className="px-2 py-2 text-center">OVR</th></>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-ks-line">
                   {rows.map((r, i) => (
                     <tr key={S(r.studentId)} className="hover:bg-ks-paper/50">
-                      {roster ? <td className="px-3 py-2 text-ks-muted">{i + 1}</td> : <><td className="px-3 py-2 font-bold text-ks-navy">{N(r.streamRank)}</td><td className="px-3 py-2 text-ks-muted">{N(r.standardRank)}</td></>}
+                      <td className="px-3 py-2 text-ks-muted">{i + 1}</td>
                       <td className="px-3 py-2">{S(r.registrationNumber)}</td>
                       <td className="px-3 py-2 font-semibold text-ks-navy">{S(r.name)}</td>
                       <td className="px-3 py-2">{S(r.gender)}</td>
                       <td className="px-3 py-2">{formatClassLabel(S(r.className), r.stream)}</td>
-                      {!roster && (report.subjects as any[]).map((s) => {
+                      {!roster && subjects.map((s) => {
                         const c = r.subjects?.[s.key];
-                        const text = !c ? '·' : c.status === 'EXEMPT' ? 'EXEMPT' : c.status === 'NOT_SAT' ? 'NS' : c.status === 'ABSENT' ? 'ABS' : `${Math.round(N(c.percentage))} ${S(c.grade)}`;
+                        const text = !c ? '·' : c.status === 'EXEMPT' ? 'EXEMPT' : c.status === 'NOT_SAT' || c.status === 'ABSENT' ? '-' : `${Math.round(N(c.percentage))} ${S(c.grade)}`;
                         return <td key={s.key} className={`px-2 py-2 text-center ${c?.status === 'EXEMPT' ? 'text-ks-blue' : c?.status === 'NOT_SAT' || c?.status === 'ABSENT' ? 'text-[#7a5200]' : ''}`}>{text}</td>;
                       })}
                       {!roster && <>
                         <td className="px-2 py-2 text-center">{r.subjectsExpected && r.subjectsAssessed !== r.subjectsExpected ? `${N(r.subjectsAssessed)}/${N(r.subjectsExpected)}` : N(r.subjectsAssessed)}</td>
                         <td className="px-2 py-2 text-center font-bold">{r.average === null ? '' : N(r.average).toFixed(1)}</td>
                         <td className="px-2 py-2 text-center">{S(r.grade)}</td>
-                        <td className="px-2 py-2">{S(r.division).replace('Division ', 'Div ')}</td>
+                        {showDivision && <td className="px-2 py-2">{S(r.division).replace('Division ', 'Div ')}</td>}
+                        <td className="px-2 py-2 text-center font-bold text-ks-navy">{N(r.streamRank)}</td>
+                        <td className="px-2 py-2 text-center text-ks-muted">{N(r.standardRank)}</td>
                       </>}
                     </tr>
                   ))}

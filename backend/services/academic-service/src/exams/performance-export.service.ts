@@ -55,6 +55,7 @@ export interface PerfStream {
   classId: string;
   label: string;
   stream: string | null;
+  subjects: Array<{ key: string; label: string }>;
   rows: PerfRow[];
 }
 
@@ -63,6 +64,7 @@ export interface PerfStandard {
   label: string;
   level: number | null;
   stage: string;
+  subjects: Array<{ key: string; label: string }>;
   /** Everyone in the standard, highest average first. */
   overall: PerfRow[];
   streams: PerfStream[];
@@ -72,6 +74,7 @@ export interface PerformanceReport {
   title: string;
   source: 'WINDOW' | 'TERM' | 'ROSTER';
   sourceLabel: string;
+  schoolName: string;
   generatedAt: string;
   subjects: Array<{ key: string; label: string }>;
   standards: PerfStandard[];
@@ -113,6 +116,28 @@ export class PerformanceExportService {
     return [s.firstName, s.middleName, s.lastName].filter(Boolean).join(' ').trim();
   }
 
+  private subjectsForRows(rows: PerfRow[]): Array<{ key: string; label: string }> {
+    const subjects = new Map<string, string>();
+    for (const row of rows) {
+      for (const [key, subject] of Object.entries(row.subjects)) {
+        if (subject.status !== 'MISSING') subjects.set(key, subject.label);
+      }
+    }
+    return [...subjects.entries()]
+      .map(([key, label]) => ({ key, label }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }
+
+  private performanceTitle(label: string, roster: boolean): string {
+    const words: Record<string, string> = {
+      '1': 'One', '2': 'Two', '3': 'Three', '4': 'Four', '5': 'Five', '6': 'Six', '7': 'Seven',
+    };
+    const readable = label.replace(/\b(Class|Form)\s+([1-7])\b/gi, (_match, prefix: string, level: string) =>
+      `${prefix[0].toUpperCase()}${prefix.slice(1).toLowerCase()} ${words[level]}`,
+    );
+    return `${readable} ${roster ? 'Student List' : 'Performance'}`;
+  }
+
   /** Build the grouped, ranked report (highest average first, per stream and per standard). */
   async build(q: PerformanceQuery, user: RequestUser): Promise<PerformanceReport> {
     let academicYearId = q.academicYearId;
@@ -135,6 +160,7 @@ export class PerformanceExportService {
     let classes = this.unwrap<any>(classesPayload).map((c) => ({
       id: c.id as string,
       name: c.name as string,
+      schoolId: (c.schoolId ?? null) as string | null,
       level: (c.level ?? null) as number | null,
       stream: (c.stream ?? null) as string | null,
       stage: (c.educationStage ?? 'PRIMARY') as string,
@@ -143,8 +169,6 @@ export class PerformanceExportService {
 
     // ── raw performance rows keyed by student ───────────────────────────
     const perf = new Map<string, { average: number; grade: string; division: string; assessed: number | null; expected: number | null; subjects: Record<string, PerfSubject> }>();
-    const subjectCols = new Map<string, string>();
-
     if (source === 'WINDOW' && window) {
       const rows = await this.prisma.examWindowResult.findMany({ where: { examWindowId: window.id } });
       for (const r of rows) {
@@ -153,7 +177,6 @@ export class PerformanceExportService {
         for (const k of Object.keys(scores)) {
           const s = scores[k];
           subjects[s.subjectId] = { label: s.subjectName, percentage: s.percentage ?? null, grade: s.grade ?? '', status: s.status ?? (s.isAbsent ? 'ABSENT' : 'SCORED') };
-          subjectCols.set(s.subjectId, s.subjectName);
         }
         perf.set(r.studentId, { average: r.mean, grade: r.overallGrade, division: r.division ?? '', assessed: r.subjectsAssessed, expected: r.subjectsExpected, subjects });
       }
@@ -170,7 +193,6 @@ export class PerformanceExportService {
         const subjects: Record<string, PerfSubject> = {};
         for (const r of byStudent.get(c.studentId) ?? []) {
           subjects[r.subjectId] = { label: r.subjectName, percentage: r.resultStatus === 'EXEMPT' ? null : r.weightedTotal, grade: r.grade, status: r.resultStatus };
-          subjectCols.set(r.subjectId, r.subjectName);
         }
         const ds = (c.divisionSummary ?? {}) as Record<string, any>;
         perf.set(c.studentId, {
@@ -246,7 +268,13 @@ export class PerformanceExportService {
       const classIds = [...new Set(visible.map((r) => r.classId))];
       for (const cid of classIds) {
         const sRows = visible.filter((r) => r.classId === cid).sort(sortFn);
-        streams.push({ classId: cid, label: formatClassLabel(sRows[0].className, sRows[0].stream), stream: sRows[0].stream, rows: sRows });
+        streams.push({
+          classId: cid,
+          label: formatClassLabel(sRows[0].className, sRows[0].stream),
+          stream: sRows[0].stream,
+          subjects: this.subjectsForRows(sRows),
+          rows: sRows,
+        });
       }
       streams.sort((a, b) => a.label.localeCompare(b.label));
       standards.push({
@@ -254,6 +282,7 @@ export class PerformanceExportService {
         label: first.level === null ? first.className : `${first.className.replace(/\s+[A-Z]$/, '')}`.trim(),
         level: first.level,
         stage: first.stage,
+        subjects: this.subjectsForRows(visible),
         overall: [...visible].sort(sortFn),
         streams,
       });
@@ -268,12 +297,31 @@ export class PerformanceExportService {
       );
     }
 
+    const selectedSchoolIds = [...new Set(classes
+      .filter((c) => !q.classId || c.id === q.classId)
+      .map((c) => c.schoolId)
+      .filter((id): id is string => Boolean(id)))];
+    const schoolId = window?.schoolId ?? user.activeSchoolId ?? (selectedSchoolIds.length === 1 ? selectedSchoolIds[0] : null);
+    let schoolName = 'Kilimanjaro Schools';
+    if (schoolId) {
+      try {
+        const payload = await this.studentClient.get<any>(`/schools/${schoolId}`, undefined, this.headers(user));
+        const school = payload?.data?.data ?? payload?.data ?? payload;
+        schoolName = school?.name || schoolName;
+      } catch {
+        // Keep exports available if school metadata is temporarily unavailable.
+      }
+    }
+    const visibleSubjects = new Map<string, string>();
+    standards.forEach((standard) => standard.subjects.forEach((subject) => visibleSubjects.set(subject.key, subject.label)));
+
     return {
       title: source === 'ROSTER' ? 'Student list' : `Student performance — ${sourceLabel}`,
       source,
       sourceLabel,
+      schoolName,
       generatedAt: new Date().toISOString(),
-      subjects: [...subjectCols.entries()].map(([key, label]) => ({ key, label })).sort((a, b) => a.label.localeCompare(b.label)),
+      subjects: [...visibleSubjects.entries()].map(([key, label]) => ({ key, label })).sort((a, b) => a.label.localeCompare(b.label)),
       standards,
       totalStudents: rows.length,
     };
@@ -283,8 +331,7 @@ export class PerformanceExportService {
   private cell(s?: PerfSubject): string {
     if (!s) return '';
     if (s.status === 'EXEMPT') return 'EXEMPT';
-    if (s.status === 'NOT_SAT') return 'NS';
-    if (s.status === 'ABSENT') return 'ABS';
+    if (s.status === 'NOT_SAT' || s.status === 'ABSENT') return '-';
     return s.percentage === null ? '' : `${Math.round(s.percentage)} ${s.grade}`.trim();
   }
 
@@ -310,15 +357,35 @@ export class PerformanceExportService {
     const used = new Set<string>();
     const roster = report.source === 'ROSTER';
 
-    const addSheet = (name: string, title: string, rows: PerfRow[], withStreamCol: boolean) => {
-      const ws = wb.addWorksheet(this.sheetName(name, used), { views: [{ state: 'frozen', ySplit: 3 }] });
+    const addSheet = (
+      name: string,
+      title: string,
+      rows: PerfRow[],
+      subjects: Array<{ key: string; label: string }>,
+      stage: string,
+      withStreamCol: boolean,
+    ) => {
+      const ws = wb.addWorksheet(this.sheetName(name, used), { views: [{ state: 'frozen', ySplit: 4 }] });
+      const showDivision = stage === 'O_LEVEL' || stage === 'A_LEVEL';
       const head: string[] = roster
-        ? ['#', 'ADMNO', 'NAME', 'GENDER', 'CLASS', 'STREAM']
-        : ['STR POS', 'OVR POS', 'ADMNO', 'NAME', 'GENDER', ...(withStreamCol ? ['STREAM'] : []), ...report.subjects.map((s) => s.label), 'SUBJECTS', 'AVG %', 'GRADE', 'DIVISION'];
+        ? ['NO.', 'ADMNO', 'NAME', 'GENDER', 'CLASS', 'STREAM']
+        : [
+            'NO.', 'ADMNO', 'NAME', 'GENDER', ...subjects.map((s) => s.label),
+            'SUBJECTS', 'AVG %', 'GRADE', ...(showDivision ? ['DIVISION'] : []),
+            ...(withStreamCol ? ['STREAM'] : []), 'STREAM POSITION', 'OVERALL POSITION',
+          ];
       ws.mergeCells(1, 1, 1, head.length);
-      ws.getCell(1, 1).value = title;
+      ws.getCell(1, 1).value = report.schoolName;
       ws.getCell(1, 1).font = { bold: true, size: 14 };
-      ws.addRow([]);
+      ws.getCell(1, 1).alignment = { horizontal: 'center' };
+      ws.mergeCells(2, 1, 2, head.length);
+      ws.getCell(2, 1).value = title;
+      ws.getCell(2, 1).font = { bold: true, size: 13 };
+      ws.getCell(2, 1).alignment = { horizontal: 'center' };
+      ws.mergeCells(3, 1, 3, head.length);
+      ws.getCell(3, 1).value = report.sourceLabel;
+      ws.getCell(3, 1).font = { italic: true, size: 11 };
+      ws.getCell(3, 1).alignment = { horizontal: 'center' };
       const hr = ws.addRow(head);
       hr.font = { bold: true, color: { argb: 'FFFFFFFF' } };
       hr.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A5F' } };
@@ -327,23 +394,26 @@ export class PerformanceExportService {
           roster
             ? [i + 1, r.registrationNumber, r.name, r.gender, r.className, r.stream ?? '']
             : [
-                r.streamRank, r.standardRank, r.registrationNumber, r.name, r.gender,
-                ...(withStreamCol ? [r.stream ?? ''] : []),
-                ...report.subjects.map((s) => this.cell(r.subjects[s.key])),
+                i + 1, r.registrationNumber, r.name, r.gender,
+                ...subjects.map((s) => this.cell(r.subjects[s.key])),
                 r.subjectsExpected && r.subjectsAssessed !== r.subjectsExpected ? `${r.subjectsAssessed}/${r.subjectsExpected}` : r.subjectsAssessed ?? '',
-                r.average, r.grade, r.division,
+                r.average, r.grade, ...(showDivision ? [r.division] : []),
+                ...(withStreamCol ? [r.stream ?? ''] : []), r.streamRank, r.standardRank,
               ],
         );
       });
-      ws.columns.forEach((c, idx) => { c.width = idx === (roster ? 2 : 3) ? 30 : idx < 5 ? 12 : 11; });
+      ws.columns.forEach((c, idx) => {
+        const heading = head[idx];
+        c.width = heading === 'NAME' ? 30 : heading?.includes('POSITION') ? 17 : idx < 5 ? 12 : 11;
+      });
     };
 
     for (const st of report.standards) {
       if (report.standards.length > 1 || st.streams.length > 1) {
-        addSheet(`${st.label} overall`, `${st.label} — all streams, highest to lowest (${report.sourceLabel})`, st.overall, true);
+        addSheet(`${st.label} overall`, this.performanceTitle(st.label, roster), st.overall, st.subjects, st.stage, true);
       }
       for (const stream of st.streams) {
-        addSheet(stream.label, `${stream.label} — highest to lowest (${report.sourceLabel})`, stream.rows, false);
+        addSheet(stream.label, this.performanceTitle(stream.label, roster), stream.rows, stream.subjects, st.stage, false);
       }
     }
     const buffer = (await wb.xlsx.writeBuffer()) as unknown as Buffer;
@@ -358,17 +428,19 @@ export class PerformanceExportService {
       return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
     };
     const roster = report.source === 'ROSTER';
+    const showDivision = report.standards.some((standard) => standard.stage === 'O_LEVEL' || standard.stage === 'A_LEVEL');
     const head = roster
-      ? ['STANDARD', 'CLASS', 'STREAM', 'ADMNO', 'NAME', 'GENDER']
-      : ['STANDARD', 'CLASS', 'STREAM', 'STR POS', 'OVR POS', 'ADMNO', 'NAME', 'GENDER', ...report.subjects.map((s) => s.label), 'SUBJECTS ASSESSED', 'SUBJECTS EXPECTED', 'AVG %', 'GRADE', 'DIVISION'];
+      ? ['NO.', 'STANDARD', 'CLASS', 'STREAM', 'ADMNO', 'NAME', 'GENDER']
+      : ['NO.', 'STANDARD', 'CLASS', 'ADMNO', 'NAME', 'GENDER', ...report.subjects.map((s) => s.label), 'SUBJECTS ASSESSED', 'SUBJECTS EXPECTED', 'AVG %', 'GRADE', ...(showDivision ? ['DIVISION'] : []), 'STREAM', 'STREAM POSITION', 'OVERALL POSITION'];
     const lines = [head.map(esc).join(',')];
+    let rowNumber = 0;
     for (const st of report.standards) {
       for (const stream of st.streams) {
         for (const r of stream.rows) {
           lines.push(
             (roster
-              ? [st.label, r.className, r.stream ?? '', r.registrationNumber, r.name, r.gender]
-              : [st.label, r.className, r.stream ?? '', r.streamRank, r.standardRank, r.registrationNumber, r.name, r.gender, ...report.subjects.map((s) => this.cell(r.subjects[s.key])), r.subjectsAssessed ?? '', r.subjectsExpected ?? '', r.average, r.grade, r.division]
+              ? [++rowNumber, st.label, r.className, r.stream ?? '', r.registrationNumber, r.name, r.gender]
+              : [++rowNumber, st.label, r.className, r.registrationNumber, r.name, r.gender, ...report.subjects.map((s) => this.cell(r.subjects[s.key])), r.subjectsAssessed ?? '', r.subjectsExpected ?? '', r.average, r.grade, ...(showDivision ? [r.division] : []), r.stream ?? '', r.streamRank, r.standardRank]
             ).map(esc).join(','),
           );
         }
@@ -389,34 +461,43 @@ export class PerformanceExportService {
       doc.on('error', reject);
 
       const W = doc.page.width - 56;
-      const cols: Array<{ h: string; w: number; v: (r: PerfRow) => string; align?: 'left' | 'center' }> = roster
-        ? [
-            { h: '#', w: 28, v: () => '' },
-            { h: 'ADMNO', w: 100, v: (r) => r.registrationNumber },
-            { h: 'NAME', w: 260, v: (r) => r.name, align: 'left' },
-            { h: 'GENDER', w: 50, v: (r) => r.gender },
-            { h: 'CLASS', w: 100, v: (r) => r.className },
-            { h: 'STREAM', w: 60, v: (r) => r.stream ?? '' },
-          ]
-        : [
-            { h: 'STR', w: 30, v: (r) => String(r.streamRank ?? '') },
-            { h: 'OVR', w: 30, v: (r) => String(r.standardRank ?? '') },
-            { h: 'ADMNO', w: 90, v: (r) => r.registrationNumber },
-            { h: 'NAME', w: 170, v: (r) => r.name, align: 'left' },
-            { h: 'SEX', w: 28, v: (r) => r.gender },
-            ...report.subjects.slice(0, 9).map((s) => ({ h: s.label.slice(0, 7).toUpperCase(), w: 44, v: (r: PerfRow) => this.cell(r.subjects[s.key]) })),
-            { h: 'SBJ', w: 34, v: (r) => (r.subjectsExpected && r.subjectsAssessed !== r.subjectsExpected ? `${r.subjectsAssessed}/${r.subjectsExpected}` : String(r.subjectsAssessed ?? '')) },
-            { h: 'AVG %', w: 42, v: (r) => (r.average === null ? '' : r.average.toFixed(1)) },
-            { h: 'GR', w: 28, v: (r) => r.grade },
-            { h: 'DIVISION', w: 70, v: (r) => r.division.replace('Division ', 'Div ').slice(0, 14) },
-          ];
-      const scale = Math.min(1, W / cols.reduce((s, c) => s + c.w, 0));
-
-      const table = (title: string, rows: PerfRow[]) => {
+      const table = (
+        title: string,
+        rows: PerfRow[],
+        subjects: Array<{ key: string; label: string }>,
+        stage: string,
+        withStreamCol: boolean,
+      ) => {
+        const showDivision = stage === 'O_LEVEL' || stage === 'A_LEVEL';
+        const cols: Array<{ h: string; w: number; v: (r: PerfRow) => string; align?: 'left' | 'center' }> = roster
+          ? [
+              { h: 'NO.', w: 28, v: () => '' },
+              { h: 'ADMNO', w: 100, v: (r) => r.registrationNumber },
+              { h: 'NAME', w: 260, v: (r) => r.name, align: 'left' },
+              { h: 'GENDER', w: 50, v: (r) => r.gender },
+              { h: 'CLASS', w: 100, v: (r) => r.className },
+              { h: 'STREAM', w: 60, v: (r) => r.stream ?? '' },
+            ]
+          : [
+              { h: 'NO.', w: 28, v: () => '' },
+              { h: 'ADMNO', w: 90, v: (r) => r.registrationNumber },
+              { h: 'NAME', w: 150, v: (r) => r.name, align: 'left' },
+              { h: 'SEX', w: 28, v: (r) => r.gender },
+              ...subjects.map((s) => ({ h: s.label.slice(0, 7).toUpperCase(), w: 44, v: (r: PerfRow) => this.cell(r.subjects[s.key]) })),
+              { h: 'SBJ', w: 34, v: (r) => (r.subjectsExpected && r.subjectsAssessed !== r.subjectsExpected ? `${r.subjectsAssessed}/${r.subjectsExpected}` : String(r.subjectsAssessed ?? '')) },
+              { h: 'AVG %', w: 42, v: (r) => (r.average === null ? '' : r.average.toFixed(1)) },
+              { h: 'GR', w: 28, v: (r) => r.grade },
+              ...(showDivision ? [{ h: 'DIVISION', w: 70, v: (r: PerfRow) => r.division.replace('Division ', 'Div ').slice(0, 14) }] : []),
+              ...(withStreamCol ? [{ h: 'STREAM', w: 48, v: (r: PerfRow) => r.stream ?? '' }] : []),
+              { h: 'STR', w: 30, v: (r) => String(r.streamRank ?? '') },
+              { h: 'OVR', w: 30, v: (r) => String(r.standardRank ?? '') },
+            ];
+        const scale = Math.min(1, W / cols.reduce((s, c) => s + c.w, 0));
         doc.addPage();
-        doc.font('Helvetica-Bold').fontSize(13).fillColor('#1e3a5f').text(title, 28, 28);
-        doc.font('Helvetica').fontSize(8).fillColor('#64748b').text(`${rows.length} students · ${roster ? 'alphabetical' : 'highest to lowest average'} · generated ${new Date().toLocaleString()}`, 28, 46);
-        let y = 64;
+        doc.font('Helvetica-Bold').fontSize(11).fillColor('#1e3a5f').text(report.schoolName, 28, 24, { width: W, align: 'center' });
+        doc.font('Helvetica-Bold').fontSize(13).fillColor('#0f172a').text(title, 28, 40, { width: W, align: 'center' });
+        doc.font('Helvetica').fontSize(9).fillColor('#64748b').text(report.sourceLabel, 28, 57, { width: W, align: 'center' });
+        let y = 76;
         const header = () => {
           doc.rect(28, y, W, 16).fill('#1e3a5f');
           let x = 28;
@@ -429,7 +510,7 @@ export class PerformanceExportService {
           if (i % 2 === 0) doc.rect(28, y, W, 14).fill('#f1f5f9');
           let x = 28;
           cols.forEach((c, ci) => {
-            const text = roster && ci === 0 ? String(i + 1) : c.v(r);
+            const text = ci === 0 ? String(i + 1) : c.v(r);
             doc.fillColor('#0f172a').font(ci === 3 && !roster ? 'Helvetica-Bold' : 'Helvetica').fontSize(7).text(text, x + 2, y + 4, { width: c.w * scale - 4, align: c.align ?? 'center', lineBreak: false });
             x += c.w * scale;
           });
@@ -438,15 +519,15 @@ export class PerformanceExportService {
       };
 
       // cover
-      doc.font('Helvetica-Bold').fontSize(20).fillColor('#1e3a5f').text('KILIMANJARO SCHOOLS', 28, 150, { width: W, align: 'center' });
+      doc.font('Helvetica-Bold').fontSize(20).fillColor('#1e3a5f').text(report.schoolName.toUpperCase(), 28, 150, { width: W, align: 'center' });
       doc.fontSize(14).fillColor('#0f172a').text(report.title, 28, 184, { width: W, align: 'center' });
       doc.font('Helvetica').fontSize(10).fillColor('#64748b').text(
         `${report.totalStudents} students · ${report.standards.length} standard(s) · generated ${new Date().toLocaleString()}`,
         28, 212, { width: W, align: 'center' },
       );
       for (const st of report.standards) {
-        if (st.streams.length > 1) table(`${st.label} — all streams, highest to lowest`, st.overall);
-        for (const stream of st.streams) table(`${stream.label} — ${roster ? 'student list' : 'highest to lowest'}`, stream.rows);
+        if (st.streams.length > 1) table(this.performanceTitle(st.label, roster), st.overall, st.subjects, st.stage, true);
+        for (const stream of st.streams) table(this.performanceTitle(stream.label, roster), stream.rows, stream.subjects, st.stage, false);
       }
       doc.end();
     });

@@ -57,6 +57,14 @@ export class DownstreamService {
     return this.get<any>(base, `/students/internal/guardian-for-student/${studentId}`);
   }
 
+  async notificationRecipients(studentIds: string[]): Promise<any[]> {
+    const base = this.config.get<string>('STUDENT_SERVICE_URL', 'http://localhost:3002');
+    const data = await this.get<any>(base, '/students/internal/notification-recipients', {
+      ids: [...new Set(studentIds)].slice(0, 500).join(','),
+    });
+    return data?.data || data?.items || data || [];
+  }
+
   async classTeachers(classId: string): Promise<any[] | null> {
     const base = this.config.get<string>('STUDENT_SERVICE_URL', 'http://localhost:3002');
     const data = await this.get<any>(base, `/students/internal/class/${classId}/teachers`);
