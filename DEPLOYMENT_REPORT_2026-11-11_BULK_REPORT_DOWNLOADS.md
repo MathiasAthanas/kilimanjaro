@@ -119,3 +119,12 @@ Individual PDFs inside an archive now include the student's full name and regist
 
 Local verification: all 6 report-card suites and 22 tests passed, including both filename formats, and the academic service TypeScript check passed.
 
+Production result:
+
+- Commit: `3cf7268` (`feat: name report PDFs by student`).
+- Active release: `/opt/kilimanjaro/releases/student-report-names-3cf7268-20261111T151000Z`.
+- Production builds passed, no migrations were pending, and all eight PM2 services remained online.
+- The Class 1 B archive contains 37 valid PDFs named like `Humayrah Othuman Swai - KEMS-P-26600.pdf`.
+- The Class 1 all-stream archive contains 74 valid PDFs, all matching the class-prefixed format, such as `Class 1 A - Sumaiya Shabani Kisija - KEMS-P-26587.pdf`.
+- Archive integrity checks passed. Production remained at 444 published report cards and 4,077 term results with unchanged fingerprint `71057a99a82df0bf83d9d017725efef1`.
+
