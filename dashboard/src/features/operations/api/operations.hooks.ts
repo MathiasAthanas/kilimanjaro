@@ -311,6 +311,7 @@ export async function downloadOfficialReportCard(
 
 export async function downloadBulkReportCards(options: {
   classId?: string;
+  schoolId?: string;
   educationStage?: string;
   classLevel?: number;
   termId: string;
@@ -324,6 +325,8 @@ export async function downloadBulkReportCards(options: {
   const response = await api.get(path, {
     params: { format: options.format, ...(options.examLabel ? { examLabel: options.examLabel } : {}) },
     responseType: 'blob',
+    timeout: 180_000,
+    ...(options.schoolId ? { headers: { 'X-Active-School': options.schoolId } } : {}),
   });
   const url = URL.createObjectURL(response.data as Blob);
   const anchor = document.createElement('a');

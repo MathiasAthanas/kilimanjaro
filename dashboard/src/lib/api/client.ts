@@ -55,6 +55,14 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
+    if (error.response?.data instanceof Blob) {
+      try {
+        const text = await error.response.data.text();
+        error.response.data = JSON.parse(text);
+      } catch {
+        // Keep the original transport error when the blob is not a JSON API error.
+      }
+    }
     const original = error.config as (typeof error.config & { _retry?: boolean });
     const session = useAuthStore.getState().session;
 

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { NavLink, useNavigate, useParams } from 'react-router-dom';
 import { toast } from '../../../lib/toast';
 import { formatClassLabel } from '../../../lib/classLabel';
+import { errorMessage } from '../../../lib/api/errors';
 import { Badge } from '../../../components/common/Badge';
 import { Button } from '../../../components/common/Button';
 import { DataError } from '../../../components/feedback/DataError';
@@ -322,15 +323,17 @@ export function ReportCardGenerationCenterPage() {
     refetch: () => void;
   };
   const [downloading, setDownloading] = useState<string | null>(null);
-  const groups = new Map<string, { termId: string; termName: string; examLabel: string; educationStage: string; classLevel: number; items: Array<Record<string, unknown>> }>();
+  const groups = new Map<string, { schoolId: string; termId: string; termName: string; examLabel: string; educationStage: string; classLevel: number; items: Array<Record<string, unknown>> }>();
   for (const item of apiResultClasses) {
     const classLevel = Number(item.classLevel);
     if (!Number.isFinite(classLevel)) continue;
     const termId = String(item.termId ?? '');
     const educationStage = String(item.educationStage ?? '');
     const examLabel = String(item.examLabel ?? '');
-    const key = `${termId}:${educationStage}:${classLevel}:${examLabel || 'unlabelled'}`;
+    const schoolId = String(item.schoolId ?? '');
+    const key = `${schoolId}:${termId}:${educationStage}:${classLevel}:${examLabel || 'unlabelled'}`;
     const group = groups.get(key) ?? {
+      schoolId,
       termId,
       termName: String(item.termName ?? 'Term'),
       examLabel,
@@ -352,8 +355,8 @@ export function ReportCardGenerationCenterPage() {
     try {
       await downloadBulkReportCards(options);
       toast(`${options.format.toUpperCase()} download ready`, 'success');
-    } catch {
-      toast('Could not prepare the selected report cards. Confirm they are published and try again.', 'error');
+    } catch (error) {
+      toast(errorMessage(error, 'Could not prepare the selected report cards. Confirm they are published and try again.'), 'error');
     } finally {
       setDownloading(null);
     }
@@ -381,6 +384,7 @@ export function ReportCardGenerationCenterPage() {
                         <Button key={format} variant="secondary" disabled={downloading === key} onClick={() => download(key, {
                           educationStage: group.educationStage,
                           classLevel: group.classLevel,
+                          schoolId: group.schoolId || undefined,
                           termId: group.termId,
                           examLabel: group.examLabel || undefined,
                           format,
@@ -413,6 +417,7 @@ export function ReportCardGenerationCenterPage() {
                             const key = `${classId}:${format}`;
                             return <Button key={format} variant="secondary" className="rounded-lg py-1.5 text-xs" disabled={downloading === key} onClick={() => download(key, {
                               classId,
+                              schoolId: String(item.schoolId ?? group.schoolId ?? '') || undefined,
                               termId,
                               examLabel: group.examLabel || undefined,
                               format,
@@ -463,14 +468,15 @@ export function ReportCardPreviewPage() {
     try {
       await downloadBulkReportCards({
         classId,
+        schoolId: String(cards[0]?.schoolId ?? '') || undefined,
         termId,
         examLabel: String(cards[0]?.examLabel ?? ''),
         format,
         filename: `Class_Report_Cards_${classId}.${format}`,
       });
       toast(`${format.toUpperCase()} download ready`, 'success');
-    } catch {
-      toast('Bulk report-card download failed. Confirm the cards are published and try again.', 'error');
+    } catch (error) {
+      toast(errorMessage(error, 'Bulk report-card download failed. Confirm the cards are published and try again.'), 'error');
     } finally {
       setBulkFormat(null);
     }

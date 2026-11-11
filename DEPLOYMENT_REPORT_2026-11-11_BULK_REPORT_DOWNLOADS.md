@@ -49,3 +49,17 @@ This is a gateway-only transfer fix. It adds no migration and does not modify re
 - Before and after verification: 444 report cards, all 444 published; 4,077 term results with unchanged fingerprint `71057a99a82df0bf83d9d017725efef1`.
 - All eight PM2 services are online, the public gateway reports every dependency reachable, and the dashboard returns HTTP 200.
 
+## Follow-up: school context reliability
+
+After the binary gateway fix, a group administrator could download once while a school was selected but later receive HTTP 400 after returning to group scope. The live response was `Select a school before creating a report-card download`; the cards were still published.
+
+The follow-up implementation:
+
+- Infers the owning school from an unambiguous class/report selection when no school header is present.
+- Keeps an all-stream selection spanning more than one school blocked until the school is explicit.
+- Separates dashboard all-stream groups by school and sends that school with every bulk request.
+- Allows three minutes for a bulk download without changing normal API timeouts.
+- Decodes blob-form API failures and displays their actual message to the user.
+
+Follow-up local verification: 96 academic tests passed, 25 skipped, dashboard TypeScript passed, 8 school-context tests passed, and both academic and dashboard production builds passed.
+

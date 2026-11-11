@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { schoolScopeFilter, assertSchoolInScope, requireWriteSchoolId } from '../common/helpers/school-scope.helper';
+import { schoolScopeFilter, assertSchoolInScope, requireWriteSchoolId, resolveWriteSchoolId } from '../common/helpers/school-scope.helper';
 import { formatClassLabel } from '../common/helpers/class-label.helper';
 import { RedisService } from '../redis/redis.service';
 import { StudentClientService } from '../student-client/student-client.service';
@@ -652,17 +652,37 @@ export class ReportCardsService {
     examLabel: string | undefined,
     user: RequestUser,
   ): Promise<{ files: BulkReportCardFile[]; baseName: string }> {
-    const schoolId = requireWriteSchoolId(user, 'report-card download');
+    const selectionWhere = {
+      termId,
+      isPublished: true,
+      pdfUrl: { not: null },
+      ...(examLabel?.trim() ? { examLabel: { equals: examLabel.trim(), mode: 'insensitive' as const } } : {}),
+      ...('classId' in scope
+        ? { classId: scope.classId }
+        : { educationStage: scope.educationStage as any, classLevel: scope.classLevel }),
+    };
+    let schoolId = resolveWriteSchoolId(user);
+    if (!schoolId) {
+      const owners = await this.prisma.reportCard.findMany({
+        where: { ...selectionWhere, ...schoolScopeFilter(user) },
+        distinct: ['schoolId'],
+        select: { schoolId: true },
+        take: 2,
+      });
+      const schoolIds = [...new Set(owners.map((owner) => owner.schoolId).filter((id): id is string => Boolean(id)))];
+      if (!schoolIds.length) {
+        throw new NotFoundException('No published report cards match the selected school, term, exam and class scope.');
+      }
+      if (schoolIds.length > 1) {
+        throw new BadRequestException('Select a school before downloading report cards across multiple schools.');
+      }
+      schoolId = schoolIds[0];
+      assertSchoolInScope(user, schoolId);
+    }
     const cards = await this.prisma.reportCard.findMany({
       where: {
         schoolId,
-        termId,
-        isPublished: true,
-        pdfUrl: { not: null },
-        ...(examLabel?.trim() ? { examLabel: { equals: examLabel.trim(), mode: 'insensitive' as const } } : {}),
-        ...('classId' in scope
-          ? { classId: scope.classId }
-          : { educationStage: scope.educationStage as any, classLevel: scope.classLevel }),
+        ...selectionWhere,
       },
       orderBy: [{ classId: 'asc' }, { rank: 'asc' }, { overallAverage: 'desc' }],
       select: { pdfUrl: true, studentId: true, classId: true, rank: true },
