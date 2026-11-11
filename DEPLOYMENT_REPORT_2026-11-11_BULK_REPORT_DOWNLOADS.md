@@ -29,5 +29,23 @@ This is a gateway-only transfer fix. It adds no migration and does not modify re
 
 - Direct academic-service generation before the fix: PDF 5,376,243 bytes and ZIP 5,388,610 bytes, both valid.
 - Gateway focused tests: 10 passed, including the exact PDF and ZIP route shapes and binary error handling.
-- Production gateway build and public-domain download verification: pending deployment.
+- Production backend and dashboard builds: passed.
+- Prisma migration check: passed; no pending migrations.
+- Public Class 1 B combined PDF: HTTP 200, 5,376,243 bytes, 37 valid pages.
+- Public Class 1 B ZIP: HTTP 200, 5,388,610 bytes, 37 valid PDF entries and no archive errors.
+- Public Class 1 all-stream PDF: HTTP 200, 10,752,472 bytes, 74 valid pages.
+- Public Class 1 all-stream ZIP: HTTP 200, 10,777,271 bytes, 74 valid PDF entries and no archive errors.
+- Responses expose the correct CORS origin, MIME type, content length, download filename, and PDF report count.
+
+## Production deployment
+
+- Git commit: `de314bf` (`fix: proxy bulk report downloads as binary`).
+- Active release: `/opt/kilimanjaro/releases/de314bf-20261111T134800Z`.
+- Previous release retained for rollback: `/opt/kilimanjaro/releases/17fd5bb-20261111T113700Z`.
+- Database backup: `/opt/kilimanjaro/backups/kilimanjaro_prod_pre_bulk_reports_20261111T134636Z.dump`.
+- Report-card file backup: `/opt/kilimanjaro/backups/report_cards_pre_bulk_reports_20261111T134636Z.tar.gz`.
+- Database backup SHA-256: `9ed2b8351f81ca05bdc558f5a739889a28959661ab084ea86fe8b152344dabe1`.
+- Report-card backup SHA-256: `a63909f3dcd27527e0a8f73720ed13ffcd83ab0fd3ec9767141606c92c9944ce`.
+- Before and after verification: 444 report cards, all 444 published; 4,077 term results with unchanged fingerprint `71057a99a82df0bf83d9d017725efef1`.
+- All eight PM2 services are online, the public gateway reports every dependency reachable, and the dashboard returns HTTP 200.
 
