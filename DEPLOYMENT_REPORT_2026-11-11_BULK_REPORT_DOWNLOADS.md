@@ -102,3 +102,14 @@ Local verification:
 - Academic TypeScript compilation: passed. The local post-build Prisma copy could not replace a DLL held open by the already-running Windows service; this does not affect the Linux production build.
 - No migration or production data mutation is required.
 
+Production result:
+
+- Commit: `305abe4` (`fix: deliver bulk report ZIP through safe transport`).
+- Active release: `/opt/kilimanjaro/releases/safe-zip-305abe4-20261111T145300Z`.
+- Production backend and dashboard builds passed; all eight PM2 services are online and gateway health is OK.
+- Prisma found 19 migrations with no pending migration to apply.
+- Public safe-transport response: HTTP 200 and 7,184,919 JSON bytes.
+- Decoded archive: 5,388,610 bytes, 37 individual PDFs, valid ZIP signature, and no archive integrity errors.
+- Nginx recorded the complete response; the academic service and gateway produced no errors for the request.
+- Production remained at 444 report cards, all published, and 4,077 term results with unchanged fingerprint `71057a99a82df0bf83d9d017725efef1`.
+
