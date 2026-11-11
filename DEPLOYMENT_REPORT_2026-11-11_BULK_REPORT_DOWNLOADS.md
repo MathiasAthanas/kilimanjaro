@@ -79,3 +79,12 @@ Chrome received HTTP 200 for ZIP requests but repeatedly closed the connection a
 
 The gateway now emits `Cross-Origin-Resource-Policy: cross-origin` for its API responses. The explicit CORS origin allowlist, credentials policy, JWT authentication and school authorization remain unchanged.
 
+Browser transport deployment result:
+
+- Commit: `994adb0` (`fix: allow cross-origin binary downloads`).
+- Active release: `/opt/kilimanjaro/releases/cross-origin-zip-20261111T142500Z`.
+- Public ZIP response: HTTP 200, 5,388,610 bytes, `Content-Type: application/zip`, and `Cross-Origin-Resource-Policy: cross-origin`.
+- The ZIP contains 37 valid individual PDFs and passes full archive integrity validation.
+- Two consecutive no-school-header ZIP downloads and the 74-card all-stream ZIP completed successfully.
+- Production report-card and term-result counts and fingerprints remained unchanged.
+
