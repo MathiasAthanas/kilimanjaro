@@ -42,4 +42,41 @@ Date: 2026-11-11
 
 ## Production Result
 
-Pending deployment.
+### Release
+
+- Runtime commit: `aec12b9` (`feat(reports): add bulk cards and grade analytics`).
+- Active release: `/opt/kilimanjaro/releases/aec12b9-20261111T101500Z`.
+- Dashboard asset: `assets/index-DboEO6Ls.js`.
+- Migration `20261111100000_report_card_exam_and_level_positions` completed at `2026-11-11 10:18:06 UTC`.
+
+### Backups
+
+- Database: `/opt/kilimanjaro/backups/kilimanjaro_prod_pre_bulk_reports_20261111T101309Z.dump`.
+- Database SHA-256: `2b6e10d94ea81dc6e4afc8fde10b8b6b2208b2245d42afa067cf0eac8393d4e6`.
+- Report-card PDFs: `/opt/kilimanjaro/backups/report_cards_pre_bulk_reports_20261111T101309Z.tar.gz`.
+- PDF archive SHA-256: `421bf93ff0084d253d590859babc27e276d4e9c18b5466eabf65bd3478f90133`.
+- Frontend rollback archive: `/opt/kilimanjaro/backups/frontend_pre_aec12b9-20261111T101500Z_20261111T101439Z.tar.gz`.
+
+### Recalculation Safety
+
+- Recalculated: 444 report cards across 10 classes.
+- Publication state: 444 published before and 444 published after.
+- Exam label: `Annual Exam` populated on all 444 cards.
+- Stream and whole-level ranks: populated on all 444 cards.
+- Alternative-subject changes: 0 rows.
+- Term results: 4,077 before and after.
+- Term-result fingerprint before and after: `71057a99a82df0bf83d9d017725efef1`.
+
+### Live Functional Verification
+
+- Class 1 A combined PDF: 37 cards and 37 pages.
+- Class 1 A ZIP: 37 individual PDFs.
+- Class 1 across all streams combined PDF: 74 cards and 74 pages.
+- Class 1 across all streams ZIP: 74 individual PDFs.
+- Existing individual download: valid one-page PDF returned.
+- Teacher grade analytics: 6 graded courses returned for a live teacher; sample French distribution was A 41, B 13, C 2, D 1, F 1 (58 total).
+- Gateway health: `ok`; auth, students, academics, finance, notifications, and analytics reachable.
+- PM2: all eight services online.
+- Dashboard: HTTP 200.
+- Nginx configuration test: passed.
+- No new service error entries were produced by deployment, recalculation, or download verification.
