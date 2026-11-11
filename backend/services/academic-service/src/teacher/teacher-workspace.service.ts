@@ -392,21 +392,40 @@ export class TeacherWorkspaceService {
           select: { classSubjectId: true, studentId: true, score: true, assessment: { select: { maxScore: true, termId: true } } },
         })
       : [];
+    const finalResults = csIds.length
+      ? await this.prisma.termResult.findMany({
+          where: {
+            classSubjectId: { in: csIds },
+            teacherId: user.id,
+            isPublished: true,
+            resultStatus: { not: 'EXEMPT' },
+            ...(q.academicYearId ? { academicYearId: q.academicYearId } : {}),
+            ...(q.termId ? { termId: q.termId } : {}),
+          },
+          select: { classSubjectId: true, grade: true },
+        })
+      : [];
 
-    const passByKey = new Map<string, number>();
-    const passMarkOf = async (c: (typeof classes)[number]) => {
+    const scaleByKey = new Map<string, { pass: number; gradeOrder: string[] }>();
+    const scaleOf = async (c: (typeof classes)[number]) => {
       const key = `${c.academicYearId}|${c.stage}|${c.level}|${c.subjectId}|${c.schoolId}`;
-      if (passByKey.has(key)) return passByKey.get(key)!;
+      if (scaleByKey.has(key)) return scaleByKey.get(key)!;
       let pass = 40;
+      let gradeOrder: string[] = [];
       try {
         const scale = await this.grading.getActiveScale(c.academicYearId, { educationStage: c.stage, classLevel: c.level, subjectId: c.subjectId }, c.schoolId);
         const passing = (scale?.grades ?? []).filter((g: any) => g.isPassing !== false).map((g: any) => Number(g.minScore));
         if (passing.length) pass = Math.min(...passing);
+        gradeOrder = (scale?.grades ?? [])
+          .slice()
+          .sort((a: any, b: any) => Number(b.maxScore) - Number(a.maxScore))
+          .map((grade: any) => String(grade.grade));
       } catch {
         /* keep the default */
       }
-      passByKey.set(key, pass);
-      return pass;
+      const value = { pass, gradeOrder };
+      scaleByKey.set(key, value);
+      return value;
     };
 
     const r1 = (n: number) => Math.round(n * 10) / 10;
@@ -417,7 +436,7 @@ export class TeacherWorkspaceService {
     let gradedAll = 0;
 
     for (const c of classes) {
-      const pass = await passMarkOf(c);
+      const { pass, gradeOrder } = await scaleOf(c);
       const per = new Map<string, number[]>();
       for (const m of marks.filter((x) => x.classSubjectId === c.classSubjectId)) {
         const max = Number(m.assessment?.maxScore ?? 0);
@@ -431,6 +450,10 @@ export class TeacherWorkspaceService {
       for (const a of avgs.filter((x) => x.avg < pass).sort((x, y) => x.avg - y.avg).slice(0, 6)) {
         attention.push({ classId: c.classId, studentId: a.studentId, subjectName: c.subjectName, className: c.label, avg: a.avg, pass });
       }
+      const gradeDistribution: Record<string, number> = Object.fromEntries(gradeOrder.map((grade) => [grade, 0]));
+      for (const result of finalResults.filter((row) => row.classSubjectId === c.classSubjectId)) {
+        gradeDistribution[result.grade] = (gradeDistribution[result.grade] ?? 0) + 1;
+      }
       courses.push({
         classSubjectId: c.classSubjectId,
         schoolId: c.schoolId,
@@ -440,6 +463,9 @@ export class TeacherWorkspaceService {
         passingStudents: passing,
         passRate: avgs.length ? r1((passing / avgs.length) * 100) : 0,
         averageScore: r1(mean(avgs.map((a) => a.avg))),
+        gradeOrder: gradeOrder.length ? gradeOrder : Object.keys(gradeDistribution),
+        gradeDistribution,
+        gradedResults: Object.values(gradeDistribution).reduce((sum, count) => sum + count, 0),
         topicsCovered: c.syllabus?.coveredTopics ?? null,
         totalTopics: c.syllabus?.totalTopics ?? null,
       });

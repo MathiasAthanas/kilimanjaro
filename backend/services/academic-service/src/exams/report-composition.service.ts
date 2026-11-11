@@ -376,9 +376,11 @@ export class ReportCompositionService {
     // ── Reuse the existing generator to build ReportCards + PDFs per class ─
     let reportCardsGenerated = 0;
     const failures: string[] = [];
+    const examLabel = dto.name?.trim()
+      || [...new Set(windows.map((window) => window.name.trim()).filter(Boolean))].join(' + ');
     for (const classId of classIds) {
       try {
-        const res = await this.reportCards.generateForClassTerm(classId, dto.termId, user.id);
+        const res = await this.reportCards.generateForClassTerm(classId, dto.termId, user.id, { examLabel });
         reportCardsGenerated += Number((res as any)?.generated ?? 0);
       } catch (err) {
         const msg = (err as Error)?.message ?? String(err);

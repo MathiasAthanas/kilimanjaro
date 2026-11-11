@@ -309,6 +309,32 @@ export async function downloadOfficialReportCard(
   setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }
 
+export async function downloadBulkReportCards(options: {
+  classId?: string;
+  educationStage?: string;
+  classLevel?: number;
+  termId: string;
+  examLabel?: string;
+  format: 'pdf' | 'zip';
+  filename: string;
+}): Promise<void> {
+  const path = options.classId
+    ? `/academics/report-cards/bulk/class/${options.classId}/term/${options.termId}`
+    : `/academics/report-cards/bulk/level/${options.educationStage}/${options.classLevel}/term/${options.termId}`;
+  const response = await api.get(path, {
+    params: { format: options.format, ...(options.examLabel ? { examLabel: options.examLabel } : {}) },
+    responseType: 'blob',
+  });
+  const url = URL.createObjectURL(response.data as Blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = options.filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30_000);
+}
+
 export function useClassAnalytics(classId: string | undefined) {
   return useQuery({
     queryKey: [...operationsKeys.all, 'analytics', 'class', classId ?? ''] as const,

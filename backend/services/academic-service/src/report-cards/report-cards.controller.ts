@@ -1,9 +1,11 @@
-import { Controller, Get, Param, Patch, Post, Res, Body, NotFoundException, Query } from '@nestjs/common';
+import { BadRequestException, Controller, Get, Param, Patch, Post, Res, Body, NotFoundException, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Response } from 'express';
 import { constants } from 'fs';
-import { access } from 'fs/promises';
-import { resolve } from 'path';
+import { access, readFile } from 'fs/promises';
+import { resolve, sep } from 'path';
+import { PDFDocument } from 'pdf-lib';
+const archiver: any = require('archiver');
 import { ConfigService } from '@nestjs/config';
 import { ROLES } from '../common/constants/roles';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -11,7 +13,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { RequestUser } from '../common/interfaces/request-user.interface';
 import { GenerateReportCardsDto } from './dto/generate-report-cards.dto';
 import { UpdateCommentsDto } from './dto/update-comments.dto';
-import { ReportCardsService } from './report-cards.service';
+import { BulkReportCardFile, ReportCardsService } from './report-cards.service';
 import { ReportCardPolicyService } from './report-card-policy.service';
 import { UpdateReportCardPolicyDto } from './dto/update-report-card-policy.dto';
 import { RecalculateReportCardsDto } from './dto/recalculate-report-cards.dto';
@@ -90,7 +92,40 @@ export class ReportCardsController {
     ROLES.TEACHER,
   )
   listForClass(@Param('classId') classId: string, @Param('termId') termId: string, @CurrentUser() user?: RequestUser) {
-    return this.reportCardsService.listForClass(classId, termId, user?.id || 'system');
+    return this.reportCardsService.listForClass(classId, termId, user!);
+  }
+
+  @Get('report-cards/bulk/class/:classId/term/:termId')
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.SUPER_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.ACADEMIC_QA)
+  async downloadClassCards(
+    @Param('classId') classId: string,
+    @Param('termId') termId: string,
+    @Query('format') format: string | undefined,
+    @Query('examLabel') examLabel: string | undefined,
+    @CurrentUser() user: RequestUser,
+    @Res() res: Response,
+  ) {
+    const selection = await this.reportCardsService.bulkFiles({ classId }, termId, examLabel, user);
+    return this.streamBulkDownload(selection.files, selection.baseName, format, res);
+  }
+
+  @Get('report-cards/bulk/level/:educationStage/:classLevel/term/:termId')
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.SUPER_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.ACADEMIC_QA)
+  async downloadLevelCards(
+    @Param('educationStage') educationStage: string,
+    @Param('classLevel') classLevelValue: string,
+    @Param('termId') termId: string,
+    @Query('format') format: string | undefined,
+    @Query('examLabel') examLabel: string | undefined,
+    @CurrentUser() user: RequestUser,
+    @Res() res: Response,
+  ) {
+    const classLevel = Number(classLevelValue);
+    if (!Number.isInteger(classLevel) || classLevel < 0) {
+      throw new BadRequestException('A valid class level is required.');
+    }
+    const selection = await this.reportCardsService.bulkFiles({ educationStage, classLevel }, termId, examLabel, user);
+    return this.streamBulkDownload(selection.files, selection.baseName, format, res);
   }
 
   @Get('report-cards/:studentId/term/:termId')
@@ -148,5 +183,69 @@ export class ReportCardsController {
   @Roles(ROLES.TEACHER, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN)
   updateComments(@Param('id') id: string, @Body() dto: UpdateCommentsDto, @CurrentUser() user?: RequestUser) {
     return this.reportCardsService.updateComments(id, dto, user!);
+  }
+
+  private safeDownloadName(value: string): string {
+    return value.replace(/[^a-zA-Z0-9._-]+/g, '_').replace(/^_+|_+$/g, '') || 'Report_Cards';
+  }
+
+  private async bulkPaths(files: BulkReportCardFile[]): Promise<Array<BulkReportCardFile & { absolutePath: string; entryName: string }>> {
+    const storageRoot = resolve(this.configService.get<string>('PDF_STORAGE_PATH', './storage/report-cards'));
+    const results: Array<BulkReportCardFile & { absolutePath: string; entryName: string }> = [];
+    for (const [index, file] of files.entries()) {
+      const absolutePath = resolve(storageRoot, file.pdfUrl);
+      if (absolutePath !== storageRoot && !absolutePath.startsWith(`${storageRoot}${sep}`)) {
+        throw new BadRequestException('A report-card file path is invalid.');
+      }
+      try {
+        await access(absolutePath, constants.R_OK);
+      } catch {
+        throw new NotFoundException(`Report card ${index + 1} is unavailable. Recalculate the report cards and retry.`);
+      }
+      const identity = file.registrationNumber || file.studentId;
+      const entryName = `${String(index + 1).padStart(3, '0')}_${this.safeDownloadName(file.className)}_${this.safeDownloadName(identity)}.pdf`;
+      results.push({ ...file, absolutePath, entryName });
+    }
+    return results;
+  }
+
+  private async streamBulkDownload(
+    files: BulkReportCardFile[],
+    baseName: string,
+    requestedFormat: string | undefined,
+    res: Response,
+  ) {
+    const format = (requestedFormat || 'pdf').toLowerCase();
+    if (!['pdf', 'zip'].includes(format)) {
+      throw new BadRequestException('Format must be pdf or zip.');
+    }
+    const ready = await this.bulkPaths(files);
+    const safeBase = this.safeDownloadName(baseName);
+
+    if (format === 'zip') {
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader('Content-Disposition', `attachment; filename="${safeBase}.zip"`);
+      const archive = archiver('zip', { zlib: { level: 6 } });
+      archive.on('warning', (error: Error) => {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') res.destroy(error);
+      });
+      archive.on('error', (error: Error) => res.destroy(error));
+      archive.pipe(res);
+      for (const file of ready) archive.file(file.absolutePath, { name: file.entryName });
+      await archive.finalize();
+      return;
+    }
+
+    const combined = await PDFDocument.create();
+    for (const file of ready) {
+      const source = await PDFDocument.load(await readFile(file.absolutePath), { ignoreEncryption: true });
+      const pages = await combined.copyPages(source, source.getPageIndices());
+      for (const page of pages) combined.addPage(page);
+    }
+    const bytes = await combined.save({ useObjectStreams: true });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${safeBase}.pdf"`);
+    res.setHeader('X-Report-Card-Count', String(ready.length));
+    return res.send(Buffer.from(bytes));
   }
 }

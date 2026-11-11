@@ -54,6 +54,9 @@ describe('ReportCardPdfService', () => {
       divisionSummary: { mode: 'PRIMARY', descriptor: 'Promotable', totalPoints: 0 },
       rank: 1,
       totalStudents: 42,
+      overallRank: 2,
+      totalStudentsOverall: 81,
+      examLabel: 'Annual Exam',
     };
 
     const fileName = await service.generatePdf(input);

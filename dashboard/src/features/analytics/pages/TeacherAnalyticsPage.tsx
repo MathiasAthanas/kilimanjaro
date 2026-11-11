@@ -54,6 +54,15 @@ function CourseCards({ courses }: { courses: any[] }) {
               </div>
               <Badge tone={passRate >= 70 ? 'emerald' : passRate >= 50 ? 'amber' : 'rose'}>{`${passRate.toFixed(1)}%`}</Badge>
             </div>
+            {Object.keys(c.gradeDistribution ?? {}).length > 0 && (
+              <div className="mt-4 flex flex-wrap gap-1.5" aria-label={`${c.subjectName} grade counts`}>
+                {(c.gradeOrder?.length ? c.gradeOrder : Object.keys(c.gradeDistribution)).map((grade: string) => (
+                  <span key={grade} className="rounded-md border border-ks-line bg-ks-paper px-2 py-1 text-[10px] font-black text-ks-navy">
+                    {grade}: {Number(c.gradeDistribution?.[grade] ?? 0)}
+                  </span>
+                ))}
+              </div>
+            )}
             {coverage !== null && (
               <div className="mt-4">
                 <div className="mb-1 flex justify-between text-[10px] font-black uppercase tracking-widest text-ks-muted">
@@ -88,6 +97,54 @@ function CourseCards({ courses }: { courses: any[] }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function SubjectGradeDistribution({ courses }: { courses: any[] }) {
+  const gradeOrder: string[] = [];
+  const bySubject = new Map<string, { subjectName: string; students: number; grades: Record<string, number> }>();
+  for (const course of courses) {
+    for (const grade of course.gradeOrder ?? Object.keys(course.gradeDistribution ?? {})) {
+      if (!gradeOrder.includes(grade)) gradeOrder.push(grade);
+    }
+    const subjectName = String(course.subjectName || 'Subject');
+    const row = bySubject.get(subjectName) ?? { subjectName, students: 0, grades: {} };
+    for (const [grade, count] of Object.entries(course.gradeDistribution ?? {})) {
+      row.grades[grade] = (row.grades[grade] ?? 0) + Number(count);
+      row.students += Number(count);
+    }
+    bySubject.set(subjectName, row);
+  }
+  const rows = [...bySubject.values()].sort((a, b) => a.subjectName.localeCompare(b.subjectName));
+  if (!rows.length || !gradeOrder.length) return null;
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-ks-line bg-white shadow-sm">
+      <div className="border-b border-ks-line p-4">
+        <h3 className="font-display text-lg font-black text-ks-navy">Student Grades by Subject</h3>
+        <p className="mt-0.5 text-xs font-semibold text-ks-muted">Counts use published student results for the selected period. Exempt subjects are not counted.</p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-sm">
+          <thead className="bg-ks-paper">
+            <tr>
+              <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-wider text-ks-muted">Subject</th>
+              {gradeOrder.map((grade) => <th key={grade} className="px-4 py-3 text-center text-[10px] font-black uppercase tracking-wider text-ks-muted">{grade}</th>)}
+              <th className="px-4 py-3 text-center text-[10px] font-black uppercase tracking-wider text-ks-muted">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.subjectName} className="border-t border-ks-line">
+                <td className="px-4 py-3 font-bold text-ks-navy">{row.subjectName}</td>
+                {gradeOrder.map((grade) => <td key={grade} className="px-4 py-3 text-center font-mono font-bold text-ks-navy">{row.grades[grade] ?? 0}</td>)}
+                <td className="px-4 py-3 text-center font-mono font-black text-ks-navy">{row.students}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -306,6 +363,8 @@ export function TeacherAnalyticsPage() {
         <p className="mb-3 text-xs font-black uppercase tracking-widest text-ks-muted">My Course Performance</p>
         {isLoading ? <ChartSkeleton height="h-56" /> : <CourseCards courses={courses} />}
       </div>
+
+      {!isLoading && <SubjectGradeDistribution courses={courses} />}
 
       {/* Term trend */}
       {isLoading ? <ChartSkeleton /> : termTrend.length > 0 && (

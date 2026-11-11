@@ -399,6 +399,11 @@ model ReportCard {
   divisionSummary      Json?
   rank                 Int?
   totalStudentsInClass Int?
+  /// Position across every stream at the same school, stage and class level.
+  overallRank          Int?
+  totalStudentsInLevel Int?
+  /// Human-readable exam/composition label, for example "Annual Exam".
+  examLabel            String?
   subjectCount         Int
   /// Subjects the student was expected to take (assessed + exempt).
   subjectsExpected     Int            @default(0)

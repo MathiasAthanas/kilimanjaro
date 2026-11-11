@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { schoolScopeFilter, assertSchoolInScope, requireWriteSchoolId } from '../common/helpers/school-scope.helper';
+import { formatClassLabel } from '../common/helpers/class-label.helper';
 import { RedisService } from '../redis/redis.service';
 import { StudentClientService } from '../student-client/student-client.service';
 import { RabbitMqService } from '../rabbitmq/rabbitmq.service';
@@ -13,6 +14,19 @@ import { ReportCardPdfService } from './report-card-pdf.service';
 import { GradingResolverService } from '../exams/grading-resolver.service';
 import { competitionRanks, computeDivision, round, scaleDirection } from '../exams/engine/result-engine';
 import { ReportCardPolicyService, ReportCardPolicyValues } from './report-card-policy.service';
+
+export type BulkReportCardFile = {
+  pdfUrl: string;
+  studentId: string;
+  classId: string;
+  className: string;
+  registrationNumber: string | null;
+  rank: number | null;
+};
+
+type ReportCardGenerationContext = {
+  examLabel?: string;
+};
 
 @Injectable()
 export class ReportCardsService {
@@ -145,13 +159,47 @@ export class ReportCardsService {
     }
   }
 
-  async generateForClassTerm(classId: string, termId: string, actorId: string) {
+  private compositionLabel(composition: { name?: string | null; windowSelections?: unknown } | null): string | undefined {
+    const explicit = composition?.name?.trim();
+    if (explicit) return explicit;
+    const selections = Array.isArray(composition?.windowSelections) ? composition!.windowSelections : [];
+    const names = selections
+      .map((item: any) => String(item?.name ?? '').trim())
+      .filter(Boolean);
+    return names.length ? [...new Set(names)].join(' + ') : undefined;
+  }
+
+  private async resolveExamLabel(classId: string, termId: string, schoolId: string | null): Promise<string | undefined> {
+    const existing = await this.prisma.reportCard.findFirst({
+      where: { classId, termId },
+      select: { examLabel: true },
+    });
+    if (existing?.examLabel?.trim()) return existing.examLabel.trim();
+
+    const compositions = await this.prisma.reportCardComposition.findMany({
+      where: { termId, schoolId },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+      select: { name: true, scopeClassIds: true, windowSelections: true },
+    });
+    const matching = compositions.find((item) => !item.scopeClassIds.length || item.scopeClassIds.includes(classId));
+    return this.compositionLabel(matching ?? null);
+  }
+
+  async generateForClassTerm(
+    classId: string,
+    termId: string,
+    actorId: string,
+    context: ReportCardGenerationContext = {},
+  ) {
     const labels = await this.termLabels(termId, actorId);
     const termResults = await this.prisma.termResult.findMany({
       where: { classId, termId },
       orderBy: [{ studentId: 'asc' }, { weightedTotal: 'desc' }],
     });
     const policy = await this.policyService.getForSchool(termResults[0]?.schoolId ?? null);
+    const examLabel = context.examLabel?.trim()
+      || await this.resolveExamLabel(classId, termId, termResults[0]?.schoolId ?? null);
 
     const byStudent = new Map<string, typeof termResults>();
     for (const row of termResults) {
@@ -197,6 +245,51 @@ export class ReportCardsService {
     // Competition ranking on the normalized average: ties share a position.
     const ranking = new Map(Object.entries(competitionRanks(averages, (a) => a.studentId, (a) => a.average)));
 
+    // A student's stream position is calculated above. The overall position uses
+    // every stream at the same school, stage and class level for this term.
+    const firstResult = termResults[0];
+    const levelRows = firstResult
+      ? await this.prisma.termResult.findMany({
+          where: {
+            schoolId: firstResult.schoolId,
+            termId,
+            academicYearId: firstResult.academicYearId,
+            educationStage: firstResult.educationStage,
+            classLevel: firstResult.classLevel,
+          },
+          select: {
+            studentId: true,
+            subjectId: true,
+            subjectName: true,
+            resultStatus: true,
+            weightedTotal: true,
+            grade: true,
+            gradePoints: true,
+            remark: true,
+            isPassing: true,
+          },
+        })
+      : [];
+    const levelByStudent = new Map<string, typeof levelRows>();
+    for (const row of levelRows) {
+      const current = levelByStudent.get(row.studentId) ?? [];
+      current.push(row);
+      levelByStudent.set(row.studentId, current);
+    }
+    const levelAverages = [...levelByStudent.entries()].map(([studentId, rawRows]) => {
+      const applicable = this.applyAlternativeSubjectPolicy(rawRows, policy)
+        .filter((row) => (row.resultStatus ?? 'SCORED') !== 'EXEMPT');
+      return {
+        studentId,
+        average: applicable.length
+          ? round(applicable.reduce((sum, row) => sum + row.weightedTotal, 0) / applicable.length)
+          : 0,
+      };
+    });
+    const overallRanking = new Map(Object.entries(
+      competitionRanks(levelAverages, (item) => item.studentId, (item) => item.average),
+    ));
+
     const alertsPayload = await this.studentClient.get<any>(
         '/students/performance/alerts',
       { classId, isResolved: false, severity: 'HIGH,CRITICAL' },
@@ -241,6 +334,9 @@ export class ReportCardsService {
           divisionSummary,
           rank: ranking.get(studentId),
           totalStudentsInClass: byStudent.size,
+          overallRank: overallRanking.get(studentId),
+          totalStudentsInLevel: levelByStudent.size,
+          examLabel,
           subjectCount,
           subjectsExpected: card.subjectsExpected,
           exemptSubjectCount: card.exemptSubjectCount,
@@ -259,6 +355,9 @@ export class ReportCardsService {
           divisionSummary,
           rank: ranking.get(studentId),
           totalStudentsInClass: byStudent.size,
+          overallRank: overallRanking.get(studentId),
+          totalStudentsInLevel: levelByStudent.size,
+          examLabel,
           subjectCount,
           subjectsExpected: card.subjectsExpected,
           exemptSubjectCount: card.exemptSubjectCount,
@@ -325,6 +424,9 @@ export class ReportCardsService {
         divisionSummary,
         rank: ranking.get(studentId),
         totalStudents: byStudent.size,
+        overallRank: overallRanking.get(studentId),
+        totalStudentsOverall: levelByStudent.size,
+        examLabel,
         teacherComment: current.teacherComment,
         principalComment: current.principalComment,
         internalPerformanceNote: `${alertsByStudent.get(studentId) ?? 0} active high/critical alerts`,
@@ -427,6 +529,8 @@ export class ReportCardsService {
         academicYearId: true,
         schoolId: true,
         educationStage: true,
+        classLevel: true,
+        examLabel: true,
         isPublished: true,
         updatedAt: true,
       },
@@ -457,10 +561,16 @@ export class ReportCardsService {
       academicYearId: string;
       schoolId: string | null;
       educationStage: string;
+      classLevel: number | null;
+      examLabel: string | null;
+      termName: string | null;
       reportCards: number;
       publishedCards: number;
       updatedAt: Date;
     }>();
+    const termIds = [...new Set(cards.map((card) => card.termId))];
+    const termEntries = await Promise.all(termIds.map(async (termId) => [termId, await this.termLabels(termId, user.id)] as const));
+    const labelsByTerm = new Map(termEntries);
     for (const card of cards) {
       const key = `${card.classId}:${card.termId}`;
       const current = groups.get(key);
@@ -479,6 +589,9 @@ export class ReportCardsService {
         academicYearId: card.academicYearId,
         schoolId: card.schoolId ?? null,
         educationStage: card.educationStage,
+        classLevel: card.classLevel,
+        examLabel: card.examLabel ?? null,
+        termName: labelsByTerm.get(card.termId)?.termName ?? null,
         reportCards: 1,
         publishedCards: card.isPublished ? 1 : 0,
         updatedAt: card.updatedAt,
@@ -494,16 +607,16 @@ export class ReportCardsService {
    * All report cards for a class + term, enriched with student identity so
    * the dashboard report-card centre can list and download per student.
    */
-  async listForClass(classId: string, termId: string, actorId: string) {
+  async listForClass(classId: string, termId: string, user: RequestUser) {
     const cards = await this.prisma.reportCard.findMany({
-      where: { classId, termId },
+      where: { classId, termId, ...schoolScopeFilter(user) },
       orderBy: [{ rank: 'asc' }, { overallAverage: 'desc' }],
     });
 
     const studentsPayload = await this.studentClient.get<any>(
       `/students/classes/${classId}/students`,
       { limit: 500 },
-      this.internalHeaders(actorId),
+      this.internalHeaders(user.id),
     );
     const studentsData = this.unwrap<any>(studentsPayload);
     // Endpoint returns enrolment rows with the student nested inside
@@ -531,6 +644,68 @@ export class ReportCardsService {
         registrationNumber: student?.registrationNumber ?? null,
       };
     });
+  }
+
+  async bulkFiles(
+    scope: { classId: string } | { educationStage: string; classLevel: number },
+    termId: string,
+    examLabel: string | undefined,
+    user: RequestUser,
+  ): Promise<{ files: BulkReportCardFile[]; baseName: string }> {
+    const schoolId = requireWriteSchoolId(user, 'report-card download');
+    const cards = await this.prisma.reportCard.findMany({
+      where: {
+        schoolId,
+        termId,
+        isPublished: true,
+        pdfUrl: { not: null },
+        ...(examLabel?.trim() ? { examLabel: { equals: examLabel.trim(), mode: 'insensitive' as const } } : {}),
+        ...('classId' in scope
+          ? { classId: scope.classId }
+          : { educationStage: scope.educationStage as any, classLevel: scope.classLevel }),
+      },
+      orderBy: [{ classId: 'asc' }, { rank: 'asc' }, { overallAverage: 'desc' }],
+      select: { pdfUrl: true, studentId: true, classId: true, rank: true },
+    });
+    if (!cards.length) {
+      throw new NotFoundException('No published report cards match the selected school, term, exam and class scope.');
+    }
+
+    const [classesPayload, ...rosters] = await Promise.all([
+      this.studentClient.get<any>('/students/classes', {}, this.internalHeaders(user.id)),
+      ...[...new Set(cards.map((card) => card.classId))].map((classId) =>
+        this.studentClient.get<any>(`/students/classes/${classId}/students`, { limit: 1000 }, this.internalHeaders(user.id)),
+      ),
+    ]);
+    const classesData = this.unwrap<any>(classesPayload);
+    const classes = Array.isArray(classesData) ? classesData : classesData?.items ?? classesData?.classes ?? [];
+    const classById = new Map<string, any>(classes.map((item: any) => [String(item.id), item]));
+    const studentById = new Map<string, any>();
+    for (const payload of rosters) {
+      const data = this.unwrap<any>(payload);
+      const items = Array.isArray(data?.students) ? data.students : Array.isArray(data?.items) ? data.items : Array.isArray(data) ? data : [];
+      for (const item of items) {
+        const student = item?.student ?? item;
+        if (student?.id) studentById.set(String(student.id), student);
+      }
+    }
+
+    const files = cards.map((card) => {
+      const student = studentById.get(card.studentId);
+      const klass = classById.get(card.classId);
+      return {
+        pdfUrl: card.pdfUrl!,
+        studentId: card.studentId,
+        classId: card.classId,
+        className: formatClassLabel(klass?.name ?? card.classId, klass?.stream ?? null),
+        registrationNumber: student?.registrationNumber ?? null,
+        rank: card.rank,
+      };
+    }).sort((a, b) => a.className.localeCompare(b.className) || (a.rank ?? Number.MAX_SAFE_INTEGER) - (b.rank ?? Number.MAX_SAFE_INTEGER));
+    const baseName = 'classId' in scope
+      ? `${files[0].className}_Report_Cards`
+      : `${scope.educationStage}_Level_${scope.classLevel}_All_Streams_Report_Cards`;
+    return { files, baseName };
   }
 
   async getReportPdfPath(studentId: string, termId: string, user: RequestUser) {
@@ -838,6 +1013,9 @@ export class ReportCardsService {
       divisionSummary,
       rank: currentCard.rank,
       totalStudents: currentCard.totalStudentsInClass,
+      overallRank: currentCard.overallRank,
+      totalStudentsOverall: currentCard.totalStudentsInLevel,
+      examLabel: currentCard.examLabel,
       teacherComment: currentCard.teacherComment,
       principalComment: currentCard.principalComment,
       internalPerformanceNote: undefined,

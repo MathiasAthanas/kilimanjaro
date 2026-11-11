@@ -24,6 +24,7 @@ import {
   useClassReportCards,
   useAvailableReportCardClasses,
   downloadOfficialReportCard,
+  downloadBulkReportCards,
   useGenerateReportMutation,
   useStudentAnalyticsProfile,
   useSubjectAnalytics,
@@ -320,24 +321,110 @@ export function ReportCardGenerationCenterPage() {
     isError: boolean;
     refetch: () => void;
   };
+  const [downloading, setDownloading] = useState<string | null>(null);
+  const groups = new Map<string, { termId: string; termName: string; examLabel: string; educationStage: string; classLevel: number; items: Array<Record<string, unknown>> }>();
+  for (const item of apiResultClasses) {
+    const classLevel = Number(item.classLevel);
+    if (!Number.isFinite(classLevel)) continue;
+    const termId = String(item.termId ?? '');
+    const educationStage = String(item.educationStage ?? '');
+    const examLabel = String(item.examLabel ?? '');
+    const key = `${termId}:${educationStage}:${classLevel}:${examLabel || 'unlabelled'}`;
+    const group = groups.get(key) ?? {
+      termId,
+      termName: String(item.termName ?? 'Term'),
+      examLabel,
+      educationStage,
+      classLevel,
+      items: [],
+    };
+    group.items.push(item);
+    groups.set(key, group);
+  }
+  const levelLabel = (stage: string, level: number) => {
+    if (stage === 'PRIMARY') return `Class ${level}`;
+    if (stage === 'O_LEVEL' || stage === 'A_LEVEL') return `Form ${level}`;
+    if (stage === 'NURSERY') return ['Baby Class', 'KG 1', 'KG 2'][Math.max(0, level - 1)] ?? `Nursery Level ${level}`;
+    return `${stage.replace(/_/g, ' ')} ${level}`;
+  };
+  const download = async (key: string, options: Parameters<typeof downloadBulkReportCards>[0]) => {
+    setDownloading(key);
+    try {
+      await downloadBulkReportCards(options);
+      toast(`${options.format.toUpperCase()} download ready`, 'success');
+    } catch {
+      toast('Could not prepare the selected report cards. Confirm they are published and try again.', 'error');
+    } finally {
+      setDownloading(null);
+    }
+  };
   return (
     <OperationsShell title="Report Card Generation Center" eyebrow="Generate, preview, download">
       {isLoading ? <SkeletonTable cols={3} /> : isError ? <DataError message="Could not load generated report cards." onRetry={refetch} /> : apiResultClasses.length === 0 ? (
         <EmptyState title="No report cards generated" description="Compose report cards from a closed exam window first. Generated classes will then appear here." />
       ) : (
-        <div className="grid gap-gutter xl:grid-cols-3">
-          {apiResultClasses.map((item) => {
-            const classId = String(item.classId ?? item.id ?? '');
-            const termId = String(item.termId ?? 'current');
-            const total = Number(item.reportCards ?? item.students ?? 0);
-            const published = Number(item.publishedCards ?? 0);
+        <div className="space-y-5">
+          {[...groups.entries()].map(([groupKey, group]) => {
+            const title = levelLabel(group.educationStage, group.classLevel);
+            const published = group.items.reduce((sum, item) => sum + Number(item.publishedCards ?? 0), 0);
             return (
-              <ReportTile
-                key={`${classId}:${termId}`}
-                title={formatClassLabel(String(item.className ?? classId), item.stream ? String(item.stream) : null)}
-                detail={`${total} card${total === 1 ? '' : 's'} / ${published} published`}
-                to={`/academics/report-cards/${classId}/${termId}`}
-              />
+              <section key={groupKey} className="overflow-hidden rounded-lg border border-ks-line bg-white shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-ks-line bg-ks-paper px-5 py-4">
+                  <div>
+                    <h2 className="font-display text-lg font-black text-ks-navy">{title} across all streams</h2>
+                    <p className="mt-0.5 text-xs font-semibold text-ks-muted">{group.examLabel || 'Report Cards'} / {group.termName} / {published} published cards</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {(['pdf', 'zip'] as const).map((format) => {
+                      const key = `${groupKey}:${format}`;
+                      return (
+                        <Button key={format} variant="secondary" disabled={downloading === key} onClick={() => download(key, {
+                          educationStage: group.educationStage,
+                          classLevel: group.classLevel,
+                          termId: group.termId,
+                          examLabel: group.examLabel || undefined,
+                          format,
+                          filename: `${title.replace(/\s+/g, '_')}_All_Streams_Report_Cards.${format}`,
+                        })}>
+                          {downloading === key ? 'Preparing...' : format === 'pdf' ? 'Combined PDF' : 'Individual PDFs (ZIP)'}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-3">
+                  {group.items.map((item) => {
+                    const classId = String(item.classId ?? item.id ?? '');
+                    const termId = String(item.termId ?? '');
+                    const className = formatClassLabel(String(item.className ?? classId), item.stream ? String(item.stream) : null);
+                    const total = Number(item.reportCards ?? item.students ?? 0);
+                    const classPublished = Number(item.publishedCards ?? 0);
+                    return (
+                      <div key={`${classId}:${termId}`} className="rounded-lg border border-ks-line p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <h3 className="font-black text-ks-navy">{className}</h3>
+                            <p className="mt-1 text-xs text-ks-muted">{total} cards / {classPublished} published</p>
+                          </div>
+                          <NavLink className="text-xs font-black text-ks-blue" to={`/academics/report-cards/${classId}/${termId}`}>Open</NavLink>
+                        </div>
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          {(['pdf', 'zip'] as const).map((format) => {
+                            const key = `${classId}:${format}`;
+                            return <Button key={format} variant="secondary" className="rounded-lg py-1.5 text-xs" disabled={downloading === key} onClick={() => download(key, {
+                              classId,
+                              termId,
+                              examLabel: group.examLabel || undefined,
+                              format,
+                              filename: `${className.replace(/\s+/g, '_')}_Report_Cards.${format}`,
+                            })}>{downloading === key ? 'Preparing...' : format === 'pdf' ? 'Combined PDF' : 'ZIP'}</Button>;
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
             );
           })}
         </div>
@@ -350,6 +437,7 @@ export function ReportCardPreviewPage() {
   const { classId, termId } = useParams();
   const { data: cards = [], isLoading, isError, refetch } = useClassReportCards(classId, termId) as { data: Array<Record<string, unknown>>; isLoading: boolean; isError: boolean; refetch: () => void };
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [bulkFormat, setBulkFormat] = useState<'pdf' | 'zip' | null>(null);
 
   const handleDownload = async (card: Record<string, unknown>) => {
     const studentId = String(card.studentId ?? '');
@@ -369,12 +457,42 @@ export function ReportCardPreviewPage() {
     }
   };
 
+  const handleBulkDownload = async (format: 'pdf' | 'zip') => {
+    if (!classId || !termId) return;
+    setBulkFormat(format);
+    try {
+      await downloadBulkReportCards({
+        classId,
+        termId,
+        examLabel: String(cards[0]?.examLabel ?? ''),
+        format,
+        filename: `Class_Report_Cards_${classId}.${format}`,
+      });
+      toast(`${format.toUpperCase()} download ready`, 'success');
+    } catch {
+      toast('Bulk report-card download failed. Confirm the cards are published and try again.', 'error');
+    } finally {
+      setBulkFormat(null);
+    }
+  };
+
   return (
     <OperationsShell title="Class Report Cards" eyebrow="Preview and download official PDFs">
       {isLoading ? <SkeletonTable cols={7} /> : isError ? <DataError onRetry={refetch} /> : cards.length === 0 ? (
         <EmptyState title="No report cards yet" description="Generate report cards for this class and term first (Principal → Report Cards → Generate), then download the official PDFs here." />
       ) : (
-        <OperationsTable columns={['Student', 'Reg No.', 'Average', 'Grade', 'Rank', 'Status', 'Official PDF']}>
+        <>
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-ks-line bg-white p-4">
+          <div>
+            <p className="font-black text-ks-navy">Download this class together</p>
+            <p className="mt-0.5 text-xs text-ks-muted">One combined PDF for printing, or a ZIP containing each student's PDF.</p>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="secondary" disabled={bulkFormat !== null} onClick={() => handleBulkDownload('pdf')}>{bulkFormat === 'pdf' ? 'Preparing...' : 'Combined PDF'}</Button>
+            <Button variant="secondary" disabled={bulkFormat !== null} onClick={() => handleBulkDownload('zip')}>{bulkFormat === 'zip' ? 'Preparing...' : 'Individual PDFs (ZIP)'}</Button>
+          </div>
+        </div>
+        <OperationsTable columns={['Student', 'Reg No.', 'Average', 'Grade', 'Stream Position', 'Overall Position', 'Status', 'Official PDF']}>
           {cards.map((card) => {
             const studentId = String(card.studentId ?? '');
             const published = Boolean(card.isPublished);
@@ -385,6 +503,7 @@ export function ReportCardPreviewPage() {
                 <Td>{Number(card.overallAverage ?? 0).toFixed(1)}%</Td>
                 <Td><Badge tone={String(card.overallGrade ?? '').startsWith('A') ? 'emerald' : String(card.overallGrade ?? '').startsWith('F') ? 'rose' : 'blue'}>{String(card.overallGrade ?? '—')}</Badge></Td>
                 <Td>{card.rank != null ? `${card.rank} / ${card.totalStudentsInClass ?? '—'}` : '—'}</Td>
+                <Td>{card.overallRank != null ? `${card.overallRank} / ${card.totalStudentsInLevel ?? '—'}` : '—'}</Td>
                 <Td><Badge tone={published ? 'emerald' : 'amber'}>{published ? 'PUBLISHED' : 'PROVISIONAL'}</Badge></Td>
                 <Td>
                   <Button
@@ -400,6 +519,7 @@ export function ReportCardPreviewPage() {
             );
           })}
         </OperationsTable>
+        </>
       )}
     </OperationsShell>
   );

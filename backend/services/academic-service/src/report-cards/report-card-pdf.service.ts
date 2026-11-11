@@ -96,6 +96,9 @@ export type ReportCardPdfInput = {
   divisionSummary?: unknown;
   rank?: number | null;
   totalStudents?: number | null;
+  overallRank?: number | null;
+  totalStudentsOverall?: number | null;
+  examLabel?: string | null;
   teacherComment?: string | null;
   principalComment?: string | null;
   internalPerformanceNote?: string;
@@ -229,6 +232,12 @@ export class ReportCardPdfService {
 
     // Subtitle: STAGE • ACADEMIC REPORT CARD
     this.drawSubtitle(doc, titleX, 122, 318, this.stageLabelFor(input.reportTemplateCode));
+    if (input.examLabel?.trim()) {
+      const label = `EXAM: ${input.examLabel.trim().toUpperCase()}`;
+      const exam = this.fitText(doc, label, 'Helvetica-Bold', 8.5, 306, 6.5);
+      doc.font('Helvetica-Bold').fontSize(exam.size).fillColor(RED)
+        .text(exam.text, titleX, 139, { width: 306, align: 'left', lineBreak: false });
+    }
 
     // Term ribbon
     this.drawTermRibbon(ctx, 503, 40, 72, 102);
@@ -360,7 +369,7 @@ export class ReportCardPdfService {
       ['layers', 'CLASS', input.className],
       ['calendar', 'TERM', termLabel],
       ['calendar', 'YEAR', yearLabel],
-      ['trophy', 'POSITION', position],
+      ['trophy', 'STREAM POSITION', position],
     ];
 
     // Row divider
@@ -746,13 +755,15 @@ export class ReportCardPdfService {
     doc.save().roundedRect(M, y, CW, ctx.u.summary, 10).fill(grad).restore();
     doc.save().roundedRect(M, y, CW, ctx.u.summary, 10).lineWidth(1).strokeColor(BORDER).stroke().restore();
 
-    const widths = [0.25, 0.21, 0.23, 0.31].map((r) => r * CW);
+    const widths = [0.18, 0.14, 0.18, 0.18, 0.32].map((r) => r * CW);
     const position = input.rank ? `${input.rank} / ${input.totalStudents ?? '-'}` : '—';
-    const fourth = this.verdictFor(input, template);
+    const overallPosition = input.overallRank ? `${input.overallRank} / ${input.totalStudentsOverall ?? '-'}` : '—';
+    const verdict = this.verdictFor(input, template);
     const stats: Array<[string, string]> = [
       ['Overall Average', `${input.average.toFixed(1)}%`],
       ['Overall Grade', input.overallGrade],
-      ['Class Position', position],
+      ['Stream Position', position],
+      ['Overall Position', overallPosition],
     ];
 
     const compact = ctx.u.compact;
@@ -771,30 +782,30 @@ export class ReportCardPdfService {
       doc.save().moveTo(x, y + 10).lineTo(x, y + ctx.u.summary - 10).lineWidth(0.8).strokeColor(BORDER).stroke().restore();
     });
 
-    // Fourth cell: verdict pill or assessed-subject count
-    const w4 = widths[3];
-    if (fourth) {
-      const pw = Math.min(w4 - 26, 170);
+    // Final cell: verdict pill or assessed-subject count
+    const finalWidth = widths[4];
+    if (verdict) {
+      const pw = Math.min(finalWidth - 26, 170);
       const ph = compact ? 30 : 34;
-      const px = x + (w4 - pw) / 2;
+      const px = x + (finalWidth - pw) / 2;
       const py = y + (ctx.u.summary - ph) / 2;
-      doc.save().roundedRect(px, py, pw, ph, 9).fill(fourth.soft).restore();
-      doc.save().roundedRect(px, py, pw, ph, 9).lineWidth(1.2).strokeColor(fourth.color).stroke().restore();
-      if (fourth.icon) {
-        doc.save().circle(px + 18, py + ph / 2, 10).fill(fourth.color).restore();
+      doc.save().roundedRect(px, py, pw, ph, 9).fill(verdict.soft).restore();
+      doc.save().roundedRect(px, py, pw, ph, 9).lineWidth(1.2).strokeColor(verdict.color).stroke().restore();
+      if (verdict.icon) {
+        doc.save().circle(px + 18, py + ph / 2, 10).fill(verdict.color).restore();
         this.icon(doc, 'check', px + 12, py + ph / 2 - 6, 12, 'white', 3);
       }
-      const label = fourth.label.toUpperCase();
-      const textX = fourth.icon ? px + 34 : px + 8;
-      const textW = fourth.icon ? pw - 40 : pw - 16;
+      const label = verdict.label.toUpperCase();
+      const textX = verdict.icon ? px + 34 : px + 8;
+      const textW = verdict.icon ? pw - 40 : pw - 16;
       const t = this.fitText(doc, label, 'Helvetica-Bold', 13, textW - 4, 7.5);
-      doc.font('Helvetica-Bold').fontSize(t.size).fillColor(fourth.color)
+      doc.font('Helvetica-Bold').fontSize(t.size).fillColor(verdict.color)
         .text(t.text, textX, py + (ph - t.size) / 2 - 0.5, { width: textW, align: 'center', lineBreak: false });
     } else if (input.subjectsAssessed !== undefined && input.subjectsExpected !== undefined) {
       doc.font('Helvetica-Bold').fontSize(10).fillColor(NAVY)
-        .text('Subjects Assessed', x, y + labelY, { width: w4, align: 'center', lineBreak: false });
+        .text('Subjects Assessed', x, y + labelY, { width: finalWidth, align: 'center', lineBreak: false });
       doc.font('Times-Bold').fontSize(valueSize).fillColor(RED)
-        .text(`${input.subjectsAssessed} / ${input.subjectsExpected}`, x, y + valueY, { width: w4, align: 'center', lineBreak: false });
+        .text(`${input.subjectsAssessed} / ${input.subjectsExpected}`, x, y + valueY, { width: finalWidth, align: 'center', lineBreak: false });
     }
     doc.fillColor(INK);
     ctx.y = y + ctx.u.summary;
