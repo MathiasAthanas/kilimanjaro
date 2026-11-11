@@ -32,6 +32,9 @@ export const PREDEFINED_A_LEVEL_COMBINATIONS: PredefinedCombination[] = [
   { code: 'HGE', name: 'History, Geography, Economics', principals: [
     { name: 'History', code: 'HIST' }, { name: 'Geography', code: 'GEO' }, { name: 'Economics', code: 'ECON' },
   ] },
+  { code: 'HGK', name: 'History, Geography, Kiswahili', principals: [
+    { name: 'History', code: 'HIST' }, { name: 'Geography', code: 'GEO' }, { name: 'Kiswahili', code: 'KISW' },
+  ] },
   { code: 'HKL', name: 'History, Kiswahili, Literature in English', principals: [
     { name: 'History', code: 'HIST' }, { name: 'Kiswahili', code: 'KISW' }, { name: 'Literature in English', code: 'LITENG' },
   ] },

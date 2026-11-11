@@ -1164,7 +1164,7 @@ export function useUpdateCombinationMutation() {
   });
 }
 
-/** Seed the 11 predefined A-Level combinations for an academic year (idempotent). */
+/** Seed the predefined A-Level combinations for an academic year (idempotent). */
 export function useSeedPredefinedCombinationsMutation() {
   const qc = useQueryClient();
   return useMutation({

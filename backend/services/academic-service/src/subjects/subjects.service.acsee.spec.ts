@@ -1,5 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import { SubjectsService } from './subjects.service';
+import { PREDEFINED_A_LEVEL_COMBINATIONS } from './predefined-combinations';
 
 describe('SubjectsService A-Level combination validation', () => {
   const service = new SubjectsService({} as any, {} as any, {} as any, {} as any);
@@ -20,5 +21,10 @@ describe('SubjectsService A-Level combination validation', () => {
       { subjectId: 'geography', subjectRole: 'PRINCIPAL' },
       { subjectId: 'general-studies', subjectRole: 'COMPULSORY_SUBSIDIARY' },
     ])).not.toThrow();
+  });
+
+  it('includes HGK with exactly three principal subjects', () => {
+    const hgk = PREDEFINED_A_LEVEL_COMBINATIONS.find((combination) => combination.code === 'HGK');
+    expect(hgk?.principals.map((subject) => subject.code)).toEqual(['HIST', 'GEO', 'KISW']);
   });
 });

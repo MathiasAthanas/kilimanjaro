@@ -2660,7 +2660,7 @@ export function ClassesPage() {
                 }}
                 className="inline-flex items-center gap-1.5 rounded-xl bg-amber-600 px-3 py-2 text-xs font-black text-white transition hover:bg-amber-700 disabled:opacity-50"
               >
-                <Plus className="h-3.5 w-3.5" /> {seedCombinationsMutation.isPending ? 'Seeding…' : 'Seed 11 predefined'}
+                <Plus className="h-3.5 w-3.5" /> {seedCombinationsMutation.isPending ? 'Seeding…' : 'Seed predefined combinations'}
               </button>
             </div>
             <div className="mt-4 space-y-3 rounded-2xl bg-white p-4 shadow-sm">
