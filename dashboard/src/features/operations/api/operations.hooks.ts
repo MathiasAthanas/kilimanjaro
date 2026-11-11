@@ -322,8 +322,37 @@ export async function downloadBulkReportCards(options: {
   const path = options.classId
     ? `/academics/report-cards/bulk/class/${options.classId}/term/${options.termId}`
     : `/academics/report-cards/bulk/level/${options.educationStage}/${options.classLevel}/term/${options.termId}`;
+
+  if (options.format === 'zip') {
+    const response = await api.get(path, {
+      params: { format: 'zip-base64', ...(options.examLabel ? { examLabel: options.examLabel } : {}) },
+      timeout: 180_000,
+      ...(options.schoolId ? { headers: { 'X-Active-School': options.schoolId } } : {}),
+    });
+    const payload = payloadOf(response) as {
+      filename?: string;
+      mimeType?: string;
+      base64?: string;
+    };
+    if (!payload.base64) throw new Error('The report-card archive could not be prepared. Please try again.');
+
+    const binary = window.atob(payload.base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+    const blob = new Blob([bytes], { type: payload.mimeType || 'application/zip' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = payload.filename || options.filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 30_000);
+    return;
+  }
+
   const response = await api.get(path, {
-    params: { format: options.format, ...(options.examLabel ? { examLabel: options.examLabel } : {}) },
+    params: { format: 'pdf', ...(options.examLabel ? { examLabel: options.examLabel } : {}) },
     responseType: 'blob',
     timeout: 180_000,
     ...(options.schoolId ? { headers: { 'X-Active-School': options.schoolId } } : {}),

@@ -216,11 +216,21 @@ export class ReportCardsController {
     res: Response,
   ) {
     const format = (requestedFormat || 'pdf').toLowerCase();
-    if (!['pdf', 'zip'].includes(format)) {
-      throw new BadRequestException('Format must be pdf or zip.');
+    if (!['pdf', 'zip', 'zip-base64'].includes(format)) {
+      throw new BadRequestException('Format must be pdf, zip or zip-base64.');
     }
     const ready = await this.bulkPaths(files);
     const safeBase = this.safeDownloadName(baseName);
+
+    if (format === 'zip-base64') {
+      const archive = await this.buildZipBuffer(ready);
+      return res.json({
+        filename: `${safeBase}.zip`,
+        mimeType: 'application/zip',
+        reportCardCount: ready.length,
+        base64: archive.toString('base64'),
+      });
+    }
 
     if (format === 'zip') {
       res.setHeader('Content-Type', 'application/zip');
@@ -247,5 +257,24 @@ export class ReportCardsController {
     res.setHeader('Content-Disposition', `attachment; filename="${safeBase}.pdf"`);
     res.setHeader('X-Report-Card-Count', String(ready.length));
     return res.send(Buffer.from(bytes));
+  }
+
+  private buildZipBuffer(
+    files: Array<BulkReportCardFile & { absolutePath: string; entryName: string }>,
+  ): Promise<Buffer> {
+    return new Promise((resolveArchive, rejectArchive) => {
+      const archive = archiver('zip', { zlib: { level: 6 } });
+      const chunks: Buffer[] = [];
+
+      archive.on('data', (chunk: Buffer | Uint8Array) => chunks.push(Buffer.from(chunk)));
+      archive.on('warning', (error: Error) => {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') rejectArchive(error);
+      });
+      archive.on('error', rejectArchive);
+      archive.on('end', () => resolveArchive(Buffer.concat(chunks)));
+
+      for (const file of files) archive.file(file.absolutePath, { name: file.entryName });
+      void archive.finalize().catch(rejectArchive);
+    });
   }
 }

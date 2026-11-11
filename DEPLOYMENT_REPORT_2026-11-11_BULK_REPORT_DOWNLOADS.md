@@ -88,3 +88,17 @@ Browser transport deployment result:
 - Two consecutive no-school-header ZIP downloads and the 74-card all-stream ZIP completed successfully.
 - Production report-card and term-result counts and fingerprints remained unchanged.
 
+## Follow-up: interrupted raw ZIP downloads
+
+Production access logs showed that combined PDF downloads completed at the exact expected size, while browser ZIP requests started with HTTP 200 and then stopped at different partial byte counts. The academic service and API gateway logged no generation error, and repeated server-side ZIP downloads always produced a complete archive. This confirms that the cards remained published and the interruption occurred while raw ZIP bytes were travelling to the browser.
+
+The dashboard ZIP path now requests a browser-safe JSON transport from the academic service. The service builds the same archive, encodes it as base64 in authenticated JSON, and the dashboard reconstructs the `.zip` locally before download. The existing raw `format=zip` API remains available; combined PDF behavior is unchanged.
+
+Local verification:
+
+- Browser-safe archive regression test: passed; decoded payload has a valid ZIP signature and both expected PDF entries.
+- All report-card suites: 6 suites and 21 tests passed.
+- Dashboard production build: passed.
+- Academic TypeScript compilation: passed. The local post-build Prisma copy could not replace a DLL held open by the already-running Windows service; this does not affect the Linux production build.
+- No migration or production data mutation is required.
+
