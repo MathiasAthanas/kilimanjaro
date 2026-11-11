@@ -83,10 +83,12 @@ export class ProxyController {
     const contentType = headers?.['content-type'];
     const contentDisposition = headers?.['content-disposition'];
     const contentLength = headers?.['content-length'];
+    const reportCardCount = headers?.['x-report-card-count'];
 
     if (contentType) res.setHeader('Content-Type', contentType);
     else res.setHeader('Content-Type', 'application/octet-stream');
     if (contentDisposition) res.setHeader('Content-Disposition', contentDisposition);
     if (contentLength) res.setHeader('Content-Length', contentLength);
+    if (reportCardCount) res.setHeader('X-Report-Card-Count', reportCardCount);
   }
 }

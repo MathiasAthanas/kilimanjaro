@@ -122,7 +122,7 @@ export class ProxyService {
     }
 
     const targetUrl = `${route.serviceUrl}${route.outboundPath}`;
-    const wantsBinary = this.isBinaryRoute(route.outboundPath);
+    const wantsBinary = this.isBinaryRoute(route.outboundPath, req.query);
 
     try {
       const response = await firstValueFrom(
@@ -140,7 +140,9 @@ export class ProxyService {
 
       return {
         statusCode: response.status,
-        data: response.data,
+        data: wantsBinary && (response.status < 200 || response.status >= 300)
+          ? this.decodeBinaryError(response.data)
+          : response.data,
         headers: response.headers as Record<string, string | string[] | undefined>,
         isBinary: wantsBinary && response.status >= 200 && response.status < 300,
       };
@@ -155,18 +157,40 @@ export class ProxyService {
     return noPrefix.startsWith('/') ? noPrefix : `/${noPrefix}`;
   }
 
-  private isBinaryRoute(path: string): boolean {
+  private isBinaryRoute(path: string, query: Request['query']): boolean {
     // File-returning routes must be proxied as binary (arraybuffer) so PDFs,
     // spreadsheets and CSVs are streamed through byte-for-byte instead of being
     // parsed as JSON (which corrupts the payload and rewrites the content-type).
     if (/\/files\/[^/]+\//i.test(path)) return true;
+    if (/\/academics\/report-cards\/bulk\//i.test(path)) {
+      const format = Array.isArray(query?.format) ? query.format[0] : query?.format;
+      return typeof format === 'string' && ['pdf', 'zip'].includes(format.toLowerCase());
+    }
     return /\/(download|pdf|csv|xlsx|xls|excel|export)(?:\/)?$/i.test(path);
   }
 
   private resolveTimeout(path: string, defaultTimeoutMs: number): number {
+    if (/\/academics\/report-cards\/bulk\//i.test(path)) return Math.max(defaultTimeoutMs, 180_000);
     if (path === '/api/v1/auth/users/bulk-edit/commit') return Math.max(defaultTimeoutMs, 180_000);
     if (path === '/api/v1/auth/users/bulk-edit/preview') return Math.max(defaultTimeoutMs, 60_000);
     return defaultTimeoutMs;
+  }
+
+  private decodeBinaryError(data: unknown): unknown {
+    const text = Buffer.isBuffer(data)
+      ? data.toString('utf8')
+      : data instanceof ArrayBuffer
+        ? Buffer.from(data).toString('utf8')
+        : typeof data === 'string'
+          ? data
+          : '';
+
+    if (!text) return data;
+    try {
+      return JSON.parse(text);
+    } catch {
+      return { message: text };
+    }
   }
 
   private route(

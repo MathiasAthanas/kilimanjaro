@@ -117,6 +117,53 @@ describe('gateway proxy service', () => {
     expect(httpService.request).toHaveBeenLastCalledWith(expect.objectContaining({ timeout: 180_000 }));
   });
 
+  it.each(['pdf', 'zip'])('proxies bulk report-card %s downloads as binary with an extended timeout', async (format) => {
+    const payload = Buffer.from(`${format}-payload`);
+    const httpService = {
+      request: jest.fn(() => of({
+        status: 200,
+        data: payload,
+        headers: { 'content-type': format === 'pdf' ? 'application/pdf' : 'application/zip' },
+      })),
+    };
+    const { service } = createService(httpService, { PROXY_TIMEOUT_MS: '30000' });
+    const route = service.resolveRoute('/api/v1/academics/report-cards/bulk/class/class-1/term/term-1');
+
+    const result = await service.forward(
+      { method: 'GET', headers: {}, query: { format }, body: undefined } as any,
+      route,
+    );
+
+    expect(result).toMatchObject({ statusCode: 200, data: payload, isBinary: true });
+    expect(httpService.request).toHaveBeenCalledWith(expect.objectContaining({
+      responseType: 'arraybuffer',
+      timeout: 180_000,
+    }));
+  });
+
+  it('decodes a bulk report-card download error returned through the binary proxy', async () => {
+    const httpService = {
+      request: jest.fn(() => of({
+        status: 400,
+        data: Buffer.from(JSON.stringify({ message: 'No report cards are ready' })),
+        headers: { 'content-type': 'application/json' },
+      })),
+    };
+    const { service } = createService(httpService);
+    const route = service.resolveRoute('/api/v1/academics/report-cards/bulk/level/PRIMARY/1/term/term-1');
+
+    const result = await service.forward(
+      { method: 'GET', headers: {}, query: { format: 'pdf' }, body: undefined } as any,
+      route,
+    );
+
+    expect(result).toMatchObject({
+      statusCode: 400,
+      data: { message: 'No report cards are ready' },
+      isBinary: false,
+    });
+  });
+
   it('maps downstream network errors to service unavailable', async () => {
     const httpService = { request: jest.fn(() => throwError(() => new Error('down'))) };
     const { service } = createService(httpService);
