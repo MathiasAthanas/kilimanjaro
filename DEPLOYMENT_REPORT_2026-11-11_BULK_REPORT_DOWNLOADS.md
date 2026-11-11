@@ -73,3 +73,9 @@ Follow-up production result:
 - Production remained at 444 published report cards and 4,077 term results with unchanged fingerprint `71057a99a82df0bf83d9d017725efef1`.
 - All eight PM2 services remained online after verification.
 
+## Follow-up: browser ZIP transport
+
+Chrome received HTTP 200 for ZIP requests but repeatedly closed the connection after a random partial byte count. Server-side downloads remained complete. The response headers contained conflicting policies: CORS allowed `https://manage.kilimanjaroschools.site`, while Helmet emitted `Cross-Origin-Resource-Policy: same-origin` from `https://srms.kilimanjaroschools.site`.
+
+The gateway now emits `Cross-Origin-Resource-Policy: cross-origin` for its API responses. The explicit CORS origin allowlist, credentials policy, JWT authentication and school authorization remain unchanged.
+

@@ -17,7 +17,10 @@ async function bootstrap() {
   // the loopback address for public rate limiting and audit metadata.
   app.set('trust proxy', 1);
 
-  app.use(helmet());
+  // The dashboard and API intentionally use separate HTTPS subdomains. CORS
+  // still restricts callers, while CORP must permit the browser to finish
+  // authenticated binary downloads such as report-card ZIP archives.
+  app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
   app.use(morgan(configService.get<string>('NODE_ENV') === 'production' ? 'combined' : 'dev'));
 
   const requestLimit = configService.get<string>('REQUEST_BODY_LIMIT', '100mb');
