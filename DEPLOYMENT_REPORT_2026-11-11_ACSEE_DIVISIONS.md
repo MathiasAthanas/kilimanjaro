@@ -53,14 +53,19 @@ No production student combination will be guessed from class names, streams, or 
 ## Production deployment result
 
 - Git commit: `1bb0247` (`fix: correct ACSEE divisions and combinations`).
-- Active release: `/opt/kilimanjaro/releases/1bb0247-20261111T113000Z`.
-- Previous release retained for rollback: `/opt/kilimanjaro/releases/aec12b9-20261111T101500Z`.
+- Calculation implementation commit: `1bb0247`.
+- HGK catalog completion commit: `17fd5bb`.
+- Active release: `/opt/kilimanjaro/releases/17fd5bb-20261111T113700Z`.
+- Previous releases retained for rollback: `/opt/kilimanjaro/releases/1bb0247-20261111T113000Z` and `/opt/kilimanjaro/releases/aec12b9-20261111T101500Z`.
 - Frontend backup: `/opt/kilimanjaro/backups/frontend_pre_1bb0247-20261111T113000Z_20261111T112930Z.tar.gz`.
 - Migration `20261111120000_normalize_acsee_division_points` applied successfully; Prisma reports the production schema is current.
 - A-Level boundaries after migration: A=1/pass, B=2/pass, C=3/pass, D=4/pass, E=5/pass, S=6/non-pass, F=7/non-pass.
 - Live engine checks passed: AAA=3/I, ABF=10/II, AEF=13/III, DFF=18/IV, SFF=20/0.
+- HGK is present with History, Geography and Kiswahili as its three principal subjects.
 - General Studies was excluded from the live division fixtures.
+- Seeded 12 predefined combinations for Kilimanjaro Islamic High School, academic year 2026: PCM, PCB, PGM, EGM, HGE, HGK, HKL, HGL, CBG, CBA, ECA and HKE.
 - Live A-Level readiness returned `A_LEVEL_COMBINATION_MISSING` for 7 students and did not permit closing the window.
+- Student assignments were deliberately not inferred. The administrator must select the correct combination for each student from the Form 5/Form 6 class roster.
 - The live dashboard bundle contains the A-Level combination assignment control.
 - Exam-window results remained at 451 and their fingerprint remained `e2160a2d6b611ea4c2ad35321b851a9a`.
 - Marks increased from 6,639 to 6,656 while the deployment ran because users were concurrently entering results. The migration does not update the marks table, and no mark was overwritten by this deployment.
