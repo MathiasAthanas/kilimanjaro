@@ -574,7 +574,7 @@ export class SubjectsService {
 
   /**
    * A-Level ACSEE combination rules:
-   *  - At least 2 principal subjects.
+   *  - At least 3 principal subjects so ACSEE can calculate a three-subject division.
    *  - At least one compulsory subsidiary (General Studies / General Paper).
    */
   private assertALevelCombinationValid(subjects: CreateSubjectCombinationDto['subjects']) {
@@ -585,9 +585,9 @@ export class SubjectsService {
 
     const hasCompulsorySubsidiary = subjects.some((s) => s.subjectRole === 'COMPULSORY_SUBSIDIARY');
 
-    if (principalCount < 2) {
+    if (principalCount < 3) {
       throw new BadRequestException(
-        'An A-Level combination must have at least 2 principal subjects',
+        'An A-Level combination must have at least 3 principal subjects for ACSEE division calculation',
       );
     }
     if (!hasCompulsorySubsidiary) {
@@ -759,28 +759,61 @@ export class SubjectsService {
     if (!combination || combination.educationStage !== 'A_LEVEL' || !combination.isActive) {
       throw new BadRequestException('Bulk assignment requires an active A-Level combination');
     }
+    if (combination.academicYearId !== dto.academicYearId) {
+      throw new BadRequestException('The selected combination belongs to a different academic year');
+    }
     if (combination.schoolId) resolveWriteSchoolId(user, combination.schoolId);
     await this.assertBulkEnrollmentScope(dto, user);
-    const rows: Array<Promise<unknown>> = [];
-    for (const studentId of dto.studentIds) {
-      for (const subject of combination.subjects) {
-        rows.push(
-          this.enrollStudentSubject({
-            studentId,
+    const studentIds = [...new Set(dto.studentIds)];
+    const saved = await this.prisma.$transaction(async (tx) => {
+      // Combination assignment replaces the previous one. Leaving both active
+      // would make the principal-subject set ambiguous during result calculation.
+      await tx.studentSubjectEnrollment.updateMany({
+        where: {
+          studentId: { in: studentIds },
+          classId: dto.classId,
+          academicYearId: dto.academicYearId,
+          ...(dto.termId ? { OR: [{ termId: null }, { termId: dto.termId }] } : {}),
+          combinationId: { not: null },
+          isActive: true,
+        },
+        data: { isActive: false },
+      });
+
+      const rows: unknown[] = [];
+      for (const studentId of studentIds) {
+        for (const subject of combination.subjects) {
+          const existing = await tx.studentSubjectEnrollment.findFirst({
+            where: {
+              studentId,
+              subjectId: subject.subjectId,
+              academicYearId: dto.academicYearId,
+              termId: dto.termId ?? null,
+            },
+          });
+          const data = {
             classId: dto.classId,
-            academicYearId: dto.academicYearId,
-            termId: dto.termId,
             combinationId: dto.combinationId,
-            subjectId: subject.subjectId,
             isActive: true,
-          }),
-        );
+          };
+          rows.push(existing
+            ? await tx.studentSubjectEnrollment.update({ where: { id: existing.id }, data })
+            : await tx.studentSubjectEnrollment.create({
+                data: {
+                  studentId,
+                  subjectId: subject.subjectId,
+                  academicYearId: dto.academicYearId,
+                  termId: dto.termId,
+                  ...data,
+                },
+              }));
+        }
       }
-    }
-    const saved = await Promise.all(rows);
+      return rows;
+    });
     return {
       combinationId: dto.combinationId,
-      studentsAssigned: dto.studentIds.length,
+      studentsAssigned: studentIds.length,
       subjectEnrollments: saved.length,
       items: saved,
     };

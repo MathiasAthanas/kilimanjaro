@@ -69,12 +69,21 @@ export interface ScaleIssue {
   message: string;
 }
 
+export interface CombinationIssue {
+  studentId: string;
+  studentName: string;
+  registrationNumber: string | null;
+  classId: string;
+  className: string | null;
+}
+
 export interface CalcContext {
   window: any;
   classIds: string[];
   rows: CalcStudentRow[];
   missing: MissingEntry[];
   scaleIssues: ScaleIssue[];
+  combinationIssues: CombinationIssue[];
   warnings: string[];
 }
 
@@ -274,6 +283,7 @@ export class ResultCalculatorService {
 
     const rows: CalcStudentRow[] = [];
     const missing: MissingEntry[] = [];
+    const combinationIssues: CombinationIssue[] = [];
     const warnings: string[] = [];
     const assessmentsByClass = new Map<string, typeof assessments>();
     for (const a of assessments) {
@@ -307,6 +317,13 @@ export class ResultCalculatorService {
         const rowWarnings: string[] = [];
         if (stage === 'A_LEVEL' && !enrol.combinationId) {
           rowWarnings.push('No subject combination recorded for this A-Level student.');
+          combinationIssues.push({
+            studentId: s.id,
+            studentName: this.studentName(s),
+            registrationNumber: s.registrationNumber ?? null,
+            classId,
+            className: meta.name,
+          });
         }
 
         const outcomes: SubjectOutcome[] = [];
@@ -413,7 +430,7 @@ export class ResultCalculatorService {
       }
     }
 
-    return { window, classIds, rows, missing, scaleIssues: [...scaleIssueKeys.values()], warnings };
+    return { window, classIds, rows, missing, scaleIssues: [...scaleIssueKeys.values()], combinationIssues, warnings };
   }
 
   /** The blocking error thrown when a window cannot be calculated/closed yet. */
@@ -442,9 +459,23 @@ export class ResultCalculatorService {
     });
   }
 
-  /** Throw if the window cannot be calculated: missing grading scale or unresolved marks. */
+  combinationError(issues: CombinationIssue[]): BadRequestException {
+    const first = issues[0];
+    const more = issues.length - 1;
+    const identifier = first.registrationNumber ? ` (${first.registrationNumber})` : '';
+    const message = `${first.studentName}${identifier} has no A-Level subject combination.${more > 0 ? ` ${more} more student${more === 1 ? '' : 's'} also need a combination.` : ''} Assign the correct combination before calculating divisions.`;
+    return new BadRequestException({
+      statusCode: 400,
+      message,
+      code: 'A_LEVEL_COMBINATION_MISSING',
+      details: { issueCount: issues.length, issues: issues.slice(0, 500) },
+    });
+  }
+
+  /** Throw if the window cannot be calculated: missing scale, combination, or marks. */
   assertCalculable(ctx: CalcContext): void {
     if (ctx.scaleIssues.length) throw this.scaleError(ctx.scaleIssues);
+    if (ctx.combinationIssues.length) throw this.combinationError(ctx.combinationIssues);
     if (ctx.missing.length) throw this.incompleteError(ctx.missing);
   }
 }

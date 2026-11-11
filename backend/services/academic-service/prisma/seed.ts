@@ -95,13 +95,13 @@ async function main() {
   ]);
 
   await seedScale('A-Level ACSEE 2026', 'A_LEVEL', [
-    { grade: 'A', minScore: 80, maxScore: 100, points: 5, remark: 'Distinction', isPassing: true },
-    { grade: 'B', minScore: 60, maxScore: 79, points: 4, remark: 'Credit', isPassing: true },
+    { grade: 'A', minScore: 80, maxScore: 100, points: 1, remark: 'Distinction', isPassing: true },
+    { grade: 'B', minScore: 60, maxScore: 79, points: 2, remark: 'Credit', isPassing: true },
     { grade: 'C', minScore: 45, maxScore: 59, points: 3, remark: 'Merit', isPassing: true },
-    { grade: 'D', minScore: 30, maxScore: 44, points: 2, remark: 'Pass', isPassing: true },
-    { grade: 'E', minScore: 25, maxScore: 29, points: 1, remark: 'Subsidiary Pass', isPassing: true },
-    { grade: 'S', minScore: 20, maxScore: 24, points: 0, remark: 'Subsidiary', isPassing: false },
-    { grade: 'F', minScore: 0, maxScore: 19, points: 0, remark: 'Fail', isPassing: false },
+    { grade: 'D', minScore: 30, maxScore: 44, points: 4, remark: 'Pass', isPassing: true },
+    { grade: 'E', minScore: 25, maxScore: 29, points: 5, remark: 'Principal Pass', isPassing: true },
+    { grade: 'S', minScore: 20, maxScore: 24, points: 6, remark: 'Subsidiary', isPassing: false },
+    { grade: 'F', minScore: 0, maxScore: 19, points: 7, remark: 'Fail', isPassing: false },
   ]);
 
   await seedAssessmentType('Class Activity Test', 'CAT1', 40, 'PRIMARY');

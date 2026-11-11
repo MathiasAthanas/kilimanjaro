@@ -603,6 +603,30 @@ export function useSubjectCombinations() {
   });
 }
 
+export function useStudentSubjectEnrollments(classId?: string, academicYearId?: string) {
+  const activeSchoolKey = useActiveSchoolKey();
+  return useQuery({
+    queryKey: [...adminKeys.combinations(), 'student-enrolments', activeSchoolKey, classId ?? '', academicYearId ?? ''],
+    queryFn: () => api.get('/academics/student-subject-enrollments', {
+      params: { classId, academicYearId },
+    }).then((r) => arrayFromApi(payloadOf(r), ['items', 'enrollments'])),
+    enabled: Boolean(classId && academicYearId),
+    staleTime: 15_000,
+  });
+}
+
+export function useAssignStudentCombinationMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { studentIds: string[]; classId: string; academicYearId: string; combinationId: string; termId?: string }) =>
+      api.post('/academics/student-subject-enrollments/bulk-combination', payload).then((r) => payloadOf(r)),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: adminKeys.combinations() });
+      qc.invalidateQueries({ queryKey: ['class-students'] });
+    },
+  });
+}
+
 export function useClassPathways() {
   return useQuery({
     queryKey: adminKeys.pathways(),

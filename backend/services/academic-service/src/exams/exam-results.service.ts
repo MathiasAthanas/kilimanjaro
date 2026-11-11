@@ -187,6 +187,10 @@ export class ExamResultsService {
 
     const blockers: Array<{ code: string; message: string }> = [];
     for (const issue of ctx.scaleIssues) blockers.push({ code: 'GRADING_SCALE_MISSING', message: issue.message });
+    if (ctx.combinationIssues.length) {
+      const e = this.calculator.combinationError(ctx.combinationIssues);
+      blockers.push({ code: 'A_LEVEL_COMBINATION_MISSING', message: String((e.getResponse() as any).message) });
+    }
     if (ctx.missing.length) {
       const e = this.calculator.incompleteError(ctx.missing);
       blockers.push({ code: 'RESULTS_INCOMPLETE', message: String((e.getResponse() as any).message) });
@@ -234,6 +238,7 @@ export class ExamResultsService {
       blockers,
       counts,
       scaleIssues: ctx.scaleIssues,
+      combinationIssues: ctx.combinationIssues,
       warnings: ctx.warnings,
       subjects: [...subjectCols.values()].sort((a, b) => a.subjectName.localeCompare(b.subjectName)),
       missing: ctx.missing.slice(0, 1000),

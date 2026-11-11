@@ -3,7 +3,7 @@
  *
  * Each combination lists three PRINCIPAL subjects. General Studies is added
  * automatically as the COMPULSORY_SUBSIDIARY that every ACSEE candidate sits,
- * satisfying the combination validation rules (>=2 principals + 1 compulsory
+ * satisfying the combination validation rules (>=3 principals + 1 compulsory
  * subsidiary). Schools can still create custom combinations on top of these.
  */
 

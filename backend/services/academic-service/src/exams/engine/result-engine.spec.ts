@@ -188,13 +188,53 @@ describe('divisions', () => {
       buildOutcome({ subjectId: id, subjectName: id, code: id, maxScore: 100, mark: { score, isAbsent: false, notSat: false }, scale: aLevelScale });
     const full = summarizeStudent('A_LEVEL', [mk('phy', 85), mk('chem', 82), mk('math', 90), mk('gs', 30)], principals);
     expect(full.division.division).toBe('Division I');
-    expect(full.division.totalPoints).toBe(15);
+    expect(full.division.totalPoints).toBe(3);
 
     const exempt = buildOutcome({ subjectId: 'math', subjectName: 'math', code: 'm', maxScore: 100, mark: null, exemption: { id: 'e', reason: 'x' }, scale: aLevelScale });
     const few = summarizeStudent('A_LEVEL', [mk('phy', 85), mk('chem', 82), exempt, mk('gs', 30)], principals);
     expect(few.division.eligible).toBe(false);
     expect(few.division.division).toBe('Ungraded');
     expect(few.division.note).toMatch(/fewer than 3 eligible principal/);
+  });
+
+  it.each([
+    [['A', 'A', 'A'], 3, 'Division I'],
+    [['A', 'A', 'F'], 9, 'Division I'],
+    [['A', 'B', 'F'], 10, 'Division II'],
+    [['A', 'D', 'F'], 12, 'Division II'],
+    [['A', 'E', 'F'], 13, 'Division III'],
+    [['E', 'E', 'F'], 17, 'Division III'],
+    [['D', 'F', 'F'], 18, 'Division IV'],
+    [['S', 'S', 'F'], 19, 'Division IV'],
+    [['S', 'F', 'F'], 20, 'Division 0'],
+    [['F', 'F', 'F'], 21, 'Division 0'],
+  ])('A-Level: %j gives %i points and %s', (grades, points, division) => {
+    const rows = grades.map((grade, index) => ({
+      subjectId: `principal-${index}`,
+      grade,
+      gradePoints: 0,
+      isPassing: false,
+    }));
+    const result = computeDivision(
+      'A_LEVEL',
+      [...rows, { subjectId: 'general-studies', grade: 'A', gradePoints: 99, isPassing: true }],
+      new Set(rows.map((row) => row.subjectId)),
+      'HIGHER_BETTER',
+    );
+    expect(result.totalPoints).toBe(points);
+    expect(result.division).toBe(division);
+    expect(result.eligibleSubjects).toBe(3);
+  });
+
+  it('A-Level: no assigned principal combination is ungraded instead of counting every subject', () => {
+    const result = computeDivision('A_LEVEL', [
+      { subjectId: 'general-studies', grade: 'A', gradePoints: 1, isPassing: true },
+      { subjectId: 'basic-math', grade: 'A', gradePoints: 1, isPassing: true },
+      { subjectId: 'ict', grade: 'A', gradePoints: 1, isPassing: true },
+    ]);
+    expect(result.eligible).toBe(false);
+    expect(result.division).toBe('Ungraded');
+    expect(result.note).toMatch(/no A-Level principal combination/i);
   });
 
   it('Primary: overall pass mark determines the promotion verdict', () => {

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useParams, NavLink } from 'react-router-dom';
-import { Download, KeyRound, ShieldAlert, UserPlus, X } from 'lucide-react';
+import { BookOpenCheck, Download, KeyRound, ShieldAlert, UserPlus, X } from 'lucide-react';
 import { AdminShell } from '../components/AdminConsole';
 import { Button } from '../../../components/common/Button';
 import { toast } from '../../../lib/toast';
@@ -15,6 +15,9 @@ import {
   useAddGuardianMutation,
   useUnlinkGuardianMutation,
   useResetUserPwMutation,
+  useSubjectCombinations,
+  useStudentSubjectEnrollments,
+  useAssignStudentCombinationMutation,
 } from '../api/admin.hooks';
 import { StudentLifecycleDialog } from '../components/StudentLifecycleDialog';
 
@@ -68,6 +71,7 @@ export function ClassStudentsAdminPage() {
   const [manageStudent, setManageStudent] = useState<ClassStudentRow | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [lifecycleOpen, setLifecycleOpen] = useState(false);
+  const [combinationId, setCombinationId] = useState('');
 
   // A cleanup may finish in another tab, or a user may revisit a bookmarked
   // class route. Do not leave either case on a permanently invalid screen.
@@ -86,11 +90,29 @@ export function ClassStudentsAdminPage() {
   });
 
   const report = data as {
-    class?: { name: string; stream?: string; educationStage?: string; combinationCode?: string | null; academicYearName?: string | null };
+    class?: { name: string; stream?: string; educationStage?: string; combinationCode?: string | null; academicYearId?: string; academicYearName?: string | null };
     school?: { name?: string | null; gender?: string | null };
     overview?: Record<string, number>;
     students?: ClassStudentRow[];
   } | undefined;
+
+  const isALevel = report?.class?.educationStage === 'A_LEVEL';
+  const academicYearId = report?.class?.academicYearId ?? '';
+  const { data: combinations = [] as any[] } = useSubjectCombinations() as { data?: any[] };
+  const { data: subjectEnrollments = [] as any[] } = useStudentSubjectEnrollments(isALevel ? classId : undefined, isALevel ? academicYearId : undefined) as { data?: any[] };
+  const assignCombination = useAssignStudentCombinationMutation();
+  const availableCombinations = combinations.filter((item: any) =>
+    String(item.academicYearId ?? '') === academicYearId && item.isActive !== false,
+  );
+  const combinationByStudent = new Map<string, any>();
+  for (const enrollment of subjectEnrollments) {
+    if (enrollment.combinationId && !combinationByStudent.has(String(enrollment.studentId))) {
+      combinationByStudent.set(String(enrollment.studentId), enrollment.combination ?? {
+        id: enrollment.combinationId,
+        code: enrollment.combinationId,
+      });
+    }
+  }
 
   const students = report?.students ?? [];
   const ov = report?.overview ?? {};
@@ -100,6 +122,20 @@ export function ClassStudentsAdminPage() {
   const toggleAllVisible = () => setSelectedIds(allVisibleSelected
     ? (current) => current.filter((id) => !students.some((student) => student.id === id))
     : (current) => [...new Set([...current, ...students.map((student) => student.id)])]);
+
+  function assignSelectedCombination() {
+    if (!classId || !academicYearId || !combinationId || selectedIds.length === 0) return;
+    const selected = availableCombinations.find((item: any) => String(item.id) === combinationId);
+    const code = String(selected?.code ?? selected?.name ?? 'selected combination');
+    if (!window.confirm(`Assign ${code} to ${selectedIds.length} selected student${selectedIds.length === 1 ? '' : 's'}? This replaces any previous A-Level combination assignment for this academic year.`)) return;
+    assignCombination.mutate({ studentIds: selectedIds, classId, academicYearId, combinationId }, {
+      onSuccess: (result: any) => {
+        toast(`${result?.studentsAssigned ?? selectedIds.length} student${selectedIds.length === 1 ? '' : 's'} assigned to ${code}.`, 'success');
+        setSelectedIds([]);
+      },
+      onError: (e: any) => toast(e?.response?.data?.message ?? 'Failed to assign the A-Level combination.', 'error'),
+    });
+  }
 
   const setFilter = (key: string, value: string) => setFilters((f) => { const n = { ...f }; if (value) n[key] = value; else delete n[key]; return n; });
 
@@ -200,6 +236,25 @@ export function ClassStudentsAdminPage() {
 
         {selectedIds.length > 0 && <div className="flex items-center justify-between rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm"><span className="font-black text-indigo-900">{selectedIds.length} student{selectedIds.length === 1 ? '' : 's'} selected</span><button onClick={() => setSelectedIds([])} className="font-bold text-indigo-700 hover:underline">Clear selection</button></div>}
 
+        {isALevel && (
+          <div className="rounded-2xl border border-indigo-200 bg-indigo-50/60 p-4 shadow-sm">
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="min-w-[260px] flex-1">
+                <div className="flex items-center gap-2 text-sm font-black text-indigo-950"><BookOpenCheck className="h-4 w-4" /> Assign A-Level combination</div>
+                <p className="mt-1 text-xs text-indigo-700">Select students in the roster, choose their three-principal-subject combination, then assign it. Existing assignments are safely replaced.</p>
+                <select value={combinationId} onChange={(event) => setCombinationId(event.target.value)} className="mt-3 h-10 w-full rounded-xl border border-indigo-200 bg-white px-3 text-sm font-bold text-slate-800 outline-none focus:border-indigo-500">
+                  <option value="">Choose combination</option>
+                  {availableCombinations.map((item: any) => <option key={String(item.id)} value={String(item.id)}>{String(item.code ?? item.name)} - {String(item.name ?? 'A-Level combination')}</option>)}
+                </select>
+              </div>
+              <Button disabled={!combinationId || selectedIds.length === 0 || assignCombination.isPending} onClick={assignSelectedCombination} className="h-10 rounded-xl px-4">
+                {assignCombination.isPending ? 'Assigning...' : `Assign selected (${selectedIds.length})`}
+              </Button>
+            </div>
+            {availableCombinations.length === 0 && <p className="mt-3 text-xs font-bold text-amber-700">No active A-Level combinations exist for this academic year. Create or seed them in Class Management first.</p>}
+          </div>
+        )}
+
         {/* Table */}
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="overflow-x-auto">
@@ -207,12 +262,12 @@ export function ClassStudentsAdminPage() {
               <thead className="bg-[#1E1B4B] text-[11px] font-black uppercase tracking-widest text-white">
                 <tr>
                   <th className="w-10 px-3 py-3"><input aria-label="Select all visible students" type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} className="h-3.5 w-3.5 rounded border-white/50" /></th>
-                  {['Reg / Admission', 'Name', 'Gender', 'Guardian', 'Login', 'Status', 'Actions'].map((h) => <th key={h} className="px-4 py-3">{h}</th>)}
+                  {['Reg / Admission', 'Name', 'Gender', ...(isALevel ? ['Combination'] : []), 'Guardian', 'Login', 'Status', 'Actions'].map((h) => <th key={h} className="px-4 py-3">{h}</th>)}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {isLoading && <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-400">Loading…</td></tr>}
-                {!isLoading && students.length === 0 && <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-400">No students match.</td></tr>}
+                {isLoading && <tr><td colSpan={isALevel ? 9 : 8} className="px-4 py-10 text-center text-slate-400">Loading…</td></tr>}
+                {!isLoading && students.length === 0 && <tr><td colSpan={isALevel ? 9 : 8} className="px-4 py-10 text-center text-slate-400">No students match.</td></tr>}
                 {students.map((s) => (
                   <tr key={s.id} className="hover:bg-slate-50">
                     <td className="px-3 py-3"><input aria-label={`Select ${s.fullName}`} type="checkbox" checked={selectedSet.has(s.id)} onChange={() => toggleStudent(s.id)} className="h-4 w-4 rounded border-slate-300 text-indigo-600" /></td>
@@ -222,6 +277,7 @@ export function ClassStudentsAdminPage() {
                     </td>
                     <td className="px-4 py-3 font-black text-slate-900">{s.fullName}</td>
                     <td className="px-4 py-3">{s.gender ?? <span className="text-rose-500">—</span>}</td>
+                    {isALevel && <td className="px-4 py-3"><span className={`rounded-full px-2 py-1 text-[10px] font-black ${combinationByStudent.has(s.id) ? 'bg-indigo-100 text-indigo-700' : 'bg-amber-100 text-amber-700'}`}>{String(combinationByStudent.get(s.id)?.code ?? combinationByStudent.get(s.id)?.name ?? 'Not assigned')}</span></td>}
                     <td className="px-4 py-3">
                       {s.primaryGuardian
                         ? <div><p className="font-semibold text-slate-700">{s.primaryGuardian.name}</p><p className="text-[11px] text-slate-400">{s.primaryGuardian.phoneNumber || 'no phone'}</p></div>

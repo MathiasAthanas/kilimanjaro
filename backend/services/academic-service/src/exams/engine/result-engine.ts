@@ -175,6 +175,21 @@ export interface DivisionRow {
   isPassing: boolean;
 }
 
+/** Official ACSEE grade points used only for A-Level division calculation. */
+export const ACSEE_POINTS_BY_GRADE: Readonly<Record<string, number>> = Object.freeze({
+  A: 1,
+  B: 2,
+  C: 3,
+  D: 4,
+  E: 5,
+  S: 6,
+  F: 7,
+});
+
+export function acseeGradePoints(grade: string): number {
+  return ACSEE_POINTS_BY_GRADE[String(grade ?? '').trim().toUpperCase()] ?? 7;
+}
+
 /**
  * Which way grade points run. NECTA ACSEE awards A=1 ... F=7 (lower is better);
  * some school scales use A=5 ... F=0 (higher is better). Detected from the scale
@@ -210,14 +225,15 @@ export interface DivisionResult {
  * division: too few eligible subjects → "Ungraded".
  *
  *  O-Level: best 7 by grade-point (lower better). 7–17 I | 18–21 II | 22–25 III | 26–33 IV | ≥34 0
- *  A-Level: best 3 PRINCIPAL (higher better). 13–15 I | 10–12 II | 7–9 III | 4–6 IV | ≤3 0
+ *  A-Level: best 3 PRINCIPAL combination subjects using A=1 ... F=7.
+ *           3–9 I | 10–12 II | 13–17 III | 18–19 IV | ≥20 0
  *  Primary: "Promotable" when the overall average reaches the configured pass mark.
  */
 export function computeDivision(
   stage: string | null | undefined,
   rows: DivisionRow[],
   principalSubjectIds?: Set<string>,
-  direction: PointsDirection = 'HIGHER_BETTER',
+  _direction: PointsDirection = 'HIGHER_BETTER',
   options: { overallAverage?: number; primaryPassMark?: number } = {},
 ): DivisionResult {
   if (stage === 'PRIMARY') {
@@ -236,9 +252,13 @@ export function computeDivision(
   }
 
   if (stage === 'A_LEVEL') {
-    const principals = principalSubjectIds ? rows.filter((r) => principalSubjectIds.has(r.subjectId)) : rows;
+    const principals = principalSubjectIds
+      ? rows.filter((r) => principalSubjectIds.has(r.subjectId))
+      : [];
     if (principals.length < 3) {
-      const note = `Ungraded — fewer than 3 eligible principal subjects (${principals.length})`;
+      const note = principalSubjectIds
+        ? `Ungraded - fewer than 3 eligible principal subjects (${principals.length})`
+        : 'Ungraded - no A-Level principal combination is assigned';
       return {
         mode: 'A_LEVEL',
         division: 'Ungraded',
@@ -246,36 +266,27 @@ export function computeDivision(
         totalPoints: 0,
         eligible: false,
         note,
-        principalPasses: principals.filter((r) => r.gradePoints >= 1).length,
+        principalPasses: principals.filter((r) => acseeGradePoints(r.grade) <= 5).length,
         eligibleSubjects: principals.length,
       };
     }
-    const lower = direction === 'LOWER_BETTER';
-    const principalPasses = principals.filter((r) => (lower ? r.isPassing : r.gradePoints >= 1)).length;
-    const best3 = [...principals].sort((a, b) => (lower ? a.gradePoints - b.gradePoints : b.gradePoints - a.gradePoints)).slice(0, 3);
-    const divPoints = best3.reduce((sum, r) => sum + r.gradePoints, 0);
+    // Editable school scales control score-to-grade boundaries, but must never
+    // reverse or redefine national ACSEE division points.
+    const principalPasses = principals.filter((r) => acseeGradePoints(r.grade) <= 5).length;
+    const best3 = [...principals]
+      .sort((a, b) => acseeGradePoints(a.grade) - acseeGradePoints(b.grade))
+      .slice(0, 3);
+    const divPoints = best3.reduce((sum, r) => sum + acseeGradePoints(r.grade), 0);
     let division: string;
-    if (lower) {
-      // NECTA ACSEE: best 3 principal subjects, A=1 ... F=7. I 3-9 | II 10-12 | III 13-17 | IV 18-19 | 0 >=20
-      if (principalPasses < 2) division = 'Division 0';
-      else if (divPoints <= 9) division = 'Division I';
-      else if (divPoints <= 12) division = 'Division II';
-      else if (divPoints <= 17) division = 'Division III';
-      else if (divPoints <= 19) division = 'Division IV';
-      else division = 'Division 0';
-    } else if (principalPasses < 2 || divPoints <= 3) division = 'Division 0';
-    else if (divPoints >= 13) division = 'Division I';
-    else if (divPoints >= 10) division = 'Division II';
-    else if (divPoints >= 7) division = 'Division III';
-    else if (divPoints >= 4) division = 'Division IV';
+    if (divPoints <= 9) division = 'Division I';
+    else if (divPoints <= 12) division = 'Division II';
+    else if (divPoints <= 17) division = 'Division III';
+    else if (divPoints <= 19) division = 'Division IV';
     else division = 'Division 0';
     return {
       mode: 'A_LEVEL',
       division,
-      descriptor:
-        principalPasses >= 2
-          ? `${division} · ${principalPasses} principal pass(es) · ${divPoints} pts`
-          : `Division 0 — only ${principalPasses} principal pass(es)`,
+      descriptor: `${division} - ${principalPasses} principal pass(es) - ${divPoints} pts`,
       totalPoints: divPoints,
       eligible: true,
       principalPasses,

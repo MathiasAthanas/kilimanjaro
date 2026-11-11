@@ -9,6 +9,7 @@ import {
 } from '../common/helpers/school-scope.helper';
 import { CreateAssessmentTypeDto } from './dto/create-assessment-type.dto';
 import { CreateGradingScaleDto } from './dto/create-grading-scale.dto';
+import { ACSEE_POINTS_BY_GRADE } from '../exams/engine/result-engine';
 
 @Injectable()
 export class GradingService {
@@ -35,6 +36,25 @@ export class GradingService {
     }
   }
 
+  private normalizeALevelGrades<T extends {
+    grade: string;
+    points: number;
+    isPassing?: boolean;
+  }>(educationStage: string | null | undefined, grades: T[]): T[] {
+    if (educationStage !== 'A_LEVEL') return grades;
+    return grades.map((boundary) => {
+      const grade = boundary.grade.trim().toUpperCase();
+      const points = ACSEE_POINTS_BY_GRADE[grade];
+      if (points === undefined) return boundary;
+      return {
+        ...boundary,
+        grade,
+        points,
+        isPassing: points <= 5,
+      };
+    });
+  }
+
   private scopeCacheKey(user?: RequestUser): string {
     if (!user) return 'internal';
     if (user.activeSchoolId) return `school:${user.activeSchoolId}`;
@@ -43,7 +63,8 @@ export class GradingService {
   }
 
   async createGradingScale(dto: CreateGradingScaleDto, user?: RequestUser) {
-    this.validateBoundaries(dto.grades);
+    const grades = this.normalizeALevelGrades(dto.educationStage, dto.grades);
+    this.validateBoundaries(grades);
 
     const scale = await this.prisma.gradingScale.create({
       data: {
@@ -54,7 +75,7 @@ export class GradingService {
         classLevel: dto.classLevel,
         subjectId: dto.subjectId,
         grades: {
-          create: dto.grades,
+          create: grades,
         },
       },
       include: { grades: { orderBy: { minScore: 'asc' } } },
@@ -121,7 +142,8 @@ export class GradingService {
     if (!existing) throw new NotFoundException('Grading scale not found');
     assertSchoolRecordWritable(user, existing.schoolId ?? null, 'grading scale');
 
-    this.validateBoundaries(dto.grades);
+    const grades = this.normalizeALevelGrades(existing.educationStage, dto.grades);
+    this.validateBoundaries(grades);
 
     const updated = await this.prisma.gradingScale.update({
       where: { id },
@@ -129,7 +151,7 @@ export class GradingService {
         name: dto.name,
         grades: {
           deleteMany: {},
-          create: dto.grades,
+          create: grades,
         },
       },
       include: { grades: { orderBy: { minScore: 'asc' } } },

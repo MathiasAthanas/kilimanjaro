@@ -2051,8 +2051,8 @@ export function ClassesPage() {
       displayOrder: i + 1,
     }));
     const principalCount = subjects.filter((subject) => subject.subjectRole === 'PRINCIPAL').length;
-    if (principalCount < 2) {
-      toast('Mark at least two A-Level subjects as Principal (P).', 'warning');
+    if (principalCount < 3) {
+      toast('Mark at least three A-Level subjects as Principal (P).', 'warning');
       return;
     }
     if (!subjects.some((subject) => subject.subjectRole === 'COMPULSORY_SUBSIDIARY')) {
@@ -3282,7 +3282,7 @@ const GRADING_DEFAULT_BOUNDARIES: Record<string, Array<{ label: string; min: num
   NURSERY:  [{ label: 'EE', min: 75, max: 100, points: 4, remark: 'Exceeding Expectations', isPassing: true }, { label: 'ME', min: 50, max: 74, points: 3, remark: 'Meeting Expectations', isPassing: true }, { label: 'AE', min: 25, max: 49, points: 2, remark: 'Approaching Expectations', isPassing: true }, { label: 'BE', min: 0, max: 24, points: 1, remark: 'Below Expectations', isPassing: false }],
   PRIMARY:  [{ label: 'A', min: 75, max: 100, points: 1, remark: 'Excellent', isPassing: true }, { label: 'B', min: 60, max: 74, points: 2, remark: 'Good', isPassing: true }, { label: 'C', min: 45, max: 59, points: 3, remark: 'Average', isPassing: true }, { label: 'D', min: 30, max: 44, points: 4, remark: 'Below Average', isPassing: true }, { label: 'F', min: 0, max: 29, points: 5, remark: 'Fail', isPassing: false }],
   O_LEVEL:  [{ label: 'A', min: 75, max: 100, points: 1, remark: 'Distinction', isPassing: true }, { label: 'B', min: 60, max: 74, points: 2, remark: 'Credit', isPassing: true }, { label: 'C', min: 45, max: 59, points: 3, remark: 'Merit', isPassing: true }, { label: 'D', min: 30, max: 44, points: 4, remark: 'Pass', isPassing: true }, { label: 'F', min: 0, max: 29, points: 5, remark: 'Fail', isPassing: false }],
-  A_LEVEL:  [{ label: 'A', min: 80, max: 100, points: 1, remark: 'Distinction', isPassing: true }, { label: 'B', min: 65, max: 79, points: 2, remark: 'Merit', isPassing: true }, { label: 'C', min: 50, max: 64, points: 3, remark: 'Credit', isPassing: true }, { label: 'D', min: 40, max: 49, points: 4, remark: 'Pass', isPassing: true }, { label: 'E', min: 30, max: 39, points: 5, remark: 'Subsidiary Pass', isPassing: true }, { label: 'F', min: 0, max: 29, points: 6, remark: 'Fail', isPassing: false }],
+  A_LEVEL:  [{ label: 'A', min: 80, max: 100, points: 1, remark: 'Distinction', isPassing: true }, { label: 'B', min: 70, max: 79, points: 2, remark: 'Merit', isPassing: true }, { label: 'C', min: 60, max: 69, points: 3, remark: 'Credit', isPassing: true }, { label: 'D', min: 50, max: 59, points: 4, remark: 'Pass', isPassing: true }, { label: 'E', min: 40, max: 49, points: 5, remark: 'Principal Pass', isPassing: true }, { label: 'S', min: 35, max: 39, points: 6, remark: 'Subsidiary', isPassing: false }, { label: 'F', min: 0, max: 34, points: 7, remark: 'Fail', isPassing: false }],
 };
 
 export function GradingPage() {
@@ -5220,10 +5220,10 @@ export function StageConfigPage() {
         <div className="mt-4 grid gap-3 md:grid-cols-3">
           <Field label="Failure Threshold (%)" type="number" value={config.aLevelFailure} onChange={(event) => setConfigValue('aLevelFailure', event.target.value)} />
           <Field label="At-Risk Threshold (%)" type="number" value={config.aLevelRisk} onChange={(event) => setConfigValue('aLevelRisk', event.target.value)} />
-          <Field label="ACSEE Division bands" value="I (13-15 pts)  II (10-12)  III (7-9)  IV (4-6)  0 (â‰¤3)" readOnly />
+          <Field label="ACSEE Division bands" value="I (3-9 pts)  II (10-12)  III (13-17)  IV (18-19)  0 (20+)" readOnly />
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-2">
-          <StageToggle label="Require min. 2 principal subjects per combination" description="Block combination creation unless at least 2 principal subjects are present" checked={config.requirePrincipalSubjects} onChange={(value) => setConfigValue('requirePrincipalSubjects', value)} />
+          <StageToggle label="Require min. 3 principal subjects per combination" description="Block combination creation unless at least 3 principal subjects are present" checked={config.requirePrincipalSubjects} onChange={(value) => setConfigValue('requirePrincipalSubjects', value)} />
           <StageToggle label="Require compulsory subsidiary (General Studies)" description="Block combination creation unless COMPULSORY_SUBSIDIARY subject included" checked={config.requireCompulsorySubsidiary} onChange={(value) => setConfigValue('requireCompulsorySubsidiary', value)} />
         </div>
       </AdminFormSection>
