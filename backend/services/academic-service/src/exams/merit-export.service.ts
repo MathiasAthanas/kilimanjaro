@@ -47,6 +47,13 @@ export class MeritExportService {
     return `${Math.round(cell.score)} ${cell.grade}`;
   }
 
+  private divisionText(row: any): string {
+    const division = String(row.division ?? '').replace('Division ', 'Div ');
+    if (!division) return '';
+    const points = Number(row.divisionPoints);
+    return Number.isFinite(points) ? `${division} - ${Number.isInteger(points) ? points : points.toFixed(1)} pts` : division;
+  }
+
   /** Load merit data + a mean→grade resolver for the summary rows. */
   private async gather(windowId: string, user: RequestUser, filter?: MeritFilter) {
     const merit = await this.examResults.getMeritList(windowId, user, filter);
@@ -87,6 +94,7 @@ export class MeritExportService {
     const { merit, window, gradeOf } = await this.gather(windowId, user, filter);
     const subjects = merit.subjects as Array<{ subjectId: string; subjectName: string; code: string }>;
     const rows = merit.rows as any[];
+    const showCombination = rows.some((row) => row.educationStage === 'A_LEVEL');
     const gradeCodes = (merit.gradeCodes as string[]) ?? ['A', 'B', 'C', 'D', 'E', 'X'];
 
     const wb = new ExcelJS.Workbook();
@@ -95,7 +103,7 @@ export class MeritExportService {
 
     // ── Sheet 1: Merit List ──
     const ws = wb.addWorksheet('Merit List', { views: [{ state: 'frozen', ySplit: 3, xSplit: 2 }] });
-    const headers = ['ADMNO', 'NAME', 'STR', ...subjects.map((s) => s.code || s.subjectName.slice(0, 4).toUpperCase()), 'SBJ', 'TT MKS', 'MN MKS', 'DEV', 'GR', 'STR POS', 'OVR POS'];
+    const headers = ['ADMNO', 'NAME', 'STR', ...(showCombination ? ['COMB'] : []), ...subjects.map((s) => s.code || s.subjectName.slice(0, 4).toUpperCase()), 'SBJ', 'TT MKS', 'MN MKS', 'DEV', 'GR', 'DIV', 'STR POS', 'OVR POS'];
     const lastCol = headers.length;
 
     // Title row (merged).
@@ -131,12 +139,14 @@ export class MeritExportService {
         r.registrationNumber ?? '',
         r.studentName ?? '',
         r.stream ?? '',
+        ...(showCombination ? [r.combinationCode ?? ''] : []),
         ...subjects.map((s) => this.cellText(scores[s.subjectId])),
         r.subjectCount ?? 0,
         r.total ?? 0,
         r.mean ?? 0,
         this.fmtDev(r),
         r.overallGrade ?? '',
+        this.divisionText(r),
         r.streamRank ?? '',
         r.standardRank ?? '',
       ];
@@ -146,7 +156,8 @@ export class MeritExportService {
         c.value = v as any;
         c.alignment = { horizontal: i === 1 ? 'left' : 'center' };
         c.border = { bottom: { style: 'hair' }, right: { style: 'hair' } };
-        if (i >= 3 && i < 3 + subjects.length) c.font = { size: 10 };
+        const subjectStart = 3 + (showCombination ? 1 : 0);
+        if (i >= subjectStart && i < subjectStart + subjects.length) c.font = { size: 10 };
       });
     });
 
@@ -154,10 +165,12 @@ export class MeritExportService {
     ws.getColumn(1).width = 10;
     ws.getColumn(2).width = 26;
     ws.getColumn(3).width = 6;
-    for (let i = 0; i < subjects.length; i++) ws.getColumn(4 + i).width = 9;
-    const tail = 4 + subjects.length;
-    [tail, tail + 1, tail + 2, tail + 3, tail + 4, tail + 5, tail + 6].forEach((ci, k) => {
-      ws.getColumn(ci).width = [6, 8, 8, 8, 5, 8, 8][k];
+    if (showCombination) ws.getColumn(4).width = 8;
+    const firstSubjectColumn = 4 + (showCombination ? 1 : 0);
+    for (let i = 0; i < subjects.length; i++) ws.getColumn(firstSubjectColumn + i).width = 9;
+    const tail = firstSubjectColumn + subjects.length;
+    [tail, tail + 1, tail + 2, tail + 3, tail + 4, tail + 5, tail + 6, tail + 7].forEach((ci, k) => {
+      ws.getColumn(ci).width = [6, 8, 8, 8, 5, 14, 8, 8][k];
     });
 
     // ── Sheet 2: Grade Summaries ──
@@ -248,18 +261,19 @@ export class MeritExportService {
     const { merit, window } = await this.gather(windowId, user, filter);
     const subjects = merit.subjects as Array<{ subjectId: string; subjectName: string; code: string }>;
     const rows = merit.rows as any[];
+    const showCombination = rows.some((row) => row.educationStage === 'A_LEVEL');
     const esc = (v: unknown) => {
       const s = v === null || v === undefined ? '' : String(v);
       return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
     };
-    const header = ['ADMNO', 'NAME', 'STR', ...subjects.map((s) => s.code || s.subjectName), 'SBJ', 'TT MKS', 'MN MKS', 'DEV', 'GR', 'STR POS', 'OVR POS'];
+    const header = ['ADMNO', 'NAME', 'STR', ...(showCombination ? ['COMB'] : []), ...subjects.map((s) => s.code || s.subjectName), 'SBJ', 'TT MKS', 'MN MKS', 'DEV', 'GR', 'DIV', 'STR POS', 'OVR POS'];
     const lines = [`# ${this.title(window)}`, header.map(esc).join(',')];
     for (const r of rows) {
       const scores = (r.subjectScores ?? {}) as Record<string, SubjectCell>;
       lines.push([
-        esc(r.registrationNumber), esc(r.studentName), esc(r.stream),
+        esc(r.registrationNumber), esc(r.studentName), esc(r.stream), ...(showCombination ? [esc(r.combinationCode)] : []),
         ...subjects.map((s) => esc(this.cellText(scores[s.subjectId]))),
-        esc(r.subjectCount), esc(r.total), esc(r.mean), esc(this.fmtDev(r)), esc(r.overallGrade), esc(r.streamRank), esc(r.standardRank),
+        esc(r.subjectCount), esc(r.total), esc(r.mean), esc(this.fmtDev(r)), esc(r.overallGrade), esc(this.divisionText(r)), esc(r.streamRank), esc(r.standardRank),
       ].join(','));
     }
     return { filename: this.safeName(window) + '.csv', csv: '﻿' + lines.join('\r\n') + '\r\n' };
@@ -271,6 +285,7 @@ export class MeritExportService {
     const { merit, window, gradeOf } = await this.gather(windowId, user, filter);
     const subjects = merit.subjects as Array<{ subjectId: string; subjectName: string; code: string }>;
     const rows = merit.rows as any[];
+    const showCombination = rows.some((row) => row.educationStage === 'A_LEVEL');
     const gradeCodes = (merit.gradeCodes as string[]) ?? [];
 
     return new Promise((resolve, reject) => {
@@ -289,8 +304,8 @@ export class MeritExportService {
         doc.moveDown(0.5);
 
         // Column layout: fixed left/right, subjects share the middle.
-        const fixedLeft = [ { k: 'admno', w: 52 }, { k: 'name', w: 118 }, { k: 'str', w: 20 } ];
-        const fixedRight = [ { k: 'sbj', w: 22 }, { k: 'tot', w: 34 }, { k: 'mean', w: 34 }, { k: 'dev', w: 30 }, { k: 'gr', w: 20 }, { k: 'spos', w: 26 }, { k: 'opos', w: 26 } ];
+        const fixedLeft = [ { k: 'admno', w: 52 }, { k: 'name', w: 108 }, { k: 'str', w: 20 }, ...(showCombination ? [{ k: 'comb', w: 30 }] : []) ];
+        const fixedRight = [ { k: 'sbj', w: 22 }, { k: 'tot', w: 30 }, { k: 'mean', w: 30 }, { k: 'dev', w: 28 }, { k: 'gr', w: 20 }, { k: 'div', w: 50 }, { k: 'spos', w: 24 }, { k: 'opos', w: 24 } ];
         const fixedWidth = [...fixedLeft, ...fixedRight].reduce((s, c) => s + c.w, 0);
         const subjW = Math.max(20, Math.min(46, (usable - fixedWidth) / Math.max(subjects.length, 1)));
         const smallFont = subjects.length > 9 ? 6 : 7;
@@ -299,14 +314,16 @@ export class MeritExportService {
           { label: 'ADMNO', w: fixedLeft[0].w },
           { label: 'NAME', w: fixedLeft[1].w, align: 'left' },
           { label: 'STR', w: fixedLeft[2].w },
+          ...(showCombination ? [{ label: 'COMB', w: fixedLeft[3].w }] : []),
           ...subjects.map((s) => ({ label: s.code || s.subjectName.slice(0, 4).toUpperCase(), w: subjW })),
           { label: 'SBJ', w: fixedRight[0].w },
           { label: 'TOT', w: fixedRight[1].w },
           { label: 'MN', w: fixedRight[2].w },
           { label: 'DEV', w: fixedRight[3].w },
           { label: 'GR', w: fixedRight[4].w },
-          { label: 'STR', w: fixedRight[5].w },
-          { label: 'OVR', w: fixedRight[6].w },
+          { label: 'DIV', w: fixedRight[5].w },
+          { label: 'STR', w: fixedRight[6].w },
+          { label: 'OVR', w: fixedRight[7].w },
         ];
 
         const rowH = 14;
@@ -337,9 +354,9 @@ export class MeritExportService {
         for (const r of rows) {
           const scores = (r.subjectScores ?? {}) as Record<string, SubjectCell>;
           drawRow([
-            r.registrationNumber ?? '', r.studentName ?? '', r.stream ?? '',
+            r.registrationNumber ?? '', r.studentName ?? '', r.stream ?? '', ...(showCombination ? [r.combinationCode ?? ''] : []),
             ...subjects.map((s) => this.cellText(scores[s.subjectId])),
-            String(r.subjectCount ?? ''), String(r.total ?? ''), String(r.mean ?? ''), this.fmtDev(r), r.overallGrade ?? '', String(r.streamRank ?? ''), String(r.standardRank ?? ''),
+            String(r.subjectCount ?? ''), String(r.total ?? ''), String(r.mean ?? ''), this.fmtDev(r), r.overallGrade ?? '', this.divisionText(r), String(r.streamRank ?? ''), String(r.standardRank ?? ''),
           ]);
         }
 

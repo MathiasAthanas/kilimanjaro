@@ -367,6 +367,79 @@ export async function downloadBulkReportCards(options: {
   setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }
 
+export type BulkReportCardJob = {
+  id: string;
+  schoolId: string;
+  scopeType: 'CLASS' | 'LEVEL';
+  classId?: string | null;
+  educationStage?: string | null;
+  classLevel?: number | null;
+  termId: string;
+  examLabel?: string | null;
+  format: 'pdf' | 'zip';
+  status: 'QUEUED' | 'PREPARING' | 'READY' | 'FAILED' | 'EXPIRED';
+  stage: string;
+  progress: number;
+  processedFiles: number;
+  totalFiles: number;
+  filename?: string | null;
+  fileSize?: number | null;
+  errorMessage?: string | null;
+  canRetry: boolean;
+  expiresAt: string;
+};
+
+export type BulkReportCardJobOptions = {
+  classId?: string;
+  schoolId?: string;
+  educationStage?: string;
+  classLevel?: number;
+  termId: string;
+  examLabel?: string;
+  format: 'pdf' | 'zip';
+  filename: string;
+};
+
+export async function createBulkReportCardJob(options: BulkReportCardJobOptions): Promise<BulkReportCardJob> {
+  const response = await api.post('/academics/report-cards/bulk-jobs', {
+    scopeType: options.classId ? 'CLASS' : 'LEVEL',
+    ...(options.classId ? { classId: options.classId } : {
+      educationStage: options.educationStage,
+      classLevel: options.classLevel,
+    }),
+    termId: options.termId,
+    examLabel: options.examLabel,
+    format: options.format,
+  }, {
+    timeout: 30_000,
+    ...(options.schoolId ? { headers: { 'X-Active-School': options.schoolId } } : {}),
+  });
+  return payloadOf(response) as BulkReportCardJob;
+}
+
+export async function getBulkReportCardJob(jobId: string): Promise<BulkReportCardJob> {
+  return api.get(`/academics/report-cards/bulk-jobs/${jobId}`).then(payloadOf) as Promise<BulkReportCardJob>;
+}
+
+export async function retryBulkReportCardJob(jobId: string): Promise<BulkReportCardJob> {
+  return api.post(`/academics/report-cards/bulk-jobs/${jobId}/retry`, {}).then(payloadOf) as Promise<BulkReportCardJob>;
+}
+
+export async function downloadPreparedReportCardJob(job: BulkReportCardJob): Promise<void> {
+  const response = await api.get(`/academics/report-cards/bulk-jobs/${job.id}/download`, {
+    responseType: 'blob',
+    timeout: 180_000,
+  });
+  const url = URL.createObjectURL(response.data as Blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = job.filename || `Report_Cards.${job.format}`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30_000);
+}
+
 export function useClassAnalytics(classId: string | undefined) {
   return useQuery({
     queryKey: [...operationsKeys.all, 'analytics', 'class', classId ?? ''] as const,

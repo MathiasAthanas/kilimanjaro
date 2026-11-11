@@ -329,6 +329,62 @@ export class ExamResultsService {
       };
     }
 
+    // Resolve combinations at read time too, so previously published A-Level
+    // merit rows gain their current assigned code without changing marks.
+    const aLevelRows = results.filter((row) => row.educationStage === 'A_LEVEL');
+    const combinationByStudentClass = new Map<string, string>();
+    const combinationByClass = new Map<string, string>();
+    if (aLevelRows.length) {
+      const studentIds = [...new Set(aLevelRows.map((row) => row.studentId))];
+      const classIds = [...new Set(aLevelRows.map((row) => row.classId))];
+      const [enrolments, classSubjects] = await Promise.all([
+        this.prisma.studentSubjectEnrollment.findMany({
+          where: {
+            studentId: { in: studentIds },
+            academicYearId: window.academicYearId,
+            isActive: true,
+            combinationId: { not: null },
+            OR: [{ termId: null }, { termId: window.termId }],
+          },
+          select: { studentId: true, classId: true, combination: { select: { code: true } } },
+        }),
+        this.prisma.classSubject.findMany({
+          where: {
+            classId: { in: classIds },
+            academicYearId: window.academicYearId,
+            isActive: true,
+            combinationId: { not: null },
+          },
+          select: { classId: true, combination: { select: { code: true } } },
+        }),
+      ]);
+      const codesByStudentClass = new Map<string, Set<string>>();
+      for (const enrolment of enrolments) {
+        if (!enrolment.combination?.code) continue;
+        const key = `${enrolment.studentId}:${enrolment.classId}`;
+        if (!codesByStudentClass.has(key)) codesByStudentClass.set(key, new Set());
+        codesByStudentClass.get(key)!.add(enrolment.combination.code);
+      }
+      for (const [key, codes] of codesByStudentClass) {
+        if (codes.size === 1) combinationByStudentClass.set(key, [...codes][0]);
+      }
+      const codesByClass = new Map<string, Set<string>>();
+      for (const subject of classSubjects) {
+        if (!subject.combination?.code) continue;
+        if (!codesByClass.has(subject.classId)) codesByClass.set(subject.classId, new Set());
+        codesByClass.get(subject.classId)!.add(subject.combination.code);
+      }
+      for (const [classId, codes] of codesByClass) {
+        if (codes.size === 1) combinationByClass.set(classId, [...codes][0]);
+      }
+    }
+    const displayRows = results.map((row) => ({
+      ...row,
+      combinationCode: row.educationStage === 'A_LEVEL'
+        ? combinationByStudentClass.get(`${row.studentId}:${row.classId}`) ?? combinationByClass.get(row.classId) ?? null
+        : null,
+    }));
+
     // Subject columns (union across rows, ordered by subject name).
     const subjectCols = new Map<string, { subjectId: string; subjectName: string; code: string }>();
     for (const r of results) {
@@ -349,7 +405,7 @@ export class ExamResultsService {
       window: this.windowSummary(window),
       subjects,
       gradeCodes,
-      rows: results,
+      rows: displayRows,
       summaries,
     };
   }

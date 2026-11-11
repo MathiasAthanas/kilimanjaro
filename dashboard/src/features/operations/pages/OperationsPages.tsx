@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { NavLink, useNavigate, useParams } from 'react-router-dom';
 import { toast } from '../../../lib/toast';
 import { formatClassLabel } from '../../../lib/classLabel';
@@ -25,7 +25,12 @@ import {
   useClassReportCards,
   useAvailableReportCardClasses,
   downloadOfficialReportCard,
-  downloadBulkReportCards,
+  createBulkReportCardJob,
+  downloadPreparedReportCardJob,
+  getBulkReportCardJob,
+  retryBulkReportCardJob,
+  type BulkReportCardJob,
+  type BulkReportCardJobOptions,
   useGenerateReportMutation,
   useStudentAnalyticsProfile,
   useSubjectAnalytics,
@@ -315,6 +320,147 @@ export function ResultsPublishingSupportPage() {
   return <OperationsShell title="Results Publishing Support" eyebrow="Readiness checks and blockers"><ResultsTable /></OperationsShell>;
 }
 
+const BULK_REPORT_JOB_STORAGE = 'kilimanjaro.activeBulkReportCardJob';
+
+function useBulkReportPreparation() {
+  const [job, setJob] = useState<BulkReportCardJob | null>(null);
+  const [activeKey, setActiveKey] = useState<string | null>(null);
+  const [starting, setStarting] = useState(false);
+  const [connectionIssue, setConnectionIssue] = useState(false);
+
+  const remember = useCallback((next: BulkReportCardJob | null, key?: string | null) => {
+    setJob(next);
+    if (!next) {
+      setActiveKey(null);
+      localStorage.removeItem(BULK_REPORT_JOB_STORAGE);
+      return;
+    }
+    const resolvedKey = key ?? activeKey ?? next.id;
+    setActiveKey(resolvedKey);
+    localStorage.setItem(BULK_REPORT_JOB_STORAGE, JSON.stringify({ id: next.id, key: resolvedKey }));
+  }, [activeKey]);
+
+  useEffect(() => {
+    const stored = localStorage.getItem(BULK_REPORT_JOB_STORAGE);
+    if (!stored) return;
+    try {
+      const parsed = JSON.parse(stored) as { id?: string; key?: string };
+      if (!parsed.id) return;
+      setActiveKey(parsed.key ?? parsed.id);
+      void getBulkReportCardJob(parsed.id)
+        .then((restored) => { setJob(restored); setConnectionIssue(false); })
+        .catch(() => localStorage.removeItem(BULK_REPORT_JOB_STORAGE));
+    } catch {
+      localStorage.removeItem(BULK_REPORT_JOB_STORAGE);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!job || !['QUEUED', 'PREPARING'].includes(job.status)) return;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const poll = async () => {
+      try {
+        const next = await getBulkReportCardJob(job.id);
+        if (stopped) return;
+        setJob(next);
+        setConnectionIssue(false);
+        if (['QUEUED', 'PREPARING'].includes(next.status)) timer = setTimeout(poll, 1_500);
+      } catch {
+        if (stopped) return;
+        setConnectionIssue(true);
+        timer = setTimeout(poll, 3_000);
+      }
+    };
+    timer = setTimeout(poll, 800);
+    return () => { stopped = true; if (timer) clearTimeout(timer); };
+  }, [job?.id, job?.status]);
+
+  const start = async (key: string, options: BulkReportCardJobOptions) => {
+    setStarting(true);
+    setConnectionIssue(false);
+    try {
+      const next = await createBulkReportCardJob(options);
+      remember(next, key);
+      toast('Report-card preparation started. You can leave this page and return safely.', 'success');
+    } catch (error) {
+      toast(errorMessage(error, 'Could not start report-card preparation.'), 'error');
+    } finally {
+      setStarting(false);
+    }
+  };
+
+  const retry = async () => {
+    if (!job) return;
+    setStarting(true);
+    try {
+      remember(await retryBulkReportCardJob(job.id), activeKey);
+      setConnectionIssue(false);
+    } catch (error) {
+      toast(errorMessage(error, 'Could not retry report-card preparation.'), 'error');
+    } finally {
+      setStarting(false);
+    }
+  };
+
+  const download = async () => {
+    if (!job || job.status !== 'READY') return;
+    try {
+      await downloadPreparedReportCardJob(job);
+      toast(`${job.format.toUpperCase()} download ready`, 'success');
+    } catch (error) {
+      toast(errorMessage(error, 'The prepared report-card file could not be downloaded.'), 'error');
+    }
+  };
+
+  return {
+    job, activeKey, starting, connectionIssue,
+    start, retry, download,
+    clear: () => remember(null),
+    preparing: starting || Boolean(job && ['QUEUED', 'PREPARING'].includes(job.status)),
+  };
+}
+
+function BulkReportPreparationPanel({ preparation }: { preparation: ReturnType<typeof useBulkReportPreparation> }) {
+  const { job } = preparation;
+  if (!job) return null;
+  const stageLabels: Record<string, string> = {
+    QUEUED: 'Waiting to start', RESUMING: 'Resuming safely', VALIDATING: 'Checking report-card files',
+    BUILDING: 'Building the output file', COMPRESSING: 'Compressing individual PDFs',
+    COMBINING: 'Combining report-card pages', READY: 'Ready to download', FAILED: 'Preparation failed', EXPIRED: 'Prepared file expired',
+  };
+  const size = job.fileSize ? `${(job.fileSize / 1024 / 1024).toFixed(1)} MB` : null;
+  return (
+    <div className={`rounded-lg border p-4 ${job.status === 'FAILED' || job.status === 'EXPIRED' ? 'border-ks-rose/40 bg-ks-rose/5' : job.status === 'READY' ? 'border-ks-emerald/40 bg-ks-emerald/5' : 'border-ks-blue/30 bg-ks-blue/5'}`}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="font-black text-ks-navy">{job.filename || 'Report-card download'}</p>
+          <p className="mt-1 text-xs font-semibold text-ks-muted">{stageLabels[job.stage] || job.stage.replace(/_/g, ' ')}</p>
+        </div>
+        <Badge tone={job.status === 'READY' ? 'emerald' : job.status === 'FAILED' || job.status === 'EXPIRED' ? 'rose' : 'blue'}>{job.status}</Badge>
+      </div>
+      {['QUEUED', 'PREPARING'].includes(job.status) && <>
+        <div className="mt-4 h-2 overflow-hidden rounded-full bg-white"><div className="h-full rounded-full bg-ks-blue transition-all duration-500" style={{ width: `${Math.max(2, job.progress)}%` }} /></div>
+        <div className="mt-2 flex flex-wrap justify-between gap-2 text-xs font-semibold text-ks-muted">
+          <span>{job.progress}% complete</span>
+          <span>{job.processedFiles} of {job.totalFiles} cards checked/processed</span>
+        </div>
+        <p className="mt-3 text-xs text-ks-muted">Preparation continues on the server. You can refresh, leave this page, or reconnect after a network interruption without restarting it.</p>
+        {preparation.connectionIssue && <p className="mt-2 text-xs font-bold text-ks-amber">Connection interrupted. Reconnecting automatically; server preparation continues.</p>}
+      </>}
+      {job.status === 'READY' && <div className="mt-4 flex flex-wrap items-center gap-2">
+        <Button onClick={preparation.download}>Download {job.format.toUpperCase()}{size ? ` (${size})` : ''}</Button>
+        <Button variant="secondary" onClick={preparation.clear}>Close</Button>
+        <span className="text-xs text-ks-muted">Available until {new Date(job.expiresAt).toLocaleString()}. If a transfer is interrupted, download the prepared file again without rebuilding it.</span>
+      </div>}
+      {(job.status === 'FAILED' || job.status === 'EXPIRED') && <div className="mt-4">
+        <p className="text-sm font-semibold text-ks-rose">{job.errorMessage || 'The preparation did not complete. Your report cards were not changed.'}</p>
+        <div className="mt-3 flex gap-2"><Button onClick={preparation.retry} loading={preparation.starting}>Retry safely</Button><Button variant="secondary" onClick={preparation.clear}>Dismiss</Button></div>
+      </div>}
+    </div>
+  );
+}
+
 export function ReportCardGenerationCenterPage() {
   const { data: apiResultClasses = [], isLoading, isError, refetch } = useAvailableReportCardClasses() as {
     data: Array<Record<string, unknown>>;
@@ -322,7 +468,7 @@ export function ReportCardGenerationCenterPage() {
     isError: boolean;
     refetch: () => void;
   };
-  const [downloading, setDownloading] = useState<string | null>(null);
+  const preparation = useBulkReportPreparation();
   const groups = new Map<string, { schoolId: string; termId: string; termName: string; examLabel: string; educationStage: string; classLevel: number; items: Array<Record<string, unknown>> }>();
   for (const item of apiResultClasses) {
     const classLevel = Number(item.classLevel);
@@ -350,19 +496,9 @@ export function ReportCardGenerationCenterPage() {
     if (stage === 'NURSERY') return ['Baby Class', 'KG 1', 'KG 2'][Math.max(0, level - 1)] ?? `Nursery Level ${level}`;
     return `${stage.replace(/_/g, ' ')} ${level}`;
   };
-  const download = async (key: string, options: Parameters<typeof downloadBulkReportCards>[0]) => {
-    setDownloading(key);
-    try {
-      await downloadBulkReportCards(options);
-      toast(`${options.format.toUpperCase()} download ready`, 'success');
-    } catch (error) {
-      toast(errorMessage(error, 'Could not prepare the selected report cards. Confirm they are published and try again.'), 'error');
-    } finally {
-      setDownloading(null);
-    }
-  };
   return (
     <OperationsShell title="Report Card Generation Center" eyebrow="Generate, preview, download">
+      <div className="mb-4"><BulkReportPreparationPanel preparation={preparation} /></div>
       {isLoading ? <SkeletonTable cols={3} /> : isError ? <DataError message="Could not load generated report cards." onRetry={refetch} /> : apiResultClasses.length === 0 ? (
         <EmptyState title="No report cards generated" description="Compose report cards from a closed exam window first. Generated classes will then appear here." />
       ) : (
@@ -381,7 +517,7 @@ export function ReportCardGenerationCenterPage() {
                     {(['pdf', 'zip'] as const).map((format) => {
                       const key = `${groupKey}:${format}`;
                       return (
-                        <Button key={format} variant="secondary" disabled={downloading === key} onClick={() => download(key, {
+                        <Button key={format} variant="secondary" disabled={preparation.preparing} onClick={() => preparation.start(key, {
                           educationStage: group.educationStage,
                           classLevel: group.classLevel,
                           schoolId: group.schoolId || undefined,
@@ -390,7 +526,7 @@ export function ReportCardGenerationCenterPage() {
                           format,
                           filename: `${title.replace(/\s+/g, '_')}_All_Streams_Report_Cards.${format}`,
                         })}>
-                          {downloading === key ? 'Preparing...' : format === 'pdf' ? 'Combined PDF' : 'Individual PDFs (ZIP)'}
+                          {preparation.activeKey === key && preparation.preparing ? `${preparation.job?.progress ?? 0}% preparing` : format === 'pdf' ? 'Combined PDF' : 'Individual PDFs (ZIP)'}
                         </Button>
                       );
                     })}
@@ -415,14 +551,14 @@ export function ReportCardGenerationCenterPage() {
                         <div className="mt-4 flex flex-wrap gap-2">
                           {(['pdf', 'zip'] as const).map((format) => {
                             const key = `${classId}:${format}`;
-                            return <Button key={format} variant="secondary" className="rounded-lg py-1.5 text-xs" disabled={downloading === key} onClick={() => download(key, {
+                            return <Button key={format} variant="secondary" className="rounded-lg py-1.5 text-xs" disabled={preparation.preparing} onClick={() => preparation.start(key, {
                               classId,
                               schoolId: String(item.schoolId ?? group.schoolId ?? '') || undefined,
                               termId,
                               examLabel: group.examLabel || undefined,
                               format,
                               filename: `${className.replace(/\s+/g, '_')}_Report_Cards.${format}`,
-                            })}>{downloading === key ? 'Preparing...' : format === 'pdf' ? 'Combined PDF' : 'ZIP'}</Button>;
+                            })}>{preparation.activeKey === key && preparation.preparing ? `${preparation.job?.progress ?? 0}% preparing` : format === 'pdf' ? 'Combined PDF' : 'ZIP'}</Button>;
                           })}
                         </div>
                       </div>
@@ -442,7 +578,7 @@ export function ReportCardPreviewPage() {
   const { classId, termId } = useParams();
   const { data: cards = [], isLoading, isError, refetch } = useClassReportCards(classId, termId) as { data: Array<Record<string, unknown>>; isLoading: boolean; isError: boolean; refetch: () => void };
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
-  const [bulkFormat, setBulkFormat] = useState<'pdf' | 'zip' | null>(null);
+  const preparation = useBulkReportPreparation();
 
   const handleDownload = async (card: Record<string, unknown>) => {
     const studentId = String(card.studentId ?? '');
@@ -464,22 +600,14 @@ export function ReportCardPreviewPage() {
 
   const handleBulkDownload = async (format: 'pdf' | 'zip') => {
     if (!classId || !termId) return;
-    setBulkFormat(format);
-    try {
-      await downloadBulkReportCards({
-        classId,
-        schoolId: String(cards[0]?.schoolId ?? '') || undefined,
-        termId,
-        examLabel: String(cards[0]?.examLabel ?? ''),
-        format,
-        filename: `Class_Report_Cards_${classId}.${format}`,
-      });
-      toast(`${format.toUpperCase()} download ready`, 'success');
-    } catch (error) {
-      toast(errorMessage(error, 'Bulk report-card download failed. Confirm the cards are published and try again.'), 'error');
-    } finally {
-      setBulkFormat(null);
-    }
+    await preparation.start(`${classId}:${format}`, {
+      classId,
+      schoolId: String(cards[0]?.schoolId ?? '') || undefined,
+      termId,
+      examLabel: String(cards[0]?.examLabel ?? ''),
+      format,
+      filename: `Class_Report_Cards_${classId}.${format}`,
+    });
   };
 
   return (
@@ -488,14 +616,15 @@ export function ReportCardPreviewPage() {
         <EmptyState title="No report cards yet" description="Generate report cards for this class and term first (Principal → Report Cards → Generate), then download the official PDFs here." />
       ) : (
         <>
+        <div className="mb-4"><BulkReportPreparationPanel preparation={preparation} /></div>
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-ks-line bg-white p-4">
           <div>
             <p className="font-black text-ks-navy">Download this class together</p>
             <p className="mt-0.5 text-xs text-ks-muted">One combined PDF for printing, or a ZIP containing each student's PDF.</p>
           </div>
           <div className="flex gap-2">
-            <Button variant="secondary" disabled={bulkFormat !== null} onClick={() => handleBulkDownload('pdf')}>{bulkFormat === 'pdf' ? 'Preparing...' : 'Combined PDF'}</Button>
-            <Button variant="secondary" disabled={bulkFormat !== null} onClick={() => handleBulkDownload('zip')}>{bulkFormat === 'zip' ? 'Preparing...' : 'Individual PDFs (ZIP)'}</Button>
+            <Button variant="secondary" disabled={preparation.preparing} onClick={() => handleBulkDownload('pdf')}>{preparation.activeKey === `${classId}:pdf` && preparation.preparing ? `${preparation.job?.progress ?? 0}% preparing` : 'Combined PDF'}</Button>
+            <Button variant="secondary" disabled={preparation.preparing} onClick={() => handleBulkDownload('zip')}>{preparation.activeKey === `${classId}:zip` && preparation.preparing ? `${preparation.job?.progress ?? 0}% preparing` : 'Individual PDFs (ZIP)'}</Button>
           </div>
         </div>
         <OperationsTable columns={['Student', 'Reg No.', 'Average', 'Grade', 'Stream Position', 'Overall Position', 'Status', 'Official PDF']}>

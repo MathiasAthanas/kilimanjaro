@@ -652,7 +652,7 @@ export class ReportCardsService {
     termId: string,
     examLabel: string | undefined,
     user: RequestUser,
-  ): Promise<{ files: BulkReportCardFile[]; baseName: string }> {
+  ): Promise<{ files: BulkReportCardFile[]; baseName: string; schoolId: string }> {
     const selectionWhere = {
       termId,
       isPublished: true,
@@ -730,7 +730,7 @@ export class ReportCardsService {
     const baseName = 'classId' in scope
       ? `${files[0].className}_Report_Cards`
       : `${scope.educationStage}_Level_${scope.classLevel}_All_Streams_Report_Cards`;
-    return { files, baseName };
+    return { files, baseName, schoolId };
   }
 
   async getReportPdfPath(studentId: string, termId: string, user: RequestUser) {

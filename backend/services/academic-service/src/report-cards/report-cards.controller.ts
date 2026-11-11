@@ -17,6 +17,8 @@ import { BulkReportCardFile, ReportCardsService } from './report-cards.service';
 import { ReportCardPolicyService } from './report-card-policy.service';
 import { UpdateReportCardPolicyDto } from './dto/update-report-card-policy.dto';
 import { RecalculateReportCardsDto } from './dto/recalculate-report-cards.dto';
+import { CreateBulkReportCardJobDto } from './dto/create-bulk-report-card-job.dto';
+import { ReportCardBulkJobService } from './report-card-bulk-job.service';
 
 @ApiTags('Academic - Report Cards')
 @Controller('academics')
@@ -25,6 +27,7 @@ export class ReportCardsController {
     private readonly reportCardsService: ReportCardsService,
     private readonly reportCardPolicyService: ReportCardPolicyService,
     private readonly configService: ConfigService,
+    private readonly bulkJobService: ReportCardBulkJobService,
   ) {}
 
   @Get('report-card-policy')
@@ -126,6 +129,38 @@ export class ReportCardsController {
     }
     const selection = await this.reportCardsService.bulkFiles({ educationStage, classLevel }, termId, examLabel, user);
     return this.streamBulkDownload(selection.files, selection.baseName, format, res, true);
+  }
+
+  @Post('report-cards/bulk-jobs')
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.SUPER_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.ACADEMIC_QA)
+  createBulkJob(@Body() dto: CreateBulkReportCardJobDto, @CurrentUser() user: RequestUser) {
+    return this.bulkJobService.create(dto, user);
+  }
+
+  @Get('report-cards/bulk-jobs/:jobId')
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.SUPER_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.ACADEMIC_QA)
+  getBulkJob(@Param('jobId') jobId: string, @CurrentUser() user: RequestUser) {
+    return this.bulkJobService.get(jobId, user);
+  }
+
+  @Post('report-cards/bulk-jobs/:jobId/retry')
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.SUPER_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.ACADEMIC_QA)
+  retryBulkJob(@Param('jobId') jobId: string, @CurrentUser() user: RequestUser) {
+    return this.bulkJobService.retry(jobId, user);
+  }
+
+  @Get('report-cards/bulk-jobs/:jobId/download')
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.SUPER_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.ACADEMIC_QA)
+  async downloadBulkJob(
+    @Param('jobId') jobId: string,
+    @CurrentUser() user: RequestUser,
+    @Res() res: Response,
+  ) {
+    const prepared = await this.bulkJobService.download(jobId, user);
+    res.setHeader('Content-Type', prepared.mimeType);
+    res.setHeader('Content-Disposition', `attachment; filename="${prepared.filename}"`);
+    res.setHeader('Cache-Control', 'private, no-store');
+    return res.sendFile(prepared.absolutePath);
   }
 
   @Get('report-cards/:studentId/term/:termId')

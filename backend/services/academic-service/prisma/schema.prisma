@@ -707,26 +707,26 @@ model ExamType {
 /// then see their open windows and fill marks. On close the cross-subject merit
 /// list is computed; on publish results reach students/parents and analytics.
 model ExamWindow {
-  id                 String              @id @default(uuid())
+  id                 String                       @id @default(uuid())
   schoolId           String?
   examTypeId         String
   name               String
   academicYearId     String
   termId             String
   educationStage     EducationStage?
-  scopeType          ExamWindowScopeType @default(ALL_CLASSES)
+  scopeType          ExamWindowScopeType          @default(ALL_CLASSES)
   /// For STANDARDS scope: the class levels covered (e.g. [6] → all Class 6 streams).
   scopeLevels        Int[]
   /// For STREAMS scope: explicit class ids.
   scopeClassIds      String[]
-  status             ExamWindowStatus    @default(DRAFT)
+  status             ExamWindowStatus             @default(DRAFT)
   /// Default per-subject maximum score for the whole window (individual
   /// assessments may still override their own maxScore).
-  maxScore           Float               @default(100)
+  maxScore           Float                        @default(100)
   /// Report-card composition weight (seeded from ExamType.defaultWeight, overridable).
-  weight             Float               @default(100)
+  weight             Float                        @default(100)
   /// Whether this window is eligible to be selected into a term report card.
-  countsToReportCard Boolean             @default(true)
+  countsToReportCard Boolean                      @default(true)
   instructions       String?
   opensAt            DateTime?
   closesAt           DateTime?
@@ -738,9 +738,9 @@ model ExamWindow {
   publishedAt        DateTime?
   publishedById      String?
   createdById        String?
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
-  examType           ExamType            @relation(fields: [examTypeId], references: [id])
+  createdAt          DateTime                     @default(now())
+  updatedAt          DateTime                     @updatedAt
+  examType           ExamType                     @relation(fields: [examTypeId], references: [id])
   assessments        Assessment[]
   results            ExamWindowResult[]
   editRequests       ResultEditRequest[]
@@ -832,6 +832,43 @@ model ExamWindowResult {
   @@index([examWindowId, classId])
   @@index([examWindowId, classLevel])
   @@index([studentId])
+  @@schema("academics")
+}
+
+/// Durable preparation state for large combined report-card PDFs and ZIP archives.
+/// The generated artifact lives in shared report-card storage; this record lets the
+/// browser reconnect after a refresh and lets the service resume interrupted work.
+model BulkReportCardJob {
+  id               String    @id @default(uuid())
+  schoolId         String
+  requestedById    String
+  requestedByRole  String
+  scopeType        String
+  classId          String?
+  educationStage   String?
+  classLevel       Int?
+  termId           String
+  examLabel        String?
+  format           String
+  includeClassName Boolean   @default(false)
+  status           String    @default("QUEUED")
+  stage            String    @default("QUEUED")
+  progress         Int       @default(0)
+  processedFiles   Int       @default(0)
+  totalFiles       Int       @default(0)
+  fileName         String?
+  filePath         String?
+  fileSize         Int?
+  errorMessage     String?
+  startedAt        DateTime?
+  completedAt      DateTime?
+  expiresAt        DateTime
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([schoolId, createdAt])
+  @@index([requestedById, status])
+  @@index([status, expiresAt])
   @@schema("academics")
 }
 

@@ -619,6 +619,7 @@ function MeritListPanel({ windowId, status }: { windowId: string; status: string
   if (merit.isError) return <ErrorState title="Could not load merit list" message={S((merit.error as any)?.message)} onRetry={() => merit.refetch()} />;
   const subjects = (m?.subjects ?? []) as any[];
   const rows = (m?.rows ?? []) as any[];
+  const showCombination = rows.some((row) => S(row.educationStage) === 'A_LEVEL');
   if (!rows.length) return <EmptyState title="No results" message="No computed results for this window yet." />;
 
   return (
@@ -636,7 +637,7 @@ function MeritListPanel({ windowId, status }: { windowId: string; status: string
             <thead className="bg-ks-navy text-left text-white">
               <tr>
                 <th className="px-2 py-2">OVR</th><th className="px-2 py-2">STR</th><th className="px-2 py-2">ADMNO</th>
-                <th className="px-2 py-2">Name</th><th className="px-2 py-2">Str</th>
+                <th className="px-2 py-2">Name</th><th className="px-2 py-2">Str</th>{showCombination && <th className="px-2 py-2 text-center">Comb</th>}
                 {subjects.map((s) => <th key={s.subjectId} className="px-2 py-2 text-center" title={s.subjectName}>{S(s.code || s.subjectName).slice(0, 5)}</th>)}
                 <th className="px-2 py-2 text-center">SBJ</th><th className="px-2 py-2 text-center">TOT</th>
                 <th className="px-2 py-2 text-center">MN %</th><th className="px-2 py-2 text-center">DEV</th><th className="px-2 py-2 text-center">GR</th><th className="px-2 py-2 text-center">DIV</th>
@@ -653,6 +654,7 @@ function MeritListPanel({ windowId, status }: { windowId: string; status: string
                     <td className="px-2 py-2">{S(r.registrationNumber)}</td>
                     <td className="px-2 py-2 font-semibold text-ks-navy">{S(r.studentName)}</td>
                     <td className="px-2 py-2">{S(r.stream)}</td>
+                    {showCombination && <td className="px-2 py-2 text-center font-black text-ks-navy">{S(r.combinationCode, '—')}</td>}
                     {subjects.map((s) => {
                       const cell = scores[s.subjectId];
                       const exempt = cell?.status === 'EXEMPT';
@@ -663,7 +665,7 @@ function MeritListPanel({ windowId, status }: { windowId: string; status: string
                     <td className="px-2 py-2 text-center">{N(r.mean)}</td>
                     <td className={`px-2 py-2 text-center ${N(dev) < 0 ? 'text-ks-rose' : 'text-ks-emerald'}`}>{N(dev) > 0 ? '+' : ''}{Math.round(N(dev) * 10) / 10}</td>
                     <td className="px-2 py-2 text-center"><Badge tone={statusTone('')}>{S(r.overallGrade)}</Badge></td>
-                    <td className="px-2 py-2 text-center text-[10px] font-bold text-ks-navy" title={S(r.divisionNote)}>{S(r.division, '—').replace('Division ', 'Div ')}</td>
+                    <td className="px-2 py-2 text-center text-[10px] font-bold text-ks-navy" title={S(r.divisionNote)}>{r.divisionPoints === null || r.divisionPoints === undefined ? S(r.division, '—').replace('Division ', 'Div ') : `${S(r.division, '—').replace('Division ', 'Div ')} - ${Number(r.divisionPoints).toFixed(Number(r.divisionPoints) % 1 === 0 ? 0 : 1)} pts`}</td>
                   </tr>
                 );
               })}

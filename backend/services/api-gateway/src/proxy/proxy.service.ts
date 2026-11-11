@@ -170,7 +170,9 @@ export class ProxyService {
   }
 
   private resolveTimeout(path: string, defaultTimeoutMs: number): number {
-    if (/\/academics\/report-cards\/bulk\//i.test(path)) return Math.max(defaultTimeoutMs, 180_000);
+    if (/\/academics\/report-cards\/(?:bulk\/|bulk-jobs(?:\/|$))/i.test(path)) {
+      return Math.max(defaultTimeoutMs, 180_000);
+    }
     if (path === '/api/v1/auth/users/bulk-edit/commit') return Math.max(defaultTimeoutMs, 180_000);
     if (path === '/api/v1/auth/users/bulk-edit/preview') return Math.max(defaultTimeoutMs, 60_000);
     return defaultTimeoutMs;

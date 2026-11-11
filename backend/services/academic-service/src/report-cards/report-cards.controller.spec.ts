@@ -22,6 +22,7 @@ describe('ReportCardsController bulk archive transport', () => {
       {} as any,
       {} as any,
       { get: jest.fn().mockReturnValue(storageRoot) } as any,
+      {} as any,
     );
     const response = { json: jest.fn((value) => value) };
 
@@ -62,6 +63,7 @@ describe('ReportCardsController bulk archive transport', () => {
       {} as any,
       {} as any,
       { get: jest.fn().mockReturnValue(storageRoot) } as any,
+      {} as any,
     );
     const response = { json: jest.fn((value) => value) };
 
