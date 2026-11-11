@@ -18,6 +18,7 @@ import { ReportCardPolicyService, ReportCardPolicyValues } from './report-card-p
 export type BulkReportCardFile = {
   pdfUrl: string;
   studentId: string;
+  studentName: string;
   classId: string;
   className: string;
   registrationNumber: string | null;
@@ -716,6 +717,10 @@ export class ReportCardsService {
       return {
         pdfUrl: card.pdfUrl!,
         studentId: card.studentId,
+        studentName: [student?.firstName, student?.middleName, student?.lastName]
+          .filter(Boolean)
+          .join(' ')
+          .trim() || card.studentId,
         classId: card.classId,
         className: formatClassLabel(klass?.name ?? card.classId, klass?.stream ?? null),
         registrationNumber: student?.registrationNumber ?? null,

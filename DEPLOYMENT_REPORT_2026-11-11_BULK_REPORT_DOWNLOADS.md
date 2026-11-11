@@ -113,3 +113,9 @@ Production result:
 - Nginx recorded the complete response; the academic service and gateway produced no errors for the request.
 - Production remained at 444 report cards, all published, and 4,077 term results with unchanged fingerprint `71057a99a82df0bf83d9d017725efef1`.
 
+## Follow-up: identifiable individual PDF names
+
+Individual PDFs inside an archive now include the student's full name and registration number. A single-class archive uses `Student Name - Registration.pdf`; an all-stream archive uses `Class - Student Name - Registration.pdf`. Middle names are retained when available, unsafe filename characters are removed, and the student identifier remains as a fallback when profile details are incomplete.
+
+Local verification: all 6 report-card suites and 22 tests passed, including both filename formats, and the academic service TypeScript check passed.
+

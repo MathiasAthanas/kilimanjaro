@@ -106,7 +106,7 @@ export class ReportCardsController {
     @Res() res: Response,
   ) {
     const selection = await this.reportCardsService.bulkFiles({ classId }, termId, examLabel, user);
-    return this.streamBulkDownload(selection.files, selection.baseName, format, res);
+    return this.streamBulkDownload(selection.files, selection.baseName, format, res, false);
   }
 
   @Get('report-cards/bulk/level/:educationStage/:classLevel/term/:termId')
@@ -125,7 +125,7 @@ export class ReportCardsController {
       throw new BadRequestException('A valid class level is required.');
     }
     const selection = await this.reportCardsService.bulkFiles({ educationStage, classLevel }, termId, examLabel, user);
-    return this.streamBulkDownload(selection.files, selection.baseName, format, res);
+    return this.streamBulkDownload(selection.files, selection.baseName, format, res, true);
   }
 
   @Get('report-cards/:studentId/term/:termId')
@@ -189,7 +189,17 @@ export class ReportCardsController {
     return value.replace(/[^a-zA-Z0-9._-]+/g, '_').replace(/^_+|_+$/g, '') || 'Report_Cards';
   }
 
-  private async bulkPaths(files: BulkReportCardFile[]): Promise<Array<BulkReportCardFile & { absolutePath: string; entryName: string }>> {
+  private safeArchiveEntryPart(value: string): string {
+    return value
+      .replace(/[<>:"/\\|?*\u0000-\u001f]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim() || 'Unknown';
+  }
+
+  private async bulkPaths(
+    files: BulkReportCardFile[],
+    includeClassName: boolean,
+  ): Promise<Array<BulkReportCardFile & { absolutePath: string; entryName: string }>> {
     const storageRoot = resolve(this.configService.get<string>('PDF_STORAGE_PATH', './storage/report-cards'));
     const results: Array<BulkReportCardFile & { absolutePath: string; entryName: string }> = [];
     for (const [index, file] of files.entries()) {
@@ -203,7 +213,12 @@ export class ReportCardsController {
         throw new NotFoundException(`Report card ${index + 1} is unavailable. Recalculate the report cards and retry.`);
       }
       const identity = file.registrationNumber || file.studentId;
-      const entryName = `${String(index + 1).padStart(3, '0')}_${this.safeDownloadName(file.className)}_${this.safeDownloadName(identity)}.pdf`;
+      const parts = [
+        ...(includeClassName ? [file.className] : []),
+        file.studentName,
+        identity,
+      ].map((part) => this.safeArchiveEntryPart(part));
+      const entryName = `${parts.join(' - ')}.pdf`;
       results.push({ ...file, absolutePath, entryName });
     }
     return results;
@@ -214,12 +229,13 @@ export class ReportCardsController {
     baseName: string,
     requestedFormat: string | undefined,
     res: Response,
+    includeClassName: boolean,
   ) {
     const format = (requestedFormat || 'pdf').toLowerCase();
     if (!['pdf', 'zip', 'zip-base64'].includes(format)) {
       throw new BadRequestException('Format must be pdf, zip or zip-base64.');
     }
-    const ready = await this.bulkPaths(files);
+    const ready = await this.bulkPaths(files, includeClassName);
     const safeBase = this.safeDownloadName(baseName);
 
     if (format === 'zip-base64') {
