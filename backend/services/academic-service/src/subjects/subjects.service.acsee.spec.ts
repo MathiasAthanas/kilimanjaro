@@ -3,6 +3,14 @@ import { SubjectsService } from './subjects.service';
 import { PREDEFINED_A_LEVEL_COMBINATIONS } from './predefined-combinations';
 
 describe('SubjectsService A-Level combination validation', () => {
+  it('uses the official English Language principal for HGL and HKL', () => {
+    for (const code of ['HGL', 'HKL']) {
+      const combination = PREDEFINED_A_LEVEL_COMBINATIONS.find((item) => item.code === code);
+      expect(combination?.principals.map((subject) => subject.name)).toContain('English Language');
+      expect(combination?.principals.map((subject) => subject.name)).not.toContain('Literature in English');
+    }
+  });
+
   const service = new SubjectsService({} as any, {} as any, {} as any, {} as any);
   const validate = (subjects: any[]) => (service as any).assertALevelCombinationValid(subjects);
 

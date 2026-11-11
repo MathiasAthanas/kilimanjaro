@@ -487,8 +487,13 @@ export function isSubjectExpected(input: ExpectedSubjectInput): boolean {
     return !!input.studentCombinationId && input.studentCombinationId === cs.combinationId;
   }
   if (input.stage === 'A_LEVEL') {
-    if (cs.isCompulsory) return true;
-    return !!input.combinationSubjectIds?.has(cs.subjectId) || input.enrolledSubjectIds.has(cs.subjectId);
+    // Once a student has a combination, that combination is authoritative.
+    // Legacy subject catalogues often marked every A-Level subject compulsory,
+    // which incorrectly made students sit subjects from other combinations.
+    if (input.studentCombinationId || input.combinationSubjectIds?.size) {
+      return !!input.combinationSubjectIds?.has(cs.subjectId) || input.enrolledSubjectIds.has(cs.subjectId);
+    }
+    return cs.isCompulsory || input.enrolledSubjectIds.has(cs.subjectId);
   }
   if (cs.isCompulsory) return true;
   return input.enrolledSubjectIds.has(cs.subjectId);

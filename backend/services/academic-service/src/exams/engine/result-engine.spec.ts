@@ -309,6 +309,22 @@ describe('expected subjects', () => {
     expect(isSubjectExpected({ ...base, stage: 'A_LEVEL', classSubject: cs, studentCombinationId: 'HGL' })).toBe(false);
     expect(isSubjectExpected({ ...base, stage: 'A_LEVEL', classSubject: cs })).toBe(false);
   });
+  it('does not include unrelated A-Level subjects merely because legacy data marks them compulsory', () => {
+    expect(isSubjectExpected({
+      stage: 'A_LEVEL',
+      classSubject: { subjectId: 'biology', combinationId: null, isCompulsory: true },
+      enrolledSubjectIds: new Set(),
+      studentCombinationId: 'HGL',
+      combinationSubjectIds: new Set(['history', 'geography', 'english']),
+    })).toBe(false);
+    expect(isSubjectExpected({
+      stage: 'A_LEVEL',
+      classSubject: { subjectId: 'english', combinationId: null, isCompulsory: true },
+      enrolledSubjectIds: new Set(),
+      studentCombinationId: 'HGL',
+      combinationSubjectIds: new Set(['history', 'geography', 'english']),
+    })).toBe(true);
+  });
 });
 
 describe('A-Level points direction (ACSEE A=1 ... F=7 vs A=5 ... F=0)', () => {

@@ -75,6 +75,9 @@ export interface CombinationIssue {
   registrationNumber: string | null;
   classId: string;
   className: string | null;
+  issueType?: 'NO_COMBINATION' | 'PRINCIPAL_SUBJECTS_MISSING';
+  combinationCode?: string;
+  missingPrincipalSubjects?: string[];
 }
 
 export interface CalcContext {
@@ -300,14 +303,24 @@ export class ResultCalculatorService {
 
       // Principal subjects per combination (A-Level divisions).
       const principalsByCombo = new Map<string, Set<string>>();
+      const principalNamesByCombo = new Map<string, Map<string, string>>();
+      const combinationCodeById = new Map<string, string>();
       if (stage === 'A_LEVEL' && comboIds.length) {
         const principalRows = await this.prisma.subjectCombinationSubject.findMany({
           where: { combinationId: { in: comboIds }, subjectRole: 'PRINCIPAL' },
-          select: { combinationId: true, subjectId: true },
+          select: {
+            combinationId: true,
+            subjectId: true,
+            subject: { select: { name: true } },
+            combination: { select: { code: true } },
+          },
         });
         for (const r of principalRows) {
           if (!principalsByCombo.has(r.combinationId)) principalsByCombo.set(r.combinationId, new Set());
           principalsByCombo.get(r.combinationId)!.add(r.subjectId);
+          if (!principalNamesByCombo.has(r.combinationId)) principalNamesByCombo.set(r.combinationId, new Map());
+          principalNamesByCombo.get(r.combinationId)!.set(r.subjectId, r.subject.name);
+          combinationCodeById.set(r.combinationId, r.combination.code);
         }
       }
 
@@ -323,6 +336,7 @@ export class ResultCalculatorService {
             registrationNumber: s.registrationNumber ?? null,
             classId,
             className: meta.name,
+            issueType: 'NO_COMBINATION',
           });
         }
 
@@ -358,6 +372,28 @@ export class ResultCalculatorService {
               className: meta.name,
               subjectId: a.subjectId,
               subjectName: a.classSubject.subject.name,
+            });
+          }
+        }
+
+        if (stage === 'A_LEVEL' && enrol.combinationId) {
+          const principalNames = principalNamesByCombo.get(enrol.combinationId);
+          const outcomeSubjectIds = new Set(outcomes.map((outcome) => outcome.subjectId));
+          const missingPrincipalSubjects = principalNames
+            ? [...principalNames.entries()]
+                .filter(([subjectId]) => !outcomeSubjectIds.has(subjectId))
+                .map(([, subjectName]) => subjectName)
+            : [];
+          if (missingPrincipalSubjects.length) {
+            combinationIssues.push({
+              studentId: s.id,
+              studentName: this.studentName(s),
+              registrationNumber: s.registrationNumber ?? null,
+              classId,
+              className: meta.name,
+              issueType: 'PRINCIPAL_SUBJECTS_MISSING',
+              combinationCode: combinationCodeById.get(enrol.combinationId),
+              missingPrincipalSubjects,
             });
           }
         }
@@ -463,11 +499,14 @@ export class ResultCalculatorService {
     const first = issues[0];
     const more = issues.length - 1;
     const identifier = first.registrationNumber ? ` (${first.registrationNumber})` : '';
-    const message = `${first.studentName}${identifier} has no A-Level subject combination.${more > 0 ? ` ${more} more student${more === 1 ? '' : 's'} also need a combination.` : ''} Assign the correct combination before calculating divisions.`;
+    const missingPrincipals = first.issueType === 'PRINCIPAL_SUBJECTS_MISSING';
+    const message = missingPrincipals
+      ? `${first.studentName}${identifier}'s ${first.combinationCode ?? 'A-Level'} combination is missing ${first.missingPrincipalSubjects?.join(', ') || 'a principal subject'} from this exam.${more > 0 ? ` ${more} more student${more === 1 ? '' : 's'} also have incomplete principal subjects.` : ''} Add or sync the correct combination subjects before calculating divisions.`
+      : `${first.studentName}${identifier} has no A-Level subject combination.${more > 0 ? ` ${more} more student${more === 1 ? '' : 's'} also need a combination.` : ''} Assign the correct combination before calculating divisions.`;
     return new BadRequestException({
       statusCode: 400,
       message,
-      code: 'A_LEVEL_COMBINATION_MISSING',
+      code: missingPrincipals ? 'A_LEVEL_PRINCIPAL_SUBJECTS_MISSING' : 'A_LEVEL_COMBINATION_MISSING',
       details: { issueCount: issues.length, issues: issues.slice(0, 500) },
     });
   }
