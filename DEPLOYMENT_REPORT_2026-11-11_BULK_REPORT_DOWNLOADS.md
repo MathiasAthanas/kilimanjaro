@@ -63,3 +63,13 @@ The follow-up implementation:
 
 Follow-up local verification: 96 academic tests passed, 25 skipped, dashboard TypeScript passed, 8 school-context tests passed, and both academic and dashboard production builds passed.
 
+Follow-up production result:
+
+- Commit: `7747028` (`fix: retain school scope for bulk report downloads`).
+- Active release: `/opt/kilimanjaro/releases/7747028-20261111T141000Z`.
+- The same Class 1 B PDF and ZIP were each downloaded twice consecutively without an active-school header; all four requests returned HTTP 200.
+- Both PDF attempts contained 37 valid pages and both ZIP attempts contained 37 valid PDF files.
+- Class 1 all-stream exports still returned 74 valid cards in both combined PDF and ZIP formats.
+- Production remained at 444 published report cards and 4,077 term results with unchanged fingerprint `71057a99a82df0bf83d9d017725efef1`.
+- All eight PM2 services remained online after verification.
+
