@@ -26,5 +26,5 @@ export function typedConfirmationIsValid(input: string, expected: string) {
 }
 
 export function roleRisk(role: string) {
-  return ['ADMIN', 'SYSTEM_ADMIN', 'PRINCIPAL', 'FINANCE', 'AQA', 'ACADEMIC_QA'].includes(role) ? 'high' : 'standard';
+  return ['ADMIN', 'SYSTEM_ADMIN', 'PRINCIPAL', 'FINANCE', 'AQA', 'ACADEMIC_QA', 'MANAGER', 'HEAD_OF_FINANCE', 'SUPER_ADMIN'].includes(role) ? 'high' : 'standard';
 }

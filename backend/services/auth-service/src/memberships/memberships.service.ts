@@ -120,6 +120,9 @@ export class MembershipsService {
       where: { id },
       data: { isActive: false, removedAt: new Date() },
     });
+    if (membership.role === Role.HEAD_OF_FINANCE) {
+      await this.retireHeadOfFinanceRole(membership.authUserId, actorId);
+    }
     await this.rabbitmqService.publish('membership.changed', {
       authUserId: membership.authUserId,
       schoolId: membership.schoolId,
@@ -149,17 +152,51 @@ export class MembershipsService {
     return memberships;
   }
 
-  /** Manager appoints (or replaces) the single group Head of Finances. */
-  async appointHeadOfFinance(authUserId: string, actorId: string) {
+  /**
+   * Manager appoints (or replaces) the single group Head of Finances.
+   * The caller's identity is passed through so the group-role checks in `assign` and `revoke`
+   * see a group-scoped actor; the controller already limits this endpoint to Manager / Super Admin.
+   */
+  async appointHeadOfFinance(authUserId: string, actorId: string, actorRole?: string, actor?: MembershipActor) {
+    const target = await this.prisma.user.findUnique({ where: { id: authUserId } });
+    if (!target) throw new NotFoundException('User not found');
+    // Appointing re-roles the person, which would strip these users of the access they already have.
+    if (([Role.SUPER_ADMIN, Role.MANAGER, Role.SYSTEM_ADMIN] as Role[]).includes(target.role)) {
+      throw new BadRequestException('Super admins, system admins and managers cannot be appointed Head of Finance');
+    }
+
     const current = await this.prisma.schoolMembership.findMany({
       where: { role: Role.HEAD_OF_FINANCE, isActive: true },
     });
     for (const m of current) {
-      if (m.authUserId !== authUserId) await this.revoke(m.id, actorId, Role.MANAGER);
+      if (m.authUserId !== authUserId) await this.revoke(m.id, actorId, actorRole, actor);
     }
-    const membership = await this.assign({ authUserId, role: Role.HEAD_OF_FINANCE }, actorId);
+    const membership = await this.assign({ authUserId, role: Role.HEAD_OF_FINANCE }, actorId, actorRole, actor);
     await this.prisma.user.update({ where: { id: authUserId }, data: { role: Role.HEAD_OF_FINANCE } });
     return membership;
+  }
+
+  /**
+   * A former Head of Finance must not keep the group-wide primary role. Return them to the
+   * school-level role they still hold (Finance Officer preferred), or Finance Officer by default,
+   * which carries no school access until they are given a membership.
+   */
+  private async retireHeadOfFinanceRole(authUserId: string, actorId: string): Promise<void> {
+    const user = await this.prisma.user.findUnique({ where: { id: authUserId } });
+    if (!user || user.role !== Role.HEAD_OF_FINANCE) return;
+
+    const remaining = await this.prisma.schoolMembership.findMany({
+      where: { authUserId, isActive: true, schoolId: { not: null } },
+    });
+    const schoolRoles = remaining.map((m) => m.role).filter((role) => !GROUP_ROLES.includes(role));
+    const next = schoolRoles.includes(Role.FINANCE) ? Role.FINANCE : schoolRoles[0] ?? Role.FINANCE;
+
+    await this.prisma.user.update({ where: { id: authUserId }, data: { role: next } });
+    await this.auditService.createLog({
+      userId: actorId,
+      action: AuditAction.USER_ROLE_CHANGED,
+      metadata: { targetUserId: authUserId, from: Role.HEAD_OF_FINANCE, to: next, reason: 'HEAD_OF_FINANCE_ENDED' },
+    });
   }
 
   private assertSchoolScope(schoolId: string | null, actor?: MembershipActor): void {

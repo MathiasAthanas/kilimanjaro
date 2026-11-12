@@ -120,6 +120,7 @@ import {
   SelectField, TablePagination, Td,
 } from '../components/AdminConsole';
 import { assessmentWeightsTotal, roleRisk } from '../utils/adminValidation';
+import { DEPARTMENT_REQUIRED_ROLES, GROUP_ROLE_OPTIONS, canGrantGroupRoles, departmentOptionsForRole } from '../utils/userForm';
 import { useSchools } from '../../manager/api/manager.hooks';
 import { DataError } from '../../../components/feedback/DataError';
 import { EmptyState } from '../../../components/feedback/EmptyState';
@@ -451,32 +452,6 @@ const STATUS_OPTIONS = [
   { value: 'PENDING',  label: 'Pending'  },
 ];
 
-type DeptOption = { value: string; label: string };
-
-const ROLE_DEPT_KEYWORDS: Record<string, string> = {
-  FINANCE: 'finance',
-  PRINCIPAL: 'principal',
-  ACADEMIC_QA: 'quality',
-  SYSTEM_ADMIN: 'system',
-};
-
-function departmentOptionsForRole(role: string, departments: { name: string }[]): DeptOption[] {
-  const all = departments.map((d) => ({ value: d.name, label: d.name }));
-  if (all.length === 0) return all;
-  const keyword = ROLE_DEPT_KEYWORDS[role];
-  if (keyword) {
-    const filtered = all.filter((o) => o.value.toLowerCase().includes(keyword));
-    return filtered.length > 0 ? filtered : all;
-  }
-  const restricted = Object.values(ROLE_DEPT_KEYWORDS);
-  const filtered = all.filter((o) => !restricted.some((k) => o.value.toLowerCase().includes(k)));
-  return filtered.length > 0 ? filtered : all;
-}
-
-function defaultDepartmentForRole(role: string, departments: { name: string }[]): string {
-  return departmentOptionsForRole(role, departments)[0]?.value ?? '';
-}
-
 function rolePermissions(role: string): string[] {
   const map: Record<string, string[]> = {
     TEACHER: ['Marks entry and attendance', 'Class analytics', 'Announcements inbox'],
@@ -485,6 +460,8 @@ function rolePermissions(role: string): string[] {
     FINANCE: ['Invoice management', 'Payment recording', 'Fee structure management'],
     PRINCIPAL: ['School health dashboard', 'Executive approvals', 'Full analytics read'],
     SYSTEM_ADMIN: ['User management', 'System settings', 'All modules - read / write'],
+    MANAGER: ['All-school overview and reports', 'Fund-request approvals', 'Appoints the Head of Finance'],
+    HEAD_OF_FINANCE: ['Consolidated finance across all schools', 'Invoice, payment and fee oversight', 'One appointment for the whole group'],
   };
   return map[role] ?? ['Standard workspace access'];
 }
@@ -494,6 +471,8 @@ export function CreateUserPage() {
   const createMutation = useCreateUserMutation();
   const { data: rawDepts = [] } = useDepartments();
   const depts = rawDepts as { name: string }[];
+  const session = useAuthStore((state) => state.session);
+  const roleOptions = canGrantGroupRoles(session) ? [...ROLE_OPTIONS, ...GROUP_ROLE_OPTIONS] : ROLE_OPTIONS;
   const [role, setRole] = useState('TEACHER');
   const [form, setForm] = useState({
     name: '',
@@ -502,12 +481,8 @@ export function CreateUserPage() {
     linked: '',
     status: 'ACTIVE',
   });
-
-  useEffect(() => {
-    if (depts.length > 0 && !form.linked) {
-      setForm((f) => ({ ...f, linked: defaultDepartmentForRole('TEACHER', depts) }));
-    }
-  }, [depts.length]);
+  // Group-wide roles belong to no single school, so they never take a department.
+  const showDepartment = !GROUP_ROLE_OPTIONS.some((o) => o.value === role);
   const [createdPassword, setCreatedPassword] = useState('');
   const isPrivileged = roleRisk(role) === 'high';
 
@@ -516,12 +491,13 @@ export function CreateUserPage() {
 
   const handleRoleChange = (nextRole: string) => {
     setRole(nextRole);
-    setForm((f) => ({ ...f, linked: defaultDepartmentForRole(nextRole, depts) }));
+    setForm((f) => ({ ...f, linked: '' }));
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name.trim() || !form.email.trim()) { toast('Name and email are required', 'warning'); return; }
+    if (DEPARTMENT_REQUIRED_ROLES.includes(role) && !form.linked) { toast(`Select the department this ${roleLabel(role)} leads`, 'warning'); return; }
 
     const names = form.name.trim().split(/\s+/);
     const firstName = names[0] ?? form.name.trim();
@@ -533,7 +509,7 @@ export function CreateUserPage() {
       firstName,
       lastName,
       phoneNumber: form.phone.trim() || undefined,
-      department: form.linked,
+      department: showDepartment && form.linked ? form.linked : undefined,
       isActive: form.status === 'ACTIVE',
     }, {
       onSuccess: (created: any) => {
@@ -560,16 +536,23 @@ export function CreateUserPage() {
 
             <AdminFormSection title="Role & Access" subtitle="Role determines the workspace and permission set assigned">
               <div className="grid gap-4 md:grid-cols-3">
-                <SelectField label="Role" options={ROLE_OPTIONS} value={role} onChange={handleRoleChange} />
-                <SelectField
-                  key={`department-${role}`}
-                  label="Linked Entity / Department"
-                  options={departmentOptionsForRole(role, depts)}
-                  value={form.linked}
-                  onChange={(value) => setForm((f) => ({ ...f, linked: value }))}
-                />
+                <SelectField label="Role" options={roleOptions} value={role} onChange={handleRoleChange} />
+                {showDepartment && (
+                  <SelectField
+                    key={`department-${role}`}
+                    label={DEPARTMENT_REQUIRED_ROLES.includes(role) ? 'Department (required)' : 'Linked Entity / Department (optional)'}
+                    options={departmentOptionsForRole(role, depts)}
+                    value={form.linked}
+                    onChange={(value) => setForm((f) => ({ ...f, linked: value }))}
+                  />
+                )}
                 <SelectField label="Account Status" options={STATUS_OPTIONS} value={form.status} onChange={(v) => setForm((f) => ({ ...f, status: v }))} />
               </div>
+              {role === 'TEACHER' && !form.linked && (
+                <p className="mt-3 text-xs font-semibold text-slate-500">
+                  Without a department, this teacher will not appear in a Head of Department&apos;s department view.
+                </p>
+              )}
               {isPrivileged && (
                 <div className="mt-4 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
                   <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
@@ -1030,13 +1013,14 @@ export function EditUserPage() {
     setName(user.name ?? '');
     setEmail(user.email ?? '');
     setPhone(user.phoneNumber ?? '');
-    const validOptions = depts.length > 0 ? departmentOptionsForRole(user.role, depts) : [];
-    const isValid = validOptions.some((o) => o.value === user.linked);
-    setLinked(isValid ? user.linked : (validOptions[0]?.value ?? user.linked ?? ''));
+    // Keep the real department field (or none). `linked` is a display fallback that can be a
+    // phone number or "Portal account", so it must never be written back as a department.
+    setLinked(user.department ?? '');
   }, [user?.id, depts.length]);
 
   const isPrivileged = roleRisk(role) === 'high';
-  const handleRoleChange = (nextRole: string) => { setRole(nextRole); setLinked(defaultDepartmentForRole(nextRole, depts)); };
+  // Changing the role keeps the saved department; the "(current)" option stops the select dropping it.
+  const handleRoleChange = (nextRole: string) => { setRole(nextRole); };
 
   if (loading) return <AdminShell title="Loading…" eyebrow="Account update"><SkeletonTable cols={3} /></AdminShell>;
   if (!user) return <AdminShell title="Not Found" eyebrow="Account update"><EmptyState title="User not found" description="This user account does not exist." /></AdminShell>;
@@ -1045,6 +1029,7 @@ export function EditUserPage() {
     const cleanName = name.trim();
     const cleanEmail = email.trim().toLowerCase();
     if (!cleanName) return toast('Full name is required', 'error');
+    if (DEPARTMENT_REQUIRED_ROLES.includes(role) && !linked) return toast(`Select the department this ${roleLabel(role)} leads`, 'error');
     const emailOptional = role === 'STUDENT' || role === 'PARENT';
     if ((!cleanEmail && !emailOptional) || (cleanEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail))) {
       return toast('Enter a valid email address', 'error');
@@ -1085,8 +1070,16 @@ export function EditUserPage() {
           </AdminFormSection>
           <AdminFormSection title="Role & Access" subtitle="Role and linked entity assignment">
             <div className="grid gap-4 md:grid-cols-2">
-              <SelectField label="Role" options={ROLE_OPTIONS} value={role} onChange={handleRoleChange} />
-              <SelectField key={`edit-department-${role}`} label="Linked Entity / Department" options={departmentOptionsForRole(role, depts)} value={linked} onChange={setLinked} />
+              <SelectField
+                key={`edit-role-${role}`}
+                label="Role"
+                options={ROLE_OPTIONS.some((o) => o.value === role) || !role ? ROLE_OPTIONS : [...ROLE_OPTIONS, { value: role, label: roleLabel(role) }]}
+                value={role}
+                onChange={handleRoleChange}
+              />
+              {!GROUP_ROLE_OPTIONS.some((o) => o.value === role) && (
+                <SelectField key={`edit-department-${role}-${user.id}`} label={DEPARTMENT_REQUIRED_ROLES.includes(role) ? 'Department (required)' : 'Linked Entity / Department (optional)'} options={departmentOptionsForRole(role, depts, user.department)} value={linked} onChange={setLinked} />
+              )}
             </div>
             {isPrivileged && (
               <div className="mt-4 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4">

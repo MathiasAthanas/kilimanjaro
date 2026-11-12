@@ -81,8 +81,8 @@ export class MembershipsController {
 
   @Post('head-of-finance')
   @Roles(Role.MANAGER, Role.SUPER_ADMIN)
-  appointHeadOfFinance(@Body() dto: AppointHeadOfFinanceDto, @CurrentUser() user: { sub: string }) {
-    return this.membershipsService.appointHeadOfFinance(dto.authUserId, user.sub);
+  appointHeadOfFinance(@Body() dto: AppointHeadOfFinanceDto, @CurrentUser() user: MembershipActor) {
+    return this.membershipsService.appointHeadOfFinance(dto.authUserId, user.sub, user.role, user);
   }
 
   @Delete(':id')

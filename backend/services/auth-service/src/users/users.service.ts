@@ -138,6 +138,20 @@ export class UsersService {
       }
     }
 
+    // There is exactly one group Head of Finance. Creating a second one here would bypass the
+    // Manager's "appoint / replace" flow (which retires the previous holder), so refuse instead.
+    if (dto.role === Role.HEAD_OF_FINANCE) {
+      const appointed = await this.prisma.schoolMembership.findFirst({
+        where: { role: Role.HEAD_OF_FINANCE, isActive: true },
+        select: { id: true },
+      });
+      if (appointed) {
+        throw new ConflictException(
+          'A Head of Finance is already appointed. Replace them from the Manager workspace (Head of Finances) instead of creating another.',
+        );
+      }
+    }
+
     const temporaryPassword = dto.password || this.generateNamePassword(dto.firstName, dto.lastName);
     const passwordHash = await argon2.hash(temporaryPassword);
     const temporaryPasswordEncrypted = this.encryptTemporaryPassword(temporaryPassword);
