@@ -112,6 +112,18 @@ describe('ReportCardPdfService', () => {
   const pageCount = (fileName: string) =>
     (readFileSync(join(directory, fileName), 'latin1').match(/\/Type \/Page\b/g) ?? []).length;
 
+  it('shows division points in the prominent report-card summary', () => {
+    const config = { get: jest.fn().mockReturnValue(directory) } as unknown as ConfigService;
+    const service = new ReportCardPdfService(config);
+
+    const verdict = (service as any).verdictFor(
+      buildInput({ divisionSummary: { mode: 'O_LEVEL', division: 'Division I', descriptor: 'Division I', totalPoints: 10 } }),
+      'O_LEVEL_TERM',
+    );
+
+    expect(verdict.label).toBe('Division I - 10 pts');
+  });
+
   it('paginates a long subject list instead of overflowing the page', async () => {
     const config = { get: jest.fn().mockReturnValue(directory) } as unknown as ConfigService;
     const service = new ReportCardPdfService(config);

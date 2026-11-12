@@ -739,7 +739,11 @@ export class ReportCardPdfService {
     }
     if (ds?.division) {
       const color = this.divisionColor(ds.division);
-      return { label: ds.division, color, soft: '#F5F8FC', icon: false };
+      const points = Number(ds.totalPoints);
+      const label = Number.isFinite(points)
+        ? `${ds.division} - ${Number.isInteger(points) ? points : points.toFixed(1)} pts`
+        : ds.division;
+      return { label, color, soft: '#F5F8FC', icon: false };
     }
     if (ds?.descriptor) return { label: ds.descriptor, ...good, icon: true };
     return null;
