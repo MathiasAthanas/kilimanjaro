@@ -421,14 +421,8 @@ export class ReportCardPdfService {
       );
     } else if (template === 'A_LEVEL_NATIONAL_READY' || template === 'A_LEVEL_COMBINATION') {
       const isNational = template === 'A_LEVEL_NATIONAL_READY';
-      const { principal, subsidiary } = this.splitALevel(input.results);
-      if (principal.length > 0) {
-        this.renderResultsTable(ctx, 'PRINCIPAL SUBJECTS', principal, ['Subject', 'CAT1', 'Midterm', 'Final', 'Total', 'Grade', 'Grade Pts', 'Remark'], rowH, isNational);
-      }
-      if (subsidiary.length > 0) {
-        if (principal.length > 0) ctx.y += BLOCK_GAP;
-        this.renderResultsTable(ctx, 'SUBSIDIARY / GENERAL STUDIES', subsidiary, ['Subject', 'CAT1', 'Midterm', 'Final', 'Total', 'Grade', 'Remark'], rowH, false);
-      }
+      // Every subject the student sat sits in one table: principals first, then the rest.
+      this.renderResultsTable(ctx, 'SUBJECT RESULTS', this.orderALevelRows(input.results), ['Subject', 'CAT1', 'Midterm', 'Final', 'Total', 'Grade', 'Grade Pts', 'Remark'], rowH, isNational);
     } else {
       // O_LEVEL_TERM (default)
       this.renderResultsTable(ctx, 'SUBJECT RESULTS', input.results, ['Subject', 'CAT1', 'CAT2', 'Midterm', 'Final', 'Total', 'Grade', 'Remark'], rowH);
@@ -453,6 +447,13 @@ export class ReportCardPdfService {
     this.renderComments(ctx);
   }
 
+  /** Principal subjects first, then every other subject, in their original order. */
+  private orderALevelRows(results: PdfResult[]): PdfResult[] {
+    const { principal } = this.splitALevel(results);
+    const principals = new Set(principal);
+    return [...principal, ...results.filter((row) => !principals.has(row))];
+  }
+
   private splitALevel(results: PdfResult[]) {
     return {
       principal: results.filter((r) => r.subjectRole === 'PRINCIPAL' || !r.subjectRole),
@@ -475,6 +476,9 @@ export class ReportCardPdfService {
   }
 
   private hasAssessmentNote(input: ReportCardPdfInput) {
+    // A-Level cards list every subject the student sat, while the average and division use
+    // the combination only, so a "subjects assessed" count would contradict the table.
+    if (input.reportTemplateCode === 'A_LEVEL_COMBINATION' || input.reportTemplateCode === 'A_LEVEL_NATIONAL_READY') return false;
     return input.subjectsExpected !== undefined && input.subjectsAssessed !== undefined;
   }
 
@@ -490,15 +494,8 @@ export class ReportCardPdfService {
   }
 
   private planLayout(input: ReportCardPdfInput, template: string): { rowH: number; u: Metrics } {
-    const isALevel = template === 'A_LEVEL_NATIONAL_READY' || template === 'A_LEVEL_COMBINATION';
-    let rows = input.results.length;
-    let tables = 1;
-    if (isALevel) {
-      const { principal, subsidiary } = this.splitALevel(input.results);
-      rows = principal.length + subsidiary.length;
-      tables = (principal.length > 0 ? 1 : 0) + (subsidiary.length > 0 ? 1 : 0) || 1;
-    }
-    rows = Math.max(rows, 1);
+    const rows = Math.max(input.results.length, 1);
+    const tables = 1;
     const tableTop = 156 + 90 + 16; // below the student panel
 
     // Prefer the roomy layout, then the compact one. Compact rows remain readable at 13.5pt.
@@ -699,15 +696,16 @@ export class ReportCardPdfService {
   }
 
   private rowValues(row: PdfResult, headers: string[], showGradePoints: boolean): string[] {
+    const subject = row.subjectName;
     if (row.status === 'EXEMPT') {
-      return headers.map((h) => (h === 'Subject' ? row.subjectName : h === 'Total' || h === 'Grade' ? 'EXEMPT' : h === 'Remark' ? 'Exempt' : '-'));
+      return headers.map((h) => (h === 'Subject' ? subject : h === 'Total' || h === 'Grade' ? 'EXEMPT' : h === 'Remark' ? 'Exempt' : '-'));
     }
     if (row.status === 'ABSENT' || row.status === 'NOT_SAT') {
-      return headers.map((h) => (h === 'Subject' ? row.subjectName : '-'));
+      return headers.map((h) => (h === 'Subject' ? subject : '-'));
     }
     return headers.map((h) => {
       switch (h) {
-        case 'Subject':     return row.subjectName;
+        case 'Subject':     return subject;
         case 'CAT1':        return row.CAT1 != null ? row.CAT1.toFixed(1) : '-';
         case 'CAT2':        return row.CAT2 != null ? row.CAT2.toFixed(1) : '-';
         case 'Midterm':     return row.MIDTERM != null ? row.MIDTERM.toFixed(1) : '-';

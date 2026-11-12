@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { indexStudentCombinations } from './report-composition.service';
+import { indexStudentCombinations, shouldComposeRow } from './report-composition.service';
 
 describe('report-card composition A-Level combinations', () => {
   it('deduplicates subject-enrolment rows into one student combination', () => {
@@ -19,3 +19,24 @@ describe('report-card composition A-Level combinations', () => {
     ])).toThrow(BadRequestException);
   });
 });
+
+describe('report-card composition of reference-only subjects', () => {
+  it('keeps a reference subject the student sat so it appears on the card', () => {
+    expect(shouldComposeRow(false, 'SCORED')).toBe(true);
+  });
+
+  it.each(['NOT_SAT', 'ABSENT', 'EXEMPT', 'MISSING'] as const)(
+    'leaves a reference subject off the card when its status is %s',
+    (status) => {
+      expect(shouldComposeRow(false, status)).toBe(false);
+    },
+  );
+
+  it.each(['SCORED', 'NOT_SAT', 'ABSENT', 'EXEMPT', 'MISSING'] as const)(
+    'always keeps a subject that counts toward the aggregate (%s)',
+    (status) => {
+      expect(shouldComposeRow(true, status)).toBe(true);
+    },
+  );
+});
+

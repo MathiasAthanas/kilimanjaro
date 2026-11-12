@@ -162,4 +162,39 @@ describe('ReportCardPdfService', () => {
       expect(pageCount(empty)).toBe(1);
     },
   );
+
+  it('shows every A-Level subject the student sat in one table on one page', async () => {
+    const config = { get: jest.fn().mockReturnValue(directory) } as unknown as ConfigService;
+    const service = new ReportCardPdfService(config);
+    const principal = ['Economics', 'Geography', 'History'].map((subjectName) => ({
+      subjectName, subjectRole: 'PRINCIPAL', total: 70, grade: 'B', remark: 'Good', gradePoints: 2, status: 'SCORED',
+    }));
+    const subsidiary = ['Academic Communication', 'Basic Applied Math', 'Historia ya Tanzania na Maadili'].map((subjectName) => ({
+      subjectName, subjectRole: 'SUBSIDIARY', total: 55, grade: 'C', remark: 'Fair', status: 'SCORED',
+    }));
+
+    const fileName = await service.generatePdf(
+      buildInput({
+        reportTemplateCode: 'A_LEVEL_COMBINATION',
+        studentId: 'student-reference',
+        results: [...principal, ...subsidiary],
+        subjectsAssessed: 3,
+        subjectsExpected: 3,
+      }),
+    );
+
+    expect(pageCount(fileName)).toBe(1);
+  });
+
+  it.each([
+    ['A_LEVEL_COMBINATION', false],
+    ['A_LEVEL_NATIONAL_READY', false],
+    ['O_LEVEL_TERM', true],
+    ['PRIMARY_STANDARD', true],
+  ])('%s: "subjects assessed" note shown = %s', (reportTemplateCode, expected) => {
+    const config = { get: jest.fn().mockReturnValue(directory) } as unknown as ConfigService;
+    const service = new ReportCardPdfService(config);
+
+    expect((service as any).hasAssessmentNote({ reportTemplateCode, subjectsAssessed: 3, subjectsExpected: 3 })).toBe(expected);
+  });
 });
