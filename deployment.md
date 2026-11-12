@@ -1,6 +1,6 @@
 # Kilimanjaro Production Deployment Runbook
 
-Last updated: 2026-11-12  
+Last updated: 2026-11-12 (user roles release)  
 Audience: deployment operators working on this repository  
 Purpose: deploy committed changes without losing production data, persistent files, configuration, or rollback capability.
 
@@ -36,13 +36,15 @@ Never print, copy into chat, or commit production secrets or private-key content
 
 As of 2026-11-12:
 
-- Active release: `/opt/kilimanjaro/releases/report-card-points-74716e3-20261112T130100Z`.
-- Production application code: commit `74716e3`.
-- `main` also contains documentation commit `31fdfb6`; that commit does not change runtime code.
+- Active release: `/opt/kilimanjaro/releases/user-roles-e295268-20261112T145914Z`.
+- Production application code: commit `ce8d68b` (release built from `e295268`, which adds documentation only).
+- The previous release `report-card-points-74716e3-20261112T130100Z` is the rollback target.
+- General gateway throttling (`GatewayThrottlerGuard`, 300 requests per minute per user) is active in production; only the login and auth-service throttles were removed (see the 2026-11-02 and 2026-11-03 reports).
 - All eight PM2 services are online.
 - The public gateway health endpoint reports its dependencies reachable.
 - The production dashboard returns HTTP 200.
 - No database migration was pending in the latest release.
+- Packaging note: archives built on Windows carry CRLF line endings. Strip them from `deployment/*.sh` in the staged release (`sed -i 's/$//'`) before running the activation script.
 - The latest controlled report-card regeneration preserved marks, results, rankings, and publication state.
 
 The local working tree currently contains unrelated uncommitted work. A deployment must be built from a reviewed commit, never by copying the working directory.
