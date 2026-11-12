@@ -212,6 +212,7 @@ export class ExamResultsService {
             subjectsAssessed: r.summary.subjectsAssessed,
             mean: r.summary.mean,
             division: r.summary.division.division ?? r.summary.division.descriptor,
+            divisionPoints: r.summary.division.totalPoints,
             divisionEligible: r.summary.division.eligible,
             warnings: r.warnings,
             cells: Object.fromEntries(
@@ -223,6 +224,7 @@ export class ExamResultsService {
                   maxScore: o.maxScore,
                   percentage: o.percentage,
                   grade: o.grade,
+                  countsTowardAggregate: o.countsTowardAggregate !== false,
                   exemptReason: o.exemptReason ?? null,
                 },
               ]),
@@ -325,7 +327,7 @@ export class ExamResultsService {
         window: this.windowSummary(window),
         subjects: [],
         rows: [],
-        summaries: { byStream: [], bySubject: [], byGender: [] },
+        summaries: { overall: null, byStream: [], bySubject: [], byGender: [] },
       };
     }
 
@@ -451,6 +453,28 @@ export class ExamResultsService {
 
   private buildSummaries(results: any[], subjects: { subjectId: string; subjectName: string }[], codes: string[]) {
     const round = (n: number) => this.round(n, 1);
+    const stats = (values: number[]) => ({
+      highestMarks: values.length ? round(Math.max(...values)) : 0,
+      lowestMarks: values.length ? round(Math.min(...values)) : 0,
+    });
+    const passRate = (passing: number, entries: number) => round((passing / Math.max(entries, 1)) * 100);
+    const divisionDistribution = (rows: any[]) => {
+      const dist: Record<string, number> = {
+        'Division I': 0,
+        'Division II': 0,
+        'Division III': 0,
+        'Division IV': 0,
+        'Division 0': 0,
+        Ungraded: 0,
+      };
+      for (const row of rows) {
+        if (!['O_LEVEL', 'A_LEVEL'].includes(row.educationStage)) continue;
+        const division = String(row.division ?? 'Ungraded');
+        const key = Object.prototype.hasOwnProperty.call(dist, division) ? division : 'Ungraded';
+        dist[key] += 1;
+      }
+      return dist;
+    };
 
     // Per stream (class).
     const byClass = new Map<string, any[]>();
@@ -467,7 +491,11 @@ export class ExamResultsService {
         stream: group[0].stream,
         entries: group.length,
         meanMarks: round(means.reduce((s, m) => s + m, 0) / Math.max(means.length, 1)),
+        ...stats(means),
+        passRate: passRate(group.filter((g) => g.isPassing).length, group.length),
         distribution: this.distribution(group.map((g) => g.overallGrade).filter((g) => g && g !== '-'), codes),
+        divisionDistribution: divisionDistribution(group),
+        educationStage: group[0].educationStage,
       };
     });
 
@@ -488,6 +516,14 @@ export class ExamResultsService {
         subjectName: subj.subjectName,
         entries: grades.length,
         meanMarks: round(percs.reduce((s, m) => s + m, 0) / Math.max(percs.length, 1)),
+        ...stats(percs),
+        passRate: passRate(
+          results.filter((r) => {
+            const score = (r.subjectScores as Record<string, SubjectScore>)?.[subj.subjectId];
+            return score && score.status !== 'EXEMPT' && score.status !== 'MISSING' && score.isPassing;
+          }).length,
+          grades.length,
+        ),
         distribution: this.distribution(grades, codes),
       };
     });
@@ -504,10 +540,24 @@ export class ExamResultsService {
       gender,
       entries: group.length,
       meanMarks: round(group.reduce((s, g) => s + g.mean, 0) / Math.max(group.length, 1)),
+      ...stats(group.map((item) => item.mean)),
+      passRate: passRate(group.filter((item) => item.isPassing).length, group.length),
       distribution: this.distribution(group.map((g) => g.overallGrade).filter((g) => g && g !== '-'), codes),
+      divisionDistribution: divisionDistribution(group),
     }));
 
-    return { byStream, bySubject, byGender };
+    const overallMeans = results.map((result) => result.mean);
+    const overall = {
+      entries: results.length,
+      classes: byClass.size,
+      meanMarks: round(overallMeans.reduce((sum, value) => sum + value, 0) / Math.max(overallMeans.length, 1)),
+      ...stats(overallMeans),
+      passRate: passRate(results.filter((result) => result.isPassing).length, results.length),
+      distribution: this.distribution(results.map((result) => result.overallGrade).filter((grade) => grade && grade !== '-'), codes),
+      divisionDistribution: divisionDistribution(results),
+    };
+
+    return { overall, byStream, bySubject, byGender };
   }
 
   /**

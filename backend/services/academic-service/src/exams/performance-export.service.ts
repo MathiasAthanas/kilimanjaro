@@ -42,6 +42,7 @@ export interface PerfRow {
   average: number | null;
   grade: string;
   division: string;
+  divisionPoints: number | null;
   subjectsAssessed: number | null;
   subjectsExpected: number | null;
   streamRank: number | null;
@@ -116,6 +117,11 @@ export class PerformanceExportService {
     return [s.firstName, s.middleName, s.lastName].filter(Boolean).join(' ').trim();
   }
 
+  private divisionText(row: Pick<PerfRow, 'division' | 'divisionPoints'>): string {
+    if (!row.division) return '';
+    return row.divisionPoints === null ? row.division : `${row.division} - ${row.divisionPoints} pts`;
+  }
+
   private subjectsForRows(rows: PerfRow[]): Array<{ key: string; label: string }> {
     const subjects = new Map<string, string>();
     for (const row of rows) {
@@ -168,7 +174,7 @@ export class PerformanceExportService {
     if (q.educationStage) classes = classes.filter((c) => c.stage === q.educationStage);
 
     // ── raw performance rows keyed by student ───────────────────────────
-    const perf = new Map<string, { average: number; grade: string; division: string; assessed: number | null; expected: number | null; subjects: Record<string, PerfSubject> }>();
+    const perf = new Map<string, { average: number; grade: string; division: string; divisionPoints: number | null; assessed: number | null; expected: number | null; subjects: Record<string, PerfSubject> }>();
     if (source === 'WINDOW' && window) {
       const rows = await this.prisma.examWindowResult.findMany({ where: { examWindowId: window.id } });
       for (const r of rows) {
@@ -178,7 +184,7 @@ export class PerformanceExportService {
           const s = scores[k];
           subjects[s.subjectId] = { label: s.subjectName, percentage: s.percentage ?? null, grade: s.grade ?? '', status: s.status ?? (s.isAbsent ? 'ABSENT' : 'SCORED') };
         }
-        perf.set(r.studentId, { average: r.mean, grade: r.overallGrade, division: r.division ?? '', assessed: r.subjectsAssessed, expected: r.subjectsExpected, subjects });
+        perf.set(r.studentId, { average: r.mean, grade: r.overallGrade, division: r.division ?? '', divisionPoints: r.divisionPoints ?? null, assessed: r.subjectsAssessed, expected: r.subjectsExpected, subjects });
       }
     } else if (source === 'TERM') {
       const cards = await this.prisma.reportCard.findMany({ where: { termId: q.termId, ...schoolScopeFilter(user) } });
@@ -199,6 +205,7 @@ export class PerformanceExportService {
           average: c.overallAverage,
           grade: c.overallGrade,
           division: String(ds.division ?? ds.descriptor ?? ''),
+          divisionPoints: Number.isFinite(Number(ds.totalPoints)) ? Number(ds.totalPoints) : null,
           assessed: c.subjectCount,
           expected: c.subjectsExpected || c.subjectCount,
           subjects,
@@ -226,6 +233,7 @@ export class PerformanceExportService {
           average: p ? round(p.average) : null,
           grade: p?.grade ?? '',
           division: p?.division ?? '',
+          divisionPoints: p?.divisionPoints ?? null,
           subjectsAssessed: p?.assessed ?? null,
           subjectsExpected: p?.expected ?? null,
           streamRank: null,
@@ -397,7 +405,7 @@ export class PerformanceExportService {
                 i + 1, r.registrationNumber, r.name, r.gender,
                 ...subjects.map((s) => this.cell(r.subjects[s.key])),
                 r.subjectsExpected && r.subjectsAssessed !== r.subjectsExpected ? `${r.subjectsAssessed}/${r.subjectsExpected}` : r.subjectsAssessed ?? '',
-                r.average, r.grade, ...(showDivision ? [r.division] : []),
+                r.average, r.grade, ...(showDivision ? [this.divisionText(r)] : []),
                 ...(withStreamCol ? [r.stream ?? ''] : []), r.streamRank, r.standardRank,
               ],
         );
@@ -440,7 +448,7 @@ export class PerformanceExportService {
           lines.push(
             (roster
               ? [++rowNumber, st.label, r.className, r.stream ?? '', r.registrationNumber, r.name, r.gender]
-              : [++rowNumber, st.label, r.className, r.registrationNumber, r.name, r.gender, ...report.subjects.map((s) => this.cell(r.subjects[s.key])), r.subjectsAssessed ?? '', r.subjectsExpected ?? '', r.average, r.grade, ...(showDivision ? [r.division] : []), r.stream ?? '', r.streamRank, r.standardRank]
+              : [++rowNumber, st.label, r.className, r.registrationNumber, r.name, r.gender, ...report.subjects.map((s) => this.cell(r.subjects[s.key])), r.subjectsAssessed ?? '', r.subjectsExpected ?? '', r.average, r.grade, ...(showDivision ? [this.divisionText(r)] : []), r.stream ?? '', r.streamRank, r.standardRank]
             ).map(esc).join(','),
           );
         }
@@ -487,7 +495,7 @@ export class PerformanceExportService {
               { h: 'SBJ', w: 34, v: (r) => (r.subjectsExpected && r.subjectsAssessed !== r.subjectsExpected ? `${r.subjectsAssessed}/${r.subjectsExpected}` : String(r.subjectsAssessed ?? '')) },
               { h: 'AVG %', w: 42, v: (r) => (r.average === null ? '' : r.average.toFixed(1)) },
               { h: 'GR', w: 28, v: (r) => r.grade },
-              ...(showDivision ? [{ h: 'DIVISION', w: 70, v: (r: PerfRow) => r.division.replace('Division ', 'Div ').slice(0, 14) }] : []),
+              ...(showDivision ? [{ h: 'DIVISION', w: 82, v: (r: PerfRow) => this.divisionText(r).replace('Division ', 'Div ').slice(0, 18) }] : []),
               ...(withStreamCol ? [{ h: 'STREAM', w: 48, v: (r: PerfRow) => r.stream ?? '' }] : []),
               { h: 'STR', w: 30, v: (r) => String(r.streamRank ?? '') },
               { h: 'OVR', w: 30, v: (r) => String(r.standardRank ?? '') },

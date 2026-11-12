@@ -37,6 +37,7 @@ interface BlendedRow {
   points: number;
   remark: string;
   isPassing: boolean;
+  countsTowardAggregate: boolean;
   rank?: number;
 }
 
@@ -61,6 +62,7 @@ function readOutcome(raw: any): SubjectOutcome {
     exempt: status === 'EXEMPT',
     exemptionId: raw.exemptionId ?? null,
     exemptReason: raw.exemptReason ?? null,
+    countsTowardAggregate: raw.countsTowardAggregate !== false,
   };
 }
 
@@ -239,6 +241,7 @@ export class ReportCompositionService {
           points: resolved.points,
           remark: !isExempt && blend.status !== 'SCORED' ? (blend.status === 'NOT_SAT' ? 'Not sat' : 'Absent') : resolved.remark,
           isPassing: !isExempt && blend.status !== 'SCORED' ? false : resolved.isPassing,
+          countsTowardAggregate: contribs.some((contribution) => contribution.outcome.countsTowardAggregate !== false),
         });
       }
     }
@@ -322,7 +325,12 @@ export class ReportCompositionService {
       .map((e) => e.id);
 
     const scoreJson = (r: BlendedRow) =>
-      ({ composedFrom: r.contributions, blended: r.blended, status: r.status }) as unknown as Prisma.InputJsonValue;
+      ({
+        composedFrom: r.contributions,
+        blended: r.blended,
+        status: r.status,
+        countsTowardAggregate: r.countsTowardAggregate,
+      }) as unknown as Prisma.InputJsonValue;
 
     await this.prisma.$transaction(
       [

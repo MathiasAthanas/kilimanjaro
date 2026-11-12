@@ -16,7 +16,7 @@ describe('ExamResultsService A-Level merit display', () => {
           classId: 'class-1', className: 'Form 5 A', stream: 'A', classLevel: 5,
           educationStage: 'A_LEVEL', registrationNumber: 'KEMS-A-26001', studentName: 'Test Student',
           gender: 'FEMALE', subjectScores: {}, subjectCount: 3, subjectsExpected: 3, subjectsAssessed: 3,
-          division: 'Division I', divisionPoints: 3, total: 240, mean: 80, overallGrade: 'A',
+          division: 'Division I', divisionPoints: 3, total: 240, mean: 80, overallGrade: 'A', isPassing: true,
           classMeanDev: 1, streamRank: 1, standardRank: 1,
         }]),
       },
@@ -33,6 +33,13 @@ describe('ExamResultsService A-Level merit display', () => {
     });
 
     expect(result.rows[0]).toMatchObject({ combinationCode: 'HGE', division: 'Division I', divisionPoints: 3 });
+    expect(result.summaries.overall).toMatchObject({ entries: 1, classes: 1, meanMarks: 80, passRate: 100 });
+    expect(result.summaries.byStream[0]).toMatchObject({
+      highestMarks: 80,
+      lowestMarks: 80,
+      passRate: 100,
+      divisionDistribution: { 'Division I': 1 },
+    });
     expect(prisma.studentSubjectEnrollment.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({ academicYearId: 'year-1', isActive: true }),
     }));

@@ -50,6 +50,11 @@ export class ReportCardsService {
     return payload as T;
   }
 
+  /** Old rows predate this metadata and must retain their original counting behaviour. */
+  private countsTowardAggregate(row: { assessmentScores?: unknown }): boolean {
+    return (row.assessmentScores as any)?.countsTowardAggregate !== false;
+  }
+
   /**
    * Overall grade for an average, via the SAME resolver the merit list uses.
    * Throws a clear error when no grading scale is active (never a silent fallback).
@@ -67,12 +72,13 @@ export class ReportCardsService {
 
   /** Per-student figures shared by bulk generation and single-PDF regeneration. EXEMPT rows never count. */
   private async summarizeRows(
-    rows: Array<{ subjectId: string; weightedTotal: number; gradePoints: number; grade: string; isPassing: boolean; resultStatus?: string | null; educationStage: any; classLevel: number | null; academicYearId: string }>,
+    rows: Array<{ subjectId: string; weightedTotal: number; gradePoints: number; grade: string; isPassing: boolean; resultStatus?: string | null; educationStage: any; classLevel: number | null; academicYearId: string; assessmentScores?: unknown }>,
     principalSubjectIds: Set<string> | undefined,
     schoolId: string | null,
     policy: ReportCardPolicyValues,
   ) {
-    const counted = rows.filter((r) => (r.resultStatus ?? 'SCORED') !== 'EXEMPT');
+    const applicable = rows.filter((row) => this.countsTowardAggregate(row));
+    const counted = applicable.filter((r) => (r.resultStatus ?? 'SCORED') !== 'EXEMPT');
     const avg = counted.length ? round(counted.reduce((s, r) => s + r.weightedTotal, 0) / counted.length) : 0;
     const first = rows[0];
     const resolved = counted.length
@@ -95,16 +101,16 @@ export class ReportCardsService {
     const divisionSummary = {
       ...division,
       subjectsAssessed: counted.length,
-      subjectsExpected: rows.length,
-      exemptSubjects: rows.length - counted.length,
+      subjectsExpected: applicable.length,
+      exemptSubjects: applicable.length - counted.length,
     };
     return {
       avg,
       resolved,
       divisionSummary,
       subjectsAssessed: counted.length,
-      subjectsExpected: rows.length,
-      exemptSubjectCount: rows.length - counted.length,
+      subjectsExpected: applicable.length,
+      exemptSubjectCount: applicable.length - counted.length,
       failingSubjectCount: counted.filter((r) => !r.isPassing).length,
     };
   }
@@ -136,7 +142,7 @@ export class ReportCardsService {
   }
 
   private reportTemplateFor(stage: string | null, classLevel: number | null): string {
-    if (stage === 'PRIMARY') return 'PRIMARY_STANDARD';
+    if (stage === 'PRIMARY' || stage === 'NURSERY') return 'PRIMARY_STANDARD';
     if (stage === 'A_LEVEL' && classLevel === 6) return 'A_LEVEL_NATIONAL_READY';
     if (stage === 'A_LEVEL') return 'A_LEVEL_COMBINATION';
     if (stage === 'O_LEVEL' && classLevel === 4) return 'O_LEVEL_NATIONAL_READY';
@@ -237,7 +243,7 @@ export class ReportCardsService {
     }
 
     const averages = [...byStudent.entries()].map(([studentId, rows]) => {
-      const counted = rows.filter((r) => (r.resultStatus ?? 'SCORED') !== 'EXEMPT');
+      const counted = rows.filter((r) => this.countsTowardAggregate(r) && (r.resultStatus ?? 'SCORED') !== 'EXEMPT');
       return {
         studentId,
         average: counted.length ? round(counted.reduce((sum, item) => sum + item.weightedTotal, 0) / counted.length) : 0,
@@ -262,6 +268,7 @@ export class ReportCardsService {
             studentId: true,
             subjectId: true,
             subjectName: true,
+            assessmentScores: true,
             resultStatus: true,
             weightedTotal: true,
             grade: true,
@@ -279,7 +286,7 @@ export class ReportCardsService {
     }
     const levelAverages = [...levelByStudent.entries()].map(([studentId, rawRows]) => {
       const applicable = this.applyAlternativeSubjectPolicy(rawRows, policy)
-        .filter((row) => (row.resultStatus ?? 'SCORED') !== 'EXEMPT');
+        .filter((row) => this.countsTowardAggregate(row) && (row.resultStatus ?? 'SCORED') !== 'EXEMPT');
       return {
         studentId,
         average: applicable.length

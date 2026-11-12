@@ -23,6 +23,7 @@ interface SubjectCell {
   isAbsent: boolean;
   missing: boolean;
   status?: string;
+  countsTowardAggregate?: boolean;
 }
 
 @Injectable()
@@ -44,7 +45,7 @@ export class MeritExportService {
     if (cell.status === 'EXEMPT') return 'EXEMPT';
     if (cell.status === 'NOT_SAT') return 'NS';
     if (cell.isAbsent) return 'ABS';
-    return `${Math.round(cell.score)} ${cell.grade}`;
+    return `${Math.round(cell.score)} ${cell.grade}${cell.countsTowardAggregate === false ? '*' : ''}`;
   }
 
   private divisionText(row: any): string {
@@ -179,15 +180,15 @@ export class MeritExportService {
     const writeSection = (
       title: string,
       firstColHeader: string,
-      records: Array<{ label: string; entries: number; meanMarks: number; distribution: Record<string, number> }>,
+      records: Array<{ label: string; entries: number; meanMarks: number; highestMarks: number; lowestMarks: number; passRate: number; distribution: Record<string, number> }>,
     ) => {
-      gs.mergeCells(r, 1, r, 4 + gradeCodes.length);
+      gs.mergeCells(r, 1, r, 6 + gradeCodes.length);
       const t = gs.getCell(r, 1);
       t.value = title;
       t.font = { bold: true, size: 12 };
       r += 1;
 
-      const head = [firstColHeader, ...gradeCodes, 'Entries', 'Mean Marks', 'Grade'];
+      const head = [firstColHeader, ...gradeCodes, 'Entries', 'Mean', 'High', 'Low', 'Pass %', 'Grade'];
       const hr = gs.getRow(r);
       head.forEach((h, i) => {
         const c = hr.getCell(i + 1);
@@ -204,6 +205,9 @@ export class MeritExportService {
           ...gradeCodes.map((g) => rec.distribution[g] ?? 0),
           rec.entries,
           rec.meanMarks,
+          rec.highestMarks,
+          rec.lowestMarks,
+          rec.passRate,
           gradeOf(rec.meanMarks),
         ];
         const dr = gs.getRow(r);
@@ -221,6 +225,9 @@ export class MeritExportService {
       label: formatClassLabel(s.className, s.stream) || s.classId,
       entries: s.entries,
       meanMarks: s.meanMarks,
+      highestMarks: s.highestMarks,
+      lowestMarks: s.lowestMarks,
+      passRate: s.passRate,
       distribution: s.distribution,
     }));
     writeSection('Grade Breakdown (by stream)', 'Class', byStream);
@@ -229,6 +236,9 @@ export class MeritExportService {
       label: s.subjectName,
       entries: s.entries,
       meanMarks: s.meanMarks,
+      highestMarks: s.highestMarks,
+      lowestMarks: s.lowestMarks,
+      passRate: s.passRate,
       distribution: s.distribution,
     }));
     writeSection('Class Grade Summary (by subject)', 'Subject', bySubject);
@@ -237,6 +247,9 @@ export class MeritExportService {
       label: s.gender,
       entries: s.entries,
       meanMarks: s.meanMarks,
+      highestMarks: s.highestMarks,
+      lowestMarks: s.lowestMarks,
+      passRate: s.passRate,
       distribution: s.distribution,
     }));
     writeSection('Gender Summary', 'Gender', byGender);
@@ -246,6 +259,33 @@ export class MeritExportService {
     gs.getColumn(2 + gradeCodes.length).width = 9;
     gs.getColumn(3 + gradeCodes.length).width = 11;
     gs.getColumn(4 + gradeCodes.length).width = 7;
+
+    const divisionRows = (merit.summaries.byStream as any[]).filter((item) => ['O_LEVEL', 'A_LEVEL'].includes(item.educationStage));
+    if (divisionRows.length) {
+      const divisionKeys = ['Division I', 'Division II', 'Division III', 'Division IV', 'Division 0', 'Ungraded'];
+      gs.mergeCells(r, 1, r, 1 + divisionKeys.length);
+      gs.getCell(r, 1).value = 'Division Analysis (by class / stream)';
+      gs.getCell(r, 1).font = { bold: true, size: 12 };
+      r += 1;
+      const hr = gs.getRow(r);
+      ['Class', ...divisionKeys].forEach((value, index) => {
+        const cell = hr.getCell(index + 1);
+        cell.value = value;
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F3B73' } };
+        cell.alignment = { horizontal: 'center' };
+      });
+      r += 1;
+      for (const item of divisionRows) {
+        const values = [formatClassLabel(item.className, item.stream) || item.classId, ...divisionKeys.map((key) => item.divisionDistribution?.[key] ?? 0)];
+        values.forEach((value, index) => {
+          const cell = gs.getRow(r).getCell(index + 1);
+          cell.value = value;
+          cell.alignment = { horizontal: index === 0 ? 'left' : 'center' };
+        });
+        r += 1;
+      }
+    }
 
     const buffer = (await wb.xlsx.writeBuffer()) as unknown as Buffer;
     return { filename: this.safeName(window) + '.xlsx', buffer };
@@ -364,12 +404,12 @@ export class MeritExportService {
         doc.addPage();
         doc.font('Helvetica-Bold').fontSize(13).fillColor('#1F3B73').text('Grade Summaries', { align: 'center' });
         doc.moveDown(0.5);
-        const section = (heading: string, firstHeader: string, recs: Array<{ label: string; entries: number; meanMarks: number; distribution: Record<string, number> }>) => {
+        const section = (heading: string, firstHeader: string, recs: Array<{ label: string; entries: number; meanMarks: number; highestMarks: number; lowestMarks: number; passRate: number; distribution: Record<string, number> }>) => {
           doc.font('Helvetica-Bold').fontSize(10).fillColor('#111').text(heading);
           doc.moveDown(0.2);
           const gc = gradeCodes.length ? gradeCodes : Object.keys(recs[0]?.distribution ?? {});
-          const heads = [firstHeader, ...gc, 'Entries', 'Mean', 'Grade'];
-          const colW = [140, ...gc.map(() => 26), 46, 46, 34];
+          const heads = [firstHeader, ...gc, 'Entries', 'Mean', 'High', 'Low', 'Pass %', 'Grade'];
+          const colW = [140, ...gc.map(() => 26), 42, 40, 40, 40, 42, 34];
           let yy = doc.y;
           const totalW = colW.reduce((a, b) => a + b, 0);
           const line = (vals: string[], header = false) => {
@@ -381,13 +421,55 @@ export class MeritExportService {
             yy += rowH;
           };
           line(heads, true);
-          for (const rec of recs) line([rec.label, ...gc.map((g) => String(rec.distribution[g] ?? 0)), String(rec.entries), String(rec.meanMarks), gradeOf(rec.meanMarks)]);
+          for (const rec of recs) line([
+            rec.label,
+            ...gc.map((g) => String(rec.distribution[g] ?? 0)),
+            String(rec.entries),
+            String(rec.meanMarks),
+            String(rec.highestMarks),
+            String(rec.lowestMarks),
+            String(rec.passRate),
+            gradeOf(rec.meanMarks),
+          ]);
           doc.y = yy + 10;
         };
 
-        section('Grade Breakdown (by stream)', 'Class', (merit.summaries.byStream as any[]).map((s) => ({ label: formatClassLabel(s.className, s.stream) || s.classId, entries: s.entries, meanMarks: s.meanMarks, distribution: s.distribution })));
-        section('Class Grade Summary (by subject)', 'Subject', (merit.summaries.bySubject as any[]).map((s) => ({ label: s.subjectName, entries: s.entries, meanMarks: s.meanMarks, distribution: s.distribution })));
-        section('Gender Summary', 'Gender', (merit.summaries.byGender as any[]).map((s) => ({ label: s.gender, entries: s.entries, meanMarks: s.meanMarks, distribution: s.distribution })));
+        const summaryRow = (label: string, item: any) => ({
+          label,
+          entries: item.entries,
+          meanMarks: item.meanMarks,
+          highestMarks: item.highestMarks,
+          lowestMarks: item.lowestMarks,
+          passRate: item.passRate,
+          distribution: item.distribution,
+        });
+        section('Performance by class / stream', 'Class', (merit.summaries.byStream as any[]).map((s) => summaryRow(formatClassLabel(s.className, s.stream) || s.classId, s)));
+        section('Performance by subject', 'Subject', (merit.summaries.bySubject as any[]).map((s) => summaryRow(s.subjectName, s)));
+        section('Performance by gender', 'Gender', (merit.summaries.byGender as any[]).map((s) => summaryRow(s.gender, s)));
+
+        const divisionRows = (merit.summaries.byStream as any[]).filter((item) => ['O_LEVEL', 'A_LEVEL'].includes(item.educationStage));
+        if (divisionRows.length) {
+          const keys = ['Division I', 'Division II', 'Division III', 'Division IV', 'Division 0', 'Ungraded'];
+          doc.font('Helvetica-Bold').fontSize(10).fillColor('#111').text('Division Analysis (by class / stream)');
+          doc.moveDown(0.2);
+          const colW = [160, ...keys.map(() => 60)];
+          let yy = doc.y;
+          const line = (values: string[], header = false) => {
+            if (yy + rowH > doc.page.height - doc.page.margins.bottom) { doc.addPage(); yy = doc.page.margins.top; }
+            let x = pageLeft;
+            if (header) doc.rect(pageLeft, yy, colW.reduce((sum, width) => sum + width, 0), rowH).fill('#1F3B73');
+            doc.font(header ? 'Helvetica-Bold' : 'Helvetica').fontSize(7).fillColor(header ? '#FFF' : '#111');
+            values.forEach((value, index) => {
+              doc.text(value, x + 1, yy + 3, { width: colW[index] - 2, align: index === 0 ? 'left' : 'center', lineBreak: false, ellipsis: true });
+              x += colW[index];
+            });
+            yy += rowH;
+          };
+          line(['Class', ...keys.map((key) => key.replace('Division ', 'Div '))], true);
+          for (const item of divisionRows) {
+            line([formatClassLabel(item.className, item.stream) || item.classId, ...keys.map((key) => String(item.divisionDistribution?.[key] ?? 0))]);
+          }
+        }
 
         doc.end();
       } catch (err) {

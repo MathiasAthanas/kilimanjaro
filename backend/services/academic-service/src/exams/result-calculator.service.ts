@@ -342,6 +342,7 @@ export class ResultCalculatorService {
 
         const outcomes: SubjectOutcome[] = [];
         for (const a of classAssessments) {
+          const mark = marksByAssessment.get(a.id)?.get(s.id) ?? null;
           const expected = isSubjectExpected({
             stage,
             classSubject: { subjectId: a.subjectId, combinationId: a.classSubject.combinationId, isCompulsory: a.classSubject.subject.isCompulsory },
@@ -349,7 +350,11 @@ export class ResultCalculatorService {
             studentCombinationId: enrol.combinationId,
             combinationSubjectIds: enrol.combinationId ? comboSubjects.get(enrol.combinationId) : undefined,
           });
-          if (!expected) continue;
+          // A-Level schools may record subsidiary or supporting subjects outside
+          // the student's combination. Keep an entered mark visible, but never
+          // let it alter combination totals, averages, ranks or divisions.
+          const displayOnly = stage === 'A_LEVEL' && !expected && !!mark;
+          if (!expected && !displayOnly) continue;
 
           const scale = (await scaleFor(a.educationStage, a.classLevel ?? meta.level, a.subjectId, meta.name)) ?? { grades: [] };
           const exemption = findExemption(classId, a.subjectId, s.id);
@@ -358,12 +363,13 @@ export class ResultCalculatorService {
             subjectName: a.classSubject.subject.name,
             code: a.classSubject.subject.code,
             maxScore: a.maxScore || window.maxScore || 100,
-            mark: marksByAssessment.get(a.id)?.get(s.id) ?? null,
+            mark,
             exemption: exemption ? { id: exemption.id, reason: exemption.reason } : null,
             scale,
           });
+          outcome.countsTowardAggregate = expected;
           outcomes.push(outcome);
-          if (outcome.status === 'MISSING') {
+          if (expected && outcome.status === 'MISSING') {
             missing.push({
               studentId: s.id,
               studentName: this.studentName(s),

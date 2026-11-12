@@ -87,6 +87,8 @@ export interface SubjectOutcome {
   exempt: boolean;
   exemptionId?: string | null;
   exemptReason?: string | null;
+  /** False when a recorded mark is shown for context but must not affect aggregates or divisions. */
+  countsTowardAggregate?: boolean;
 }
 
 export interface BuildOutcomeInput {
@@ -107,6 +109,7 @@ export function buildOutcome(input: BuildOutcomeInput): SubjectOutcome {
     subjectName: input.subjectName,
     code: input.code,
     maxScore,
+    countsTowardAggregate: true,
   };
 
   if (exemption) {
@@ -164,7 +167,8 @@ export function buildOutcome(input: BuildOutcomeInput): SubjectOutcome {
   };
 }
 
-export const isCounted = (o: { status: SubjectStatus }): boolean => COUNTED_STATUSES.includes(o.status);
+export const isCounted = (o: { status: SubjectStatus; countsTowardAggregate?: boolean }): boolean =>
+  o.countsTowardAggregate !== false && COUNTED_STATUSES.includes(o.status);
 
 // ─── Divisions ────────────────────────────────────────────────────────────────
 
@@ -236,7 +240,7 @@ export function computeDivision(
   _direction: PointsDirection = 'HIGHER_BETTER',
   options: { overallAverage?: number; primaryPassMark?: number } = {},
 ): DivisionResult {
-  if (stage === 'PRIMARY') {
+  if (stage === 'PRIMARY' || stage === 'NURSERY') {
     const totalPoints = rows.reduce((sum, r) => sum + r.gradePoints, 0);
     const primaryPassMark = options.primaryPassMark ?? 50;
     const promotable = rows.length > 0 && (options.overallAverage ?? 0) >= primaryPassMark;
@@ -350,6 +354,7 @@ export function summarizeStudent(
   direction: PointsDirection = 'HIGHER_BETTER',
   primaryPassMark = 50,
 ): StudentSummary {
+  const applicable = outcomes.filter((outcome) => outcome.countsTowardAggregate !== false);
   const counted = outcomes.filter(isCounted);
   const total = counted.reduce((s, o) => s + o.score, 0);
   const mean = counted.length ? round(counted.reduce((s, o) => s + (o.percentage ?? 0), 0) / counted.length) : 0;
@@ -362,10 +367,10 @@ export function summarizeStudent(
     { overallAverage: mean, primaryPassMark },
   );
   return {
-    subjectsExpected: outcomes.length,
+    subjectsExpected: applicable.length,
     subjectsAssessed: counted.length,
-    exemptCount: outcomes.filter((o) => o.status === 'EXEMPT').length,
-    missingCount: outcomes.filter((o) => o.status === 'MISSING').length,
+    exemptCount: applicable.filter((o) => o.status === 'EXEMPT').length,
+    missingCount: applicable.filter((o) => o.status === 'MISSING').length,
     total: round(total),
     mean,
     meanPoints,

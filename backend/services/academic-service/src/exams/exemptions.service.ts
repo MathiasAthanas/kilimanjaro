@@ -216,7 +216,9 @@ export class ExemptionsService {
             subjectsAssessedBefore: b.summary.subjectsAssessed,
             subjectsAssessedAfter: r.summary.subjectsAssessed,
             divisionBefore: b.summary.division.division ?? b.summary.division.descriptor,
+            divisionPointsBefore: b.summary.division.totalPoints,
             divisionAfter: r.summary.division.division ?? r.summary.division.descriptor,
+            divisionPointsAfter: r.summary.division.totalPoints,
             becomesUngraded: b.summary.division.eligible && !r.summary.division.eligible,
           };
         });

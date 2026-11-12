@@ -658,7 +658,13 @@ function MeritListPanel({ windowId, status }: { windowId: string; status: string
                     {subjects.map((s) => {
                       const cell = scores[s.subjectId];
                       const exempt = cell?.status === 'EXEMPT';
-                      return <td key={s.subjectId} className={`px-2 py-2 text-center ${exempt ? 'bg-ks-blue/10 font-bold text-ks-blue' : cell?.status === 'NOT_SAT' || cell?.isAbsent ? 'bg-ks-amber/15 text-[#7a5200]' : ''}`} title={exempt ? `Exempt: ${S(cell?.exemptReason)}` : undefined}>{cell ? (cell.missing ? '–' : exempt ? 'EXEMPT' : cell.status === 'NOT_SAT' ? 'NS' : cell.isAbsent ? 'ABS' : `${Math.round(N(cell.score))} ${S(cell.grade)}`) : '·'}</td>;
+                      const displayOnly = cell?.countsTowardAggregate === false;
+                      const title = exempt
+                        ? `Exempt: ${S(cell?.exemptReason)}`
+                        : displayOnly
+                          ? 'Shown for reference; excluded from total, average, rank and division'
+                          : undefined;
+                      return <td key={s.subjectId} className={`px-2 py-2 text-center ${exempt ? 'bg-ks-blue/10 font-bold text-ks-blue' : displayOnly ? 'bg-ks-paper text-ks-muted' : cell?.status === 'NOT_SAT' || cell?.isAbsent ? 'bg-ks-amber/15 text-[#7a5200]' : ''}`} title={title}>{cell ? (cell.missing ? '–' : exempt ? 'EXEMPT' : cell.status === 'NOT_SAT' ? 'NS' : cell.isAbsent ? 'ABS' : `${Math.round(N(cell.score))} ${S(cell.grade)}${displayOnly ? '*' : ''}`) : '·'}</td>;
                     })}
                     <td className="px-2 py-2 text-center" title="Subjects counted in the average of subjects expected">{N(r.subjectsAssessed ?? r.subjectCount)}{N(r.subjectsExpected) > N(r.subjectsAssessed ?? r.subjectCount) ? `/${N(r.subjectsExpected)}` : ''}</td>
                     <td className="px-2 py-2 text-center font-bold">{N(r.total)}</td>
@@ -681,6 +687,7 @@ function MeritListPanel({ windowId, status }: { windowId: string; status: string
 
 function SummaryTables({ summaries, gradeCodes }: { summaries: any; gradeCodes: string[] }) {
   if (!summaries) return null;
+  const divisionKeys = ['Division I', 'Division II', 'Division III', 'Division IV', 'Division 0', 'Ungraded'];
   const section = (title: string, first: string, recs: any[]) => (
     <Card className="overflow-hidden">
       <div className="border-b border-ks-line bg-ks-paper px-4 py-2 text-sm font-bold text-ks-navy">{title}</div>
@@ -688,7 +695,8 @@ function SummaryTables({ summaries, gradeCodes }: { summaries: any; gradeCodes: 
         <table className="w-full text-xs">
           <thead className="text-left text-ks-muted"><tr>
             <th className="px-3 py-2">{first}</th>{gradeCodes.map((g) => <th key={g} className="px-2 py-2 text-center">{g}</th>)}
-            <th className="px-2 py-2 text-center">Entries</th><th className="px-2 py-2 text-center">Mean</th><th className="px-2 py-2 text-center">Grade</th>
+            <th className="px-2 py-2 text-center">Entries</th><th className="px-2 py-2 text-center">Mean</th>
+            <th className="px-2 py-2 text-center">High</th><th className="px-2 py-2 text-center">Low</th><th className="px-2 py-2 text-center">Pass %</th>
           </tr></thead>
           <tbody className="divide-y divide-ks-line">
             {recs.map((rec, i) => (
@@ -696,7 +704,8 @@ function SummaryTables({ summaries, gradeCodes }: { summaries: any; gradeCodes: 
                 <td className="px-3 py-2 font-semibold text-ks-navy">{S(rec.className ? formatClassLabel(rec.className, rec.stream) : rec.subjectName ?? rec.gender)}</td>
                 {gradeCodes.map((g) => <td key={g} className="px-2 py-2 text-center">{N((rec.distribution ?? {})[g])}</td>)}
                 <td className="px-2 py-2 text-center">{N(rec.entries)}</td><td className="px-2 py-2 text-center">{N(rec.meanMarks)}</td>
-                <td className="px-2 py-2 text-center font-bold">{S(rec.grade ?? '')}</td>
+                <td className="px-2 py-2 text-center">{N(rec.highestMarks)}</td><td className="px-2 py-2 text-center">{N(rec.lowestMarks)}</td>
+                <td className="px-2 py-2 text-center font-bold">{N(rec.passRate)}%</td>
               </tr>
             ))}
           </tbody>
@@ -704,11 +713,33 @@ function SummaryTables({ summaries, gradeCodes }: { summaries: any; gradeCodes: 
       </div>
     </Card>
   );
+  const divisionRows = (summaries.byStream ?? []).filter((row: any) => ['O_LEVEL', 'A_LEVEL'].includes(S(row.educationStage)));
+  const overall = summaries.overall;
   return (
-    <div className="grid gap-4 lg:grid-cols-3">
-      {section('By Stream', 'Class', summaries.byStream ?? [])}
-      {section('By Subject', 'Subject', summaries.bySubject ?? [])}
-      {section('By Gender', 'Gender', summaries.byGender ?? [])}
+    <div className="space-y-4">
+      {overall && <Card className="p-4">
+        <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          {[['Students', overall.entries], ['Classes', overall.classes], ['Mean', overall.meanMarks], ['Highest', overall.highestMarks], ['Lowest', overall.lowestMarks], ['Pass rate', `${N(overall.passRate)}%`]].map(([label, value]) => (
+            <div key={String(label)}><p className="text-[10px] font-bold uppercase tracking-wide text-ks-muted">{label}</p><p className="mt-1 text-xl font-black text-ks-navy">{value}</p></div>
+          ))}
+        </div>
+      </Card>}
+      <div className="grid gap-4 xl:grid-cols-2">
+        {section('Performance by Class / Stream', 'Class', summaries.byStream ?? [])}
+        {section('Performance by Subject', 'Subject', summaries.bySubject ?? [])}
+      </div>
+      {divisionRows.length > 0 && <Card className="overflow-hidden">
+        <div className="border-b border-ks-line bg-ks-paper px-4 py-2 text-sm font-bold text-ks-navy">Division Analysis by Class / Stream</div>
+        <div className="overflow-x-auto"><table className="w-full text-xs">
+          <thead className="text-left text-ks-muted"><tr><th className="px-3 py-2">Class</th>{divisionKeys.map((key) => <th key={key} className="px-2 py-2 text-center">{key.replace('Division ', 'Div ')}</th>)}</tr></thead>
+          <tbody className="divide-y divide-ks-line">{divisionRows.map((row: any) => <tr key={S(row.classId)}>
+            <td className="px-3 py-2 font-semibold text-ks-navy">{formatClassLabel(S(row.className), row.stream)}</td>
+            {divisionKeys.map((key) => <td key={key} className="px-2 py-2 text-center font-semibold">{N(row.divisionDistribution?.[key])}</td>)}
+          </tr>)}</tbody>
+        </table></div>
+      </Card>}
+      {section('Performance by Gender', 'Gender', summaries.byGender ?? [])}
+      <p className="text-xs text-ks-muted">* A marked A-Level supporting subject is displayed but is not used in the student total, average, rank or division.</p>
     </div>
   );
 }

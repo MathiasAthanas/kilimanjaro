@@ -197,6 +197,24 @@ describe('divisions', () => {
     expect(few.division.note).toMatch(/fewer than 3 eligible principal/);
   });
 
+  it('A-Level: shows a marked supporting subject without changing aggregates or division', () => {
+    const principals = new Set(['phy', 'chem', 'math']);
+    const mk = (id: string, score: number) =>
+      buildOutcome({ subjectId: id, subjectName: id, code: id, maxScore: 100, mark: { score, isAbsent: false, notSat: false }, scale: aLevelScale });
+    const outcomes = [mk('phy', 80), mk('chem', 70), mk('math', 60), mk('english', 100)];
+    outcomes[3].countsTowardAggregate = false;
+
+    const summary = summarizeStudent('A_LEVEL', outcomes, principals);
+
+    expect(outcomes).toHaveLength(4);
+    expect(summary.subjectsExpected).toBe(3);
+    expect(summary.subjectsAssessed).toBe(3);
+    expect(summary.total).toBe(210);
+    expect(summary.mean).toBe(70);
+    expect(summary.division.totalPoints).toBe(6);
+    expect(summary.division.division).toBe('Division I');
+  });
+
   it.each([
     [['A', 'A', 'A'], 3, 'Division I'],
     [['A', 'A', 'F'], 9, 'Division I'],
@@ -247,6 +265,15 @@ describe('divisions', () => {
       .toBe('Promotable');
     expect(computeDivision('PRIMARY', rows, undefined, 'HIGHER_BETTER', { overallAverage: 49.9, primaryPassMark: 50 }).descriptor)
       .toBe('Needs intervention');
+  });
+
+  it('Nursery uses class performance rules and never secondary division eligibility', () => {
+    const rows = [subj('Literacy', 75), subj('Numeracy', 65)];
+    const summary = summarizeStudent('NURSERY', rows);
+    expect(summary.mean).toBe(70);
+    expect(summary.division.mode).toBe('PRIMARY');
+    expect(summary.division.division).toBeNull();
+    expect(summary.division.descriptor).toBe('Promotable');
   });
 });
 

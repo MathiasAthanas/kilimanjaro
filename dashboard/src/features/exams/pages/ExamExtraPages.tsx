@@ -205,7 +205,7 @@ export function ExamPerformancePage() {
                         <td className="px-2 py-2 text-center">{r.subjectsExpected && r.subjectsAssessed !== r.subjectsExpected ? `${N(r.subjectsAssessed)}/${N(r.subjectsExpected)}` : N(r.subjectsAssessed)}</td>
                         <td className="px-2 py-2 text-center font-bold">{r.average === null ? '' : N(r.average).toFixed(1)}</td>
                         <td className="px-2 py-2 text-center">{S(r.grade)}</td>
-                        {showDivision && <td className="px-2 py-2">{S(r.division).replace('Division ', 'Div ')}</td>}
+                        {showDivision && <td className="px-2 py-2">{S(r.division).replace('Division ', 'Div ')}{r.divisionPoints !== null && r.divisionPoints !== undefined ? ` - ${N(r.divisionPoints)} pts` : ''}</td>}
                         <td className="px-2 py-2 text-center font-bold text-ks-navy">{N(r.streamRank)}</td>
                         <td className="px-2 py-2 text-center text-ks-muted">{N(r.standardRank)}</td>
                       </>}

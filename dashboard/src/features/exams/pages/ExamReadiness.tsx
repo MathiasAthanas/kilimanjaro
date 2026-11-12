@@ -113,9 +113,10 @@ export function ReadinessPanel({
                       const c = st.cells?.[s.subjectId];
                       if (!c) return <td key={s.subjectId} className="px-2 py-2 text-center text-ks-muted" title="Not expected: the student does not take this subject">·</td>;
                       const style = STATUS_STYLE[c.status] ?? STATUS_STYLE.SCORED;
+                      const displayOnly = c.countsTowardAggregate === false;
                       return (
-                        <td key={s.subjectId} className={`px-2 py-2 text-center font-semibold ${style.cell}`} title={c.exemptReason ? `Exempt: ${c.exemptReason}` : style.label}>
-                          {cellText(c)}
+                        <td key={s.subjectId} className={`px-2 py-2 text-center font-semibold ${displayOnly ? 'bg-ks-paper text-ks-muted' : style.cell}`} title={c.exemptReason ? `Exempt: ${c.exemptReason}` : displayOnly ? 'Shown for reference; excluded from total, average, rank and division' : style.label}>
+                          {cellText(c)}{displayOnly ? '*' : ''}
                           {c.status === 'MISSING' && canExempt && (
                             <button type="button" className="mt-1 block w-full text-[10px] font-bold underline" onClick={() => onExempt({ classId: activeClass.classId, subjectId: s.subjectId, studentId: st.studentId })}>Exempt…</button>
                           )}
@@ -124,7 +125,7 @@ export function ReadinessPanel({
                     })}
                     <td className="px-2 py-2 text-center">{N(st.subjectsAssessed)}/{N(st.subjectsExpected)}</td>
                     <td className="px-2 py-2 text-center font-bold">{N(st.mean)}</td>
-                    <td className="px-2 py-2 text-center">{st.divisionEligible === false ? <Badge tone="amber">Ungraded</Badge> : S(st.division)}</td>
+                    <td className="px-2 py-2 text-center">{st.divisionEligible === false ? <Badge tone="amber">Ungraded</Badge> : `${S(st.division)}${st.divisionPoints !== null && st.divisionPoints !== undefined ? ` - ${N(st.divisionPoints)} pts` : ''}`}</td>
                   </tr>
                 ))}
               </tbody>
@@ -132,7 +133,7 @@ export function ReadinessPanel({
           </div>
         </Card>
       )}
-      <p className="text-xs text-ks-muted">A dot (·) means the student does not take that subject, so no mark or exemption is needed. A mark can be a score, <b>Absent</b> or <b>Not sat</b> (both count as 0%), or the subject can be <b>exempt</b> (excluded from the average).</p>
+      <p className="text-xs text-ks-muted">A dot (·) means the student does not take that subject, so no mark or exemption is needed. A mark can be a score, <b>Absent</b> or <b>Not sat</b> (both count as 0%), or the subject can be <b>exempt</b> (excluded from the average). An asterisk (*) marks a displayed A-Level supporting subject that does not affect totals, averages, ranks or divisions.</p>
     </div>
   );
 }
@@ -276,7 +277,7 @@ export function ExemptionsPanel({
                       <td className="pr-3">{S(r.subjectStatusBefore, '—')}{r.preservedScore != null && r.subjectStatusBefore !== 'EXEMPT' ? ` (${r.preservedScore} kept)` : ''}</td>
                       <td className="pr-3">{N(r.averageBefore)}% → <b>{N(r.averageAfter)}%</b></td>
                       <td className="pr-3">{N(r.subjectsAssessedBefore)} → <b>{N(r.subjectsAssessedAfter)}</b></td>
-                      <td>{S(r.divisionBefore)} → <b className={r.becomesUngraded ? 'text-ks-amber' : ''}>{S(r.divisionAfter)}</b></td>
+                      <td>{S(r.divisionBefore)}{r.divisionPointsBefore != null ? ` - ${N(r.divisionPointsBefore)} pts` : ''} → <b className={r.becomesUngraded ? 'text-ks-amber' : ''}>{S(r.divisionAfter)}{r.divisionPointsAfter != null ? ` - ${N(r.divisionPointsAfter)} pts` : ''}</b></td>
                     </tr>
                   ))}
                 </tbody>
