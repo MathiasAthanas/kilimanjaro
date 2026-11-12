@@ -44,13 +44,23 @@ export class ResultsController {
   }
 
   @Post('results/unpublish')
-  @Roles(ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN)
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN)
   unpublish(@Body() dto: PublishResultsDto, @CurrentUser() user?: RequestUser) {
     return this.resultsService.unpublishResults(dto, user!);
   }
 
+  @Get('results/unpublish-preview')
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN)
+  unpublishPreview(
+    @Query('classId') classId: string,
+    @Query('termId') termId: string,
+    @CurrentUser() user?: RequestUser,
+  ) {
+    return this.resultsService.previewUnpublishResults(classId, termId, user!);
+  }
+
   @Post('results/publish')
-  @Roles(ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN)
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN)
   publish(@Body() dto: PublishResultsDto, @CurrentUser() user?: RequestUser) {
     return this.resultsService.publishResults(dto, user!);
   }

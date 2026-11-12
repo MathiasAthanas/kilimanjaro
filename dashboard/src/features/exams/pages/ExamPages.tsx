@@ -2,7 +2,7 @@ import { Fragment, useEffect, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
-  ArrowLeft, CheckCircle2, Download, FileSpreadsheet, FileText, Layers, Lock,
+  AlertTriangle, ArrowLeft, CheckCircle2, Download, FileSpreadsheet, FileText, Layers, Lock,
   PlayCircle, Plus, RefreshCw, Send, Unlock, Upload, XCircle,
 } from 'lucide-react';
 import { Button } from '../../../components/common/Button';
@@ -14,11 +14,12 @@ import { WorkspaceHeader } from '../../../components/layout/WorkspaceHeader';
 import { formatClassLabel } from '../../../lib/classLabel';
 import {
   downloadMarksTemplateCsv, downloadMeritExport,
-  useAddExamWindowClasses, useComposeReportCards, useCreateEditRequest, useCreateExamType, useCreateExamWindow,
+  useAddExamWindowClasses, useAvailableReportCardClasses, useComposeReportCards, useCreateEditRequest, useCreateExamType, useCreateExamWindow,
   useDecideEditRequest, useDeleteExamType, useEditRequests, useExamReference,
   useExamTypes, useExamWindow, useExamWindows, useExcludeExamWindowClasses, useMarksTemplate, useMeritList,
   useMigrateExamTypes, useSubmitAssessment, useTeacherExamWindows,
-  usePreviewExamWindowClassExclusion, useUpdateExamWindow, useUploadMarks, useWindowAction,
+  usePreviewExamWindowClassExclusion, useUnpublishClassResults, useUnpublishResultsPreview,
+  useUpdateExamWindow, useUploadMarks, useWindowAction,
 } from '../api/examHooks';
 import { useWindowReadiness } from '../api/readinessHooks';
 import { ExemptionsPanel, ReadinessPanel } from './ExamReadiness';
@@ -870,12 +871,24 @@ export function ComposeReportCardsPage() {
   const compose = useComposeReportCards();
   const [selected, setSelected] = useState<Record<string, number>>({});
   const [scopeLevel, setScopeLevel] = useState('');
+  const [scopeClassId, setScopeClassId] = useState('');
   const [publish, setPublish] = useState(false);
   const [result, setResult] = useState<any>(null);
+  const [unpublishTarget, setUnpublishTarget] = useState<{ classId: string; className: string } | null>(null);
+  const [unpublishReason, setUnpublishReason] = useState('');
+  const [unpublishConfirmation, setUnpublishConfirmation] = useState('');
+  const [unpublishMessage, setUnpublishMessage] = useState('');
+  const availableCards = useAvailableReportCardClasses(term);
+  const unpublishPreview = useUnpublishResultsPreview(unpublishTarget?.classId, term || undefined);
+  const unpublishResults = useUnpublishClassResults();
 
   const composable = (windows.data ?? []).filter((w) => ['CLOSED', 'PUBLISHED', 'REOPENED'].includes(S(w.status)));
   const terms = (ref.data?.terms ?? []).filter((t: any) => !year || t.academicYearId === year);
   const levels = [...new Set((ref.data?.classes ?? []).map((c: any) => c.level).filter((l: any) => l != null))].sort((a: any, b: any) => a - b);
+  const classes = (ref.data?.classes ?? [])
+    .filter((c: any) => !year || S(c.academicYearId) === year)
+    .sort((a: any, b: any) => S(a.name).localeCompare(S(b.name)) || S(a.stream).localeCompare(S(b.stream)));
+  const publishedClasses = (availableCards.data ?? []).filter((item) => N(item.publishedCards) > 0);
 
   const toggle = (w: any) => setSelected((s) => {
     const n = { ...s };
@@ -893,10 +906,38 @@ export function ComposeReportCardsPage() {
   const submit = async () => {
     setResult(null);
     const body = {
-      academicYearId: year, termId: term, scopeLevel: scopeLevel ? Number(scopeLevel) : undefined, publish,
+      academicYearId: year,
+      termId: term,
+      scopeLevel: !scopeClassId && scopeLevel ? Number(scopeLevel) : undefined,
+      scopeClassIds: scopeClassId ? [scopeClassId] : undefined,
+      publish,
       windows: Object.entries(selected).map(([examWindowId, weight]) => ({ examWindowId, weight })),
     };
     try { const res = await compose.mutateAsync(body); setResult(res); } catch { /* shown via compose.isError */ }
+  };
+
+  const closeUnpublish = () => {
+    setUnpublishTarget(null);
+    setUnpublishReason('');
+    setUnpublishConfirmation('');
+  };
+  const confirmText = unpublishTarget ? `UNPUBLISH ${unpublishTarget.className.toUpperCase()}` : '';
+  const runUnpublish = async () => {
+    if (!unpublishTarget || !term) return;
+    setUnpublishMessage('');
+    try {
+      const response = await unpublishResults.mutateAsync({
+        classId: unpublishTarget.classId,
+        termId: term,
+        reason: unpublishReason.trim(),
+      }) as any;
+      setScopeClassId(unpublishTarget.classId);
+      setScopeLevel('');
+      setUnpublishMessage(
+        `${N(response.reportCards)} report card(s) and ${N(response.termResults)} subject result row(s) were unpublished for ${unpublishTarget.className}. Marks were not changed. This class is now selected for recomposition.`,
+      );
+      closeUnpublish();
+    } catch { /* mutation state renders the API message */ }
   };
 
   return (
@@ -906,27 +947,97 @@ export function ComposeReportCardsPage() {
       <ExamTaskNavigation active="composition" />
 
       <Card className="mb-5 p-5">
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <Field label="Academic year">
-            <select className={inputCls} value={year} onChange={(e) => { setYear(e.target.value); setTerm(''); }}>
+            <select className={inputCls} value={year} onChange={(e) => { setYear(e.target.value); setTerm(''); setScopeClassId(''); setScopeLevel(''); closeUnpublish(); }}>
               <option value="">Select…</option>
               {(ref.data?.years ?? []).map((y: any) => <option key={S(y.id)} value={S(y.id)}>{S(y.name)}</option>)}
             </select>
           </Field>
           <Field label="Term">
-            <select className={inputCls} value={term} onChange={(e) => setTerm(e.target.value)}>
+            <select className={inputCls} value={term} onChange={(e) => { setTerm(e.target.value); closeUnpublish(); setUnpublishMessage(''); }}>
               <option value="">Select…</option>
               {terms.map((t: any) => <option key={S(t.id)} value={S(t.id)}>{S(t.name)}</option>)}
             </select>
           </Field>
           <Field label="Standard (optional)">
-            <select className={inputCls} value={scopeLevel} onChange={(e) => setScopeLevel(e.target.value)}>
+            <select className={inputCls} value={scopeLevel} onChange={(e) => { setScopeLevel(e.target.value); if (e.target.value) setScopeClassId(''); }}>
               <option value="">All in scope</option>
               {levels.map((lv: any) => <option key={lv} value={lv}>Level {lv}</option>)}
             </select>
           </Field>
+          <Field label="Single class (optional)">
+            <select className={inputCls} value={scopeClassId} onChange={(e) => { setScopeClassId(e.target.value); if (e.target.value) setScopeLevel(''); }}>
+              <option value="">All classes in scope</option>
+              {classes.map((item: any) => <option key={S(item.id)} value={S(item.id)}>{formatClassLabel(item.name, item.stream)}</option>)}
+            </select>
+          </Field>
         </div>
+        <p className="mt-3 text-xs font-semibold text-ks-muted">Choose a single class when correcting or regenerating only that class. Selecting a class overrides the standard filter.</p>
       </Card>
+
+      {term && (
+        <Card className="mb-5 p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h3 className="font-display text-lg font-bold text-ks-navy">Published report cards</h3>
+              <p className="mt-1 text-sm text-ks-muted">Unpublish a class before recomposing it with corrected or newly added subjects. This only hides its current results from students and parents; marks, students and report-card records are not deleted.</p>
+            </div>
+            <Badge tone={publishedClasses.length ? 'amber' : 'emerald'}>{publishedClasses.length} class{publishedClasses.length === 1 ? '' : 'es'} published</Badge>
+          </div>
+
+          {availableCards.isLoading && <p className="mt-4 text-sm font-semibold text-ks-muted">Checking published cards...</p>}
+          {availableCards.isError && <div className="mt-4"><Banner tone="rose">Published report cards could not be loaded. Refresh and try again.</Banner></div>}
+          {!availableCards.isLoading && !availableCards.isError && publishedClasses.length === 0 && (
+            <p className="mt-4 rounded-lg border border-ks-emerald/30 bg-ks-emerald/5 p-3 text-sm font-semibold text-ks-navy">No published report cards are blocking recomposition for this term.</p>
+          )}
+          {publishedClasses.length > 0 && (
+            <div className="mt-4 overflow-x-auto rounded-lg border border-ks-line">
+              <table className="min-w-full text-left text-sm">
+                <thead className="bg-ks-mist/30 text-xs uppercase text-ks-muted"><tr><th className="px-3 py-2">Class</th><th className="px-3 py-2">Exam</th><th className="px-3 py-2">Cards</th><th className="px-3 py-2 text-right">Action</th></tr></thead>
+                <tbody className="divide-y divide-ks-line">
+                  {publishedClasses.map((item) => (
+                    <tr key={`${item.classId}:${item.termId}`}>
+                      <td className="px-3 py-3 font-bold text-ks-navy">{item.className}</td>
+                      <td className="px-3 py-3 text-ks-muted">{item.examLabel || 'Term report'}</td>
+                      <td className="px-3 py-3"><Badge tone="emerald">{item.publishedCards} published</Badge></td>
+                      <td className="px-3 py-3 text-right"><Button variant="danger" onClick={() => { setUnpublishTarget({ classId: item.classId, className: item.className }); setUnpublishReason(''); setUnpublishConfirmation(''); setUnpublishMessage(''); }}>Unpublish to regenerate</Button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {unpublishMessage && <div className="mt-4"><Banner tone="emerald">{unpublishMessage}</Banner></div>}
+          {unpublishTarget && (
+            <div className="mt-4 rounded-lg border-2 border-ks-rose/30 bg-ks-rose/5 p-4">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-ks-rose" />
+                <div><h4 className="font-bold text-ks-navy">Temporarily unpublish {unpublishTarget.className}</h4><p className="mt-1 text-sm text-ks-muted">Students and parents will temporarily lose access until you recompose and publish this class again.</p></div>
+              </div>
+              {unpublishPreview.isLoading && <p className="mt-3 text-sm font-semibold text-ks-muted">Calculating exact impact...</p>}
+              {unpublishPreview.isError && <div className="mt-3"><Banner tone="rose">The impact could not be calculated. Nothing has been changed.</Banner></div>}
+              {unpublishPreview.data && (
+                <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                  <div className="rounded-lg bg-white p-3"><p className="text-xs font-bold uppercase text-ks-muted">Report cards hidden</p><p className="text-xl font-black text-ks-navy">{unpublishPreview.data.publishedReportCards}</p></div>
+                  <div className="rounded-lg bg-white p-3"><p className="text-xs font-bold uppercase text-ks-muted">Subject results hidden</p><p className="text-xl font-black text-ks-navy">{unpublishPreview.data.publishedTermResults}</p></div>
+                  <div className="rounded-lg bg-white p-3"><p className="text-xs font-bold uppercase text-ks-muted">Marks deleted</p><p className="text-xl font-black text-ks-emerald">0</p></div>
+                </div>
+              )}
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                <Field label="Reason"><input className={inputCls} value={unpublishReason} onChange={(e) => setUnpublishReason(e.target.value)} placeholder="Example: Added French results" /></Field>
+                <Field label={`Type ${confirmText} to confirm`}><input className={inputCls} value={unpublishConfirmation} onChange={(e) => setUnpublishConfirmation(e.target.value)} /></Field>
+              </div>
+              {unpublishResults.isError && <div className="mt-3"><Banner tone="rose">{S((unpublishResults.error as any)?.message, 'Could not unpublish these results.')}</Banner></div>}
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Button variant="danger" onClick={runUnpublish} loading={unpublishResults.isPending} disabled={!unpublishPreview.data?.canUnpublish || unpublishReason.trim().length < 3 || unpublishConfirmation !== confirmText}>Confirm unpublish</Button>
+                <Button variant="ghost" onClick={closeUnpublish}>Cancel</Button>
+              </div>
+            </div>
+          )}
+        </Card>
+      )}
 
       {term && (
         <Card className="mb-5 p-5">

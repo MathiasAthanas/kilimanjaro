@@ -13,7 +13,7 @@ import { RabbitMqService } from '../rabbitmq/rabbitmq.service';
 import { StudentClientService } from '../student-client/student-client.service';
 import { ROLES } from '../common/constants/roles';
 import { RequestUser } from '../common/interfaces/request-user.interface';
-import { schoolScopeFilter } from '../common/helpers/school-scope.helper';
+import { assertSchoolInScope, schoolScopeFilter } from '../common/helpers/school-scope.helper';
 import { PublishResultsDto } from './dto/publish-results.dto';
 import { ResultsFilterDto } from './dto/results-filter.dto';
 import { ReportCardsService } from '../report-cards/report-cards.service';
@@ -39,6 +39,54 @@ export class ResultsService {
     }
 
     return payload as T;
+  }
+
+  private assertResultsPublisher(user: RequestUser): void {
+    const publisherRoles = [
+      ROLES.SYSTEM_ADMIN,
+      ROLES.PRINCIPAL,
+      ROLES.HEAD_OF_SCHOOL,
+      ROLES.MANAGER,
+      ROLES.SUPER_ADMIN,
+    ];
+    if (!publisherRoles.includes(user.role as any)) {
+      throw new ForbiddenException('Only an Administrator, Principal, Head of School, Manager or Super Admin can change result visibility');
+    }
+  }
+
+  private async assertClassTermInScope(classId: string, termId: string, user: RequestUser): Promise<void> {
+    if (!classId || !termId) throw new BadRequestException('Class and term are required');
+    const owner = await this.prisma.reportCard.findFirst({
+      where: { classId, termId },
+      select: { schoolId: true },
+    }) ?? await this.prisma.termResult.findFirst({
+      where: { classId, termId },
+      select: { schoolId: true },
+    });
+    if (!owner) throw new BadRequestException('No term results or report cards exist for this class and term');
+    assertSchoolInScope(user, owner.schoolId);
+  }
+
+  async previewUnpublishResults(classId: string, termId: string, user: RequestUser) {
+    this.assertResultsPublisher(user);
+    await this.assertClassTermInScope(classId, termId, user);
+    const [termResults, publishedTermResults, reportCards, publishedReportCards] = await Promise.all([
+      this.prisma.termResult.count({ where: { classId, termId } }),
+      this.prisma.termResult.count({ where: { classId, termId, isPublished: true } }),
+      this.prisma.reportCard.count({ where: { classId, termId } }),
+      this.prisma.reportCard.count({ where: { classId, termId, isPublished: true } }),
+    ]);
+    return {
+      classId,
+      termId,
+      termResults,
+      publishedTermResults,
+      reportCards,
+      publishedReportCards,
+      canUnpublish: publishedTermResults > 0 || publishedReportCards > 0,
+      deletesRecords: false,
+      marksAffected: 0,
+    };
   }
 
   private assignCompetitionRanks(entries: { studentId: string; score: number }[]): Record<string, number> {
@@ -381,10 +429,8 @@ export class ResultsService {
    * published results; they stay hidden from students/parents until republished.
    */
   async unpublishResults(dto: PublishResultsDto, user: RequestUser) {
-    const publisherRoles = [ROLES.PRINCIPAL, ROLES.HEAD_OF_SCHOOL, ROLES.MANAGER, ROLES.SUPER_ADMIN];
-    if (!publisherRoles.includes(user.role as any)) {
-      throw new ForbiddenException('Only Principal, Head of School, Manager or Super Admin can unpublish results');
-    }
+    this.assertResultsPublisher(user);
+    await this.assertClassTermInScope(dto.classId, dto.termId, user);
     const [results, cards] = await this.prisma.$transaction([
       this.prisma.termResult.updateMany({
         where: { classId: dto.classId, termId: dto.termId, isPublished: true },
@@ -400,7 +446,13 @@ export class ResultsService {
         schoolId: (user as { activeSchoolId?: string | null }).activeSchoolId ?? null,
         action: 'RESULTS_UNPUBLISHED',
         performedById: user.id,
-        payload: { classId: dto.classId, termId: dto.termId, termResults: results.count, reportCards: cards.count },
+        payload: {
+          classId: dto.classId,
+          termId: dto.termId,
+          termResults: results.count,
+          reportCards: cards.count,
+          reason: dto.reason?.trim() || null,
+        },
       },
     });
     await this.redis.del(`class-results:${dto.classId}:${dto.termId}`);
@@ -411,10 +463,8 @@ export class ResultsService {
   }
 
   async publishResults(dto: PublishResultsDto, user: RequestUser) {
-    const publisherRoles = [ROLES.PRINCIPAL, ROLES.HEAD_OF_SCHOOL, ROLES.MANAGER, ROLES.SUPER_ADMIN];
-    if (!publisherRoles.includes(user.role as any)) {
-      throw new ForbiddenException('Only Principal, Head of School, Manager or Super Admin can publish results');
-    }
+    this.assertResultsPublisher(user);
+    await this.assertClassTermInScope(dto.classId, dto.termId, user);
 
     const results = await this.prisma.termResult.findMany({ where: { classId: dto.classId, termId: dto.termId } });
     if (!results.length) {

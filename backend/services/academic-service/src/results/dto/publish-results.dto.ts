@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsString } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class PublishResultsDto {
   @IsString()
@@ -8,4 +8,9 @@ export class PublishResultsDto {
   @IsString()
   @IsNotEmpty()
   termId!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  reason?: string;
 }

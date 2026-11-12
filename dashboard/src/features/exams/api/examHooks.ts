@@ -13,6 +13,8 @@ export const examKeys = {
   template: (assessmentId: string) => [...examKeys.all, 'template', assessmentId] as const,
   editRequests: (f?: Record<string, unknown>) => [...examKeys.all, 'edit-requests', f ?? {}] as const,
   compositions: (termId?: string) => [...examKeys.all, 'compositions', termId ?? ''] as const,
+  reportCardClasses: (termId?: string) => [...examKeys.all, 'report-card-classes', termId ?? ''] as const,
+  unpublishPreview: (classId?: string, termId?: string) => [...examKeys.all, 'unpublish-preview', classId ?? '', termId ?? ''] as const,
   ref: () => [...examKeys.all, 'reference'] as const,
 };
 
@@ -247,6 +249,65 @@ export function useComposeReportCards() {
   return useMutation({
     mutationFn: (body: Record<string, unknown>) => api.post('/academics/report-card-compositions', body).then(payloadOf),
     onSuccess: () => qc.invalidateQueries({ queryKey: [...examKeys.all, 'compositions'] }),
+  });
+}
+
+export type AvailableReportCardClass = {
+  classId: string;
+  className: string;
+  stream: string | null;
+  termId: string;
+  termName: string | null;
+  academicYearId: string;
+  examLabel: string | null;
+  reportCards: number;
+  publishedCards: number;
+  updatedAt: string;
+};
+
+export type UnpublishResultsPreview = {
+  classId: string;
+  termId: string;
+  termResults: number;
+  publishedTermResults: number;
+  reportCards: number;
+  publishedReportCards: number;
+  canUnpublish: boolean;
+  deletesRecords: false;
+  marksAffected: 0;
+};
+
+export function useAvailableReportCardClasses(termId?: string) {
+  return useQuery({
+    queryKey: examKeys.reportCardClasses(termId),
+    enabled: !!termId,
+    staleTime: 5_000,
+    queryFn: async () => {
+      const rows = arrayFromApi(payloadOf(await api.get('/academics/report-cards/available/classes')), ['classes']) as AvailableReportCardClass[];
+      return rows.filter((row) => row.termId === termId);
+    },
+  });
+}
+
+export function useUnpublishResultsPreview(classId?: string, termId?: string) {
+  return useQuery({
+    queryKey: examKeys.unpublishPreview(classId, termId),
+    enabled: !!classId && !!termId,
+    staleTime: 0,
+    queryFn: () => api.get('/academics/results/unpublish-preview', { params: { classId, termId } }).then(payloadOf) as Promise<UnpublishResultsPreview>,
+  });
+}
+
+export function useUnpublishClassResults() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { classId: string; termId: string; reason: string }) =>
+      api.post('/academics/results/unpublish', body).then(payloadOf),
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({ queryKey: examKeys.reportCardClasses(variables.termId) });
+      qc.invalidateQueries({ queryKey: examKeys.unpublishPreview(variables.classId, variables.termId) });
+      qc.invalidateQueries({ queryKey: examKeys.compositions(variables.termId) });
+    },
   });
 }
 
