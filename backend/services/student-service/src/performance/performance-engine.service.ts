@@ -90,6 +90,22 @@ export class PerformanceEngineService {
   }
 
   async ingestSnapshot(payload: SnapshotPayload): Promise<void> {
+    // Events may carry routing metadata such as schoolId. Persist only the
+    // PerformanceSnapshot contract; school scope is already derived through classId.
+    const snapshotData = {
+      studentId: payload.studentId,
+      subjectId: payload.subjectId,
+      subjectName: payload.subjectName,
+      classId: payload.classId,
+      termId: payload.termId,
+      academicYearId: payload.academicYearId,
+      score: payload.score,
+      grade: payload.grade,
+      assessmentBreakdown: payload.assessmentBreakdown as Prisma.InputJsonValue,
+      rank: payload.rank,
+      totalStudentsInClass: payload.totalStudentsInClass,
+      teacherId: payload.teacherId,
+    };
     const snapshot = await this.prisma.performanceSnapshot.upsert({
       where: {
         studentId_subjectId_termId: {
@@ -98,14 +114,8 @@ export class PerformanceEngineService {
           termId: payload.termId,
         },
       },
-      create: {
-        ...payload,
-        assessmentBreakdown: payload.assessmentBreakdown as Prisma.InputJsonValue,
-      },
-      update: {
-        ...payload,
-        assessmentBreakdown: payload.assessmentBreakdown as Prisma.InputJsonValue,
-      },
+      create: snapshotData,
+      update: snapshotData,
     });
 
     await this.analyzeStudentSubject(payload.studentId, payload.subjectId, snapshot.id);
