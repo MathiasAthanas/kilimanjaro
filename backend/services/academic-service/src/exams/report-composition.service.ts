@@ -66,6 +66,26 @@ function readOutcome(raw: any): SubjectOutcome {
   };
 }
 
+export function indexStudentCombinations(
+  enrollments: Array<{ studentId: string; classId: string; combinationId: string | null }>,
+): Map<string, string> {
+  const candidates = new Map<string, Set<string>>();
+  for (const enrollment of enrollments) {
+    if (!enrollment.combinationId) continue;
+    const key = `${enrollment.studentId}:${enrollment.classId}`;
+    if (!candidates.has(key)) candidates.set(key, new Set());
+    candidates.get(key)!.add(enrollment.combinationId);
+  }
+  const resolved = new Map<string, string>();
+  for (const [key, combinationIds] of candidates) {
+    if (combinationIds.size > 1) {
+      throw new BadRequestException(`Student ${key.split(':')[0]} has multiple active A-Level combinations. Keep one active combination before composing report cards.`);
+    }
+    resolved.set(key, [...combinationIds][0]);
+  }
+  return resolved;
+}
+
 @Injectable()
 export class ReportCompositionService {
   private readonly logger = new Logger(ReportCompositionService.name);
@@ -179,6 +199,28 @@ export class ReportCompositionService {
     }
 
     const academicYearId = dto.academicYearId;
+    // Generic A-Level class subjects deliberately have no combinationId. Resolve
+    // the student's active combination here so every composed TermResult carries
+    // the principal-subject context required by report-card division calculation.
+    const combinationByStudentClass = new Map<string, string>();
+    const aLevelResults = results.filter((result) => result.educationStage === 'A_LEVEL');
+    if (aLevelResults.length) {
+      const enrollments = await this.prisma.studentSubjectEnrollment.findMany({
+        where: {
+          studentId: { in: [...new Set(aLevelResults.map((result) => result.studentId))] },
+          classId: { in: [...new Set(aLevelResults.map((result) => result.classId))] },
+          academicYearId,
+          isActive: true,
+          combinationId: { not: null },
+          OR: [{ termId: null }, { termId: dto.termId }],
+        },
+        select: { studentId: true, classId: true, combinationId: true },
+      });
+      for (const [key, combinationId] of indexStudentCombinations(enrollments)) {
+        combinationByStudentClass.set(key, combinationId);
+      }
+    }
+
     const scaleCache = new Map<string, any>();
     const scaleFor = async (stage: string | null, level: number | null, subjectId: string | null) => {
       const key = `${stage}:${level}:${subjectId}`;
@@ -233,7 +275,7 @@ export class ReportCompositionService {
           subjectName: contribs[0].outcome.subjectName,
           classSubjectId: meta.classSubjectId,
           teacherId: meta.teacherId,
-          combinationId: meta.combinationId,
+          combinationId: combinationByStudentClass.get(`${studentId}:${classId}`) ?? meta.combinationId,
           status: blend.status,
           blended: blend.percentage ?? 0,
           contributions: blend.contributions,
