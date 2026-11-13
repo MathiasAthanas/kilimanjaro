@@ -105,3 +105,9 @@ Deployed 2026-11-13 18:26 UTC as a dashboard-only publish (no backend restart, n
 Not yet deployed: the backend half of the matrix fix (invoice generation prefers the newest structure when two match at the same level, commit `61cbe14`); it needs a finance-service restart.
 
 Open item found by inspection: production's only "current" term is the leftover "Mobile QA Test Term"; real Terms 1-3 are not marked current, so Generate Invoices pre-selects the QA term. Needs a decision on which term is current.
+
+## 7. Payment Approval screens redesigned (commit `447b6fb`, dashboard only)
+
+Deployed 2026-11-13 18:39 UTC as a dashboard-only publish (no backend restart, no database change), release `/opt/kilimanjaro/releases/dash-payapproval-447b6fb-20261113T183822Z`, archive SHA-256 `1f718f7a6a229c18e750cca7612b657568150682ce8fc7ec1794a6d695d98604`, bundle `index-wGewOmDY.js`. Previous dashboard archived as `frontend_pre_payapproval_*.tar.gz` in `/opt/kilimanjaro/backups`.
+
+New card layout for each pending payment, method-aware quick notes, Approve/Reject rules (confirmation box, 8-character note), a header without school-health figures and with the right role line for a Manager, a queue that refreshes on every visit and every 20 seconds, and a rebuilt detail page with evidence preview. Verified locally on screen (approve, reject, detail, phone width) and with 8 new tests; the full dashboard suite (188) passes. Not viewed on production (no login there).
