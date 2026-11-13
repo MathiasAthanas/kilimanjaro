@@ -21,8 +21,18 @@ export class StoreService {
     private readonly numberService: NumberSequenceService,
   ) {}
 
-  private dec(v?: string, fallback = '0'): Prisma.Decimal {
-    return new Prisma.Decimal(v ?? fallback);
+  /** A blank box on the form means "not entered", not an error; a non-number is the user's mistake, not a server fault. */
+  private isBlank(v?: string | number | null): boolean {
+    return v === undefined || v === null || String(v).trim() === '';
+  }
+
+  private dec(v?: string | number | null, fallback = '0'): Prisma.Decimal {
+    const text = this.isBlank(v) ? fallback : String(v).trim();
+    try {
+      return new Prisma.Decimal(text);
+    } catch {
+      throw new BadRequestException(`"${text}" is not a valid number.`);
+    }
   }
 
   // ── Items ──────────────────────────────────────────────────────────────────
@@ -105,8 +115,8 @@ export class StoreService {
         category: dto.category as any,
         unit: dto.unit,
         description: dto.description,
-        reorderLevel: dto.reorderLevel !== undefined ? this.dec(dto.reorderLevel) : undefined,
-        unitCost: dto.unitCost !== undefined ? this.dec(dto.unitCost) : undefined,
+        reorderLevel: !this.isBlank(dto.reorderLevel) ? this.dec(dto.reorderLevel) : undefined,
+        unitCost: !this.isBlank(dto.unitCost) ? this.dec(dto.unitCost) : undefined,
         location: dto.location,
         isActive: dto.isActive,
         updatedById: user.id,
@@ -121,7 +131,7 @@ export class StoreService {
     const item = await this.requireItem(id, user);
     const qty = this.dec(dto.quantity);
     if (qty.lessThanOrEqualTo(0)) throw new BadRequestException('Quantity must be greater than zero');
-    const unitCost = dto.unitCost !== undefined ? this.dec(dto.unitCost) : new Prisma.Decimal(item.unitCost);
+    const unitCost = !this.isBlank(dto.unitCost) ? this.dec(dto.unitCost) : new Prisma.Decimal(item.unitCost);
 
     const result = await this.prisma.$transaction(async (tx) => {
       const bumped = await tx.storeItem.update({
