@@ -5,7 +5,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { AssessmentStatus } from '../../generated/prisma';
+import { AssessmentStatus, ExemptionStatus, Prisma } from '../../generated/prisma';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { StudentClientService } from '../student-client/student-client.service';
@@ -20,6 +20,18 @@ interface RosterStudent {
   studentId: string;
   registrationNumber: string | null;
   name: string;
+}
+
+/** Why a class student is not in the marks grid, and whether the editor may bring them in. */
+export type AddableReason = 'EXEMPT' | 'NOT_TAKING';
+export type AddableBlock = 'CLASS_EXEMPTION' | 'COMBINATION' | 'ADMIN_ONLY';
+
+export interface AddableStudent extends RosterStudent {
+  reason: AddableReason;
+  canAdd: boolean;
+  blockedBy: AddableBlock | null;
+  /** A mark already on file (for example a recorded Not sat), shown so nothing is lost. */
+  existing: { score: number | null; isAbsent: boolean; notSat: boolean } | null;
 }
 
 @Injectable()
@@ -92,11 +104,67 @@ export class ExamMarksService {
   }
 
   private async loadRoster(classId: string, user: RequestUser, assessment?: any): Promise<RosterStudent[]> {
-    const roster = await this.loadClassRoster(classId, user);
-    if (!assessment) return roster;
+    return (await this.loadRosterParts(classId, user, assessment)).roster;
+  }
+
+  /**
+   * The grid roster (students who must have a mark) plus the rest of the class,
+   * so the editor can offer to bring the others in.
+   */
+  private async loadRosterParts(classId: string, user: RequestUser, assessment?: any) {
+    const all = await this.loadClassRoster(classId, user);
+    if (!assessment) return { all, roster: all, expected: new Set<string>(), exempt: new Set<string>() };
     // Optional / combination subjects: only students who take the subject, and who are not exempt.
-    const { required } = await resolveExpectedStudents(this.prisma, assessment, roster.map((r) => r.studentId));
-    return roster.filter((r) => required.has(r.studentId));
+    const { expected, exempt, required } = await resolveExpectedStudents(this.prisma, assessment, all.map((r) => r.studentId));
+    return { all, roster: all.filter((r) => required.has(r.studentId)), expected, exempt };
+  }
+
+  /** Class students who are not in the grid (exempt, or not registered for the subject), with the reason. */
+  private async buildAddable(
+    assessment: any,
+    parts: { all: RosterStudent[]; roster: RosterStudent[]; expected: Set<string>; exempt: Set<string> },
+    user: RequestUser,
+  ): Promise<AddableStudent[]> {
+    const inGrid = new Set(parts.roster.map((r) => r.studentId));
+    const rest = parts.all.filter((r) => !inGrid.has(r.studentId));
+    if (!rest.length) return [];
+
+    const ids = rest.map((r) => r.studentId);
+    const [marks, exemptions] = await Promise.all([
+      this.prisma.mark.findMany({
+        where: { assessmentId: assessment.id, studentId: { in: ids } },
+        select: { studentId: true, score: true, isAbsent: true, notSat: true },
+      }),
+      this.prisma.resultCalculationExemption.findMany({
+        where: this.exemptionWhere(assessment),
+        select: { studentId: true },
+      }),
+    ]);
+    const markOf = new Map(marks.map((m) => [m.studentId, m]));
+    const classWide = exemptions.some((e) => e.studentId === null);
+    const privileged = ExamMarksService.PRIVILEGED.includes(user.role);
+
+    return rest.map((r) => {
+      const m = markOf.get(r.studentId);
+      const existing = m ? { score: m.score ?? null, isAbsent: m.isAbsent, notSat: m.notSat } : null;
+      if (parts.exempt.has(r.studentId)) {
+        const blocked = classWide && !exemptions.some((e) => e.studentId === r.studentId);
+        return { ...r, reason: 'EXEMPT' as const, canAdd: !blocked, blockedBy: blocked ? ('CLASS_EXEMPTION' as const) : null, existing };
+      }
+      const combination = !!assessment.classSubject?.combinationId;
+      const blockedBy: AddableBlock | null = combination ? 'COMBINATION' : !privileged ? 'ADMIN_ONLY' : null;
+      return { ...r, reason: 'NOT_TAKING' as const, canAdd: blockedBy === null, blockedBy, existing };
+    });
+  }
+
+  private exemptionWhere(assessment: any): Prisma.ResultCalculationExemptionWhereInput {
+    return {
+      status: ExemptionStatus.APPROVED,
+      classId: assessment.classId,
+      subjectId: assessment.subjectId,
+      termId: assessment.termId,
+      OR: assessment.examWindowId ? [{ examWindowId: null }, { examWindowId: assessment.examWindowId }] : [{ examWindowId: null }],
+    };
   }
 
   private async loadClassRoster(classId: string, user: RequestUser): Promise<RosterStudent[]> {
@@ -117,7 +185,9 @@ export class ExamMarksService {
   /** Structured template: metadata + pre-filled roster rows, for the dashboard to render/export. */
   async getTemplateData(assessmentId: string, user: RequestUser) {
     const assessment = await this.getAssessmentForTeacher(assessmentId, user);
-    const roster = await this.loadRoster(assessment.classId, user, assessment);
+    const parts = await this.loadRosterParts(assessment.classId, user, assessment);
+    const roster = parts.roster;
+    const addable = await this.buildAddable(assessment, parts, user);
 
     const existing = await this.prisma.mark.findMany({
       where: { assessmentId },
@@ -148,6 +218,8 @@ export class ExamMarksService {
         };
       }),
       rosterSize: roster.length,
+      /** Class students the grid does not list (exempt / not registered); the editor can add them. */
+      addable,
     };
   }
 
@@ -180,6 +252,71 @@ export class ExamMarksService {
     return { filename, csv: lines.join('\r\n') + '\r\n' };
   }
 
+  private blockMessage(blockedBy: AddableBlock | null): string {
+    switch (blockedBy) {
+      case 'CLASS_EXEMPTION':
+        return 'the whole class is exempt from this subject. Remove that exemption on the Exemptions page first.';
+      case 'COMBINATION':
+        return "this subject belongs to a combination the student is not in. Change the student's combination first.";
+      case 'ADMIN_ONLY':
+        return 'the student is not registered for this subject. Ask an administrator to add them.';
+      default:
+        return 'not allowed.';
+    }
+  }
+
+  /**
+   * Make the student count for this subject again, in the same transaction as the mark:
+   * lift their exemption, or register them for the optional subject. Both are audited.
+   */
+  private async admitStudent(tx: Prisma.TransactionClient, assessment: any, a: AddableStudent, user: RequestUser) {
+    const schoolId: string | null = assessment.schoolId ?? null;
+    if (a.reason === 'EXEMPT') {
+      const revoked = await tx.resultCalculationExemption.updateMany({
+        where: { ...this.exemptionWhere(assessment), studentId: a.studentId },
+        data: {
+          status: ExemptionStatus.REVOKED,
+          revokedById: user.id,
+          revokedAt: new Date(),
+          revokeReason: 'A mark was entered for this student, so they sat the exam.',
+        },
+      });
+      await tx.academicAuditLog.create({
+        data: {
+          schoolId,
+          action: 'MARKS_ADD_EXEMPT_STUDENT',
+          performedById: user.id,
+          payload: { assessmentId: assessment.id, studentId: a.studentId, exemptionsRevoked: revoked.count } as unknown as Prisma.InputJsonValue,
+        },
+      });
+      return;
+    }
+    const existing = await tx.studentSubjectEnrollment.findFirst({
+      where: { studentId: a.studentId, subjectId: assessment.subjectId, academicYearId: assessment.academicYearId, termId: null },
+    });
+    if (existing) {
+      if (!existing.isActive) await tx.studentSubjectEnrollment.update({ where: { id: existing.id }, data: { isActive: true } });
+    } else {
+      await tx.studentSubjectEnrollment.create({
+        data: {
+          studentId: a.studentId,
+          classId: assessment.classId,
+          subjectId: assessment.subjectId,
+          academicYearId: assessment.academicYearId,
+          termId: null,
+        },
+      });
+    }
+    await tx.academicAuditLog.create({
+      data: {
+        schoolId,
+        action: 'MARKS_ADD_UNREGISTERED_STUDENT',
+        performedById: user.id,
+        payload: { assessmentId: assessment.id, studentId: a.studentId, subjectId: assessment.subjectId } as unknown as Prisma.InputJsonValue,
+      },
+    });
+  }
+
   private parseBool(v: unknown): boolean {
     return ['true', '1', 'yes', 'y', 'absent', 'not sat', 'notsat', 'ns'].includes(String(v ?? '').toLowerCase().trim());
   }
@@ -207,7 +344,12 @@ export class ExamMarksService {
       );
     }
 
-    const roster = await this.loadRoster(assessment.classId, user, assessment);
+    const parts = await this.loadRosterParts(assessment.classId, user, assessment);
+    const roster = [...parts.roster];
+    // Students the grid does not list but the teacher chose to bring in ("Add students").
+    const addable = (dto.rows ?? []).some((r) => r.add === true) ? await this.buildAddable(assessment, parts, user) : [];
+    const addableById = new Map(addable.map((a) => [a.studentId, a]));
+    const adds = new Map<string, AddableStudent>();
     const byReg = new Map(roster.filter((r) => r.registrationNumber).map((r) => [r.registrationNumber!.toUpperCase().trim(), r]));
     const byId = new Map(roster.map((r) => [r.studentId, r]));
 
@@ -224,6 +366,30 @@ export class ExamMarksService {
         student = byId.get(raw.studentId);
       } else if (regRaw) {
         student = byReg.get(regRaw.toUpperCase());
+      }
+      if (!student && raw.add === true) {
+        const candidate = raw.studentId
+          ? addableById.get(raw.studentId)
+          : addable.find((a) => (a.registrationNumber ?? '').toUpperCase().trim() === regRaw.toUpperCase());
+        if (!candidate) {
+          errors.push({ row: rowNum, registrationNumber: regRaw, message: `"${regRaw || raw.studentId}" is not a student of this class.` });
+          return;
+        }
+        const shown = candidate.registrationNumber ?? undefined;
+        if (!candidate.canAdd) {
+          errors.push({ row: rowNum, registrationNumber: shown, message: `${candidate.name} cannot be added here: ${this.blockMessage(candidate.blockedBy)}` });
+          return;
+        }
+        if (!windowOpen) {
+          errors.push({ row: rowNum, registrationNumber: shown, message: 'Students can only be added while the exam window is open.' });
+          return;
+        }
+        if (raw.isAbsent === true || raw.notSat === true || this.parseBool(raw.isAbsent as unknown) || this.parseBool(raw.notSat as unknown)) {
+          errors.push({ row: rowNum, registrationNumber: shown, message: `${candidate.name}: enter a score to add this student (Absent and Not sat are already left out).` });
+          return;
+        }
+        student = candidate;
+        adds.set(candidate.studentId, candidate);
       }
       if (!student) {
         errors.push({ row: rowNum, registrationNumber: regRaw, message: `No student "${regRaw || raw.studentId}" in this class.` });
@@ -259,10 +425,14 @@ export class ExamMarksService {
       valid.set(student.studentId, { studentId: student.studentId, score, isAbsent, notSat, note: raw.note?.toString().trim() || undefined });
     });
 
+    // An added student whose row failed validation must not be registered or un-exempted.
+    for (const id of [...adds.keys()]) if (!valid.has(id)) adds.delete(id);
+
     // Apply the valid rows.
     const entries = [...valid.values()];
     if (entries.length) {
       await this.prisma.$transaction(async (tx) => {
+        for (const a of adds.values()) await this.admitStudent(tx, assessment, a, user);
         for (const e of entries) {
           await tx.mark.upsert({
             where: { assessmentId_studentId: { assessmentId, studentId: e.studentId } },
@@ -289,7 +459,9 @@ export class ExamMarksService {
         await tx.assessment.update({ where: { id: assessmentId }, data: { status: AssessmentStatus.OPEN, updatedAt: new Date() } });
       });
       await this.redis.del(`marks-sheet:${assessmentId}`, `class-results:${assessment.classId}:${assessment.termId}`);
+      if (adds.size && assessment.examWindowId) await this.redis.delByPattern(`exam-window:*:${assessment.examWindowId}`);
     }
+    for (const a of adds.values()) roster.push(a);
 
     // Coverage + optional auto-submit.
     const markedCount = await this.prisma.mark.count({ where: { assessmentId, studentId: { in: roster.map((r) => r.studentId) } } });
@@ -316,13 +488,16 @@ export class ExamMarksService {
       errors,
       rosterSize: roster.length,
       marksEntered: markedCount,
+      added: adds.size,
       missing: Math.max(missing, 0),
       autoSubmitted,
       message:
         submitMessage ??
         (errors.length
           ? `${entries.length} saved, ${errors.length} row(s) need attention.`
-          : `${entries.length} marks saved.`),
+          : adds.size
+            ? `${entries.length} marks saved, including ${adds.size} added student${adds.size === 1 ? '' : 's'}. Recalculate the results when you are done.`
+            : `${entries.length} marks saved.`),
       assessmentStatus: autoSubmitted ? AssessmentStatus.SUBMITTED : AssessmentStatus.OPEN,
     };
   }

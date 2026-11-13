@@ -3,7 +3,7 @@ import * as XLSX from 'xlsx';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   AlertTriangle, ArrowLeft, CheckCircle2, Download, FileSpreadsheet, FileText, Layers, Lock,
-  PlayCircle, Plus, RefreshCw, Send, Unlock, Upload, XCircle,
+  PlayCircle, Plus, RefreshCw, Send, Unlock, Upload, UserPlus, XCircle,
 } from 'lucide-react';
 import { Button } from '../../../components/common/Button';
 import { Card } from '../../../components/common/Card';
@@ -24,6 +24,7 @@ import {
 import { useWindowReadiness } from '../api/readinessHooks';
 import { ExemptionsPanel, ReadinessPanel } from './ExamReadiness';
 import { WindowPlanPanel } from './ExamWindowPlan';
+import { AddStudentsPanel, type AddableStudent } from './AddStudentsPanel';
 import { eligibleExamClasses, includedExamClassIds } from '../utils/examWindowClasses';
 
 // ─── helpers ──────────────────────────────────────────────────────────────
@@ -1215,6 +1216,9 @@ export function TeacherExamMarksPage() {
   const [reason, setReason] = useState('');
   const [showReq, setShowReq] = useState(false);
   const [fileMsg, setFileMsg] = useState('');
+  // Students brought in from "Add students" that are not saved yet.
+  const [added, setAdded] = useState<AddableStudent[]>([]);
+  const [showAdd, setShowAdd] = useState(false);
   const location = useLocation();
   const decide = useDecideEditRequest();
   const adminView = location.pathname.startsWith('/exams');
@@ -1232,23 +1236,50 @@ export function TeacherExamMarksPage() {
   const windowOpen = ['OPEN', 'REOPENED'].includes(S(assessment?.examWindow?.status));
   const locked = !windowOpen || ['LOCKED', 'HOD_APPROVED', 'APPROVED'].includes(status);
 
-  // Seed the grid ONCE per assessment when the template loads. Using a ref guard
-  // (not the raw data reference) prevents React Query's re-fetches from wiping
-  // the teacher's in-progress edits.
   const seededRef = useRef('');
+  const keyOf = (r: any) => S(r.registrationNumber) || S(r.studentId);
   useEffect(() => {
-    if (data?.rows && seededRef.current !== assessmentId) {
-      seededRef.current = assessmentId;
-      const seed: Record<string, { score: string; status: EntryStatus }> = {};
-      for (const r of data.rows as any[]) seed[S(r.registrationNumber)] = { score: r.score === '' || r.score == null ? '' : String(r.score), status: r.notSat ? 'NOT_SAT' : r.isAbsent ? 'ABSENT' : 'SCORED' };
-      setRows(seed);
-    }
+    if (!data?.rows) return;
+    const fresh = seededRef.current !== assessmentId;
+    seededRef.current = assessmentId;
+    if (fresh) { setAdded([]); setShowAdd(false); }
+    // First load: seed every row. Later reloads only add rows that are new (for example students
+    // just added and saved), so a teacher's unsaved typing is never wiped by a re-fetch.
+    setRows((prev) => {
+      const next: Record<string, { score: string; status: EntryStatus }> = fresh ? {} : { ...prev };
+      for (const r of data.rows as any[]) {
+        const key = keyOf(r);
+        if (key in next) continue;
+        next[key] = { score: r.score === '' || r.score == null ? '' : String(r.score), status: r.notSat ? 'NOT_SAT' : r.isAbsent ? 'ABSENT' : 'SCORED' };
+      }
+      return next;
+    });
   }, [data, assessmentId]);
+
+  // Added students that are not part of the saved list yet.
+  const savedIds = new Set(((data?.rows ?? []) as any[]).map((r) => S(r.studentId)));
+  const pendingAdded = added.filter((a) => !savedIds.has(a.studentId));
+  const addedIds = new Set(pendingAdded.map((a) => a.studentId));
+  const addable = ((data?.addable ?? []) as AddableStudent[]).filter((a) => !addedIds.has(a.studentId));
+  const allRows: any[] = [
+    ...((data?.rows ?? []) as any[]),
+    ...pendingAdded.map((a) => ({ registrationNumber: a.registrationNumber, studentId: a.studentId, studentName: a.name, _added: true })),
+  ];
+  const addStudents = (picked: AddableStudent[]) => {
+    setAdded((cur) => [...cur, ...picked.filter((p) => !cur.some((c) => c.studentId === p.studentId))]);
+    setRows((cur) => {
+      const next = { ...cur };
+      for (const p of picked) next[p.registrationNumber ?? p.studentId] = { score: '', status: 'SCORED' };
+      return next;
+    });
+    setShowAdd(false);
+  };
+  const removeAdded = (studentId: string) => setAdded((cur) => cur.filter((c) => c.studentId !== studentId));
 
   const save = async (autoSubmit = false) => {
     setResult(null);
-    const all = data?.rows as any[];
-    const localOf = (r: any) => rows[S(r.registrationNumber)] ?? { score: '', status: 'SCORED' as EntryStatus };
+    const all = allRows;
+    const localOf = (r: any) => rows[keyOf(r)] ?? { score: '', status: 'SCORED' as EntryStatus };
     const isBlank = (r: any) => { const l = localOf(r); return l.status === 'SCORED' && l.score.trim() === ''; };
     // Catch obvious slips here, naming the student, instead of failing the whole save on the server.
     const outOfRange = all.filter((r) => { const l = localOf(r); if (l.status !== 'SCORED' || l.score.trim() === '') return false; const n = Number(l.score); return !Number.isFinite(n) || n < 0 || n > maxScore; });
@@ -1268,6 +1299,7 @@ export function TeacherExamMarksPage() {
       const local = localOf(r);
       return {
         registrationNumber: S(r.registrationNumber),
+        ...(r._added ? { studentId: S(r.studentId), add: true } : {}),
         score: local.status !== 'SCORED' ? undefined : Number(local.score),
         isAbsent: local.status === 'ABSENT', notSat: local.status === 'NOT_SAT', row: all.indexOf(r) + 2,
       };
@@ -1340,10 +1372,11 @@ export function TeacherExamMarksPage() {
           </label>
         )}
         {grantedRequest && <Button variant="success" onClick={async () => { await decide.mutateAsync({ id: S(grantedRequest.id), decision: 'complete' }); setResult({ message: 'Thank you. This subject is locked again and waiting for the administrator to republish.' }); tpl.refetch(); }} loading={decide.isPending}><CheckCircle2 className="h-4 w-4" /> Finish editing</Button>}
+        {!locked && addable.length > 0 && <Button variant="secondary" onClick={() => setShowAdd((v) => !v)}><UserPlus className="h-4 w-4" /> Add students ({addable.length})</Button>}
         {!locked && <><Button onClick={() => save(false)} loading={upload.isPending}><Upload className="h-4 w-4" /> Save marks</Button>
           <Button variant="success" onClick={() => save(true)} loading={upload.isPending}><Send className="h-4 w-4" /> Save & submit</Button></>}
         {locked && !adminView && !grantedRequest && <Button variant="secondary" onClick={() => setShowReq((v) => !v)}><Unlock className="h-4 w-4" /> Request permission to edit</Button>}
-        <span className="ml-auto text-xs text-ks-muted">{N(data.rosterSize)} students</span>
+        <span className="ml-auto text-xs text-ks-muted">{allRows.length} students</span>
       </Card>
 
       {fileMsg && <div className="mb-4"><Banner tone={fileMsg.startsWith('Could not') ? 'rose' : 'emerald'}>{fileMsg}</Banner></div>}
@@ -1374,8 +1407,15 @@ export function TeacherExamMarksPage() {
         </div>
       )}
 
+      {!locked && addable.length > 0 && !showAdd && (
+        <p className="mb-3 text-xs text-ks-muted">
+          {addable.length} student{addable.length === 1 ? ' in this class is' : 's in this class are'} not on this list (exempt, or not registered for the subject).{' '}
+          <button type="button" className="font-bold text-ks-blue underline" onClick={() => setShowAdd(true)}>Add students</button> to enter their marks.
+        </p>
+      )}
+      {!locked && showAdd && <AddStudentsPanel students={addable} onAdd={addStudents} onClose={() => setShowAdd(false)} />}
       {!locked && (() => {
-        const blank = (data.rows as any[]).filter((r) => { const l = rows[S(r.registrationNumber)]; return !l || (l.status === 'SCORED' && l.score === ''); }).length;
+        const blank = allRows.filter((r) => { const l = rows[keyOf(r)]; return !l || (l.status === 'SCORED' && l.score === ''); }).length;
         return (
           <p className={`mb-3 text-xs font-semibold ${blank ? 'text-ks-rose' : 'text-ks-emerald'}`} role="status">
             {blank ? `${blank} student${blank === 1 ? '' : 's'} still without a result — enter a score, or choose Absent / Not sat. Results cannot be closed with blanks.` : 'Every student has a result.'}
@@ -1389,27 +1429,34 @@ export function TeacherExamMarksPage() {
               <tr><th className="px-4 py-3">ADMNO</th><th className="px-4 py-3">Student</th><th className="px-4 py-3 w-32">Score</th><th className="px-4 py-3">Status</th></tr>
             </thead>
             <tbody className="divide-y divide-ks-line">
-              {(data.rows as any[]).map((r) => {
-                const reg = S(r.registrationNumber);
+              {allRows.map((r) => {
+                const reg = keyOf(r);
                 const local = rows[reg] ?? { score: '', status: 'SCORED' as EntryStatus };
                 const empty = local.status === 'SCORED' && local.score === '';
                 return (
-                  <tr key={reg} className={empty && !locked ? 'bg-ks-rose/5' : ''}>
-                    <td className="px-4 py-2 text-ks-muted">{reg}</td>
-                    <td className="px-4 py-2 font-semibold text-ks-navy">{S(r.studentName)}</td>
+                  <tr key={reg} className={r._added ? 'bg-ks-blue/5' : empty && !locked ? 'bg-ks-rose/5' : ''}>
+                    <td className="px-4 py-2 text-ks-muted">{S(r.registrationNumber)}</td>
+                    <td className="px-4 py-2 font-semibold text-ks-navy">
+                      {S(r.studentName)}
+                      {r._added && <span className="ml-2 rounded bg-ks-blue/10 px-1.5 py-0.5 text-[10px] font-bold uppercase text-ks-blue">Added</span>}
+                    </td>
                     <td className="px-4 py-2">
                       <input type="number" min={0} max={maxScore} disabled={locked || local.status !== 'SCORED'} value={local.score} aria-label={`Score for ${S(r.studentName)}`}
                         onChange={(e) => setRows((s) => ({ ...s, [reg]: { ...local, score: e.target.value } }))}
                         className="w-24 rounded border border-ks-line px-2 py-1 disabled:bg-ks-mist/20" />
                     </td>
                     <td className="px-4 py-2">
-                      <select disabled={locked} value={local.status} aria-label={`Status for ${S(r.studentName)}`}
-                        onChange={(e) => setRows((s) => ({ ...s, [reg]: { ...local, status: e.target.value as EntryStatus, score: e.target.value === 'SCORED' ? local.score : '' } }))}
-                        className="rounded border border-ks-line px-2 py-1 text-xs">
-                        <option value="SCORED">Scored</option>
-                        <option value="ABSENT">Absent (0)</option>
-                        <option value="NOT_SAT">Not sat (0)</option>
-                      </select>
+                      {r._added ? (
+                        <button type="button" onClick={() => removeAdded(S(r.studentId))} className="text-xs font-bold text-ks-rose underline">Remove</button>
+                      ) : (
+                        <select disabled={locked} value={local.status} aria-label={`Status for ${S(r.studentName)}`}
+                          onChange={(e) => setRows((s) => ({ ...s, [reg]: { ...local, status: e.target.value as EntryStatus, score: e.target.value === 'SCORED' ? local.score : '' } }))}
+                          className="rounded border border-ks-line px-2 py-1 text-xs">
+                          <option value="SCORED">Scored</option>
+                          <option value="ABSENT">Absent (0)</option>
+                          <option value="NOT_SAT">Not sat (0)</option>
+                        </select>
+                      )}
                     </td>
                   </tr>
                 );

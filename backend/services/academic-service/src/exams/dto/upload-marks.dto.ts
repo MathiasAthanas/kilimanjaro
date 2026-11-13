@@ -41,6 +41,14 @@ export class UploadMarkRowDto {
   @IsString()
   note?: string;
 
+  /**
+   * True when the teacher brought this student in from "Add students" (exempt or not
+   * registered for the subject). The server re-checks they belong to the class.
+   */
+  @IsOptional()
+  @IsBoolean()
+  add?: boolean;
+
   /** Original 1-based row number in the sheet, echoed back in error reports. */
   @IsOptional()
   row?: number;
