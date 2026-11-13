@@ -93,3 +93,15 @@ Lesson: after any finance deploy, run `prisma migrate diff --from-url $DATABASE_
 Staff reported that editing a fee category "would not save". The server was saving (PATCH returned 200 after section 4), but the form's Default Amount box was never sent or stored, because categories have no amount (amounts live in Fee Structures), so the typed value vanished and the list showed 0. Removed the field from the form and the list, limited Billing Frequency to Every term / Once only, replaced the misleading audit text.
 
 Deployed 2026-11-13 17:56 UTC as a dashboard-only publish (no backend change, no restart, no database change): built from `dash-feecat-38d72ec.tar.gz` (SHA-256 `ac889c33c47c8123992c52ca826f63309ba2039b099ded9135a4494f8d9bd62d`) in `/opt/kilimanjaro/releases/dash-feecat-38d72ec-20261113T175508Z`, published to `/var/www/kilimanjaro-manage`, bundle `index-D2g08G0Y.js`. Previous dashboard archived as `frontend_pre_feecat_*.tar.gz` in `/opt/kilimanjaro/backups`. Rollback: restore that archive over `/var/www/kilimanjaro-manage`. The active backend release is still `finance-fixes-1d0f889-20261113T114140Z`.
+
+## 6. Dashboard fixes during the client presentation (commit `0014e07`, dashboard only)
+
+Deployed 2026-11-13 18:26 UTC as a dashboard-only publish (no backend restart, no database change), release `/opt/kilimanjaro/releases/dash-fixes-0014e07-20261113T182521Z`, archive SHA-256 `12043d6d9e722fb1c7ca689b5998131e5905898724fc7b01a68135e15fd29639`, bundle `index-DDeRrBh1.js`. Previous dashboard archived as `frontend_pre_dashfixes_*.tar.gz` in `/opt/kilimanjaro/backups`.
+
+- Fee Matrix: saving the same cell twice in one visit no longer creates a second structure (the grid now reuses the live structure for that class and term). Verified on screen locally.
+- Payment page timeline no longer reads "Payment recorded by Awaiting approval".
+- Manager menu: new **Approve Payments** link to the real approval screen; the old "Pending Approvals" (a finance-officer verification queue with no approve button) is now called **Payment Queue**.
+
+Not yet deployed: the backend half of the matrix fix (invoice generation prefers the newest structure when two match at the same level, commit `61cbe14`); it needs a finance-service restart.
+
+Open item found by inspection: production's only "current" term is the leftover "Mobile QA Test Term"; real Terms 1-3 are not marked current, so Generate Invoices pre-selects the QA term. Needs a decision on which term is current.
