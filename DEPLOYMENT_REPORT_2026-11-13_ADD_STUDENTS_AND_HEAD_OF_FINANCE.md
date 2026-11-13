@@ -60,3 +60,18 @@ sudo -u kilimanjaro -H bash -lc "cd /opt/kilimanjaro/app/backend && pm2 startOrR
 ```
 
 Restore the matching `frontend_pre_*` archive for the dashboard. Exemptions revoked through "Add students" stay revoked after a rollback; they are recorded in the audit log.
+
+## 3. Finance fixes found by on-screen testing (commit `1d0f889`)
+
+Release: `/opt/kilimanjaro/releases/finance-fixes-1d0f889-20261113T114140Z` (previous: `hof-finance-36e1b49-20261113T101124Z`). Archive SHA-256 `b43b987bfc5112e1b2161af68a3cb164f1480f17245d5bd0e019af2c0e4602dc`.
+
+Found while testing the finance dashboard as the Head of Finance on a local copy (forms filled in on screen, approvals as a Head of School):
+
+- **Adding a verification note to a payment returned a 500 for every finance user.** The Prisma schema listed `PAYMENT_NOTE_ADDED` but the database enum never received it. Additive migration `20261113120000_payment_note_audit_action` (`ALTER TYPE "finance"."FinancialAuditAction" ADD VALUE IF NOT EXISTS 'PAYMENT_NOTE_ADDED'`) applied directly to production before activation (the finance schema has no migration history table). The same check across every service's enums found no other missing values.
+- **Adding a store item with Opening Qty or Reorder Level blank returned a 500** (empty string passed to Decimal). Blank now means not entered; a non-number returns a clear 400. Four new tests.
+
+Backups taken before the change: database `/opt/kilimanjaro/backups/kilimanjaro_prod_pre_finance_fixes_20261113T114232Z.dump` (SHA-256 `9fe894c4e60da98c2581313d9a859a6c4d55b4407b71b1ce3207369926712ce7`) and the dashboard archive `frontend_pre_finance_fixes_*.tar.gz`.
+
+Verification: all eight services online, health OK, dashboard 200 (bundle `index-xxJVIYiF.js`), enum value present, store fix present in the compiled service, no fresh error lines in any log. Marks (7011, fingerprint `77d32e17...`), users (1752) and finance rows (1 invoice, 1 payment, 1 receipt) unchanged.
+
+On-screen test coverage and gaps: tested fee category, invoice generation, cash and bank payments, verification notes, approve, reject and refund (as Head of School), receipts and PDFs, expenses, store items and stock receipt, assets, fund request create, review and disburse, defaulter contact log, all eight Export Center CSVs, statement PDF and CSV. Not tested: defaulter SMS (no dashboard button; the gateway endpoint only queues a stub job), the fee-structure form, and a real Head of Finance login on production.
