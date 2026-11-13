@@ -2529,7 +2529,7 @@ export function FeeCategoriesPage() {
         ) : !apiCategories.length ? (
           <EmptyState title="No fee categories" description="Create the first fee category to start building fee structures." action={{ label: 'Create Category', href: '/finance/fee-categories/create' }} />
         ) : (
-        <FinanceTable columns={['Order', 'Code', 'Name', 'Type', 'Default Amount', 'Frequency', 'Used By', 'Status', 'Actions']} minWidth={940}>
+        <FinanceTable columns={['Order', 'Code', 'Name', 'Type', 'Frequency', 'Used By', 'Status', 'Actions']} minWidth={860}>
           {orderedCategories.map((category, index) => (
             <tr key={category.id} className="even:bg-[#f7f9fb]">
               <Td>
@@ -2564,7 +2564,6 @@ export function FeeCategoriesPage() {
                   {category.mandatory ? 'mandatory' : 'optional'}
                 </Badge>
               </Td>
-              <Td amount><AmountDisplay amount={category.amount} /></Td>
               <Td>{category.frequency}</Td>
               <Td>
                 <div className="text-xs font-bold text-[#334155]">
@@ -2644,7 +2643,6 @@ function FeeCategoryForm({ title, mode }: { title: string; mode: 'create' | 'edi
     name: '',
     code: '',
     mandatory: 'mandatory',
-    amount: '',
     frequency: 'TERM',
     order: '',
   });
@@ -2652,7 +2650,7 @@ function FeeCategoryForm({ title, mode }: { title: string; mode: 'create' | 'edi
   useEffect(() => {
     if (existing) {
       const frequency = String(existing.frequency ?? '').toUpperCase().includes('TERM') ? 'TERM' : 'ONE_TIME';
-      setForm({ name: existing.name ?? '', code: existing.code ?? '', mandatory: existing.mandatory ? 'mandatory' : 'optional', amount: String(existing.amount ?? ''), frequency, order: String(existing.order ?? '') });
+      setForm({ name: existing.name ?? '', code: existing.code ?? '', mandatory: existing.mandatory ? 'mandatory' : 'optional', frequency, order: String(existing.order ?? '') });
     }
   }, [existing?.id]);
 
@@ -2690,7 +2688,7 @@ function FeeCategoryForm({ title, mode }: { title: string; mode: 'create' | 'edi
             <FileSpreadsheet className="h-5 w-5 text-[#00334f]" />
             <div>
               <h2 className="font-display text-xl font-black text-[#00334f]">{title}</h2>
-              <p className="text-sm font-semibold text-[#64748b]">All changes are audited with actor and reason.</p>
+              <p className="text-sm font-semibold text-[#64748b]">A category is only a name for a charge (for example Tuition). The amount is set per class in Fee Structures. All changes are logged.</p>
             </div>
           </div>
           <div className="mt-5 grid gap-4 md:grid-cols-2">
@@ -2709,13 +2707,9 @@ function FeeCategoryForm({ title, mode }: { title: string; mode: 'create' | 'edi
               </select>
             </label>
             <label className="block">
-              <span className="text-[11px] font-black uppercase tracking-widest text-[#64748b]">Default Amount (TZS)</span>
-              <input type="number" value={form.amount} onChange={set('amount')} className="mt-2 h-11 w-full rounded border border-[#d5dde6] bg-[#f7f9fb] px-3 font-semibold outline-none focus:border-[#00334f]" placeholder="e.g. 450000" />
-            </label>
-            <label className="block">
               <span className="text-[11px] font-black uppercase tracking-widest text-[#64748b]">Billing Frequency</span>
               <select value={form.frequency} onChange={set('frequency')} className="mt-2 h-11 w-full rounded border border-[#d5dde6] bg-[#f7f9fb] px-3 font-semibold outline-none focus:border-[#00334f]">
-                <option value="TERM">Per Term</option><option value="ANNUAL">Annual</option><option value="MONTHLY">Monthly</option><option value="ONE_TIME">One Time</option>
+                <option value="TERM">Every term</option><option value="ONE_TIME">Once only</option>
               </select>
             </label>
             <label className="block">
@@ -2733,8 +2727,8 @@ function FeeCategoryForm({ title, mode }: { title: string; mode: 'create' | 'edi
         <SideSummary title="Safety Rules" items={[
           ['Used by', String(existing?.usedByStructures ?? 0) + ' structures'],
           ['Delete', 'Blocked if in use'],
-          ['Audit', 'Reason required'],
-          ['Preview', 'Shown before save'],
+          ['Amounts', 'Set in Fee Structures'],
+          ['Audit', 'Every change is logged'],
         ]} />
       </div>
     </FinanceWorkspaceShell>
