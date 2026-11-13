@@ -36,9 +36,9 @@ Never print, copy into chat, or commit production secrets or private-key content
 
 As of 2026-11-12:
 
-- Active release: `/opt/kilimanjaro/releases/alevel-cards-ebbba54-20261112T181341Z`.
-- Production application code: commit `ebbba54`.
-- The previous release `user-roles-e295268-20261112T145914Z` is the rollback target.
+- Active release: `/opt/kilimanjaro/releases/avg-rule-bf9356a-20261113T080828Z`.
+- Production application code: commit `bf9356a`.
+- The previous release `alevel-cards-ebbba54-20261112T181341Z` is the rollback target.
 - General gateway throttling (`GatewayThrottlerGuard`, 300 requests per minute per user) is active in production; only the login and auth-service throttles were removed (see the 2026-11-02 and 2026-11-03 reports).
 - All eight PM2 services are online.
 - The public gateway health endpoint reports its dependencies reachable.
