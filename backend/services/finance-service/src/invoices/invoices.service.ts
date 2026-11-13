@@ -145,7 +145,8 @@ export class InvoicesService {
     for (const s of structures) {
       if (s.feeCategory.isOptional && !optionalSet.has(s.feeCategoryId)) continue;
       const existing = deduped.get(s.feeCategoryId);
-      if (!existing || specificity(s) > specificity(existing)) {
+      // Same category matched twice at the same level (an old and a corrected price): the newest one wins.
+      if (!existing || specificity(s) > specificity(existing) || (specificity(s) === specificity(existing) && s.createdAt > existing.createdAt)) {
         deduped.set(s.feeCategoryId, s);
       }
     }

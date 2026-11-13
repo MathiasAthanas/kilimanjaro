@@ -2977,7 +2977,16 @@ export function FeeMatrixPage() {
             saved++;
           } else {
             for (const classId of col.classIds) {
-              await createMutation.mutateAsync({ feeCategoryId: cat.id, classId, amount: String(amount), academicYearId: effectiveYearId, termId: termId || undefined, currency: 'TZS' });
+              // The grid only learns a structure's id when it loads, so a cell saved earlier in this visit has none.
+              // Look for a live structure first, otherwise saving twice would add a second price for the same class.
+              const live = (apiStructures as unknown as Array<{ id: string; category: string; classId?: string; termId?: string; active?: boolean }>).find(
+                (s) => s.active !== false && s.category === cat.name && s.classId === classId && (termId ? s.termId === termId : !s.termId),
+              );
+              if (live) {
+                await updateMutation.mutateAsync({ id: live.id, body: { amount: String(amount) } });
+              } else {
+                await createMutation.mutateAsync({ feeCategoryId: cat.id, classId, amount: String(amount), academicYearId: effectiveYearId, termId: termId || undefined, currency: 'TZS' });
+              }
               saved++;
             }
           }
