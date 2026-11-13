@@ -63,6 +63,10 @@ export type PrincipalPaymentApproval = {
   risk: Urgency;
   notes: string;
   evidenceUrl: string;
+  /** Lets the reviewer open the invoice the payment is for */
+  invoiceId?: string;
+  /** When the money was received (not when it was entered) */
+  paidAt?: string;
 };
 
 export type PrincipalStudent = {

@@ -3,11 +3,13 @@ import {
   AlertTriangle,
   BookOpen,
   Calendar,
+  CheckCircle2,
   Download,
   GraduationCap,
   Lock,
   Megaphone,
   Plus,
+  Search,
   Send,
   ShieldCheck,
   TrendingUp,
@@ -666,35 +668,81 @@ export function FinanceOversightPage() {
 // ─── Payment approvals ────────────────────────────────────────────────────────
 
 export function PaymentApprovalsPage() {
-  const { data: apiApprovals = [] as PrincipalPaymentApproval[] } = usePrincipalPendingPayments() as { data: PrincipalPaymentApproval[] };
-  const highest = apiApprovals.length ? Math.max(...apiApprovals.map((a) => a.amount)) : 0;
+  const { data: apiApprovals = [] as PrincipalPaymentApproval[], isLoading, isError, refetch } = usePrincipalPendingPayments() as { data: PrincipalPaymentApproval[]; isLoading: boolean; isError: boolean; refetch: () => void };
+  const [search, setSearch] = useState('');
+  const [method, setMethod] = useState<'ALL' | 'CASH' | 'BANK'>('ALL');
+
   const total = apiApprovals.reduce((s, a) => s + a.amount, 0);
-  const oldest = apiApprovals.find((a) => a.age)?.age ?? '—';
+  const oldest = apiApprovals.find((a) => a.age)?.age;
+  const isCash = (a: PrincipalPaymentApproval) => a.method.toUpperCase().includes('CASH');
+  const counts = { ALL: apiApprovals.length, CASH: apiApprovals.filter(isCash).length, BANK: apiApprovals.filter((a) => !isCash(a)).length };
+  const q = search.trim().toLowerCase();
+  const visible = apiApprovals.filter((a) => {
+    if (method === 'CASH' && !isCash(a)) return false;
+    if (method === 'BANK' && isCash(a)) return false;
+    return !q || [a.student, a.registration, a.invoice, a.paymentNumber, a.reference].some((v) => v.toLowerCase().includes(q));
+  });
+
   return (
-    <PrincipalWorkspaceShell title="Payment Approval" eyebrow="Manual payment authority">
+    <PrincipalWorkspaceShell
+      title="Payment Approval"
+      eyebrow="Manual payment authority"
+      subtitle="Cash and bank payments recorded by the finance office wait here for your decision."
+      pills={[
+        { label: 'Waiting', value: `${apiApprovals.length} ${apiApprovals.length === 1 ? 'payment' : 'payments'}`, tone: apiApprovals.length ? 'gold' : 'green' },
+        { label: 'Total value', value: money(total), tone: 'gold' },
+        { label: 'Oldest', value: oldest ? (oldest === 'just now' ? 'Just now' : oldest) : '—', tone: 'green' },
+      ]}
+    >
       <PrincipalBreadcrumb crumbs={[
         { label: 'Executive', to: '/principal' },
         { label: 'Finance', to: '/principal/finance' },
         { label: 'Payment Approvals' },
       ]} />
-      <ExecutiveMetricGrid items={[
-        { label: 'Pending',      value: String(apiApprovals.length), detail: 'Awaiting authorization', tone: apiApprovals.length > 0 ? 'high' : 'stable' },
-        { label: 'Highest Risk', value: money(highest), detail: 'Highest pending value', tone: highest > 0 ? 'critical' : 'stable' },
-        { label: 'Oldest',       value: oldest,          detail: 'Oldest pending queue age', tone: oldest === '—' ? 'stable' : 'high' },
-        { label: 'Total Pending', value: money(total), detail: 'Combined pending value', tone: total > 0 ? 'medium' : 'stable' },
-      ]} />
-      <div className="rounded-2xl border border-ks-navy/20 bg-ks-navy/5 p-4">
-        <p className="text-sm font-black text-ks-navy">
-          Approve or reject after reviewing bank evidence. Confirmation required. Approved cards are removed from this queue and a receipt is issued automatically.
-        </p>
-      </div>
-      <div className="grid gap-gutter xl:grid-cols-3">
-        {apiApprovals.map((approval) => (
-          <PaymentApprovalCard key={approval.id} approval={approval} />
-        ))}
-      </div>
-      {apiApprovals.length === 0 && (
-        <EmptyState title="No payment approvals pending" description="Cash and bank payments that require principal approval will appear here." />
+
+      {isLoading ? (
+        <SkeletonTable cols={4} />
+      ) : isError ? (
+        <DataError onRetry={refetch} />
+      ) : apiApprovals.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-ks-line bg-white px-6 py-14 text-center">
+          <CheckCircle2 className="mx-auto h-10 w-10 text-ks-emerald" />
+          <h3 className="mt-3 font-display text-xl font-black text-ks-navy">You are all caught up</h3>
+          <p className="mx-auto mt-1 max-w-md text-sm font-semibold text-ks-muted">No payments are waiting. New cash and bank payments appear here as soon as the finance office records them.</p>
+        </div>
+      ) : (
+        <>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative min-w-[220px] flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ks-muted" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search student, invoice, payment number or reference…"
+                className="h-11 w-full rounded-xl border border-ks-line bg-white pl-9 pr-3 text-sm font-semibold text-ks-navy outline-none transition placeholder:text-ks-muted/70 focus:border-ks-blue focus:ring-2 focus:ring-ks-blue/15"
+              />
+            </div>
+            <div className="flex gap-1 rounded-xl border border-ks-line bg-white p-1">
+              {([['ALL', 'All'], ['CASH', 'Cash'], ['BANK', 'Bank & other']] as const).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setMethod(key)}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-black transition ${method === key ? 'bg-ks-navy text-white' : 'text-ks-slate hover:bg-ks-paper'}`}
+                >
+                  {label} <span className={method === key ? 'text-white/70' : 'text-ks-muted'}>{counts[key]}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+          {visible.length === 0 ? (
+            <p className="rounded-2xl border border-dashed border-ks-line bg-white px-6 py-10 text-center text-sm font-bold text-ks-muted">Nothing matches that search or filter.</p>
+          ) : (
+            <div className="space-y-gutter">
+              {visible.map((approval) => <PaymentApprovalCard key={approval.id} approval={approval} />)}
+            </div>
+          )}
+        </>
       )}
     </PrincipalWorkspaceShell>
   );
@@ -703,55 +751,53 @@ export function PaymentApprovalsPage() {
 // ─── Payment approval detail ──────────────────────────────────────────────────
 
 export function PaymentApprovalDetailPage() {
-  const { loading, item: approval } = usePaymentApproval();
+  const { loading, item: live } = usePaymentApproval();
+  const navigate = useNavigate();
+  // Once decided, the payment leaves the queue; keep showing it so the confirmation stays on screen until we navigate away.
+  const lastSeen = React.useRef(live);
+  if (live) lastSeen.current = live;
+  const approval = live ?? lastSeen.current;
+  const back = { label: 'Payment Approvals', to: '/principal/finance/approvals' };
 
-  if (loading) return <PrincipalWorkspaceShell title="Loading…" eyebrow="Payment approval dossier"><SkeletonTable cols={4} /></PrincipalWorkspaceShell>;
+  if (loading) return <PrincipalWorkspaceShell title="Loading…" eyebrow="Payment review" pills={[]}><SkeletonTable cols={4} /></PrincipalWorkspaceShell>;
   if (!approval) return (
-    <PrincipalWorkspaceShell title="Approval Not Found" eyebrow="Payment approval dossier">
-      <PrincipalBreadcrumb crumbs={[{ label: 'Executive', to: '/principal' }, { label: 'Finance', to: '/principal/finance' }, { label: 'Payment Approvals', to: '/principal/finance/approvals' }, { label: 'Not Found' }]} />
-      <EmptyState title="Payment approval not found" description="This payment may have already been processed or the link is invalid." />
+    <PrincipalWorkspaceShell title="Payment not found" eyebrow="Payment review" subtitle="It may already have been approved or rejected." pills={[]}>
+      <PrincipalBreadcrumb crumbs={[{ label: 'Executive', to: '/principal' }, { label: 'Finance', to: '/principal/finance' }, back, { label: 'Not found' }]} />
+      <div className="rounded-2xl border border-dashed border-ks-line bg-white px-6 py-12 text-center">
+        <p className="font-display text-xl font-black text-ks-navy">This payment is no longer waiting</p>
+        <p className="mx-auto mt-1 max-w-md text-sm font-semibold text-ks-muted">Someone may have decided it already, or the link is out of date.</p>
+        <NavLink to={back.to} className="mt-5 inline-flex rounded-xl bg-ks-navy px-4 py-2.5 text-sm font-black text-white">Back to the queue</NavLink>
+      </div>
     </PrincipalWorkspaceShell>
   );
 
+  const isImage = /\.(png|jpe?g|webp)(\?|$)/i.test(approval.evidenceUrl);
   return (
-    <PrincipalWorkspaceShell title={approval.paymentNumber || 'Payment approval'} eyebrow="Payment approval dossier">
-      <PrincipalBreadcrumb crumbs={[
-        { label: 'Executive', to: '/principal' },
-        { label: 'Finance', to: '/principal/finance' },
-        { label: 'Payment Approvals', to: '/principal/finance/approvals' },
-        { label: approval.paymentNumber || 'Payment' },
-      ]} />
-      <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_420px]">
-        <div className="space-y-gutter">
-          <ExecutiveMetricGrid items={[
-            { label: 'Amount',     value: money(approval.amount),  detail: approval.method.replaceAll('_', ' '),  tone: approval.risk as 'critical' | 'high' | 'medium' | 'stable' },
-            { label: 'Invoice',    value: approval.invoice,        detail: approval.student,                      tone: 'medium' },
-            { label: 'Reference',  value: approval.reference || '—', detail: approval.age ? `Waiting ${approval.age}` : 'Just submitted', tone: 'high' },
-            { label: 'Entered By', value: approval.enteredBy,      detail: 'Finance office',                      tone: 'stable' },
-          ]} />
-          {/* Evidence the finance office attached */}
-          <div className="rounded-2xl border border-ks-line bg-white p-6 shadow-sm">
-            <p className="text-[11px] font-black uppercase tracking-widest text-ks-muted">Evidence</p>
-            {approval.evidenceUrl ? (
-              /\.(png|jpe?g|webp)(\?|$)/i.test(approval.evidenceUrl) ? (
-                <a href={approval.evidenceUrl} target="_blank" rel="noreferrer">
-                  <img src={approval.evidenceUrl} alt="Payment evidence" className="mt-4 max-h-96 w-full rounded-xl border border-ks-line object-contain" />
-                </a>
-              ) : (
-                <a href={approval.evidenceUrl} target="_blank" rel="noreferrer" className="mt-4 inline-flex items-center gap-2 rounded-xl border border-ks-line px-4 py-3 text-sm font-black text-ks-navy hover:bg-ks-paper">
-                  Open attached document
-                </a>
-              )
-            ) : (
-              <p className="mt-4 rounded-xl border border-dashed border-ks-line bg-ks-paper p-6 text-center text-sm font-bold text-ks-muted">
-                No bank slip or document was attached to this payment.
-              </p>
-            )}
-            {approval.notes ? <p className="mt-4 whitespace-pre-wrap text-sm font-semibold text-ks-slate">{approval.notes}</p> : null}
-          </div>
+    <PrincipalWorkspaceShell
+      title="Payment review"
+      eyebrow="Manual payment authority"
+      subtitle={`${approval.paymentNumber || 'Payment'} · ${approval.student}`}
+      pills={[
+        { label: 'Amount', value: money(approval.amount), tone: 'gold' },
+        { label: 'Method', value: approval.method.replaceAll('_', ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase()) || '—', tone: 'green' },
+      ]}
+    >
+      <PrincipalBreadcrumb crumbs={[{ label: 'Executive', to: '/principal' }, { label: 'Finance', to: '/principal/finance' }, back, { label: approval.paymentNumber || 'Payment' }]} />
+      <PaymentApprovalCard approval={approval} showDetailLink={false} onDone={() => setTimeout(() => navigate(back.to), 1400)} />
+      {approval.evidenceUrl && (
+        <div className="rounded-2xl border border-ks-line bg-white p-5 shadow-sm sm:p-6">
+          <p className="text-[10px] font-black uppercase tracking-widest text-ks-muted">Evidence attached by the finance office</p>
+          {isImage ? (
+            <a href={approval.evidenceUrl} target="_blank" rel="noreferrer">
+              <img src={approval.evidenceUrl} alt="Payment evidence" className="mt-4 max-h-[28rem] w-full rounded-xl border border-ks-line bg-ks-paper object-contain" />
+            </a>
+          ) : (
+            <a href={approval.evidenceUrl} target="_blank" rel="noreferrer" className="mt-4 inline-flex items-center gap-2 rounded-xl border border-ks-line px-4 py-3 text-sm font-black text-ks-navy hover:bg-ks-paper">
+              Open attached document
+            </a>
+          )}
         </div>
-        <PaymentApprovalCard approval={approval} />
-      </div>
+      )}
     </PrincipalWorkspaceShell>
   );
 }

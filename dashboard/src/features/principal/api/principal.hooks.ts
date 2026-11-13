@@ -293,6 +293,8 @@ export function usePrincipalPendingPayments() {
             student: resolveName(a.studentName ?? a.student ?? pay.payerName) || 'Student',
             registration: String(a.registrationNumber ?? ''),
             invoice: String(a.invoiceNumber ?? ''),
+            invoiceId: String(pay.invoiceId ?? ''),
+            paidAt: String(pay.paidAt ?? pay.createdAt ?? ''),
             method: String(pay.method ?? a.method ?? ''),
             amount,
             reference: String(pay.referenceNumber ?? a.reference ?? ''),
@@ -304,6 +306,10 @@ export function usePrincipalPendingPayments() {
           };
         }),
       ),
+    // A decision queue must not show yesterday's picture: reload on every visit and keep checking while it is open.
+    staleTime: 0,
+    refetchOnMount: 'always',
+    refetchInterval: 20_000,
   });
 }
 

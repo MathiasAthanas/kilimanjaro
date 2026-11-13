@@ -23,14 +23,12 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { Badge } from '../../../components/common/Badge';
 import { Button } from '../../../components/common/Button';
 import { toast } from '../../../lib/toast';
-import type { DisciplineIncident, PrincipalAssessment, PrincipalMetric, PrincipalPaymentApproval, SchoolHealth, Urgency } from '../types/principal.types';
-import { canApprovePayment, canLockMarks, canPublishResults, selectedClassLabel } from '../utils/principalDecision';
+import type { DisciplineIncident, PrincipalAssessment, PrincipalMetric, SchoolHealth, Urgency } from '../types/principal.types';
+import { canLockMarks, canPublishResults, selectedClassLabel } from '../utils/principalDecision';
 import { useAuthStore } from '../../../lib/auth/authStore';
 import {
-  useApprovePaymentMutation,
   useLockMarksMutation,
   usePublishResultsMutation,
-  useRejectPaymentMutation,
   useResolveDisciplineMutation,
   useReturnMarksMutation,
   usePrincipalSchoolHealth,
@@ -44,14 +42,22 @@ export function PrincipalWorkspaceShell({
   eyebrow,
   children,
   action,
+  subtitle,
+  pills,
 }: {
   title: string;
   eyebrow: string;
   children: ReactNode;
   action?: ReactNode;
+  /** Replaces the default line under the title */
+  subtitle?: string;
+  /** Replaces the school-health pills (use for pages where those figures do not apply) */
+  pills?: Array<{ label: string; value: string; tone: 'green' | 'red' | 'gold' }>;
 }) {
   const session = useAuthStore((state) => state.session);
   const userName = session?.user?.name ?? 'Principal';
+  const role = session?.user?.role;
+  const roleLine = role === 'MANAGER' ? 'Manager · Group oversight' : role === 'HEAD_OF_SCHOOL' ? 'Head of School · Executive decision authority' : 'Head master / Head of School · Executive decision authority';
   const { data: health } = usePrincipalSchoolHealth() as { data: Record<string, number> | undefined };
   const { data: approvals = [] } = usePendingMarkApprovals() as unknown as { data: unknown[] };
   return (
@@ -67,12 +73,16 @@ export function PrincipalWorkspaceShell({
           <div>
             <p className="text-[11px] font-black uppercase tracking-[0.32em] text-[#f4c96b]">{eyebrow}</p>
             <h1 className="mt-2 font-display text-[44px] font-black leading-tight tracking-[-0.04em] text-white">{title}</h1>
-            <p className="mt-1.5 text-sm font-semibold text-white/60">{userName} · Head master / Head of School · Executive decision authority</p>
+            <p className="mt-1.5 text-sm font-semibold text-white/60">{subtitle ?? `${userName} · ${roleLine}`}</p>
           </div>
-          <div className="flex shrink-0 items-start gap-3 xl:pt-2">
-            <HeaderPill label="Health"   value={`${health?.score ?? '—'} / 100`}        tone="green" />
-            <HeaderPill label="Critical" value={`${health?.critical ?? 0} alerts`}       tone="red"   />
-            <HeaderPill label="Pending"  value={`${approvals.length} approvals`}          tone="gold"  />
+          <div className="flex shrink-0 flex-wrap items-start gap-3 xl:pt-2">
+            {pills ? pills.map((pill) => <HeaderPill key={pill.label} {...pill} />) : (
+              <>
+                <HeaderPill label="Health"   value={`${health?.score ?? '—'} / 100`}        tone="green" />
+                <HeaderPill label="Critical" value={`${health?.critical ?? 0} alerts`}       tone="red"   />
+                <HeaderPill label="Pending"  value={`${approvals.length} approvals`}          tone="gold"  />
+              </>
+            )}
           </div>
         </div>
 
@@ -617,70 +627,8 @@ function Step({ label, done }: { label: string; done: boolean }) {
   );
 }
 
-// ─── Payment approval card ────────────────────────────────────────────────────
-
-export function PaymentApprovalCard({ approval }: { approval: PrincipalPaymentApproval }) {
-  const approveMutation = useApprovePaymentMutation();
-  const rejectMutation = useRejectPaymentMutation();
-  const [confirmed, setConfirmed] = useState(false);
-  const [reason, setReason] = useState('Bank evidence verified against reference.');
-  const [removed, setRemoved] = useState(false);
-  if (removed) return null;
-  const allowed = canApprovePayment(confirmed, reason);
-  const busy = approveMutation.isPending || rejectMutation.isPending;
-
-  const handleApprove = () => {
-    approveMutation.mutate({ id: approval.id, notes: reason }, {
-      onSuccess: () => { setRemoved(true); toast('Payment approved', 'success'); },
-      onError: () => toast('Failed to approve payment. Please try again.', 'error'),
-    });
-  };
-
-  const handleReject = () => {
-    if (!reason.trim()) { toast('Reason required to reject', 'warning'); return; }
-    rejectMutation.mutate({ id: approval.id, reason }, {
-      onSuccess: () => { setRemoved(true); toast('Payment rejected', 'info'); },
-      onError: () => toast('Failed to reject payment. Please try again.', 'error'),
-    });
-  };
-
-  return (
-    <div className={`rounded-2xl border border-ks-line bg-white p-5 shadow-sm transition ${urgencyClass(approval.risk, 'border')}`}>
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-[10px] font-black uppercase tracking-widest text-ks-muted">
-            {approval.paymentNumber || 'Payment'} · {approval.method.replaceAll('_', ' ')}{approval.age ? ` · waiting ${approval.age}` : ''}
-          </p>
-          <h3 className="mt-1 font-display text-xl font-black text-ks-navy">{approval.student}</h3>
-          <p className="text-sm font-semibold text-ks-muted">{approval.invoice}{approval.reference ? ` · ref: ${approval.reference}` : ''}</p>
-        </div>
-        <p className="shrink-0 font-mono text-xl font-black text-ks-navy">TZS {approval.amount.toLocaleString('en-US')}</p>
-      </div>
-      <p className="mt-2 text-xs font-bold text-ks-muted">Entered by: {approval.enteredBy}</p>
-      <textarea
-        value={reason}
-        onChange={(e) => setReason(e.target.value)}
-        className="mt-4 h-20 w-full rounded-xl border border-ks-line p-3 text-sm font-semibold outline-none focus:border-ks-blue"
-        placeholder="Approval reason (required)..."
-      />
-      <label className="mt-3 flex cursor-pointer gap-2 text-sm font-bold text-ks-slate">
-        <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} className="mt-1 h-4 w-4 accent-ks-navy" />
-        I have reviewed the evidence and invoice context.
-      </label>
-      <div className="mt-4 flex flex-wrap gap-2">
-        <Button disabled={!allowed || busy} onClick={handleApprove} className="rounded-xl bg-ks-emerald disabled:opacity-40">
-          <CheckCircle2 className="h-4 w-4" /> {approveMutation.isPending ? 'Approving…' : 'Approve'}
-        </Button>
-        <Button variant="danger" disabled={busy} onClick={handleReject} className="rounded-xl">
-          {rejectMutation.isPending ? 'Rejecting…' : 'Reject'}
-        </Button>
-        <NavLink to={`/principal/finance/approvals/${approval.id}`}>
-          <Button variant="secondary" className="rounded-xl">Full Detail</Button>
-        </NavLink>
-      </div>
-    </div>
-  );
-}
+// Payment approval card now lives in ./PaymentApproval
+export { PaymentApprovalCard, PaymentDecisionPanel } from './PaymentApproval';
 
 // ─── Discipline severity bar ──────────────────────────────────────────────────
 
