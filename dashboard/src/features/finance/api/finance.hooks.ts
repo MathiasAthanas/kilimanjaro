@@ -258,7 +258,7 @@ function normalisePayment(raw: unknown) {
     method: strOf(p.method, p.paymentMethod, p.payment_method),
     amount: decimalToNumber(p.amount ?? p.total),
     status: strOf(p.status, p.approvalStatus, p.paymentStatus) || 'PENDING',
-    enteredBy: strOf(p.enteredBy, p.recordedBy) || (p.requiresApproval && p.status === 'PENDING' ? 'Awaiting approval' : 'Finance desk'),
+    enteredBy: strOf(p.enteredBy, p.recordedBy) || 'Finance desk',
     date: strOf(p.paidAt, p.date, p.createdAt, p.created_at),
     reference: strOf(p.referenceNumber, p.reference, p.bankReference),
     notes: strOf(p.notes, p.comment, p.description),
