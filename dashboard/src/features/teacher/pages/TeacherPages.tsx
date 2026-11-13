@@ -604,7 +604,7 @@ export function MarksEntryPage() {
               )}
             </div>
             <ProgressBar value={completion} tone={completion === 100 ? 'bg-ks-emerald' : 'bg-ks-blue'} className="mt-3" />
-            {editable && <p className="mt-2 text-xs font-semibold text-ks-muted">Type a score and press Enter to go to the next student. Use the Status column for Absent or Not sat (both count as 0).</p>}
+            {editable && <p className="mt-2 text-xs font-semibold text-ks-muted">Type a score and press Enter to go to the next student. Use the Status column for Absent or Not sat: that subject is then left out of the student's average.</p>}
             {fileMsg && <p className={`mt-2 text-xs font-bold ${fileMsg.startsWith('Could not') ? 'text-ks-rose' : 'text-ks-emerald'}`} role="status">{fileMsg}</p>}
           </div>
           {rows.length === 0 ? (

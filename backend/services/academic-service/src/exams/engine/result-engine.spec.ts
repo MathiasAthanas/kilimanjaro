@@ -87,23 +87,43 @@ describe('Asha scenario (Class 6 A, 7 subjects)', () => {
     expect(summarizeStudent('PRIMARY', ashaSubjects(agri)).missingCount).toBe(1);
   });
 
-  it('Option 1: NOT_SAT → 0, included, average 57.86, failing grade', () => {
+  it('NOT_SAT is left out: the average comes from the 6 subjects with marks (67.50)', () => {
     const agri = subj('Agriculture', 0, { notSat: true });
     expect(agri.status).toBe('NOT_SAT');
-    expect(agri.percentage).toBe(0);
-    expect(agri.grade).toBe('E');
-    expect(agri.points).toBe(1);
-    expect(agri.isPassing).toBe(false);
     const s = summarizeStudent('PRIMARY', ashaSubjects(agri));
-    expect(s.mean).toBe(57.86);
-    expect(s.subjectsAssessed).toBe(7);
-    expect(s.failingCount).toBe(1);
+    expect(s.mean).toBe(67.5);
+    expect(s.subjectsAssessed).toBe(6);
+    expect(s.subjectsExpected).toBe(6);
+    expect(s.failingCount).toBe(0);
   });
 
-  it('ABSENT behaves like NOT_SAT for calculations', () => {
+  it('ABSENT set by a teacher or admin is left out the same way', () => {
     const agri = subj('Agriculture', 0, { absent: true });
     expect(agri.status).toBe('ABSENT');
-    expect(summarizeStudent('PRIMARY', ashaSubjects(agri)).mean).toBe(57.86);
+    const s = summarizeStudent('PRIMARY', ashaSubjects(agri));
+    expect(s.mean).toBe(67.5);
+    expect(s.subjectsAssessed).toBe(6);
+  });
+
+  it('a student is averaged over exactly the subjects they have marks for', () => {
+    const nine = [80, 75, 70, 85, 65, 90, 78, 72, 81].map((score, i) => subj('S' + i, score));
+    expect(summarizeStudent('PRIMARY', nine).mean).toBe(77.33);
+    const sevenOfTen = [
+      ...[80, 75, 70, 85, 65, 90, 78].map((score, i) => subj('T' + i, score)),
+      subj('X1', 0, { notSat: true }),
+      subj('X2', 0, { notSat: true }),
+      subj('X3', 0, { absent: true }),
+    ];
+    const s = summarizeStudent('PRIMARY', sevenOfTen);
+    expect(s.subjectsAssessed).toBe(7);
+    expect(s.mean).toBe(77.57);
+  });
+
+  it('a student with no marks at all has no average and is not graded', () => {
+    const s = summarizeStudent('PRIMARY', [subj('A', 0, { notSat: true }), subj('B', 0, { absent: true })]);
+    expect(s.subjectsAssessed).toBe(0);
+    expect(s.mean).toBe(0);
+    expect(s.division.descriptor).toBe('No assessed subjects');
   });
 
   it('Option 2: EXEMPT → excluded, average 67.50 from 6 of 7', () => {
@@ -161,11 +181,26 @@ describe('divisions', () => {
     expect(s.division.totalPoints).toBe(7);
   });
 
-  it('O-Level: NOT_SAT cannot improve points (F=5 not X=0)', () => {
-    const outcomes = [...o(6, 80), subj('Bio', 0, { notSat: true, scale: oLevelScale })];
+  it('O-Level: a Not sat subject is not part of the average or the best seven', () => {
+    const outcomes = [...o(7, 80), subj('Bio', 0, { notSat: true, scale: oLevelScale })];
     const s = summarizeStudent('O_LEVEL', outcomes);
+    expect(s.mean).toBe(80);
+    expect(s.division.totalPoints).toBe(7);
+    expect(s.division.division).toBe('Division I');
+  });
+
+  it('O-Level: a failed subject can be one of the seven best when only seven were sat', () => {
+    const outcomes = [...o(6, 80), subj('Bio', 5, { scale: oLevelScale })];
+    const s = summarizeStudent('O_LEVEL', outcomes);
+    expect(s.division.eligible).toBe(true);
     expect(s.division.totalPoints).toBe(6 + 5);
-    expect(s.division.division).toBe('Division I'); // 11 pts, but the F is counted
+  });
+
+  it('O-Level: with more than seven subjects only the seven best decide the division, all decide the average', () => {
+    const outcomes = [...o(7, 80), subj('Bio', 5, { scale: oLevelScale })];
+    const s = summarizeStudent('O_LEVEL', outcomes);
+    expect(s.division.totalPoints).toBe(7);
+    expect(s.mean).toBe(70.63);
   });
 
   it('O-Level: exemption leaving <7 subjects → Ungraded, average still calculated', () => {
@@ -197,22 +232,30 @@ describe('divisions', () => {
     expect(few.division.note).toMatch(/fewer than 3 eligible principal/);
   });
 
-  it('A-Level: shows a marked supporting subject without changing aggregates or division', () => {
+  it('A-Level: every subject the student sat counts toward the average; only the combination decides the division', () => {
     const principals = new Set(['phy', 'chem', 'math']);
     const mk = (id: string, score: number) =>
       buildOutcome({ subjectId: id, subjectName: id, code: id, maxScore: 100, mark: { score, isAbsent: false, notSat: false }, scale: aLevelScale });
     const outcomes = [mk('phy', 80), mk('chem', 70), mk('math', 60), mk('english', 100)];
-    outcomes[3].countsTowardAggregate = false;
 
     const summary = summarizeStudent('A_LEVEL', outcomes, principals);
 
-    expect(outcomes).toHaveLength(4);
-    expect(summary.subjectsExpected).toBe(3);
-    expect(summary.subjectsAssessed).toBe(3);
-    expect(summary.total).toBe(210);
-    expect(summary.mean).toBe(70);
+    expect(summary.subjectsExpected).toBe(4);
+    expect(summary.subjectsAssessed).toBe(4);
+    expect(summary.total).toBe(310);
+    expect(summary.mean).toBe(77.5);
     expect(summary.division.totalPoints).toBe(6);
     expect(summary.division.division).toBe('Division I');
+  });
+
+  it('A-Level: a subject recorded Not sat is left out of the average and cannot be a principal', () => {
+    const principals = new Set(['phy', 'chem', 'math']);
+    const mk = (id: string, score: number, notSat = false) =>
+      buildOutcome({ subjectId: id, subjectName: id, code: id, maxScore: 100, mark: { score, isAbsent: false, notSat }, scale: aLevelScale });
+    const summary = summarizeStudent('A_LEVEL', [mk('phy', 80), mk('chem', 70), mk('math', 0, true), mk('english', 60)], principals);
+
+    expect(summary.mean).toBe(70);
+    expect(summary.division.eligible).toBe(false);
   });
 
   it.each([

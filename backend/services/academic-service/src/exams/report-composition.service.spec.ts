@@ -20,23 +20,13 @@ describe('report-card composition A-Level combinations', () => {
   });
 });
 
-describe('report-card composition of reference-only subjects', () => {
-  it('keeps a reference subject the student sat so it appears on the card', () => {
-    expect(shouldComposeRow(false, 'SCORED')).toBe(true);
+describe('report-card composition of subjects the student did', () => {
+  it.each(['SCORED', 'EXEMPT', 'MISSING'] as const)('keeps a subject whose status is %s', (status) => {
+    expect(shouldComposeRow(status)).toBe(true);
   });
 
-  it.each(['NOT_SAT', 'ABSENT', 'EXEMPT', 'MISSING'] as const)(
-    'leaves a reference subject off the card when its status is %s',
-    (status) => {
-      expect(shouldComposeRow(false, status)).toBe(false);
-    },
-  );
-
-  it.each(['SCORED', 'NOT_SAT', 'ABSENT', 'EXEMPT', 'MISSING'] as const)(
-    'always keeps a subject that counts toward the aggregate (%s)',
-    (status) => {
-      expect(shouldComposeRow(true, status)).toBe(true);
-    },
-  );
+  it.each(['NOT_SAT', 'ABSENT'] as const)('leaves a subject recorded %s off the card', (status) => {
+    expect(shouldComposeRow(status)).toBe(false);
+  });
 });
 

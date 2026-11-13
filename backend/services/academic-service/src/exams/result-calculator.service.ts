@@ -350,11 +350,12 @@ export class ResultCalculatorService {
             studentCombinationId: enrol.combinationId,
             combinationSubjectIds: enrol.combinationId ? comboSubjects.get(enrol.combinationId) : undefined,
           });
-          // A-Level schools may record subsidiary or supporting subjects outside
-          // the student's combination. Keep an entered mark visible, but never
-          // let it alter combination totals, averages, ranks or divisions.
-          const displayOnly = stage === 'A_LEVEL' && !expected && !!mark;
-          if (!expected && !displayOnly) continue;
+          // A-Level schools also record subsidiary or supporting subjects outside the student's
+          // combination (e.g. Academic Communication, Basic Applied Mathematics). Any subject the
+          // student has a mark for counts toward the average and position; only the division is
+          // restricted to the combination's principal subjects (see principalsByCombo).
+          const extraSubject = stage === 'A_LEVEL' && !expected && !!mark;
+          if (!expected && !extraSubject) continue;
 
           const scale = (await scaleFor(a.educationStage, a.classLevel ?? meta.level, a.subjectId, meta.name)) ?? { grades: [] };
           const exemption = findExemption(classId, a.subjectId, s.id);
@@ -367,7 +368,6 @@ export class ResultCalculatorService {
             exemption: exemption ? { id: exemption.id, reason: exemption.reason } : null,
             scale,
           });
-          outcome.countsTowardAggregate = expected;
           outcomes.push(outcome);
           if (expected && outcome.status === 'MISSING') {
             missing.push({

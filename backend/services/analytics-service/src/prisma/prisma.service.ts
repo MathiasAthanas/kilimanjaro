@@ -7,12 +7,13 @@ const READ_ACTIONS = new Set(['findMany', 'findFirst', 'count', 'aggregate', 'gr
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   constructor() {
     super();
-    // Every analytics read of TermResult excludes EXEMPT subjects, so exemptions can never
-    // distort averages, pass rates, rankings or distributions (one rule, applied centrally).
+    // Every analytics read of TermResult only counts subjects the student actually has a mark for:
+    // EXEMPT, Not sat and Absent subjects are left out, so they can never distort averages, pass
+    // rates, rankings or distributions (one rule, applied centrally).
     this.$use(async (params, next) => {
       if (params.model === 'TermResult' && READ_ACTIONS.has(params.action)) {
         const args = (params.args ?? {}) as { where?: Record<string, unknown> };
-        args.where = { AND: [args.where ?? {}, { resultStatus: { not: 'EXEMPT' } }] };
+        args.where = { AND: [args.where ?? {}, { resultStatus: { notIn: ['EXEMPT', 'NOT_SAT', 'ABSENT'] } }] };
         params.args = args;
       }
       return next(params);

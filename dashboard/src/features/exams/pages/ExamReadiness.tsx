@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { AlertTriangle, CheckCircle2, Eye, ShieldCheck, Undo2 } from 'lucide-react';
 import { Button } from '../../../components/common/Button';
 import { Card } from '../../../components/common/Card';
@@ -65,6 +66,8 @@ export function ReadinessPanel({
   if (q.isError) return <ErrorState title="Could not load readiness" message={S((q.error as any)?.message)} onRetry={() => q.refetch()} />;
   if (!d) return null;
   const canExempt = status !== 'PUBLISHED' && status !== 'DRAFT';
+  // While the window is open or reopened for changes, every cell and subject column links to the marks editor.
+  const canEditMarks = status === 'OPEN' || status === 'REOPENED';
 
   return (
     <div className="space-y-4">
@@ -101,7 +104,17 @@ export function ReadinessPanel({
               <thead className="bg-ks-paper text-left text-[11px] uppercase tracking-wider text-ks-muted">
                 <tr>
                   <th className="sticky left-0 bg-ks-paper px-3 py-2">Student</th>
-                  {subjects.map((s) => <th key={s.subjectId} className="px-2 py-2 text-center" title={s.subjectName}>{S(s.code || s.subjectName).slice(0, 8)}</th>)}
+                  {subjects.map((s) => {
+                    const target = activeClass?.assessments?.[s.subjectId]?.assessmentId;
+                    return (
+                      <th key={s.subjectId} className="px-2 py-2 text-center" title={s.subjectName}>
+                        {S(s.code || s.subjectName).slice(0, 8)}
+                        {canEditMarks && target && (
+                          <Link to={`/exams/marks/${S(target)}`} className="mt-1 block text-[10px] font-bold normal-case tracking-normal text-ks-blue underline">Enter marks</Link>
+                        )}
+                      </th>
+                    );
+                  })}
                   <th className="px-2 py-2 text-center">Assessed</th><th className="px-2 py-2 text-center">Average</th><th className="px-2 py-2 text-center">Division</th>
                 </tr>
               </thead>
@@ -113,10 +126,13 @@ export function ReadinessPanel({
                       const c = st.cells?.[s.subjectId];
                       if (!c) return <td key={s.subjectId} className="px-2 py-2 text-center text-ks-muted" title="Not expected: the student does not take this subject">·</td>;
                       const style = STATUS_STYLE[c.status] ?? STATUS_STYLE.SCORED;
-                      const displayOnly = c.countsTowardAggregate === false;
+                      const target = activeClass?.assessments?.[s.subjectId]?.assessmentId;
                       return (
-                        <td key={s.subjectId} className={`px-2 py-2 text-center font-semibold ${displayOnly ? 'bg-ks-paper text-ks-muted' : style.cell}`} title={c.exemptReason ? `Exempt: ${c.exemptReason}` : displayOnly ? 'Shown for reference; excluded from total, average, rank and division' : style.label}>
-                          {cellText(c)}{displayOnly ? '*' : ''}
+                        <td key={s.subjectId} className={`px-2 py-2 text-center font-semibold ${style.cell}`} title={c.exemptReason ? `Exempt: ${c.exemptReason}` : style.label}>
+                          {cellText(c)}
+                          {canEditMarks && target && c.status !== 'EXEMPT' && (
+                            <Link to={`/exams/marks/${S(target)}`} className="mt-1 block text-[10px] font-bold underline">{c.status === 'MISSING' ? 'Enter mark' : 'Edit'}</Link>
+                          )}
                           {c.status === 'MISSING' && canExempt && (
                             <button type="button" className="mt-1 block w-full text-[10px] font-bold underline" onClick={() => onExempt({ classId: activeClass.classId, subjectId: s.subjectId, studentId: st.studentId })}>Exempt…</button>
                           )}
@@ -133,7 +149,7 @@ export function ReadinessPanel({
           </div>
         </Card>
       )}
-      <p className="text-xs text-ks-muted">A dot (·) means the student does not take that subject, so no mark or exemption is needed. A mark can be a score, <b>Absent</b> or <b>Not sat</b> (both count as 0%), or the subject can be <b>exempt</b> (excluded from the average). An asterisk (*) marks a displayed A-Level supporting subject that does not affect totals, averages, ranks or divisions.</p>
+      <p className="text-xs text-ks-muted">A dot (·) means the student does not take that subject, so no mark is needed. A mark can be a score, or <b>Absent</b> / <b>Not sat</b> when a teacher or admin sets it: those subjects are left out of the average, so the average is always calculated from the subjects the student has marks for. A subject can also be <b>exempt</b>. A division only uses the seven best subjects (O-Level) or the combination subjects (A-Level), while the average and position use every subject with a mark. While the window is open or reopened, use <b>Enter marks</b> / <b>Edit</b> to update any subject.</p>
     </div>
   );
 }

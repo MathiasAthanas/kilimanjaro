@@ -5366,7 +5366,7 @@ export function ReportCardPolicyPage() {
           <StageToggle label="Apply alternative-subject exemptions" description="When IRE is scored, CRE is excluded; when CRE is scored, IRE is excluded." checked={form.autoAlternativeSubjectExemptions} onChange={setToggle('autoAlternativeSubjectExemptions')} />
         </div>
         <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-          Absent and Not Sat results count as zero. Approved exemptions and subjects omitted from the selected exam do not count.
+          The average is always calculated from the subjects a student has marks for. Subjects a teacher or admin records as Absent or Not Sat, approved exemptions and subjects omitted from the selected exam are left out.
         </div>
       </AdminFormSection>
 

@@ -13,8 +13,13 @@
 
 export type SubjectStatus = 'SCORED' | 'ABSENT' | 'NOT_SAT' | 'MISSING' | 'EXEMPT';
 
-/** Statuses that take part in averages / ranking / divisions. */
-export const COUNTED_STATUSES: SubjectStatus[] = ['SCORED', 'ABSENT', 'NOT_SAT'];
+/**
+ * Statuses that take part in averages / ranking / divisions.
+ * The average is always calculated from the subjects the student actually has a mark for:
+ * a subject recorded "Not sat" or "Absent" by a teacher or admin is simply left out, so no
+ * fixed subject count is ever used as the divisor.
+ */
+export const COUNTED_STATUSES: SubjectStatus[] = ['SCORED'];
 
 export interface GradeBand {
   grade: string;
@@ -87,7 +92,7 @@ export interface SubjectOutcome {
   exempt: boolean;
   exemptionId?: string | null;
   exemptReason?: string | null;
-  /** False when a recorded mark is shown for context but must not affect aggregates or divisions. */
+  /** Legacy flag, always true now: every subject the student has a mark for counts toward the average. */
   countsTowardAggregate?: boolean;
 }
 
@@ -167,8 +172,7 @@ export function buildOutcome(input: BuildOutcomeInput): SubjectOutcome {
   };
 }
 
-export const isCounted = (o: { status: SubjectStatus; countsTowardAggregate?: boolean }): boolean =>
-  o.countsTowardAggregate !== false && COUNTED_STATUSES.includes(o.status);
+export const isCounted = (o: { status: SubjectStatus }): boolean => COUNTED_STATUSES.includes(o.status);
 
 // ─── Divisions ────────────────────────────────────────────────────────────────
 
@@ -354,7 +358,8 @@ export function summarizeStudent(
   direction: PointsDirection = 'HIGHER_BETTER',
   primaryPassMark = 50,
 ): StudentSummary {
-  const applicable = outcomes.filter((outcome) => outcome.countsTowardAggregate !== false);
+  // Subjects the student was set to take, excluding those recorded Not sat / Absent.
+  const applicable = outcomes.filter((outcome) => outcome.status !== 'NOT_SAT' && outcome.status !== 'ABSENT');
   const counted = outcomes.filter(isCounted);
   const total = counted.reduce((s, o) => s + o.score, 0);
   const mean = counted.length ? round(counted.reduce((s, o) => s + (o.percentage ?? 0), 0) / counted.length) : 0;

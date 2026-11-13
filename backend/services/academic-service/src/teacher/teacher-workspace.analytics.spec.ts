@@ -1,7 +1,7 @@
 import { TeacherWorkspaceService } from './teacher-workspace.service';
 
 describe('TeacherWorkspaceService analytics', () => {
-  it('counts published student grades for each subject and excludes exempt results', async () => {
+  it('counts published student grades for each subject and counts only subjects the student has a mark for', async () => {
     const prisma = {
       mark: {
         findMany: jest.fn().mockResolvedValue([
@@ -40,7 +40,7 @@ describe('TeacherWorkspaceService analytics', () => {
     });
 
     expect(prisma.termResult.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({ isPublished: true, resultStatus: { not: 'EXEMPT' } }),
+      where: expect.objectContaining({ isPublished: true, resultStatus: 'SCORED' }),
     }));
     expect(result.courses[0]).toMatchObject({
       subjectName: 'Mathematics',

@@ -197,11 +197,22 @@ export class ExamResultsService {
     }
     const closable = ([ExamWindowStatus.OPEN, ExamWindowStatus.REOPENED] as ExamWindowStatus[]).includes(ctx.window.status);
 
+    // The assessment behind each class + subject, so any mark can be updated in one click while the window is open.
+    const assessmentRows = await this.prisma.assessment.findMany({
+      where: { examWindowId: windowId },
+      select: { id: true, classId: true, subjectId: true, status: true },
+    });
+
     const classes = ctx.classIds.map((classId) => {
       const group = ctx.rows.filter((r) => r.classId === classId);
       return {
         classId,
         className: group[0]?.className ?? classId,
+        assessments: Object.fromEntries(
+          assessmentRows
+            .filter((a) => a.classId === classId)
+            .map((a) => [a.subjectId, { assessmentId: a.id, status: a.status }]),
+        ),
         students: group
           .sort((a, b) => (a.registrationNumber ?? '').localeCompare(b.registrationNumber ?? ''))
           .map((r) => ({

@@ -50,9 +50,15 @@ export class ReportCardsService {
     return payload as T;
   }
 
-  /** Old rows predate this metadata and must retain their original counting behaviour. */
-  private countsTowardAggregate(row: { assessmentScores?: unknown }): boolean {
-    return (row.assessmentScores as any)?.countsTowardAggregate !== false;
+  /** A subject counts toward the average, position and division only when the student has a mark for it. */
+  private isCounted(row: { resultStatus?: string | null }): boolean {
+    return (row.resultStatus ?? 'SCORED') === 'SCORED';
+  }
+
+  /** A subject the student did (or was exempted from); "Not sat" / "Absent" subjects are not part of the card. */
+  private isTaken(row: { resultStatus?: string | null }): boolean {
+    const status = row.resultStatus ?? 'SCORED';
+    return status !== 'NOT_SAT' && status !== 'ABSENT';
   }
 
   /**
@@ -77,8 +83,8 @@ export class ReportCardsService {
     schoolId: string | null,
     policy: ReportCardPolicyValues,
   ) {
-    const applicable = rows.filter((row) => this.countsTowardAggregate(row));
-    const counted = applicable.filter((r) => (r.resultStatus ?? 'SCORED') !== 'EXEMPT');
+    const applicable = rows.filter((row) => this.isTaken(row));
+    const counted = rows.filter((row) => this.isCounted(row));
     const avg = counted.length ? round(counted.reduce((s, r) => s + r.weightedTotal, 0) / counted.length) : 0;
     const first = rows[0];
     const resolved = counted.length
@@ -243,7 +249,7 @@ export class ReportCardsService {
     }
 
     const averages = [...byStudent.entries()].map(([studentId, rows]) => {
-      const counted = rows.filter((r) => this.countsTowardAggregate(r) && (r.resultStatus ?? 'SCORED') !== 'EXEMPT');
+      const counted = rows.filter((r) => this.isCounted(r));
       return {
         studentId,
         average: counted.length ? round(counted.reduce((sum, item) => sum + item.weightedTotal, 0) / counted.length) : 0,
@@ -286,7 +292,7 @@ export class ReportCardsService {
     }
     const levelAverages = [...levelByStudent.entries()].map(([studentId, rawRows]) => {
       const applicable = this.applyAlternativeSubjectPolicy(rawRows, policy)
-        .filter((row) => this.countsTowardAggregate(row) && (row.resultStatus ?? 'SCORED') !== 'EXEMPT');
+        .filter((row) => this.isCounted(row));
       return {
         studentId,
         average: applicable.length
@@ -395,9 +401,7 @@ export class ReportCardsService {
         ? performance.pairings.some((item: any) => ['ACTIVE', 'SUGGESTED'].includes(item.status))
         : false;
 
-      const visibleRows = policy.hideExemptSubjects
-        ? rows.filter((row) => row.resultStatus !== 'EXEMPT')
-        : rows;
+      const visibleRows = rows.filter((row) => this.isTaken(row) && (!policy.hideExemptSubjects || row.resultStatus !== 'EXEMPT'));
       const pdfUrl = await this.pdfService.generatePdf({
         studentId,
         termId,
@@ -1008,9 +1012,7 @@ export class ReportCardsService {
     const className = studentProfile?.enrolments?.[0]?.class?.name || firstRow.classId;
 
     const labels = await this.termLabels(termId, actorId);
-    const visibleRows = policy.hideExemptSubjects
-      ? rows.filter((row) => row.resultStatus !== 'EXEMPT')
-      : rows;
+    const visibleRows = rows.filter((row) => this.isTaken(row) && (!policy.hideExemptSubjects || row.resultStatus !== 'EXEMPT'));
     const pdfUrl = await this.pdfService.generatePdf({
       studentId,
       termId,

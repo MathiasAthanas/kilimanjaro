@@ -398,7 +398,7 @@ export class TeacherWorkspaceService {
             classSubjectId: { in: csIds },
             teacherId: user.id,
             isPublished: true,
-            resultStatus: { not: 'EXEMPT' },
+            resultStatus: 'SCORED',
             ...(q.academicYearId ? { academicYearId: q.academicYearId } : {}),
             ...(q.termId ? { termId: q.termId } : {}),
           },

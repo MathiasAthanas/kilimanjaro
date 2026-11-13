@@ -62,18 +62,17 @@ function readOutcome(raw: any): SubjectOutcome {
     exempt: status === 'EXEMPT',
     exemptionId: raw.exemptionId ?? null,
     exemptReason: raw.exemptReason ?? null,
-    countsTowardAggregate: raw.countsTowardAggregate !== false,
+    countsTowardAggregate: true,
   };
 }
 
 /**
- * Reference-only subjects (kept visible on the exam results but excluded from every total,
- * average, rank and division) belong on a report card only when the student actually sat
- * them. A "not sat" / absent / exempt reference subject is left off the card entirely.
- * Subjects that count toward the aggregate are always kept, whatever their status.
+ * A subject belongs on the report card only when the student actually did it. A subject a
+ * teacher or admin recorded as "Not sat" or "Absent" is left off entirely (it is not part
+ * of the average, position or division), whichever subject it is.
  */
-export function shouldComposeRow(countsTowardAggregate: boolean, status: SubjectStatus): boolean {
-  return countsTowardAggregate || status === 'SCORED';
+export function shouldComposeRow(status: SubjectStatus): boolean {
+  return status !== 'NOT_SAT' && status !== 'ABSENT';
 }
 
 export function indexStudentCombinations(
@@ -265,8 +264,7 @@ export class ReportCompositionService {
         const meta = csMeta.get(`${classId}:${subjectId}`);
         if (!meta) continue;
         const blend = blendWindows(contribs);
-        const countsTowardAggregate = contribs.some((contribution) => contribution.outcome.countsTowardAggregate !== false);
-        if (!shouldComposeRow(countsTowardAggregate, blend.status)) continue;
+        if (!shouldComposeRow(blend.status)) continue;
         if (blend.status === 'MISSING') {
           throw new BadRequestException(
             `${primary.studentName ?? studentId} is missing a ${meta.subjectName} result in a selected window. Resolve it before composing report cards.`,
@@ -295,7 +293,7 @@ export class ReportCompositionService {
           points: resolved.points,
           remark: !isExempt && blend.status !== 'SCORED' ? (blend.status === 'NOT_SAT' ? 'Not sat' : 'Absent') : resolved.remark,
           isPassing: !isExempt && blend.status !== 'SCORED' ? false : resolved.isPassing,
-          countsTowardAggregate,
+          countsTowardAggregate: true,
         });
       }
     }
