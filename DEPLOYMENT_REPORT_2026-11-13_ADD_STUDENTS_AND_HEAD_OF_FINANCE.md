@@ -75,3 +75,15 @@ Backups taken before the change: database `/opt/kilimanjaro/backups/kilimanjaro_
 Verification: all eight services online, health OK, dashboard 200 (bundle `index-xxJVIYiF.js`), enum value present, store fix present in the compiled service, no fresh error lines in any log. Marks (7011, fingerprint `77d32e17...`), users (1752) and finance rows (1 invoice, 1 payment, 1 receipt) unchanged.
 
 On-screen test coverage and gaps: tested fee category, invoice generation, cash and bank payments, verification notes, approve, reject and refund (as Head of School), receipts and PDFs, expenses, store items and stock receipt, assets, fund request create, review and disburse, defaulter contact log, all eight Export Center CSVs, statement PDF and CSV. Not tested: defaulter SMS (no dashboard button; the gateway endpoint only queues a stub job), the fee-structure form, and a real Head of Finance login on production.
+
+## 4. Production finance schema catch-up (fee categories and fee structures returned 500)
+
+Reported by staff at about 17:41 UTC: creating or editing fee categories and fee structures returned "Internal Server Error". The finance service log showed `The column schoolId does not exist in the current database` on `financialAuditLog.create()`, so every audited finance write failed.
+
+Cause: three finance migrations from 2026-10-24 (`asset_school_scope`, `audit_school_scope`, `defaulter_contacts`) had never been applied to the production database (the finance schema has no migration history table, so nothing applies them automatically). My earlier on-screen finance tests ran against a local database that had them, so they did not catch it.
+
+Fix (database only, no code change, no restart), 2026-11-13 17:49 UTC: backup `/opt/kilimanjaro/backups/finance_schema_pre_school_scope_20261113T174929Z.dump` (finance schema, SHA-256 `d6e169e0d0aa1e07037b05f8483142a1f090e4e12473bd2dbe21e8672796e8e7`), then the three idempotent migrations applied in one transaction (`Asset.schoolId`, `FinancialAuditLog.schoolId`, table `DefaulterContact`, indexes). The audit log was empty, so no rows were touched.
+
+Verification: `prisma migrate diff` of production against each service's schema now shows no missing columns, tables or enum values in finance, academic, student, notification, auth, gateway or e-learning (analytics mirrors other schemas' tables and is not a real difference). Remaining finance differences are four extra `schoolId` indexes and one truncated index name; harmless. All 8 services online, health OK.
+
+Lesson: after any finance deploy, run `prisma migrate diff --from-url $DATABASE_URL --to-schema-datamodel prisma/schema.prisma --script` on the server and apply missing additive changes by hand.
