@@ -14,7 +14,7 @@ export function ContextTaskBar() {
   const groupOperationsSections = (role === 'MANAGER' || role === 'SUPER_ADMIN')
     ? getSectionsForRole('ADMIN').filter((item) => ['Notifications', 'Timetable', 'Reports & Audit'].includes(item.title))
     : [];
-  const groupFinanceSections = (role === 'MANAGER' || role === 'SUPER_ADMIN' || role === 'HEAD_OF_FINANCE')
+  const groupFinanceSections = (role === 'MANAGER' || role === 'SUPER_ADMIN')
     ? getSectionsForRole('FINANCE').filter((item) => item.title !== 'Finance Desk')
     : [];
   const section = getActiveSection([...groupAcademicSections, ...groupOperationsSections, ...groupFinanceSections, ...roleSections], pathname);

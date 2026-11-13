@@ -32,7 +32,7 @@ export class ClassesController {
   }
 
   @Get('classes')
-  @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN', 'ACADEMIC_QA', 'FINANCE', 'HEAD_OF_DEPARTMENT', 'TEACHER', 'ADMISSIONS')
+  @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN', 'ACADEMIC_QA', 'FINANCE', 'HEAD_OF_FINANCE', 'HEAD_OF_DEPARTMENT', 'TEACHER', 'ADMISSIONS')
   @ApiOperation({ summary: 'List classes by academic year/level/stream' })
   async listClasses(
     @Query('academicYearId') academicYearId?: string,
@@ -84,7 +84,7 @@ export class ClassesController {
   }
 
   @Get('classes/:classId/students')
-  @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN', 'ACADEMIC_QA', 'FINANCE', 'HEAD_OF_DEPARTMENT', 'TEACHER', 'ADMISSIONS')
+  @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN', 'ACADEMIC_QA', 'FINANCE', 'HEAD_OF_FINANCE', 'HEAD_OF_DEPARTMENT', 'TEACHER', 'ADMISSIONS')
   @ApiOperation({ summary: 'Class roster with guardian/profile/account summary' })
   async classStudents(
     @Param('classId') classId: string,
@@ -113,7 +113,7 @@ export class ClassesController {
   }
 
   @Get('academic-years')
-  @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN', 'ACADEMIC_QA', 'FINANCE', 'HEAD_OF_DEPARTMENT', 'TEACHER', 'ADMISSIONS')
+  @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN', 'ACADEMIC_QA', 'FINANCE', 'HEAD_OF_FINANCE', 'HEAD_OF_DEPARTMENT', 'TEACHER', 'ADMISSIONS')
   @ApiOperation({ summary: 'List academic years' })
   async listAcademicYears() {
     return this.classesService.listAcademicYears();
@@ -127,7 +127,7 @@ export class ClassesController {
   }
 
   @Get('terms')
-  @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN', 'ACADEMIC_QA', 'FINANCE', 'HEAD_OF_DEPARTMENT', 'TEACHER', 'STUDENT', 'PARENT', 'GUARDIAN')
+  @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN', 'ACADEMIC_QA', 'FINANCE', 'HEAD_OF_FINANCE', 'HEAD_OF_DEPARTMENT', 'TEACHER', 'STUDENT', 'PARENT', 'GUARDIAN')
   @ApiOperation({ summary: 'List terms by academic year/current flag' })
   async listTerms(@Query('academicYearId') academicYearId?: string, @Query('isCurrent') isCurrent?: string) {
     return this.classesService.listTerms({

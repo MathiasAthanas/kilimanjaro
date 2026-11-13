@@ -5,7 +5,7 @@ import { GatewayUser, UiApiService, UiEnvelope } from '../ui/ui-api.service';
 import { OperationRecord, OperationsStoreService } from './operations-store.service';
 
 const ADMIN = ['SYSTEM_ADMIN'];
-const LEADERSHIP = ['SYSTEM_ADMIN', 'PRINCIPAL', 'ACADEMIC_QA', 'HEAD_OF_DEPARTMENT', 'FINANCE'];
+const LEADERSHIP = ['SYSTEM_ADMIN', 'PRINCIPAL', 'ACADEMIC_QA', 'HEAD_OF_DEPARTMENT', 'FINANCE', 'HEAD_OF_FINANCE'];
 const ACADEMIC_LEADERS = ['SYSTEM_ADMIN', 'PRINCIPAL', 'ACADEMIC_QA', 'HEAD_OF_DEPARTMENT'];
 const TEACHERS = ['SYSTEM_ADMIN', 'TEACHER', 'HEAD_OF_DEPARTMENT'];
 
@@ -430,7 +430,7 @@ export class OperationsController {
   }
 
   @Post('finance/payments/:id/evidence')
-  @Roles('FINANCE', 'PRINCIPAL', 'SYSTEM_ADMIN')
+  @Roles('FINANCE', 'HEAD_OF_FINANCE', 'PRINCIPAL', 'SYSTEM_ADMIN')
   paymentEvidence(@CurrentUser() user: GatewayUser, @Param('id') id: string, @Body() body: Record<string, unknown>): UiEnvelope {
     const evidence = this.store.create('payment-evidence', {
       paymentId: id,
@@ -446,19 +446,19 @@ export class OperationsController {
   }
 
   @Get('finance/payments/:id/evidence')
-  @Roles('FINANCE', 'PRINCIPAL', 'SYSTEM_ADMIN')
+  @Roles('FINANCE', 'HEAD_OF_FINANCE', 'PRINCIPAL', 'SYSTEM_ADMIN')
   paymentEvidenceList(@Param('id') id: string): UiEnvelope {
     return this.ui.envelope({ evidence: this.store.list('payment-evidence').filter((item) => item.paymentId === id) });
   }
 
   @Get('finance/reconciliation/cash-drawers')
-  @Roles('FINANCE', 'PRINCIPAL', 'SYSTEM_ADMIN')
+  @Roles('FINANCE', 'HEAD_OF_FINANCE', 'PRINCIPAL', 'SYSTEM_ADMIN')
   cashDrawers(): UiEnvelope {
     return this.ui.envelope({ cashDrawers: this.store.list('cash-drawers') });
   }
 
   @Post('finance/reconciliation/cash-drawers/open')
-  @Roles('FINANCE', 'SYSTEM_ADMIN')
+  @Roles('FINANCE', 'HEAD_OF_FINANCE', 'SYSTEM_ADMIN')
   openCashDrawer(@CurrentUser() user: GatewayUser, @Body() body: Record<string, unknown>): UiEnvelope {
     const drawer = this.store.create('cash-drawers', {
       status: 'OPEN',
@@ -472,7 +472,7 @@ export class OperationsController {
   }
 
   @Post('finance/reconciliation/cash-drawers/:id/close')
-  @Roles('FINANCE', 'SYSTEM_ADMIN')
+  @Roles('FINANCE', 'HEAD_OF_FINANCE', 'SYSTEM_ADMIN')
   closeCashDrawer(@CurrentUser() user: GatewayUser, @Param('id') id: string, @Body() body: Record<string, unknown>): UiEnvelope {
     const expectedCash = Number(body.expectedCash || 0);
     const countedCash = Number(body.countedCash || 0);
@@ -490,7 +490,7 @@ export class OperationsController {
   }
 
   @Post('finance/reconciliation/bank-statements/import')
-  @Roles('FINANCE', 'SYSTEM_ADMIN')
+  @Roles('FINANCE', 'HEAD_OF_FINANCE', 'SYSTEM_ADMIN')
   importBankStatement(@CurrentUser() user: GatewayUser, @Body() body: Record<string, unknown>): UiEnvelope {
     const schoolId = this.requireActiveSchool(user);
     const statement = this.store.create('bank-statement-imports', {
@@ -507,13 +507,13 @@ export class OperationsController {
   }
 
   @Get('finance/reconciliation/matches')
-  @Roles('FINANCE', 'PRINCIPAL', 'SYSTEM_ADMIN')
+  @Roles('FINANCE', 'HEAD_OF_FINANCE', 'PRINCIPAL', 'SYSTEM_ADMIN')
   reconciliationMatches(): UiEnvelope {
     return this.ui.envelope({ matches: this.store.list('bank-reconciliation-matches') });
   }
 
   @Patch('finance/reconciliation/matches/:id/confirm')
-  @Roles('FINANCE', 'SYSTEM_ADMIN')
+  @Roles('FINANCE', 'HEAD_OF_FINANCE', 'SYSTEM_ADMIN')
   confirmReconciliationMatch(@CurrentUser() user: GatewayUser, @Param('id') id: string, @Body() body: Record<string, unknown>): UiEnvelope {
     const match = this.store.update('bank-reconciliation-matches', id, {
       status: 'CONFIRMED',
@@ -526,13 +526,13 @@ export class OperationsController {
   }
 
   @Get('finance/assets/:id/maintenance')
-  @Roles('FINANCE', 'PRINCIPAL', 'SYSTEM_ADMIN')
+  @Roles('FINANCE', 'HEAD_OF_FINANCE', 'PRINCIPAL', 'SYSTEM_ADMIN')
   assetMaintenance(@Param('id') id: string): UiEnvelope {
     return this.ui.envelope({ events: this.store.list('asset-maintenance').filter((item) => item.assetId === id) });
   }
 
   @Post('finance/assets/:id/maintenance')
-  @Roles('FINANCE', 'SYSTEM_ADMIN')
+  @Roles('FINANCE', 'HEAD_OF_FINANCE', 'SYSTEM_ADMIN')
   createAssetMaintenance(@CurrentUser() user: GatewayUser, @Param('id') id: string, @Body() body: Record<string, unknown>): UiEnvelope {
     const event = this.store.create('asset-maintenance', {
       assetId: id,
@@ -547,7 +547,7 @@ export class OperationsController {
   }
 
   @Post('finance/assets/:id/photos')
-  @Roles('FINANCE', 'SYSTEM_ADMIN')
+  @Roles('FINANCE', 'HEAD_OF_FINANCE', 'SYSTEM_ADMIN')
   assetPhoto(@CurrentUser() user: GatewayUser, @Param('id') id: string, @Body() body: Record<string, unknown>): UiEnvelope {
     const photo = this.store.create('asset-photos', {
       assetId: id,
@@ -560,7 +560,7 @@ export class OperationsController {
   }
 
   @Post('finance/fee-defaulters/notify')
-  @Roles('FINANCE', 'PRINCIPAL', 'SYSTEM_ADMIN')
+  @Roles('FINANCE', 'HEAD_OF_FINANCE', 'PRINCIPAL', 'SYSTEM_ADMIN')
   notifyFeeDefaulters(@CurrentUser() user: GatewayUser, @Body() body: Record<string, unknown>): UiEnvelope {
     const job = this.store.create('notification-jobs', {
       type: 'FEE_DEFAULTERS',

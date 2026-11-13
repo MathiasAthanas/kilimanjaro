@@ -24,6 +24,14 @@ describe('role navigation flow', () => {
     }
   });
 
+  it('gives the Head of Finance every finance-officer task, plus the group totals', () => {
+    const officer = getSectionsForRole('FINANCE').flatMap((section) => section.items.map((item) => item.to));
+    const head = getSectionsForRole('HEAD_OF_FINANCE').flatMap((section) => section.items.map((item) => item.to));
+    expect(head).toEqual(expect.arrayContaining(officer));
+    expect(head).toContain('/finance-group');
+    expect(head).toEqual(expect.arrayContaining(['/finance/payments/cash', '/finance/invoices/generate', '/finance/fee-structures', '/finance/expenses']));
+  });
+
   it('finds the most specific section on nested people routes', () => {
     const sections = getSectionsForRole('ADMIN');
     expect(getActiveSection(sections, '/admin/users/123/edit')?.title).toBe('Users & Staff');

@@ -12,7 +12,7 @@ const AQA_ROLES = ['ACADEMIC_QA', 'PRINCIPAL', 'SYSTEM_ADMIN'];
 const FINANCE_ROLES = ['FINANCE', 'HEAD_OF_FINANCE', 'PRINCIPAL', 'HEAD_OF_SCHOOL', 'MANAGING_DIRECTOR', 'SYSTEM_ADMIN'];
 const PRINCIPAL_ROLES = ['PRINCIPAL', 'HEAD_OF_SCHOOL', 'MANAGER', 'SUPER_ADMIN', 'SYSTEM_ADMIN'];
 const ADMIN_ROLES = ['SYSTEM_ADMIN'];
-const LEADERSHIP_ROLES = ['SYSTEM_ADMIN', 'PRINCIPAL', 'ACADEMIC_QA', 'HEAD_OF_DEPARTMENT', 'FINANCE'];
+const LEADERSHIP_ROLES = ['SYSTEM_ADMIN', 'PRINCIPAL', 'ACADEMIC_QA', 'HEAD_OF_DEPARTMENT', 'FINANCE', 'HEAD_OF_FINANCE'];
 
 @Controller(['', 'api/v1'])
 export class UiController {
@@ -934,7 +934,7 @@ export class UiController {
       templates: [
         { id: 'teacher-performance', title: 'Teacher Performance Review', roles: ['HEAD_OF_DEPARTMENT', 'PRINCIPAL'] },
         { id: 'department-quality', title: 'Department Quality Pack', roles: ['ACADEMIC_QA', 'PRINCIPAL'] },
-        { id: 'finance-board-pack', title: 'Finance Board Pack', roles: ['FINANCE', 'PRINCIPAL'] },
+        { id: 'finance-board-pack', title: 'Finance Board Pack', roles: ['FINANCE', 'HEAD_OF_FINANCE', 'PRINCIPAL'] },
         { id: 'student-risk', title: 'Student Risk Register', roles: ['TEACHER', 'HEAD_OF_DEPARTMENT', 'ACADEMIC_QA'] },
       ],
     });

@@ -41,7 +41,7 @@ export class DisciplineController {
     'SYSTEM_ADMIN',
     'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN',
     'ACADEMIC_QA',
-    'FINANCE',
+    'FINANCE', 'HEAD_OF_FINANCE',
     'HEAD_OF_DEPARTMENT',
     'TEACHER',
     'PARENT',

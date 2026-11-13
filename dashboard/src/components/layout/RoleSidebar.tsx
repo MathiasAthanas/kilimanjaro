@@ -643,7 +643,8 @@ export function getSectionsForRole(role: string | undefined): SidebarSection[] {
   if (role === 'ADMISSIONS') return [...admissionsSections, ...sharedSections];
   if (role === 'MANAGER')          return [...managerSections,       ...sharedSections];
   if (role === 'SUPER_ADMIN')      return [...superAdminSections,    ...sharedSections];
-  if (role === 'HEAD_OF_FINANCE')  return [...headOfFinanceSections, ...sharedSections];
+  // Head of Finance: group totals plus everything a finance officer does, in any school.
+  if (role === 'HEAD_OF_FINANCE')  return [...headOfFinanceSections, ...financeSections, ...sharedSections];
   if (role === 'HEAD_OF_SCHOOL')   return [...principalSections,     ...sharedSections];
   if (role === 'STUDENT') return studentSections;
   if (role === 'PARENT' || role === 'GUARDIAN') return parentSections;

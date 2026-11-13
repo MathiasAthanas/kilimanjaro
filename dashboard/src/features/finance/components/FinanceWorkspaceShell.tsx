@@ -28,6 +28,7 @@ import { Button } from '../../../components/common/Button';
 import type { Asset, AuditEntry, Invoice, Payment, Receipt } from '../types/finance.types';
 import { formatDate, formatTZS } from '../utils/money';
 import { useFinanceOverview, usePendingPaymentApprovals } from '../api/finance.hooks';
+import { useSchoolStore } from '../../../lib/school/schoolStore';
 import { api } from '../../../lib/api/client';
 import { useAuthStore } from '../../../lib/auth/authStore';
 import { financeHeaderLinks } from './financeHeaderLinks';
@@ -50,6 +51,10 @@ export function FinanceWorkspaceShell({
   const { pathname } = useLocation();
   const headerLinks = financeHeaderLinks(pathname);
   const userName = session?.user?.name ?? 'Finance Officer';
+  const activeSchool = useSchoolStore((state) => state.activeSchool);
+  const isHeadOfFinance = session?.user?.role === 'HEAD_OF_FINANCE';
+  // Group-wide staff see every school's figures; recording or changing anything needs one school picked first.
+  const needsSchool = session?.user?.scope === 'GROUP' && !activeSchool;
   const { data: overview } = useFinanceOverview() as unknown as { data?: { today: number; outstanding: number } };
   const { data: pendingApprovals } = usePendingPaymentApprovals() as unknown as { data?: unknown[] };
   const pendingCount = Array.isArray(pendingApprovals) ? pendingApprovals.length : 0;
@@ -71,7 +76,7 @@ export function FinanceWorkspaceShell({
                   {title}
                 </h1>
                 <p className="mt-1 text-sm font-semibold text-[#64748b]">
-                  {userName} · Finance Office
+                  {userName} · {isHeadOfFinance ? 'Head of Finance' : 'Finance Office'}
                 </p>
               </div>
             </div>
@@ -97,6 +102,12 @@ export function FinanceWorkspaceShell({
           </div>
         )}
       </section>
+
+      {needsSchool && (
+        <div role="status" className="rounded-lg border border-[#d59a1b]/40 bg-[#d59a1b]/5 px-4 py-3 text-sm font-semibold text-[#7a5200]">
+          You are looking at all schools together. To record a payment, generate invoices or change fees, choose a school in the top bar first.
+        </div>
+      )}
 
       {children}
     </div>

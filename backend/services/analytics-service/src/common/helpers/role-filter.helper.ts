@@ -36,7 +36,7 @@ export function applyRoleFilter(profile: any, role: string) {
     }
   }
 
-  if (role === 'FINANCE') {
+  if (role === 'FINANCE' || role === 'HEAD_OF_FINANCE') {
     if (result.academic) {
       result.academic = {
         currentTermSummary: {

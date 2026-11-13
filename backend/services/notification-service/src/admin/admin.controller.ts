@@ -21,7 +21,7 @@ export class AdminController {
   }
 
   @Get('logs/sms')
-  @Roles(ROLES.SYSTEM_ADMIN, ROLES.FINANCE)
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.FINANCE, ROLES.HEAD_OF_FINANCE)
   smsLogs(@Query() query: any) {
     return this.adminService.smsLogs(query);
   }

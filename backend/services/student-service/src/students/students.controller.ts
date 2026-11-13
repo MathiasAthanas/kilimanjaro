@@ -84,14 +84,14 @@ export class StudentsController {
   }
 
   @Get()
-  @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN', 'ACADEMIC_QA', 'FINANCE', 'HEAD_OF_DEPARTMENT', 'TEACHER', 'ADMISSIONS')
+  @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN', 'ACADEMIC_QA', 'FINANCE', 'HEAD_OF_FINANCE', 'HEAD_OF_DEPARTMENT', 'TEACHER', 'ADMISSIONS')
   @ApiOperation({ summary: 'Paginated list of students with filters' })
   async list(@Query() query: ListStudentsDto, @CurrentUser() user?: RequestUser) {
     return this.studentsService.list(query, user);
   }
 
   @Get('registration/:registrationNumber')
-  @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN', 'ACADEMIC_QA', 'FINANCE', 'HEAD_OF_DEPARTMENT', 'TEACHER', 'ADMISSIONS')
+  @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN', 'ACADEMIC_QA', 'FINANCE', 'HEAD_OF_FINANCE', 'HEAD_OF_DEPARTMENT', 'TEACHER', 'ADMISSIONS')
   @ApiOperation({ summary: 'Lookup student by registration number' })
   async byRegistration(@Param('registrationNumber') registrationNumber: string, @CurrentUser() user?: RequestUser) {
     return this.studentsService.findByRegistration(registrationNumber, user);
@@ -102,7 +102,7 @@ export class StudentsController {
     'SYSTEM_ADMIN',
     'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN',
     'ACADEMIC_QA',
-    'FINANCE',
+    'FINANCE', 'HEAD_OF_FINANCE',
     'HEAD_OF_DEPARTMENT',
     'TEACHER',
     'ADMISSIONS',

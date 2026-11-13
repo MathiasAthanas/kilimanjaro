@@ -32,7 +32,7 @@ export class DepartmentsController {
   }
 
   @Get()
-  @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN', 'ACADEMIC_QA', 'HEAD_OF_DEPARTMENT', 'TEACHER', 'FINANCE')
+  @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN', 'ACADEMIC_QA', 'HEAD_OF_DEPARTMENT', 'TEACHER', 'FINANCE', 'HEAD_OF_FINANCE')
   @ApiOperation({ summary: 'List all departments' })
   list(@CurrentUser() user?: RequestUser) {
     return this.service.list(user);

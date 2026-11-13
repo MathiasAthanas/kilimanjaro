@@ -336,7 +336,7 @@ export class FundRequestsService {
     if (!existing) throw new NotFoundException('Fund request not found');
     assertSchoolInScope(user, existing.schoolId ?? null);
 
-    const privileged: string[] = [ROLES.FINANCE, ROLES.SYSTEM_ADMIN];
+    const privileged: string[] = [ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.SYSTEM_ADMIN];
     if (existing.requestedById !== user.id && !privileged.includes(user.role)) {
       throw new ForbiddenException('Only the requester can cancel this request');
     }

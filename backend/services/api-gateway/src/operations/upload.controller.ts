@@ -68,7 +68,7 @@ export class UploadController implements OnModuleInit {
   @Post('upload')
   @ApiOperation({ summary: 'Upload file (multipart/form-data, field name: file)' })
   @ApiConsumes('multipart/form-data')
-  @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'FINANCE', 'HEAD_OF_DEPARTMENT', 'TEACHER', 'ACADEMIC_QA', 'MANAGING_DIRECTOR')
+  @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'FINANCE', 'HEAD_OF_FINANCE', 'HEAD_OF_DEPARTMENT', 'TEACHER', 'ACADEMIC_QA', 'MANAGING_DIRECTOR')
   @UseInterceptors(FileInterceptor('file', { storage: storageOptions, limits: { fileSize: MAX_FILE_SIZE_BYTES }, fileFilter }))
   uploadFile(@UploadedFile() file: Express.Multer.File, @CurrentUser() user: GatewayUser) {
     if (!file) throw new NotFoundException('No file received — use field name "file"');
@@ -89,7 +89,7 @@ export class UploadController implements OnModuleInit {
 
   /** Serve a stored file — streams the actual bytes */
   @Get(':id/serve')
-  @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'FINANCE', 'HEAD_OF_DEPARTMENT', 'TEACHER', 'ACADEMIC_QA', 'PARENT', 'STUDENT')
+  @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'FINANCE', 'HEAD_OF_FINANCE', 'HEAD_OF_DEPARTMENT', 'TEACHER', 'ACADEMIC_QA', 'PARENT', 'STUDENT')
   async serveFile(@Param('id') id: string, @Res() res: Response, @CurrentUser() user: GatewayUser) {
     const record = this.store.get<OperationRecord>('files', id);
     if (!record) throw new NotFoundException('File not found');
@@ -107,7 +107,7 @@ export class UploadController implements OnModuleInit {
 
   /** Delete a file and remove from disk */
   @Delete(':id')
-  @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'FINANCE')
+  @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'FINANCE', 'HEAD_OF_FINANCE')
   async deleteFile(@Param('id') id: string, @CurrentUser() user: GatewayUser) {
     const record = this.store.get<OperationRecord>('files', id);
     if (!record) throw new NotFoundException('File not found');
