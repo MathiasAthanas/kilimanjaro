@@ -87,3 +87,9 @@ Fix (database only, no code change, no restart), 2026-11-13 17:49 UTC: backup `/
 Verification: `prisma migrate diff` of production against each service's schema now shows no missing columns, tables or enum values in finance, academic, student, notification, auth, gateway or e-learning (analytics mirrors other schemas' tables and is not a real difference). Remaining finance differences are four extra `schoolId` indexes and one truncated index name; harmless. All 8 services online, health OK.
 
 Lesson: after any finance deploy, run `prisma migrate diff --from-url $DATABASE_URL --to-schema-datamodel prisma/schema.prisma --script` on the server and apply missing additive changes by hand.
+
+## 5. Fee category form: Default Amount removed (commit `38d72ec`, dashboard only)
+
+Staff reported that editing a fee category "would not save". The server was saving (PATCH returned 200 after section 4), but the form's Default Amount box was never sent or stored, because categories have no amount (amounts live in Fee Structures), so the typed value vanished and the list showed 0. Removed the field from the form and the list, limited Billing Frequency to Every term / Once only, replaced the misleading audit text.
+
+Deployed 2026-11-13 17:56 UTC as a dashboard-only publish (no backend change, no restart, no database change): built from `dash-feecat-38d72ec.tar.gz` (SHA-256 `ac889c33c47c8123992c52ca826f63309ba2039b099ded9135a4494f8d9bd62d`) in `/opt/kilimanjaro/releases/dash-feecat-38d72ec-20261113T175508Z`, published to `/var/www/kilimanjaro-manage`, bundle `index-D2g08G0Y.js`. Previous dashboard archived as `frontend_pre_feecat_*.tar.gz` in `/opt/kilimanjaro/backups`. Rollback: restore that archive over `/var/www/kilimanjaro-manage`. The active backend release is still `finance-fixes-1d0f889-20261113T114140Z`.
