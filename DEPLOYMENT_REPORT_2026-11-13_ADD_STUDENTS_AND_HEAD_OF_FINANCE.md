@@ -135,3 +135,9 @@ Backups: database `/opt/kilimanjaro/backups/kilimanjaro_prod_pre_finance_approva
 Verification: all 8 services online, health OK, dashboard 200; compiled code contains the new numbering, bulk decisions and tie-break; `prisma migrate diff` shows no missing columns, tables or enum values; no fresh error lines in any log; finance rows unchanged (1 invoice, 1 payment, 1 receipt, 7 structures, 488 audit rows), users 1753 (staff activity). Local verification beforehand: backend tests 17 passed; payment approval end-to-end script 20/20; dashboard 205 tests, type check and lint clean; pages loaded on screen without console errors. Not viewed on production (no login there).
 
 Rollback: point `/opt/kilimanjaro/app` at the previous release and `pm2 startOrReload ecosystem.config.js --update-env`; restore the matching `frontend_pre_*` archive for the dashboard. Invoices created after this release carry the new numbers and remain valid either way.
+
+## 10. Current term set to Term 3 (2026-11-14 15:16 UTC)
+
+At the owner's direction, Term 3 (group-wide, 2026) is now the one current term; the leftover "Mobile QA Test Term" is no longer current (the system allows exactly one). Done directly in `students.Term` (same effect as the API's set-current, which clears all others) after saving the rows to `/opt/kilimanjaro/backups/terms_before_set_current_20261114T151604Z.csv`. No other data changed.
+
+Per owner: Term 3 applies to Primary and the O-level schools, Term 1 to the Advanced school (Islamic High School). The "current" flag is global, so Advanced staff must choose Term 1 explicitly in Generate Invoices and other term pickers. Recorded exam windows today: Islamic High School Term 1 (Terminal, Regional Mock), Primary Term 3 (Annual), Islamic secondary and Modern boys Term 2 (Annual). A per-school current term would be a feature (Term is unique per year and name).
