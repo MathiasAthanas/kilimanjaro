@@ -10,7 +10,21 @@ export type ClientTableOptions<T> = {
   initialSortDir?: SortDir;
   pageSize?: number;
   searchDelay?: number;
+  /** When set, the chosen page size is remembered in this browser under this name. */
+  storageKey?: string;
 };
+
+const PAGE_SIZES = [10, 20, 25, 50, 100, 200];
+
+function readStoredSize(storageKey: string | undefined, fallback: number): number {
+  if (!storageKey) return fallback;
+  try {
+    const stored = Number(window.localStorage.getItem(`ks.web.table-size.${storageKey}`));
+    return PAGE_SIZES.includes(stored) ? stored : fallback;
+  } catch {
+    return fallback;
+  }
+}
 
 export type ClientTable<T> = {
   /** The rows to render (filtered + sorted + paginated). */
@@ -22,6 +36,7 @@ export type ClientTable<T> = {
   page: number;
   setPage: (p: number) => void;
   pageSize: number;
+  setPageSize: (size: number) => void;
   sortBy?: string;
   sortDir: SortDir;
   toggleSort: (column: string) => void;
@@ -46,9 +61,18 @@ export function useClientTable<T>(data: T[], options: ClientTableOptions<T> = {}
     sortAccessors = {},
     initialSortBy,
     initialSortDir = 'asc',
-    pageSize = 10,
+    pageSize: initialPageSize = 10,
     searchDelay = 250,
+    storageKey,
   } = options;
+  const [pageSize, setPageSizeState] = useState(() => readStoredSize(storageKey, initialPageSize));
+  const setPageSize = (size: number) => {
+    setPageSizeState(size);
+    setPage(1);
+    if (storageKey) {
+      try { window.localStorage.setItem(`ks.web.table-size.${storageKey}`, String(size)); } catch { /* remembered only for this visit */ }
+    }
+  };
 
   const [search, setSearch] = useState('');
   const [debounced, setDebounced] = useState('');
@@ -106,5 +130,5 @@ export function useClientTable<T>(data: T[], options: ClientTableOptions<T> = {}
     }
   };
 
-  return { rows, total, search, setSearch, page: safePage, setPage, pageSize, sortBy, sortDir, toggleSort };
+  return { rows, total, search, setSearch, page: safePage, setPage, pageSize, setPageSize, sortBy, sortDir, toggleSort };
 }

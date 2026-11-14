@@ -1,5 +1,35 @@
 import { ChevronLeft, ChevronRight, Search } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import type { SortDir, TableSort } from '../../../components/common/table';
+
+const SIZES = [25, 50, 100];
+
+/**
+ * How a server-paged ledger is shown: rows per page (25 / 50 / 100, remembered per ledger) and which column it is
+ * sorted by. Changing either sends the ledger back to page 1.
+ */
+export function useLedgerView(storageKey: string, resetPage: () => void, initialSort?: { by: string; dir: SortDir }) {
+  const [limit, setLimitState] = useState<number>(() => {
+    try {
+      const stored = Number(window.localStorage.getItem(`ks.web.table-size.${storageKey}`));
+      return SIZES.includes(stored) ? stored : 25;
+    } catch {
+      return 25;
+    }
+  });
+  const [order, setOrder] = useState<{ by?: string; dir: SortDir }>({ by: initialSort?.by, dir: initialSort?.dir ?? 'desc' });
+  const setLimit = useCallback((n: number) => {
+    setLimitState(n);
+    resetPage();
+    try { window.localStorage.setItem(`ks.web.table-size.${storageKey}`, String(n)); } catch { /* remembered for this visit only */ }
+  }, [resetPage, storageKey]);
+  const onSort = useCallback((column: string) => {
+    resetPage();
+    setOrder((cur) => (cur.by === column ? { by: column, dir: cur.dir === 'asc' ? 'desc' : 'asc' } : { by: column, dir: 'asc' }));
+  }, [resetPage]);
+  const sort: TableSort = { by: order.by, dir: order.dir, onSort };
+  return { limit, setLimit, sort, params: { limit, ...(order.by ? { sortBy: order.by, sortDir: order.dir } : {}) } as { limit: number; sortBy?: string; sortDir?: SortDir } };
+}
 
 /** Returns `value` once it has stopped changing for `delay` ms, so typing does not fire a request per key. */
 export function useDebounced<T>(value: T, delay = 350): T {
@@ -48,17 +78,22 @@ export function LedgerTabs({ tabs, active, onChange }: { tabs: LedgerTab[]; acti
 }
 
 /** Pager for the server-paged ledgers (1-based pages). */
-export function LedgerPager({ page, totalPages, total, limit, noun, onPage }: { page: number; totalPages: number; total: number; limit: number; noun: string; onPage: (p: number) => void }) {
-  if (totalPages <= 1) return null;
+export function LedgerPager({ page, totalPages, total, limit, noun, onPage, onLimit }: { page: number; totalPages: number; total: number; limit: number; noun: string; onPage: (p: number) => void; onLimit?: (n: number) => void }) {
+  if (totalPages <= 1 && !(onLimit && total > SIZES[0])) return null;
   const from = (page - 1) * limit + 1;
   const to = Math.min(page * limit, total);
   const windowSize = Math.min(totalPages, 7);
   const first = totalPages <= 7 ? 1 : page <= 4 ? 1 : page >= totalPages - 3 ? totalPages - 6 : page - 3;
   const btn = 'flex h-8 w-8 items-center justify-center rounded border border-[#d5dde6] text-[#64748b] transition hover:bg-[#f1f5f9] disabled:opacity-40';
   return (
-    <div className="flex items-center justify-between pt-1">
+    <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
       <span className="text-xs font-semibold text-[#64748b]">Showing {from}–{to} of {total} {noun}</span>
       <div className="flex items-center gap-1">
+        {onLimit && (
+          <select value={limit} onChange={(e) => onLimit(Number(e.target.value))} aria-label="Rows per page" className="mr-1 h-8 cursor-pointer rounded border border-[#d5dde6] bg-white px-2 text-xs font-black text-[#475569] outline-none hover:border-[#00334f]">
+            {SIZES.map((n) => <option key={n} value={n}>{n} / page</option>)}
+          </select>
+        )}
         <button disabled={page <= 1} onClick={() => onPage(page - 1)} className={btn} aria-label="Previous page"><ChevronLeft className="h-4 w-4" /></button>
         {Array.from({ length: windowSize }, (_, i) => first + i).map((p) => (
           <button

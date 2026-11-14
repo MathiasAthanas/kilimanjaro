@@ -3,13 +3,11 @@ import {
   AlertTriangle,
   BookOpen,
   Calendar,
-  CheckCircle2,
   Download,
   GraduationCap,
   Lock,
   Megaphone,
   Plus,
-  Search,
   Send,
   ShieldCheck,
   TrendingUp,
@@ -39,6 +37,7 @@ import {
   useMarksForApproval,
   usePublishReadiness,
   usePrincipalPendingPayments,
+  usePendingApprovalsPage,
   usePrincipalDiscipline,
   usePrincipalStudents,
   usePrincipalStudentAnalytics,
@@ -54,7 +53,7 @@ import {
 } from '../api/principal.hooks';
 import { useInvoiceLedger } from '../../finance/api/finance.hooks';
 import { FinanceStatusBadge } from '../../finance/components/FinanceWorkspaceShell';
-import { LedgerPager, LedgerSearch, LedgerTabs, useDebounced } from '../../finance/components/LedgerControls';
+import { LedgerPager, LedgerSearch, LedgerTabs, useDebounced, useLedgerView } from '../../finance/components/LedgerControls';
 import { downloadReportWhenReady, useGenerateReportMutation, useGenerateReportCardsMutation } from '../../operations/api/operations.hooks';
 import { useAcademicYears, useTerms } from '../../admin/api/admin.hooks';
 import { useAqaSchoolSummary, useAqaPairings, useCreateAqaInterventionMutation } from '../../aqa/api/aqa.hooks';
@@ -81,6 +80,8 @@ import {
   SchoolSettingsSection,
   Td,
 } from '../components/PrincipalWorkspaceShell';
+import { PaymentApprovalQueue } from '../components/PaymentApprovalQueue';
+import { usePagedRows } from '../../../components/common/table';
 import { DataError } from '../../../components/feedback/DataError';
 import { EmptyState } from '../../../components/feedback/EmptyState';
 import { SkeletonTable } from '../../../components/common/SkeletonTable';
@@ -668,29 +669,19 @@ export function FinanceOversightPage() {
 // ─── Payment approvals ────────────────────────────────────────────────────────
 
 export function PaymentApprovalsPage() {
-  const { data: apiApprovals = [] as PrincipalPaymentApproval[], isLoading, isError, refetch } = usePrincipalPendingPayments() as { data: PrincipalPaymentApproval[]; isLoading: boolean; isError: boolean; refetch: () => void };
-  const [search, setSearch] = useState('');
-  const [method, setMethod] = useState<'ALL' | 'CASH' | 'BANK'>('ALL');
-
-  const total = apiApprovals.reduce((s, a) => s + a.amount, 0);
-  const oldest = apiApprovals.find((a) => a.age)?.age;
-  const isCash = (a: PrincipalPaymentApproval) => a.method.toUpperCase().includes('CASH');
-  const counts = { ALL: apiApprovals.length, CASH: apiApprovals.filter(isCash).length, BANK: apiApprovals.filter((a) => !isCash(a)).length };
-  const q = search.trim().toLowerCase();
-  const visible = apiApprovals.filter((a) => {
-    if (method === 'CASH' && !isCash(a)) return false;
-    if (method === 'BANK' && isCash(a)) return false;
-    return !q || [a.student, a.registration, a.invoice, a.paymentNumber, a.reference].some((v) => v.toLowerCase().includes(q));
-  });
+  // A one-row query just for the header figures; the queue below runs its own paged query.
+  const { data: summary } = usePendingApprovalsPage({ page: 1, limit: 1, sortBy: 'requestedAt', sortDir: 'asc' });
+  const waiting = summary?.meta.total ?? 0;
+  const oldest = summary?.items[0]?.age;
 
   return (
     <PrincipalWorkspaceShell
       title="Payment Approval"
       eyebrow="Manual payment authority"
-      subtitle="Cash and bank payments recorded by the finance office wait here for your decision."
+      subtitle="Cash and bank payments recorded by the finance office wait here for your decision. Select as many as you need and decide them together."
       pills={[
-        { label: 'Waiting', value: `${apiApprovals.length} ${apiApprovals.length === 1 ? 'payment' : 'payments'}`, tone: apiApprovals.length ? 'gold' : 'green' },
-        { label: 'Total value', value: money(total), tone: 'gold' },
+        { label: 'Waiting', value: `${waiting} ${waiting === 1 ? 'payment' : 'payments'}`, tone: waiting ? 'gold' : 'green' },
+        { label: 'Total value', value: money(summary?.totals.pendingAmount ?? 0), tone: 'gold' },
         { label: 'Oldest', value: oldest ? (oldest === 'just now' ? 'Just now' : oldest) : '—', tone: 'green' },
       ]}
     >
@@ -699,51 +690,7 @@ export function PaymentApprovalsPage() {
         { label: 'Finance', to: '/principal/finance' },
         { label: 'Payment Approvals' },
       ]} />
-
-      {isLoading ? (
-        <SkeletonTable cols={4} />
-      ) : isError ? (
-        <DataError onRetry={refetch} />
-      ) : apiApprovals.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-ks-line bg-white px-6 py-14 text-center">
-          <CheckCircle2 className="mx-auto h-10 w-10 text-ks-emerald" />
-          <h3 className="mt-3 font-display text-xl font-black text-ks-navy">You are all caught up</h3>
-          <p className="mx-auto mt-1 max-w-md text-sm font-semibold text-ks-muted">No payments are waiting. New cash and bank payments appear here as soon as the finance office records them.</p>
-        </div>
-      ) : (
-        <>
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="relative min-w-[220px] flex-1">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ks-muted" />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search student, invoice, payment number or reference…"
-                className="h-11 w-full rounded-xl border border-ks-line bg-white pl-9 pr-3 text-sm font-semibold text-ks-navy outline-none transition placeholder:text-ks-muted/70 focus:border-ks-blue focus:ring-2 focus:ring-ks-blue/15"
-              />
-            </div>
-            <div className="flex gap-1 rounded-xl border border-ks-line bg-white p-1">
-              {([['ALL', 'All'], ['CASH', 'Cash'], ['BANK', 'Bank & other']] as const).map(([key, label]) => (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => setMethod(key)}
-                  className={`rounded-lg px-3 py-1.5 text-xs font-black transition ${method === key ? 'bg-ks-navy text-white' : 'text-ks-slate hover:bg-ks-paper'}`}
-                >
-                  {label} <span className={method === key ? 'text-white/70' : 'text-ks-muted'}>{counts[key]}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-          {visible.length === 0 ? (
-            <p className="rounded-2xl border border-dashed border-ks-line bg-white px-6 py-10 text-center text-sm font-bold text-ks-muted">Nothing matches that search or filter.</p>
-          ) : (
-            <div className="space-y-gutter">
-              {visible.map((approval) => <PaymentApprovalCard key={approval.id} approval={approval} />)}
-            </div>
-          )}
-        </>
-      )}
+      <PaymentApprovalQueue />
     </PrincipalWorkspaceShell>
   );
 }
@@ -810,7 +757,8 @@ export function PrincipalInvoiceManagementPage() {
   const [page, setPage] = useState(1);
   const q = useDebounced(search.trim());
   const statuses: Record<string, string | undefined> = { ALL: undefined, OVERDUE: 'OVERDUE', PARTIALLY_PAID: 'PARTIALLY_PAID', PAID: 'PAID' };
-  const { data, isLoading, isError, isFetching } = useInvoiceLedger({ page, limit: 25, search: q || undefined, status: statuses[tab] });
+  const view = useLedgerView('principal-invoices', () => setPage(1), { by: 'dueDate', dir: 'desc' });
+  const { data, isLoading, isError, isFetching } = useInvoiceLedger({ page, ...view.params, search: q || undefined, status: statuses[tab] });
   const counts = data?.counts ?? {};
   const changed = (set: (v: string) => void) => (v: string) => { set(v); setPage(1); };
 
@@ -850,7 +798,7 @@ export function PrincipalInvoiceManagementPage() {
       )}
       {!isLoading && !isError && !!data?.items.length && (
         <div className={isFetching ? 'opacity-70 transition-opacity' : 'transition-opacity'}>
-          <ExecutiveTable columns={['Invoice', 'Student', 'Class', 'Total', 'Paid', 'Outstanding', 'Status', 'Link']}>
+          <ExecutiveTable columns={[{ label: 'Invoice', key: 'invoiceNumber' }, 'Student', 'Class', { label: 'Total', key: 'total' }, { label: 'Paid', key: 'paid' }, { label: 'Outstanding', key: 'outstanding' }, { label: 'Status', key: 'status' }, 'Link']} sort={view.sort}>
             {data.items.map((invoice) => (
               <tr key={invoice.id} className="transition hover:bg-ks-paper">
                 <Td><span className="font-black text-ks-navy">{invoice.number || invoice.id}</span></Td>
@@ -870,7 +818,7 @@ export function PrincipalInvoiceManagementPage() {
               </tr>
             ))}
           </ExecutiveTable>
-          <LedgerPager page={data.meta.page} totalPages={data.meta.totalPages} total={data.meta.total} limit={25} noun="invoices" onPage={setPage} />
+          <LedgerPager page={data.meta.page} totalPages={data.meta.totalPages} total={data.meta.total} limit={view.limit} noun="invoices" onPage={setPage} onLimit={view.setLimit} />
         </div>
       )}
     </PrincipalWorkspaceShell>
@@ -1205,6 +1153,15 @@ export function PrincipalStudentsPage() {
     : filter === 'finance'
     ? apiStudents.filter((s) => s.financeBalance > 0)
     : apiStudents;
+  const paged = usePagedRows(filtered, {
+    storageKey: 'principal-students',
+    unit: 'students',
+    initialSortBy: 'name',
+    sortAccessors: {
+      name: (s) => s.name, className: (s) => s.className, average: (s) => s.academicAverage, attendance: (s) => s.attendance,
+      finance: (s) => s.financeBalance, alert: (s) => s.alertStatus, discipline: (s) => s.disciplineStatus,
+    },
+  });
 
   return (
     <PrincipalWorkspaceShell title="All Students" eyebrow="Executive student browser">
@@ -1234,8 +1191,12 @@ export function PrincipalStudentsPage() {
       ) : !filtered.length ? (
         <EmptyState title={filter === 'all' ? 'No students enrolled' : 'No students match this filter'} description={filter === 'all' ? 'Students will appear here once they are enrolled.' : 'Try adjusting the filter above.'} />
       ) : (
-      <ExecutiveTable columns={['Student', 'Class', 'Average', 'Attendance', 'Finance', 'Alert', 'Discipline', 'Guardian', 'Actions']}>
-        {filtered.map((student) => (
+      <ExecutiveTable
+        columns={[{ label: 'Student', key: 'name' }, { label: 'Class', key: 'className' }, { label: 'Average', key: 'average' }, { label: 'Attendance', key: 'attendance' }, { label: 'Finance', key: 'finance' }, { label: 'Alert', key: 'alert' }, { label: 'Discipline', key: 'discipline' }, 'Guardian', 'Actions']}
+        sort={paged.sort}
+        footer={paged.pager}
+      >
+        {paged.rows.map((student) => (
           <tr key={student.id} className={`transition hover:bg-ks-paper ${student.alertStatus === 'Critical' ? 'border-l-4 border-l-ks-rose' : ''}`}>
             <Td><span className="font-black text-ks-navy">{student.name}</span></Td>
             <Td>{student.className}</Td>
@@ -1359,8 +1320,31 @@ export function StaffOverviewPage() {
                 <Badge tone="slate">{`${deptStaff.length} member${deptStaff.length !== 1 ? 's' : ''}`}</Badge>
               </div>
             </div>
-            <ExecutiveTable columns={['Name', 'Role', 'On-Time %', 'Syllabus %', 'Classes', 'Status']} minWidth={700}>
-              {deptStaff.map((staff) => {
+            <DepartmentStaffTable staffList={deptStaff} dept={dept} />
+          </div>
+        );
+      })}
+    </PrincipalWorkspaceShell>
+  );
+}
+
+function DepartmentStaffTable({ staffList, dept }: { staffList: StaffMember[]; dept: string }) {
+  const paged = usePagedRows(staffList, {
+    storageKey: 'principal-staff',
+    unit: 'staff',
+    pageSize: 25,
+    initialSortBy: 'name',
+    sortAccessors: { name: (x) => x.name, role: (x) => x.role, onTime: (x) => x.onTime, syllabus: (x) => x.syllabus, classes: (x) => x.classes },
+  });
+  void dept;
+  return (
+            <ExecutiveTable
+              columns={[{ label: 'Name', key: 'name' }, { label: 'Role', key: 'role' }, { label: 'On-Time %', key: 'onTime' }, { label: 'Syllabus %', key: 'syllabus' }, { label: 'Classes', key: 'classes' }, 'Status']}
+              minWidth={700}
+              sort={paged.sort}
+              footer={paged.pager}
+            >
+              {paged.rows.map((staff) => {
                 const concern = staff.onTime < 80 || (staff.syllabus > 0 && staff.syllabus < 60);
                 return (
                   <tr key={staff.id} className={`transition hover:bg-ks-paper ${concern ? 'border-l-4 border-l-ks-rose' : ''}`}>
@@ -1384,10 +1368,6 @@ export function StaffOverviewPage() {
                 );
               })}
             </ExecutiveTable>
-          </div>
-        );
-      })}
-    </PrincipalWorkspaceShell>
   );
 }
 
@@ -1942,6 +1922,11 @@ export function PrincipalAuditPage() {
   const { data: apiAudit = [] as PrincipalAuditEvent[] } = usePrincipalAudit() as { data: PrincipalAuditEvent[] };
   const eventTypes = ['All', 'Marks locked', 'Payment approved', 'Announcement published'];
   const filtered = filter === 'All' ? apiAudit : apiAudit.filter((e) => e.decision.toLowerCase().includes(filter.toLowerCase()));
+  const paged = usePagedRows(filtered, {
+    storageKey: 'principal-audit',
+    unit: 'decisions',
+    sortAccessors: { date: (r) => r.date, decision: (r) => r.decision, entity: (r) => r.entity },
+  });
 
   return (
     <PrincipalWorkspaceShell title="Headmaster Decision Audit Trail" eyebrow="Audited executive decisions">
@@ -1981,8 +1966,13 @@ export function PrincipalAuditPage() {
       <DecisionAuditTimeline rows={filtered} />
 
       {/* Detailed table view */}
-      <ExecutiveTable columns={['Date', 'Decision', 'Entity', 'Reason', 'Correlation ID']} minWidth={900}>
-        {filtered.map((row) => (
+      <ExecutiveTable
+        columns={[{ label: 'Date', key: 'date' }, { label: 'Decision', key: 'decision' }, { label: 'Entity', key: 'entity' }, 'Reason', 'Correlation ID']}
+        minWidth={900}
+        sort={paged.sort}
+        footer={paged.pager}
+      >
+        {paged.rows.map((row) => (
           <tr key={row.id} className="transition hover:bg-ks-paper">
             <Td className="text-xs">{row.date}</Td>
             <Td><span className="font-black text-ks-navy">{row.decision}</span></Td>
@@ -2116,14 +2106,25 @@ function SettingsBlock({ title, subtitle, children }: { title: string; subtitle:
 function PrincipalCriticalStudentsTable() {
   const { data: apiStudents = [] as PrincipalStudent[] } = usePrincipalStudents() as { data: PrincipalStudent[] };
   const atRisk = apiStudents.filter((s) => s.alertStatus === 'Critical' || s.alertStatus === 'Watch');
+  const paged = usePagedRows(atRisk, {
+    storageKey: 'principal-critical-students',
+    unit: 'students',
+    initialSortBy: 'average',
+    sortAccessors: { name: (s) => s.name, className: (s) => s.className, average: (s) => s.academicAverage, alert: (s) => s.alertStatus, attendance: (s) => s.attendance },
+  });
   return (
     <div className="rounded-2xl border border-ks-line bg-white shadow-sm">
       <div className="border-b border-ks-line bg-ks-navy px-5 py-4">
         <p className="text-[11px] font-black uppercase tracking-widest text-white/60">Critical students</p>
         <h2 className="mt-0.5 font-display text-xl font-black text-white">Immediate Attention Required</h2>
       </div>
-      <ExecutiveTable columns={['Student', 'Class', 'Average', 'Alert', 'Attendance', 'Actions']} minWidth={840}>
-        {atRisk.map((student) => (
+      <ExecutiveTable
+        columns={[{ label: 'Student', key: 'name' }, { label: 'Class', key: 'className' }, { label: 'Average', key: 'average' }, { label: 'Alert', key: 'alert' }, { label: 'Attendance', key: 'attendance' }, 'Actions']}
+        minWidth={840}
+        sort={paged.sort}
+        footer={paged.pager}
+      >
+        {paged.rows.map((student) => (
           <tr key={student.id} className={`transition hover:bg-ks-paper ${student.alertStatus === 'Critical' ? 'border-l-4 border-l-ks-rose' : 'border-l-4 border-l-ks-amber'}`}>
             <Td><span className="font-black text-ks-navy">{student.name}</span></Td>
             <Td>{student.className}</Td>

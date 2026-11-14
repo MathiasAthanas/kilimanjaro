@@ -67,6 +67,12 @@ export type PrincipalPaymentApproval = {
   invoiceId?: string;
   /** When the money was received (not when it was entered) */
   paidAt?: string;
+  className?: string;
+  /** When the payment was entered and began waiting */
+  requestedAt?: string;
+  /** User id of whoever entered it (they cannot decide their own entry) */
+  enteredById?: string;
+  ageHours?: number;
 };
 
 export type PrincipalStudent = {

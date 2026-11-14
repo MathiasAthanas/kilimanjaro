@@ -43,10 +43,11 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { NavLink, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Navigate, NavLink, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { PaymentApprovalQueue } from '../../principal/components/PaymentApprovalQueue';
+import { usePendingApprovalsPage } from '../../principal/api/principal.hooks';
 import { downloadReportWhenReady, useGenerateReportMutation } from '../../operations/api/operations.hooks';
 import { toast } from '../../../lib/toast';
-import { formatClassLabel } from '../../../lib/classLabel';
 import { Badge } from '../../../components/common/Badge';
 import { Button } from '../../../components/common/Button';
 import {
@@ -133,7 +134,12 @@ import {
 } from '../components/FinanceWorkspaceShell';
 import { EXPORTS, exportFinanceCsv } from '../utils/exportCsv';
 import type { ExportKey } from '../utils/exportCsv';
-import { LedgerPager, LedgerSearch, LedgerTabs, selectClass, useDebounced } from '../components/LedgerControls';
+import { LedgerPager, LedgerSearch, LedgerTabs, selectClass, useDebounced, useLedgerView } from '../components/LedgerControls';
+import { groupClassesByLevel, priceTarget, structuresFor, type ClassLevelGroup } from '../utils/classLevels';
+import { useSchoolStore } from '../../../lib/school/schoolStore';
+import { useSchools } from '../../manager/api/manager.hooks';
+
+type StructureRow = { id: string; category?: string; classId?: string | null; educationStage?: string | null; rawClassLevel?: number | null; schoolId?: string | null; termId?: string | null; active?: boolean; amount?: number };
 import { formatDate, formatTZS, overdueInvoices, parseTZSInput, isOverpayment } from '../utils/money';
 import { useFileUploadMutation, validateFile } from '../../../lib/api/upload';
 import type { UploadedFile } from '../../../lib/api/upload';
@@ -215,7 +221,7 @@ export function FinanceHomePage() {
         {[
           {
             icon: Clock, label: 'Payment Queue', count: pendingCount,
-            detail: pendingCount > 0 ? `${pendingCount} awaiting Principal approval` : 'Queue is clear',
+            detail: pendingCount > 0 ? `${pendingCount} awaiting approval` : 'Queue is clear',
             to: '/finance/payments/pending',
             tone: pendingCount > 0 ? 'border-[#d59a1b]/40 bg-[#fffbeb]' : 'border-[#d5dde6] bg-white',
             iconTone: pendingCount > 0 ? 'bg-[#d59a1b] text-white' : 'bg-[#f7f9fb] text-[#64748b]',
@@ -338,7 +344,7 @@ export function FinanceHomePage() {
         { label: 'Today\'s Collection', value: formatTZS(apiOverview.today), detail: 'Live collection desk total', tone: 'gold', trend: apiOverview.today > 0 ? 'up' : undefined },
         { label: 'Term Collected', value: formatTZS(apiOverview.totalCollected), detail: `${collectedPct}% of invoiced amount`, tone: 'green', trend: 'up', progress: collectedPct },
         { label: 'Outstanding', value: formatTZS(apiOverview.outstanding), detail: `${apiOverview.overdueInvoices} overdue · ${formatTZS(apiOverview.totalInvoiced)} invoiced`, tone: 'red', trend: overdue.length > 0 ? 'down' : undefined },
-        { label: 'Payment Queue', value: String(pendingCount), detail: pendingCount > 0 ? 'Awaiting Principal approval' : 'Queue is clear', tone: pendingCount > 0 ? 'gold' : 'navy' },
+        { label: 'Payment Queue', value: String(pendingCount), detail: pendingCount > 0 ? 'Awaiting approval' : 'Queue is clear', tone: pendingCount > 0 ? 'gold' : 'navy' },
       ]} />
 
       {/* ── Main three-column grid ── */}
@@ -584,7 +590,6 @@ export function FinanceHomePage() {
 
 // ─── Invoice pages ────────────────────────────────────────────────────────────
 
-const INV_PAGE_SIZE = 25;
 type LedgerInvoice = {
   id: string; number: string; studentId?: string; student: string; registration?: string; className?: string; term?: string;
   total: number; paid: number; outstanding: number; status: string; dueDate: string;
@@ -600,9 +605,14 @@ const INV_TABS: { key: string; label: string; statuses?: string }[] = [
   { key: 'CANCELLED', label: 'Cancelled', statuses: 'CANCELLED,WAIVED' },
 ];
 
-function InvoiceLedgerTable({ rows }: { rows: LedgerInvoice[] }) {
+function InvoiceLedgerTable({ rows, sort }: { rows: LedgerInvoice[]; sort?: import('../../../components/common/table').TableSort }) {
   return (
-    <FinanceTable columns={['Invoice #', 'Student', 'Class', 'Term', 'Total', 'Paid', 'Outstanding', 'Status', 'Due Date', '']}>
+    <FinanceTable
+      columns={sort
+        ? [{ label: 'Invoice #', key: 'invoiceNumber' }, 'Student', 'Class', 'Term', { label: 'Total', key: 'total' }, { label: 'Paid', key: 'paid' }, { label: 'Outstanding', key: 'outstanding' }, { label: 'Status', key: 'status' }, { label: 'Due Date', key: 'dueDate' }, '']
+        : ['Invoice #', 'Student', 'Class', 'Term', 'Total', 'Paid', 'Outstanding', 'Status', 'Due Date', '']}
+      sort={sort}
+    >
       {rows.map((inv) => (
         <tr key={inv.id} className="group bg-white transition even:bg-[#f7f9fb] hover:bg-[#eef5f8]" style={{ borderLeft: `3px solid ${statusRail(inv.status)}` }}>
           <Td>
@@ -637,10 +647,11 @@ export function InvoiceListPage() {
   const [termFilter, setTermFilter] = useState('');
   const [page, setPage] = useState(1);
   const q = useDebounced(search.trim());
+  const view = useLedgerView('finance-invoices', () => setPage(1), { by: 'dueDate', dir: 'desc' });
 
   const { data, isLoading, isError, isFetching, refetch } = useInvoiceLedger({
     page,
-    limit: INV_PAGE_SIZE,
+    ...view.params,
     search: q || undefined,
     status: INV_TABS.find((t) => t.key === statusTab)?.statuses,
     classId: classFilter || undefined,
@@ -697,8 +708,8 @@ export function InvoiceListPage() {
         <EmptyState title="No matching invoices" description="Try adjusting your search or filters." />
       ) : (
         <div className={isFetching ? 'opacity-70 transition-opacity' : 'transition-opacity'}>
-          <InvoiceLedgerTable rows={data.items} />
-          <LedgerPager page={data.meta.page} totalPages={data.meta.totalPages} total={data.meta.total} limit={INV_PAGE_SIZE} noun="invoices" onPage={setPage} />
+          <InvoiceLedgerTable rows={data.items} sort={view.sort} />
+          <LedgerPager page={data.meta.page} totalPages={data.meta.totalPages} total={data.meta.total} limit={view.limit} noun="invoices" onPage={setPage} onLimit={view.setLimit} />
         </div>
       )}
     </FinanceWorkspaceShell>
@@ -724,13 +735,22 @@ export function GenerateInvoicesPage() {
   const term = terms.find((t) => t.id === termId);
   const yearName = years.find((y) => y.id === term?.academicYearId)?.name ?? '';
   const running = Boolean(jobId) && (!job || job.status === 'PENDING' || job.status === 'RUNNING');
-  const toggleClass = (id: string) => setClassIds((cur) => (cur.includes(id) ? cur.filter((c) => c !== id) : [...cur, id]));
+  // Class 1 is Class 1: choose levels; every stream of a chosen level is invoiced.
+  const { data: schoolList } = useSchools();
+  const levelGroups = useMemo(() => {
+    const groups = groupClassesByLevel(classes);
+    const several = new Set(groups.map((g) => g.schoolId)).size > 1;
+    const codeOf = (id: string | null) => schoolList?.find((x) => x.id === id)?.code ?? '';
+    return groups.map((g) => ({ ...g, label: several && g.schoolId ? `${g.label} · ${codeOf(g.schoolId)}` : g.label }));
+  }, [classes, schoolList]);
+  const toggleClass = (key: string) => setClassIds((cur) => (cur.includes(key) ? cur.filter((c) => c !== key) : [...cur, key]));
+  const selectedClassIds = levelGroups.filter((g) => classIds.includes(g.key)).flatMap((g) => g.classIds);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!term) { toast('Choose the term to invoice', 'error'); return; }
     generateMutation.mutate(
-      { termId: term.id, academicYearId: term.academicYearId, ...(classIds.length ? { classIds } : {}) },
+      { termId: term.id, academicYearId: term.academicYearId, ...(selectedClassIds.length ? { classIds: selectedClassIds } : {}) },
       {
         onSuccess: (res) => {
           const started = ((res as { data?: { jobId?: string } })?.data ?? res) as { jobId?: string } | undefined;
@@ -778,19 +798,19 @@ export function GenerateInvoicesPage() {
             </div>
             <div className="mt-2 flex max-h-44 flex-wrap gap-2 overflow-y-auto rounded border border-[#d5dde6] bg-[#f7f9fb] p-3">
               {classes.length === 0 && <span className="text-sm font-semibold text-[#64748b]">Loading classes…</span>}
-              {classes.map((c) => (
+              {levelGroups.map((g) => (
                 <button
-                  key={c.id}
+                  key={g.key}
                   type="button"
                   disabled={running}
-                  onClick={() => toggleClass(c.id)}
-                  className={`rounded-full border px-3 py-1 text-xs font-black transition ${classIds.includes(c.id) ? 'border-[#00334f] bg-[#00334f] text-white' : 'border-[#d5dde6] bg-white text-[#334155] hover:border-[#00334f]'}`}
+                  onClick={() => toggleClass(g.key)}
+                  className={`rounded-full border px-3 py-1 text-xs font-black transition ${classIds.includes(g.key) ? 'border-[#00334f] bg-[#00334f] text-white' : 'border-[#d5dde6] bg-white text-[#334155] hover:border-[#00334f]'}`}
                 >
-                  {formatClassLabel(c.name, c.stream)}
+                  {g.label}
                 </button>
               ))}
             </div>
-            <p className="mt-1 text-xs font-semibold text-[#64748b]">Leave empty to invoice every class you can access.</p>
+            <p className="mt-1 text-xs font-semibold text-[#64748b]">Leave empty to invoice every class you can access. Each level includes all its streams.</p>
           </div>
 
           <div className="mt-5 rounded border border-[#d59a1b]/30 bg-[#d59a1b]/5 p-3 text-xs font-bold text-[#7a5200]">
@@ -819,7 +839,7 @@ export function GenerateInvoicesPage() {
         <SideSummary title="Generation Preview" items={[
           ['Term', term ? term.name : '—'],
           ['Academic year', yearName || '—'],
-          ['Classes', classIds.length ? `${classIds.length} selected` : 'All'],
+          ['Class levels', classIds.length ? `${classIds.length} selected` : 'All'],
           ['Audit', 'Full trail captured'],
         ]} />
       </div>
@@ -1720,7 +1740,7 @@ function SmartPaymentForm({ method }: { method: 'cash' | 'bank' }) {
             <span className="text-[11px] font-black uppercase tracking-widest text-[#00334f]">Approval trail</span>
           </div>
           <p className="text-xs font-semibold text-[#64748b]">
-            Finance Officers post payments but cannot approve their own entries. Each payment is reviewed by the Principal or MD before it is finalised and a receipt is issued.
+            Finance Officers post payments but cannot approve their own entries. Each payment is reviewed by the Head of School, the Manager or the Head of Finance before it is finalised and a receipt is issued.
           </p>
         </div>
       </div>
@@ -1728,7 +1748,6 @@ function SmartPaymentForm({ method }: { method: 'cash' | 'bank' }) {
   );
 }
 
-const PAY_PAGE_SIZE = 25;
 
 const PAY_TABS: { key: string; label: string; status?: string }[] = [
   { key: 'ALL', label: 'All' },
@@ -1757,10 +1776,11 @@ export function PaymentListPage() {
   const [page, setPage] = useState(1);
   const q = useDebounced(search.trim());
   const changed = (set: (v: string) => void) => (v: string) => { set(v); setPage(1); };
+  const view = useLedgerView('finance-payments', () => setPage(1), { by: 'paidAt', dir: 'desc' });
 
   const { data, isLoading, isError, isFetching, refetch } = usePaymentLedger({
     page,
-    limit: PAY_PAGE_SIZE,
+    ...view.params,
     search: q || undefined,
     status: PAY_TABS.find((t) => t.key === tab)?.status,
     method: method || undefined,
@@ -1816,8 +1836,8 @@ export function PaymentListPage() {
         <EmptyState title="No matching payments" description="Try adjusting your search or filters." />
       ) : (
         <div className={isFetching ? 'opacity-70 transition-opacity' : 'transition-opacity'}>
-          <PaymentTable rows={data.items as unknown as typeof payments} />
-          <LedgerPager page={data.meta.page} totalPages={data.meta.totalPages} total={data.meta.total} limit={PAY_PAGE_SIZE} noun="payments" onPage={setPage} />
+          <PaymentTable rows={data.items as unknown as typeof payments} sort={view.sort} />
+          <LedgerPager page={data.meta.page} totalPages={data.meta.totalPages} total={data.meta.total} limit={view.limit} noun="payments" onPage={setPage} onLimit={view.setLimit} />
         </div>
       )}
     </FinanceWorkspaceShell>
@@ -1841,6 +1861,27 @@ function hoursAgo(dateStr: string | undefined): string {
 }
 
 type QueueTab = 'all' | 'cash' | 'bank' | 'stale';
+
+/** Who may approve or reject a waiting payment: the heads, the manager and the head of finance, never the finance officer who entered it. */
+export const PAYMENT_APPROVER_ROLES = ['MANAGER', 'HEAD_OF_SCHOOL', 'PRINCIPAL', 'HEAD_OF_FINANCE', 'SUPER_ADMIN', 'ADMIN'];
+
+export function PaymentApprovalsFinancePage() {
+  const role = useAuthStore((s) => s.session?.user.role);
+  const { data: summary } = usePendingApprovalsPage({ page: 1, limit: 1, sortBy: 'requestedAt', sortDir: 'asc' });
+  if (!role || !PAYMENT_APPROVER_ROLES.includes(role)) return <Navigate to="/finance/payments/pending" replace />;
+  const waiting = summary?.meta.total ?? 0;
+  return (
+    <FinanceWorkspaceShell title="Approve Payments" eyebrow="Cash and bank payments waiting for a decision">
+      <FinanceBreadcrumb crumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Payments' }, { label: 'Approve' }]} />
+      <FinanceMetricStrip items={[
+        { label: 'Waiting', value: String(waiting), detail: waiting === 1 ? 'payment' : 'payments', tone: waiting ? 'gold' : 'green' },
+        { label: 'Total value', value: formatTZS(summary?.totals.pendingAmount ?? 0), detail: 'awaiting a decision', tone: 'navy' },
+        { label: 'Oldest', value: summary?.items[0]?.age ? (summary.items[0].age === 'just now' ? 'Just now' : summary.items[0].age) : '—', detail: 'longest wait', tone: 'gold' },
+      ]} />
+      <PaymentApprovalQueue detailHref={(row) => `/finance/payments/${row.paymentId}`} />
+    </FinanceWorkspaceShell>
+  );
+}
 
 export function PendingPaymentApprovalsPage() {
   const { data: apiPending = [] as typeof payments, isLoading, isError, refetch } = usePendingPaymentApprovals() as unknown as { data: typeof payments; isLoading: boolean; isError: boolean; refetch: () => void };
@@ -1934,7 +1975,7 @@ export function PendingPaymentApprovalsPage() {
       <div className="flex items-start gap-3 rounded-lg border border-[#d59a1b]/40 bg-[#fffbeb] px-4 py-3">
         <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[#7a5200]" />
         <p className="text-xs font-bold text-[#7a5200]">
-          As Finance Officer you can add verification notes and attach evidence to each payment. Approval is handled by the Principal or MD — you cannot approve your own entries.
+          As Finance Officer you can add verification notes and attach evidence to each payment. Approval is handled by the Head of School, the Manager or the Head of Finance — nobody approves a payment they entered themselves.
         </p>
       </div>
 
@@ -2237,7 +2278,6 @@ export function PaymentDetailPage() {
 
 // ─── Receipt pages ────────────────────────────────────────────────────────────
 
-const RCP_PAGE_SIZE = 25;
 
 const RCP_TABS: { key: string; label: string; state?: string }[] = [
   { key: 'ALL', label: 'All' },
@@ -2251,10 +2291,11 @@ export function ReceiptListPage() {
   const [page, setPage] = useState(1);
   const q = useDebounced(search.trim());
   const changed = (set: (v: string) => void) => (v: string) => { set(v); setPage(1); };
+  const view = useLedgerView('finance-receipts', () => setPage(1), { by: 'issuedAt', dir: 'desc' });
 
   const { data, isLoading, isError, isFetching, refetch } = useReceiptLedger({
     page,
-    limit: RCP_PAGE_SIZE,
+    ...view.params,
     search: q || undefined,
     state: RCP_TABS.find((t) => t.key === tab)?.state,
   });
@@ -2286,7 +2327,7 @@ export function ReceiptListPage() {
       ) : (
         <div className={isFetching ? 'opacity-70 transition-opacity' : 'transition-opacity'}>
           <ReceiptList rows={data.items as unknown as typeof receipts} />
-          <LedgerPager page={data.meta.page} totalPages={data.meta.totalPages} total={data.meta.total} limit={RCP_PAGE_SIZE} noun="receipts" onPage={setPage} />
+          <LedgerPager page={data.meta.page} totalPages={data.meta.totalPages} total={data.meta.total} limit={view.limit} noun="receipts" onPage={setPage} onLimit={view.setLimit} />
         </div>
       )}
     </FinanceWorkspaceShell>
@@ -2818,7 +2859,8 @@ export function FeeStructuresPage() {
 }
 
 export function FeeMatrixPage() {
-  type ColDef = { id: string; label: string; classIds: string[]; mirrorOf: string | null };
+  // One column per class LEVEL (all streams together); `parts` are the levels merged into it by "Group Classes".
+  type ColDef = { id: string; label: string; classIds: string[]; mirrorOf: string | null; parts: ClassLevelGroup[] };
 
   const { data: rawCategories = [] } = useFeeCategories() as unknown as { data: typeof feeCategories };
   const { data: apiClasses = [] } = useFinanceClasses();
@@ -2853,14 +2895,15 @@ export function FeeMatrixPage() {
     [rawCategories],
   );
 
-  const stageClasses = useMemo(
-    () =>
-      apiClasses
-        .filter((c) => stageLabel(c.educationStage) === stageTab)
-        .sort((a, b) => a.level - b.level),
-    [apiClasses, stageTab],
-  );
-
+  const activeSchoolId = useSchoolStore((s) => s.activeSchool?.id ?? null);
+  const { data: schoolList } = useSchools();
+  // Class 1 A and Class 1 B are both Class 1: one column per level, whatever the streams.
+  const stageClasses = useMemo(() => {
+    const groups = groupClassesByLevel(apiClasses.filter((c) => stageLabel(c.educationStage) === stageTab));
+    const several = new Set(groups.map((g) => g.schoolId)).size > 1;
+    const codeOf = (id: string | null) => schoolList?.find((s) => s.id === id)?.code ?? '';
+    return groups.map((g) => ({ ...g, label: several && g.schoolId ? `${g.label} · ${codeOf(g.schoolId)}` : g.label }));
+  }, [apiClasses, stageTab, schoolList]);
   // Open on the first stage that actually has classes (a primary-only school has no O-Level)
   useEffect(() => {
     if (stagePicked || !apiClasses.length) return;
@@ -2871,7 +2914,7 @@ export function FeeMatrixPage() {
   // Reset columns and signal matrix re-init on stage change
   useEffect(() => {
     if (!stageClasses.length) return;
-    setColumns(stageClasses.map((c) => ({ id: c.id, label: c.name, classIds: [c.id], mirrorOf: null })));
+    setColumns(stageClasses.map((g) => ({ id: g.key, label: g.label, classIds: g.classIds, mirrorOf: null, parts: [g] })));
     setSelCols(new Set());
     setGroupMode(false);
     setColMenu(null);
@@ -2891,11 +2934,13 @@ export function FeeMatrixPage() {
       newMat[cat.id] = {};
       newOrig[cat.id] = {};
       columns.forEach((col) => {
-        // Match on the class id (class names repeat across schools and carry streams), preferring the chosen term
-        const candidates = (apiStructures as unknown as Array<{ id: string; category: string; classId?: string; termId?: string; amount: number }>).filter((s) =>
-          s.category === cat.name && s.classId && col.classIds.includes(s.classId),
-        );
-        const struct = (termId ? candidates.find((s) => s.termId === termId) : undefined) ?? candidates.find((s) => !s.termId) ?? candidates[0];
+        // The price of a class level, however it was stored (one stage + level price, or per stream), preferring the chosen term
+        const all = apiStructures as unknown as StructureRow[];
+        const group = col.parts[0];
+        const exact = group ? structuresFor(all, cat.name, group, termId) : [];
+        const fallback = group && termId ? structuresFor(all, cat.name, group, '') : [];
+        const candidates = exact.length ? exact : fallback;
+        const struct = candidates.find((s) => !s.classId) ?? candidates[0];
         const amt = struct ? String(struct.amount) : '';
         newMat[cat.id][col.id] = amt;
         newOrig[cat.id][col.id] = { amount: amt, structureId: struct?.id ?? null };
@@ -2929,9 +2974,10 @@ export function FeeMatrixPage() {
     const ids = [...selCols];
     const [first, ...rest] = ids;
     const allClassIds = ids.flatMap((id) => columns.find((c) => c.id === id)?.classIds ?? []);
+    const allParts = ids.flatMap((id) => columns.find((c) => c.id === id)?.parts ?? []);
     setColumns((prev) =>
       prev.filter((c) => !rest.includes(c.id)).map((c) =>
-        c.id === first ? { ...c, label: groupName.trim(), classIds: allClassIds } : c,
+        c.id === first ? { ...c, label: groupName.trim(), classIds: allClassIds, parts: allParts } : c,
       ),
     );
     const trimKeys = (prev: Record<string, Record<string, string>>) => {
@@ -2972,21 +3018,28 @@ export function FeeMatrixPage() {
           if (!eff || eff === (orig?.amount ?? '')) continue;
           const amount = Number(eff);
           if (isNaN(amount) || amount <= 0) continue;
-          if (orig?.structureId) {
-            await updateMutation.mutateAsync({ id: orig.structureId, body: { amount: String(amount) } });
-            saved++;
+          // Every live price that already covers this class level (one stage + level price and/or per-stream ones):
+          // all of them move to the same amount, so streams can never drift apart.
+          const live = (apiStructures as unknown as StructureRow[]).filter((s) => col.parts.some((g) => structuresFor([s], cat.name, g, termId).length > 0));
+          const known = new Map(live.map((s) => [s.id, s]));
+          if (orig?.structureId && !known.has(orig.structureId)) known.set(orig.structureId, { id: orig.structureId });
+          if (known.size) {
+            for (const s of known.values()) {
+              await updateMutation.mutateAsync({ id: s.id, body: { amount: String(amount) } });
+              saved++;
+            }
+          } else if (col.parts.length === 1) {
+            const target = priceTarget(col.parts[0], activeSchoolId);
+            const base = { feeCategoryId: cat.id, amount: String(amount), academicYearId: effectiveYearId, termId: termId || undefined, currency: 'TZS' };
+            if (target.mode === 'level') {
+              await createMutation.mutateAsync({ ...base, educationStage: target.educationStage, classLevel: target.classLevel });
+              saved++;
+            } else {
+              for (const classId of target.classIds) { await createMutation.mutateAsync({ ...base, classId }); saved++; }
+            }
           } else {
             for (const classId of col.classIds) {
-              // The grid only learns a structure's id when it loads, so a cell saved earlier in this visit has none.
-              // Look for a live structure first, otherwise saving twice would add a second price for the same class.
-              const live = (apiStructures as unknown as Array<{ id: string; category: string; classId?: string; termId?: string; active?: boolean }>).find(
-                (s) => s.active !== false && s.category === cat.name && s.classId === classId && (termId ? s.termId === termId : !s.termId),
-              );
-              if (live) {
-                await updateMutation.mutateAsync({ id: live.id, body: { amount: String(amount) } });
-              } else {
-                await createMutation.mutateAsync({ feeCategoryId: cat.id, classId, amount: String(amount), academicYearId: effectiveYearId, termId: termId || undefined, currency: 'TZS' });
-              }
+              await createMutation.mutateAsync({ feeCategoryId: cat.id, classId, amount: String(amount), academicYearId: effectiveYearId, termId: termId || undefined, currency: 'TZS' });
               saved++;
             }
           }
@@ -3004,8 +3057,8 @@ export function FeeMatrixPage() {
         });
         return next;
       });
-    } catch {
-      toast('Failed to save some structures', 'error');
+    } catch (e) {
+      toast(errorMessage(e, 'Failed to save some structures'), 'error');
     } finally {
       setIsSaving(false);
     }
@@ -3104,11 +3157,15 @@ export function FeeMatrixPage() {
                             onClick={(e) => e.stopPropagation()} />
                         )}
                         <span className="text-xs font-bold text-[#00334f]">{col.label}</span>
-                        {col.classIds.length > 1 && (
+                        {col.parts.length > 1 ? (
                           <span className="rounded-full bg-[#00334f]/10 px-2 py-0.5 text-[10px] font-bold text-[#00334f]">
-                            {col.classIds.length} classes
+                            {col.parts.length} levels
                           </span>
-                        )}
+                        ) : col.parts[0]?.streams.length > 1 ? (
+                          <span className="text-[10px] font-semibold text-[#94a3b8]" title="One price for every stream">
+                            all streams ({col.parts[0].streams.join(', ')})
+                          </span>
+                        ) : null}
                         {mirrorSrc && (
                           <span className="flex items-center gap-0.5 rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-700">
                             <Link2 className="h-2.5 w-2.5" /> {mirrorSrc.label}
@@ -3134,17 +3191,17 @@ export function FeeMatrixPage() {
                                       <Link2Off className="h-3.5 w-3.5 text-orange-400" /> Break mirror
                                     </button>
                                   )}
-                                  {col.classIds.length > 1 && (
+                                  {col.parts.length > 1 && (
                                     <button className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs font-semibold text-red-600 hover:bg-red-50"
                                       onClick={() => {
-                                        const restored = col.classIds.map((cid) => {
-                                          const cls = apiClasses.find((c) => c.id === cid);
-                                          return { id: cid, label: cls?.name ?? cid, classIds: [cid], mirrorOf: null as null };
+                                        const restored = col.parts.map((g) => {
+                                          const shown = stageClasses.find((x) => x.key === g.key);
+                                          return { id: g.key, label: shown?.label ?? g.label, classIds: g.classIds, mirrorOf: null as null, parts: [g] };
                                         });
                                         setColumns((prev) => {
                                           const others = prev.filter((c) => c.id !== col.id);
                                           return [...others, ...restored].sort((a, b) =>
-                                            stageClasses.findIndex((c) => c.id === a.classIds[0]) - stageClasses.findIndex((c) => c.id === b.classIds[0]),
+                                            stageClasses.findIndex((c) => c.key === a.parts[0]?.key) - stageClasses.findIndex((c) => c.key === b.parts[0]?.key),
                                           );
                                         });
                                         setColMenu(null);
@@ -3340,9 +3397,17 @@ export function CreateFeeStructurePage() {
   const sel = 'mt-2 h-11 w-full rounded border border-[#d5dde6] bg-[#f7f9fb] px-3 font-semibold outline-none focus:border-[#00334f]';
   const cap = 'text-[11px] font-black uppercase tracking-widest text-[#64748b]';
 
-  const toggleClass = (id: string) => setSelectedClasses((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
-  const classesByStage = classes.reduce<Record<string, typeof classes>>((acc, c) => { (acc[c.educationStage] ??= []).push(c); return acc; }, {});
-
+  // Class 1 is Class 1: pick levels, never individual streams (A, B, ...).
+  const activeSchoolId = useSchoolStore((st) => st.activeSchool?.id ?? null);
+  const { data: schoolList } = useSchools();
+  const levelGroups = useMemo(() => {
+    const groups = groupClassesByLevel(classes);
+    const several = new Set(groups.map((g) => g.schoolId)).size > 1;
+    const codeOf = (id: string | null) => schoolList?.find((x) => x.id === id)?.code ?? '';
+    return groups.map((g) => ({ ...g, label: several && g.schoolId ? `${g.label} · ${codeOf(g.schoolId)}` : g.label }));
+  }, [classes, schoolList]);
+  const toggleClass = (key: string) => setSelectedClasses((p) => (p.includes(key) ? p.filter((x) => x !== key) : [...p, key]));
+  const classesByStage = levelGroups.reduce<Record<string, typeof levelGroups>>((acc, g) => { (acc[g.educationStage] ??= []).push(g); return acc; }, {});
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!categoryId || !amount) { toast('Fee category and amount are required', 'error'); return; }
@@ -3351,8 +3416,13 @@ export function CreateFeeStructurePage() {
 
     let payloads: Record<string, unknown>[] = [];
     if (mode === 'class') {
-      if (!selectedClasses.length) { toast('Select at least one class', 'error'); return; }
-      payloads = selectedClasses.map((classId) => ({ ...base, classId }));
+      if (!selectedClasses.length) { toast('Select at least one class level', 'error'); return; }
+      payloads = levelGroups.filter((g) => selectedClasses.includes(g.key)).flatMap((g): Record<string, unknown>[] => {
+        const target = priceTarget(g, activeSchoolId);
+        return target.mode === 'level'
+          ? [{ ...base, educationStage: target.educationStage, classLevel: target.classLevel }]
+          : target.classIds.map((classId) => ({ ...base, classId }));
+      });
     } else if (mode === 'stage') {
       payloads = [{ ...base, educationStage, classLevel: classLevel ? Number(classLevel) : undefined }];
     } else {
@@ -3366,8 +3436,8 @@ export function CreateFeeStructurePage() {
       for (const body of payloads) { await createMutation.mutateAsync(body); ok++; }
       toast(`${ok} fee structure${ok === 1 ? '' : 's'} created`, 'success');
       navigate('/finance/fee-structures');
-    } catch {
-      toast('Failed to create one or more fee structures', 'error');
+    } catch (err) {
+      toast(errorMessage(err, 'Failed to create one or more fee structures'), 'error');
     } finally {
       setSubmitting(false);
     }
@@ -3382,7 +3452,7 @@ export function CreateFeeStructurePage() {
             <FileSpreadsheet className="h-5 w-5 text-[#00334f]" />
             <div>
               <h2 className="font-display text-xl font-black text-[#00334f]">Create Fee Structure</h2>
-              <p className="text-sm font-semibold text-[#64748b]">Define a fee amount and apply it to specific classes, a stage/level, or a student group.</p>
+              <p className="text-sm font-semibold text-[#64748b]">Set one price per class level (every stream pays the same), for a whole stage, or for a student group.</p>
             </div>
           </div>
 
@@ -3417,7 +3487,7 @@ export function CreateFeeStructurePage() {
           <div className="mt-6">
             <span className={cap}>Apply to</span>
             <div className="mt-2 flex flex-wrap gap-2">
-              {([['class', 'Specific classes'], ['stage', 'Stage / level'], ['group', 'Student group']] as const).map(([m, lbl]) => (
+              {([['class', 'Class levels'], ['stage', 'Whole stage'], ['group', 'Student group']] as const).map(([m, lbl]) => (
                 <button type="button" key={m} onClick={() => setMode(m)}
                   className={`rounded px-3 py-1.5 text-[11px] font-black uppercase tracking-wider transition ${mode === m ? 'bg-[#00334f] text-white' : 'border border-[#d5dde6] bg-white text-[#64748b] hover:bg-[#eef5f8]'}`}>
                   {lbl}
@@ -3433,15 +3503,18 @@ export function CreateFeeStructurePage() {
                   <div className="mb-2 flex items-center justify-between">
                     <p className="text-[11px] font-black uppercase tracking-widest text-[#00334f]">{stage.replaceAll('_', ' ')}</p>
                     <button type="button" className="text-[11px] font-black uppercase text-[#0284c7] hover:underline"
-                      onClick={() => { const ids = list.map((c) => c.id); const allSel = ids.every((id) => selectedClasses.includes(id)); setSelectedClasses((p) => allSel ? p.filter((x) => !ids.includes(x)) : [...new Set([...p, ...ids])]); }}>
+                      onClick={() => { const ids = list.map((c) => c.key); const allSel = ids.every((id) => selectedClasses.includes(id)); setSelectedClasses((p) => allSel ? p.filter((x) => !ids.includes(x)) : [...new Set([...p, ...ids])]); }}>
                       Toggle all
                     </button>
                   </div>
                   <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
                     {list.map((c) => (
-                      <label key={c.id} className={`flex cursor-pointer items-center gap-2 rounded border px-3 py-2 text-sm font-bold transition ${selectedClasses.includes(c.id) ? 'border-[#00334f] bg-[#eef5f8] text-[#00334f]' : 'border-[#d5dde6] bg-white text-[#475569]'}`}>
-                        <input type="checkbox" checked={selectedClasses.includes(c.id)} onChange={() => toggleClass(c.id)} className="accent-[#00334f]" />
-                        {formatClassLabel(c.name, c.stream)}
+                      <label key={c.key} className={`flex cursor-pointer items-center gap-2 rounded border px-3 py-2 text-sm font-bold transition ${selectedClasses.includes(c.key) ? 'border-[#00334f] bg-[#eef5f8] text-[#00334f]' : 'border-[#d5dde6] bg-white text-[#475569]'}`}>
+                        <input type="checkbox" checked={selectedClasses.includes(c.key)} onChange={() => toggleClass(c.key)} className="accent-[#00334f]" />
+                        <span className="min-w-0">
+                          {c.label}
+                          {c.streams.length > 1 && <span className="block text-[10px] font-semibold text-[#94a3b8]">all streams</span>}
+                        </span>
                       </label>
                     ))}
                   </div>
@@ -3477,7 +3550,7 @@ export function CreateFeeStructurePage() {
 
           <div className="mt-6 flex gap-2">
             <Button type="submit" className="rounded bg-[#00334f] hover:bg-[#001e30] hover:shadow-none" disabled={submitting}>
-              <Send className="h-4 w-4" /> {submitting ? 'Creating…' : mode === 'class' && selectedClasses.length > 1 ? `Create ${selectedClasses.length} Structures` : 'Create Structure'}
+              <Send className="h-4 w-4" /> {submitting ? 'Creating…' : mode === 'class' && selectedClasses.length > 1 ? `Create ${selectedClasses.length} Prices` : 'Create Structure'}
             </Button>
             <Button type="button" variant="secondary" className="rounded" onClick={() => navigate('/finance/fee-structures')}>Cancel</Button>
           </div>
@@ -3485,7 +3558,7 @@ export function CreateFeeStructurePage() {
         <SideSummary title="Impact Preview" items={[
           ['Category', categoryId ? (apiCategories.find((c) => c.id === categoryId)?.name ?? '—') : '—'],
           ['Amount', amount ? formatTZS(Number(amount)) : '—'],
-          ['Applies to', mode === 'class' ? `${selectedClasses.length} class(es)` : mode === 'stage' ? `${educationStage.replaceAll('_', ' ')}${classLevel ? ` · L${classLevel}` : ''}` : (studentGroup || 'group')],
+          ['Applies to', mode === 'class' ? `${selectedClasses.length} class level(s)` : mode === 'stage' ? `${educationStage.replaceAll('_', ' ')}${classLevel ? ` · L${classLevel}` : ''}` : (studentGroup || 'group')],
           ['Term', termId ? (yearTerms.find((t) => t.id === termId)?.name ?? '—') : 'Annual'],
         ]} />
       </div>

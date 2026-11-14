@@ -8,3 +8,7 @@ export { SortHeader } from './SortHeader';
 export type { SortHeaderProps } from './SortHeader';
 export { DataPagination } from './DataPagination';
 export type { DataPaginationProps } from './DataPagination';
+export { ClientDataTable } from './ClientDataTable';
+export type { ClientDataTableProps, DataColumn } from './ClientDataTable';
+export { usePagedRows } from './usePagedRows';
+export type { PagedRows, TableSort } from './usePagedRows';

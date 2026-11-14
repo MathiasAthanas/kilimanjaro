@@ -21,6 +21,7 @@ import type { ReactNode } from 'react';
 import { useRef, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { Badge } from '../../../components/common/Badge';
+import { SortHeader, type TableSort } from '../../../components/common/table';
 import { Button } from '../../../components/common/Button';
 import { toast } from '../../../lib/toast';
 import type { DisciplineIncident, PrincipalAssessment, PrincipalMetric, SchoolHealth, Urgency } from '../types/principal.types';
@@ -434,21 +435,26 @@ export function MarksFinalApprovalTable({ assessments }: { assessments: Principa
 
 // ─── Executive table ──────────────────────────────────────────────────────────
 
-export function ExecutiveTable({ columns, children, minWidth = 1000 }: { columns: string[]; children: ReactNode; minWidth?: number }) {
+export type TableColumn = string | { label: string; key: string };
+
+/** The principal's list table. Give `sort` plus column keys to make headers sortable, and `footer` for the pager. */
+export function ExecutiveTable({ columns, children, minWidth = 1000, sort, footer }: { columns: TableColumn[]; children: ReactNode; minWidth?: number; sort?: TableSort; footer?: ReactNode }) {
   return (
     <div className="overflow-hidden rounded-2xl border border-ks-line bg-white shadow-sm">
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm" style={{ minWidth }}>
           <thead className="bg-ks-navy text-[10px] font-black uppercase tracking-widest text-white">
             <tr>
-              {columns.map((col) => (
-                <th key={col} className="px-5 py-4">{col}</th>
-              ))}
+              {columns.map((col) => {
+                if (typeof col === 'string' || !sort) return <th key={typeof col === 'string' ? col : col.key} className="px-5 py-4">{typeof col === 'string' ? col : col.label}</th>;
+                return <SortHeader key={col.key} label={col.label} column={col.key} activeSortBy={sort.by} sortDir={sort.dir} onSort={sort.onSort} />;
+              })}
             </tr>
           </thead>
           <tbody className="divide-y divide-ks-line">{children}</tbody>
         </table>
       </div>
+      {footer}
     </div>
   );
 }

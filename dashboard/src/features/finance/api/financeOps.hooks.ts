@@ -288,13 +288,13 @@ export const useIssueStockMutation = stockAction('issue');
 export const useAdjustStockMutation = stockAction('adjust');
 
 // ─── Reference data (classes / years / terms) for fee-structure targeting ────────
-export type ClassRef = { id: string; name: string; level: number; stream: string; educationStage: string; academicYearId: string };
+export type ClassRef = { id: string; name: string; level: number; stream: string; educationStage: string; academicYearId: string; schoolId: string | null };
 export function useFinanceClasses() {
   return useQuery({
     queryKey: [...opsKeys.all, 'ref', 'classes'],
     queryFn: () => api.get('/students/classes').then((r) => arrayFromApi(payloadOf(r), ['items', 'classes']).map((c) => {
       const o = c as Record<string, unknown>;
-      return { id: str(o.id), name: str(o.name), level: Number(o.level ?? 0), stream: str(o.stream), educationStage: str(o.educationStage), academicYearId: str(o.academicYearId) } as ClassRef;
+      return { id: str(o.id), name: str(o.name), level: Number(o.level ?? 0), stream: str(o.stream), educationStage: str(o.educationStage), academicYearId: str(o.academicYearId), schoolId: o.schoolId ? str(o.schoolId) : null } as ClassRef;
     })),
     staleTime: 300_000,
   });

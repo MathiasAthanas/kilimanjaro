@@ -33,6 +33,7 @@ import { api } from '../../../lib/api/client';
 import { useAuthStore } from '../../../lib/auth/authStore';
 import { financeHeaderLinks } from './financeHeaderLinks';
 import { errorMessage } from '../../../lib/api/errors';
+import { SortHeader, type TableSort } from '../../../components/common/table';
 
 // ─── Shell ────────────────────────────────────────────────────────────────────
 
@@ -338,23 +339,29 @@ export function CollectionRing({ rate }: { rate: number }) {
 
 // ─── Finance table ────────────────────────────────────────────────────────────
 
-export function FinanceTable({ columns, children, minWidth = 1100 }: { columns: string[]; children: ReactNode; minWidth?: number }) {
+export type FinanceColumn = string | { label: string; key: string };
+
+/** The finance list table. Give `sort` plus column keys to make headers sortable, and `footer` for the pager. */
+export function FinanceTable({ columns, children, minWidth = 1100, sort, footer }: { columns: FinanceColumn[]; children: ReactNode; minWidth?: number; sort?: TableSort; footer?: ReactNode }) {
   return (
     <div className="overflow-hidden rounded-lg border border-[#d5dde6] bg-white">
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm" style={{ minWidth }}>
           <thead className="bg-[#eef5f8]">
             <tr>
-              {columns.map((col) => (
-                <th key={col} className="border-b border-[#d5dde6] px-4 py-3 text-[10px] font-black uppercase tracking-widest text-[#00334f]">
-                  {col}
-                </th>
-              ))}
+              {columns.map((col) => {
+                if (typeof col === 'string' || !sort) {
+                  const label = typeof col === 'string' ? col : col.label;
+                  return <th key={label} className="border-b border-[#d5dde6] px-4 py-3 text-[10px] font-black uppercase tracking-widest text-[#00334f]">{label}</th>;
+                }
+                return <SortHeader key={col.key} label={col.label} column={col.key} activeSortBy={sort.by} sortDir={sort.dir} onSort={sort.onSort} compact tone="light" className="border-b border-[#d5dde6]" />;
+              })}
             </tr>
           </thead>
           <tbody className="divide-y divide-[#e2e8f0]">{children}</tbody>
         </table>
       </div>
+      {footer}
     </div>
   );
 }
@@ -459,9 +466,14 @@ export function InvoiceTable({ rows }: { rows: Invoice[] }) {
 
 // ─── Payment table ────────────────────────────────────────────────────────────
 
-export function PaymentTable({ rows }: { rows: Payment[] }) {
+export function PaymentTable({ rows, sort }: { rows: Payment[]; sort?: TableSort }) {
   return (
-    <FinanceTable columns={['Payment', 'Student', 'Invoice', 'Method', 'Amount', 'Status', 'Entered by', 'Date', 'Receipt', '']}>
+    <FinanceTable
+      columns={sort
+        ? [{ label: 'Payment', key: 'paymentNumber' }, 'Student', 'Invoice', { label: 'Method', key: 'method' }, { label: 'Amount', key: 'amount' }, { label: 'Status', key: 'status' }, 'Entered by', { label: 'Date', key: 'paidAt' }, 'Receipt', '']
+        : ['Payment', 'Student', 'Invoice', 'Method', 'Amount', 'Status', 'Entered by', 'Date', 'Receipt', '']}
+      sort={sort}
+    >
       {rows.map((payment) => {
         const railColor = statusRail(payment.status);
         return (

@@ -27,7 +27,7 @@ function LocationPath() {
 }
 
 describe('school and workflow context', () => {
-  beforeEach(() => useSchoolStore.setState({ activeSchool: null }));
+  beforeEach(() => { window.localStorage.clear(); useSchoolStore.getState().reset(); });
 
   it('keeps All Schools available only for a group-scoped session', () => {
     setSession('MANAGER', 'GROUP', []);

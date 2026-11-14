@@ -13,7 +13,21 @@ export type TableControlsOptions = {
   initialFilters?: Record<string, string | undefined>;
   /** Debounce for the search box, ms. */
   searchDelay?: number;
+  /** When set, the chosen page size is remembered in this browser under this name (e.g. 'payment-approvals'). */
+  storageKey?: string;
 };
+
+const PAGE_SIZES = [10, 20, 25, 50, 100, 200];
+
+function readStoredLimit(storageKey: string | undefined, fallback: number): number {
+  if (!storageKey) return fallback;
+  try {
+    const stored = Number(window.localStorage.getItem(`ks.web.table-size.${storageKey}`));
+    return PAGE_SIZES.includes(stored) ? stored : fallback;
+  } catch {
+    return fallback;
+  }
+}
 
 export type TableControls = {
   /** Live input value (bind to the search box). */
@@ -52,12 +66,13 @@ export function useTableControls(options: TableControlsOptions = {}): TableContr
     initialSortDir = 'desc',
     initialFilters = {},
     searchDelay = 300,
+    storageKey,
   } = options;
 
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [page, setPage] = useState(1);
-  const [limit, setLimitState] = useState(initialLimit);
+  const [limit, setLimitState] = useState(() => readStoredLimit(storageKey, initialLimit));
   const [sortBy, setSortBy] = useState<string | undefined>(initialSortBy);
   const [sortDir, setSortDir] = useState<SortDir>(initialSortDir);
   const [filters, setFilters] = useState<Record<string, string | undefined>>(initialFilters);
@@ -98,6 +113,9 @@ export function useTableControls(options: TableControlsOptions = {}): TableContr
   const setLimit = (value: number) => {
     setLimitState(value);
     setPage(1);
+    if (storageKey) {
+      try { window.localStorage.setItem(`ks.web.table-size.${storageKey}`, String(value)); } catch { /* remembered only for this visit */ }
+    }
   };
 
   const params = useMemo(() => {

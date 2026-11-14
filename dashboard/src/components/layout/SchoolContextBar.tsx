@@ -13,7 +13,7 @@ import { canSelectSchool, isGroupWorkspacePath } from './schoolScope';
  */
 export function SchoolContextBar() {
   const session = useAuthStore((s) => s.session);
-  const { activeSchool, setActiveSchool } = useSchoolStore();
+  const { activeSchool, preferredSchool, setActiveSchool, suspendForGroupPage, resumePreferred } = useSchoolStore();
   const navigate = useNavigate();
   const location = useLocation();
   const [open, setOpen] = useState(false);
@@ -43,17 +43,25 @@ export function SchoolContextBar() {
   const { data: schools } = useSchools();
   const visibleSchools = useMemo(() => (schools ?? []).filter((s) => canSelectSchool(session?.user.scope, scopedIds, s.id)), [schools, session, scopedIds]);
 
-  // Clear school scope when entering a whole-group route, but not when a user
-  // selects a school from its menu before navigation finishes.
+  // Whole-group pages look at every school, but the school the user chose is remembered: leaving the group page
+  // brings them straight back to it, and a refresh keeps it. Choosing "All Schools" is what forgets it.
   useLayoutEffect(() => {
-    if (groupRole && onGroupPage && useSchoolStore.getState().activeSchool) setActiveSchool(null);
-  }, [groupRole, onGroupPage, location.pathname, setActiveSchool]);
+    if (!groupRole) return;
+    if (onGroupPage) suspendForGroupPage();
+    else resumePreferred();
+  }, [groupRole, onGroupPage, location.pathname, suspendForGroupPage, resumePreferred]);
 
   // Keep the selector consistent with current membership and auto-scope a
   // single-school user. This never infers access from the role label alone.
   useEffect(() => {
     if (!session) return;
-    if (activeSchool && !canSelectSchool(session.user.scope, scopedIds, activeSchool.id)) {
+    const remembered = activeSchool ?? preferredSchool;
+    // A remembered school the user can no longer open (access removed, or the school was closed) is dropped.
+    if (remembered && !canSelectSchool(session.user.scope, scopedIds, remembered.id)) {
+      setActiveSchool(null);
+      return;
+    }
+    if (remembered && schools && !schools.some((s) => s.id === remembered.id)) {
       setActiveSchool(null);
       return;
     }
@@ -61,7 +69,11 @@ export function SchoolContextBar() {
       const only = visibleSchools[0];
       setActiveSchool({ id: only.id, name: only.name, code: only.code, type: only.type, gender: only.gender });
     }
-  }, [session, onGroupPage, groupRole, activeSchool, scopedIds, visibleSchools, setActiveSchool]);
+  }, [session, groupRole, activeSchool, preferredSchool, scopedIds, schools, visibleSchools, setActiveSchool]);
+
+  // On a whole-group page the chosen school is only paused: offer the way back.
+  const pausedSchool = groupRole && onGroupPage && !activeSchool ? preferredSchool : null;
+  const resumeHome = role === 'HEAD_OF_FINANCE' ? '/finance/invoices' : '/principal';
 
   if (!session || (!showSwitcher && !activeSchool)) return null;
 
@@ -139,6 +151,19 @@ export function SchoolContextBar() {
             </div>
           )}
         </div>
+
+        {pausedSchool && (
+          <div className="flex items-center gap-2 rounded-full bg-[#d59a1b]/15 px-3 py-1.5 text-xs font-black text-[#7a5200]">
+            You were working in {pausedSchool.name}
+            <button
+              type="button"
+              onClick={() => { setActiveSchool(pausedSchool); navigate(resumeHome); }}
+              className="flex items-center gap-1 rounded-full bg-[#00334f] px-2.5 py-0.5 text-white transition hover:bg-[#001e30]"
+            >
+              <SchoolIcon className="h-3 w-3" /> Go back
+            </button>
+          </div>
+        )}
 
         {groupRole && activeSchool && (
           <div className="flex items-center gap-2 rounded-full bg-[#d59a1b]/15 px-3 py-1.5 text-xs font-black text-[#7a5200]">

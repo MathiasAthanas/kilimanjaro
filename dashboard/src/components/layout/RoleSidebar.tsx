@@ -617,6 +617,7 @@ const headOfFinanceSections: SidebarSection[] = [
     title: 'Group Finance',
     items: [
       { to: '/finance-group', icon: WalletCards, label: 'Consolidated Finance', end: true },
+      { to: '/finance/payments/approve', icon: ClipboardCheck, label: 'Approve Payments', end: true },
     ],
   },
 ];

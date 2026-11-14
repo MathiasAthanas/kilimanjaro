@@ -193,7 +193,7 @@ export function useInvoices(params?: Record<string, unknown>) {
 export interface LedgerMeta { page: number; limit: number; total: number; totalPages: number }
 
 /** One page of the invoice ledger with totals, status counts and filter choices for the whole filtered set. */
-export function useInvoiceLedger(params: { page: number; limit?: number; status?: string; search?: string; classId?: string; termId?: string; studentId?: string; sort?: 'outstanding' }, options?: { enabled?: boolean }) {
+export function useInvoiceLedger(params: { page: number; limit?: number; status?: string; search?: string; classId?: string; termId?: string; studentId?: string; sort?: 'outstanding'; sortBy?: string; sortDir?: string }, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: [...financeKeys.all, 'invoice-ledger', params] as const,
     queryFn: async () => {
@@ -301,7 +301,7 @@ export function usePayment(id: string) {
 }
 
 /** One page of the payment ledger with totals and status counts for everything that matches. */
-export function usePaymentLedger(params: { page: number; limit?: number; status?: string; method?: string; search?: string; startDate?: string; endDate?: string; studentId?: string }, options?: { enabled?: boolean }) {
+export function usePaymentLedger(params: { page: number; limit?: number; status?: string; method?: string; search?: string; startDate?: string; endDate?: string; studentId?: string; sortBy?: string; sortDir?: string }, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: [...financeKeys.all, 'payment-ledger', params] as const,
     queryFn: async () => {
@@ -378,7 +378,7 @@ export function useReceipts(params?: Record<string, unknown>) {
 }
 
 /** One page of the receipt ledger with the active/void counts for everything that matches. */
-export function useReceiptLedger(params: { page: number; limit?: number; state?: string; search?: string; studentId?: string }, options?: { enabled?: boolean }) {
+export function useReceiptLedger(params: { page: number; limit?: number; state?: string; search?: string; studentId?: string; sortBy?: string; sortDir?: string }, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: [...financeKeys.all, 'receipt-ledger', params] as const,
     queryFn: async () => {
@@ -472,7 +472,7 @@ export function useFeeStructures() {
         const className =
           strOf(s.className, s.class, s.class_name) ||
           (classId ? classMap.get(classId) ?? '' : '') ||
-          [stage.replace(/_/g, ' '), level ? `Form ${level}` : ''].filter(Boolean).join(' · ') ||
+          (stage ? [stage.replace(/_/g, ' '), s.classLevel === null || s.classLevel === undefined ? 'all levels' : `level ${level} (all streams)`].join(' · ') : '') ||
           strOf(s.studentGroup, s.group);
         return {
           ...s,
@@ -487,6 +487,10 @@ export function useFeeStructures() {
           currency: strOf(s.currency) || 'TZS',
           active: Boolean(s.isActive ?? s.active ?? true),
           classLevel: level,
+          // null = a whole-stage price; the number above is 0 for both that and a real level 0
+          rawClassLevel: s.classLevel === null || s.classLevel === undefined ? null : Number(s.classLevel),
+          schoolId: s.schoolId ? String(s.schoolId) : null,
+          termId: s.termId ? String(s.termId) : null,
         };
       });
     },

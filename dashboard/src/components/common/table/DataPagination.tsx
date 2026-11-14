@@ -7,6 +7,8 @@ export type DataPaginationProps = {
   onPageSizeChange?: (size: number) => void;
   pageSizeOptions?: number[];
   unit?: string;
+  /** 'navy' matches the finance, manager and principal screens; 'indigo' the admin console. */
+  variant?: 'indigo' | 'navy';
 };
 
 const BTN =
@@ -23,9 +25,11 @@ export function DataPagination({
   total,
   onPageChange,
   onPageSizeChange,
-  pageSizeOptions = [10, 20, 50, 100],
+  pageSizeOptions = [25, 50, 100],
   unit = 'results',
+  variant = 'indigo',
 }: DataPaginationProps) {
+  const active = variant === 'navy' ? 'border-[#00334f] bg-[#00334f] text-white' : 'border-[#4338CA] bg-[#4338CA] text-white';
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
   if (total === 0) return null;
   const from = (page - 1) * pageSize + 1;
@@ -50,7 +54,7 @@ export function DataPagination({
             className="mr-1 h-8 cursor-pointer rounded-lg border border-slate-200 bg-white px-2 text-xs font-black text-slate-600 outline-none transition hover:border-slate-300"
             aria-label="Rows per page"
           >
-            {pageSizeOptions.map((size) => (
+            {(pageSizeOptions.includes(pageSize) ? pageSizeOptions : [...pageSizeOptions, pageSize].sort((a, b) => a - b)).map((size) => (
               <option key={size} value={size}>{size} / page</option>
             ))}
           </select>
@@ -61,7 +65,7 @@ export function DataPagination({
           <button
             key={p}
             onClick={() => onPageChange(p)}
-            className={`${BTN} ${p === page ? 'border-[#4338CA] bg-[#4338CA] text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'}`}
+            className={`${BTN} ${p === page ? active : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'}`}
           >
             {p}
           </button>

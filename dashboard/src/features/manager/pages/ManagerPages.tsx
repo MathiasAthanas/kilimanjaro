@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   AlertTriangle, ArrowRight, BadgeCheck, Banknote, ChevronRight,
@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { Badge } from '../../../components/common/Badge';
 import { Button } from '../../../components/common/Button';
+import { ClientDataTable, type DataColumn } from '../../../components/common/table';
 import { DataError } from '../../../components/feedback/DataError';
 import { SkeletonTable } from '../../../components/common/SkeletonTable';
 import { toast } from '../../../lib/toast';
@@ -278,57 +279,44 @@ export function ManagerOverviewPage() {
 
 function ScorecardTable({ schools }: { schools: SchoolScorecard[] }) {
   const enterSchool = useEnterSchool();
-  const [sortKey, setSortKey] = useState<keyof SchoolScorecard>('students');
-  const sorted = useMemo(
-    () => [...schools].sort((a, b) => Number(b[sortKey] ?? 0) - Number(a[sortKey] ?? 0)),
-    [schools, sortKey],
-  );
-  const headers: Array<[string, keyof SchoolScorecard]> = [
-    ['Students', 'students'], ['Capacity Fill', 'capacityFillPct'], ['Acad. Mean', 'academicMean'],
-    ['Collection', 'collectionRate'], ['Outstanding', 'outstanding'], ['Attendance', 'attendanceRate'], ['At Risk', 'atRisk'],
+  const pct = (v: number | null | undefined) => (v != null ? `${v}%` : '—');
+  const columns: Array<DataColumn<SchoolScorecard>> = [
+    {
+      key: 'name', label: 'School', sort: (s) => s.name,
+      render: (s) => (
+        <>
+          <button type="button" onClick={() => enterSchool(s)} className="text-left font-black text-[#00334f] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0284c7]">{s.name}</button>
+          <p className="text-[11px] font-bold text-[#64748b]">{SCHOOL_TYPE_LABELS[s.type]} · {SCHOOL_GENDER_LABELS[s.gender]}</p>
+        </>
+      ),
+    },
+    { key: 'students', label: 'Students', sort: (s) => s.students, align: 'right', render: (s) => <span className="font-mono font-black tabular-nums">{s.students}</span> },
+    { key: 'capacityFillPct', label: 'Capacity fill', sort: (s) => s.capacityFillPct ?? -1, align: 'right', render: (s) => <span className="font-mono tabular-nums">{pct(s.capacityFillPct)}</span> },
+    { key: 'academicMean', label: 'Acad. mean', sort: (s) => s.academicMean ?? -1, align: 'right', render: (s) => <span className="font-mono tabular-nums">{pct(s.academicMean)}</span> },
+    { key: 'collectionRate', label: 'Collection', sort: (s) => s.collectionRate ?? -1, align: 'right', render: (s) => <span className="font-mono tabular-nums">{pct(s.collectionRate)}</span> },
+    { key: 'outstanding', label: 'Outstanding', sort: (s) => s.outstanding, align: 'right', render: (s) => <span className="whitespace-nowrap font-mono tabular-nums text-[#d97706]">{formatTZS(s.outstanding)}</span> },
+    { key: 'attendanceRate', label: 'Attendance', sort: (s) => s.attendanceRate ?? -1, align: 'right', render: (s) => <span className="font-mono tabular-nums">{pct(s.attendanceRate)}</span> },
+    { key: 'atRisk', label: 'At risk', sort: (s) => s.atRisk, align: 'right', render: (s) => <span className="font-mono tabular-nums">{s.atRisk}</span> },
+    { key: 'health', label: 'Health', sort: (s) => s.health, render: (s) => <Badge tone={s.health === 'GOOD' ? 'emerald' : s.health === 'WATCH' ? 'amber' : 'rose'}>{s.health}</Badge> },
   ];
   return (
-    <section className="overflow-hidden rounded-lg border border-[#d5dde6] bg-white">
-      <div className="flex items-center justify-between border-b border-[#eef2f6] px-5 py-3.5">
+    <section>
+      <div className="mb-3 flex items-center justify-between">
         <h2 className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-[#00334f]"><Table2 className="h-3.5 w-3.5" /> School Scorecards</h2>
         <p className="text-[11px] font-bold text-[#94a3b8]">Click a column to sort · click a school to enter it</p>
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-left text-sm" style={{ minWidth: 980 }}>
-          <thead className="bg-[#eef5f8]">
-            <tr>
-              <th className="border-b border-[#d5dde6] px-4 py-3 text-[10px] font-black uppercase tracking-widest text-[#00334f]">School</th>
-              {headers.map(([label, key]) => (
-                <th key={label} className="border-b border-[#d5dde6] px-4 py-3 text-[10px] font-black uppercase tracking-widest text-[#00334f]">
-                  <button type="button" onClick={() => setSortKey(key)} aria-label={`Sort schools by ${label}`}
-                    className="text-left hover:text-[#0284c7] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0284c7]">
-                    {label}{sortKey === key ? ' ↓' : ''}
-                  </button>
-                </th>
-              ))}
-              <th className="border-b border-[#d5dde6] px-4 py-3 text-[10px] font-black uppercase tracking-widest text-[#00334f]">Health</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[#e2e8f0]">
-            {sorted.map((s) => (
-              <tr key={s.id} className="bg-white transition even:bg-[#f7f9fb] hover:bg-[#eef5f8]">
-                <td className="px-4 py-3">
-                  <button type="button" onClick={() => enterSchool(s)} className="text-left font-black text-[#00334f] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0284c7]">{s.name}</button>
-                  <p className="text-[11px] font-bold text-[#64748b]">{SCHOOL_TYPE_LABELS[s.type]} · {SCHOOL_GENDER_LABELS[s.gender]}</p>
-                </td>
-                <td className="px-4 py-3 font-mono font-black tabular-nums">{s.students}</td>
-                <td className="px-4 py-3 font-mono tabular-nums">{s.capacityFillPct != null ? `${s.capacityFillPct}%` : '—'}</td>
-                <td className="px-4 py-3 font-mono tabular-nums">{s.academicMean != null ? `${s.academicMean}%` : '—'}</td>
-                <td className="px-4 py-3 font-mono tabular-nums">{s.collectionRate != null ? `${s.collectionRate}%` : '—'}</td>
-                <td className="px-4 py-3 font-mono tabular-nums text-[#d97706]">{formatTZS(s.outstanding)}</td>
-                <td className="px-4 py-3 font-mono tabular-nums">{s.attendanceRate != null ? `${s.attendanceRate}%` : '—'}</td>
-                <td className="px-4 py-3 font-mono tabular-nums">{s.atRisk}</td>
-                <td className="px-4 py-3"><Badge tone={s.health === 'GOOD' ? 'emerald' : s.health === 'WATCH' ? 'amber' : 'rose'}>{s.health}</Badge></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <ClientDataTable
+        rows={schools}
+        columns={columns}
+        rowKey={(s) => s.id}
+        unit="schools"
+        searchText={(s) => s.name}
+        searchPlaceholder="Search schools…"
+        initialSortBy="students"
+        initialSortDir="desc"
+        storageKey="manager-scorecards"
+        minWidth={980}
+      />
     </section>
   );
 }
@@ -389,34 +377,33 @@ export function GroupFinancePage() {
               <div className="border-b border-[#eef2f6] px-5 py-3.5">
                 <h2 className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-[#00334f]"><Banknote className="h-3.5 w-3.5" /> Per-School Finance</h2>
               </div>
-              <div className="overflow-x-auto"><table className="w-full min-w-[680px] text-left text-sm">
-                <thead className="bg-[#eef5f8]">
-                  <tr>
-                    {['School', 'Invoiced', 'Collected', 'Outstanding', 'Rate', 'Next step'].map((h) => (
-                      <th key={h} className="border-b border-[#d5dde6] px-4 py-3 text-[10px] font-black uppercase tracking-widest text-[#00334f]">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#e2e8f0]">
-                  {visibleSchoolFinance.map((s) => (
-                    <tr key={s.id} className="bg-white even:bg-[#f7f9fb]">
-                      <td className="px-4 py-3 font-black text-[#00334f]">{s.name}</td>
-                      <td className="px-4 py-3 font-mono tabular-nums">{formatTZS(s.invoiced)}</td>
-                      <td className="px-4 py-3 font-mono tabular-nums text-[#10b981]">{formatTZS(s.collected)}</td>
-                      <td className="px-4 py-3 font-mono tabular-nums text-[#d97706]">{formatTZS(s.outstanding)}</td>
-                      <td className="px-4 py-3 font-mono font-black tabular-nums">{s.collectionRate != null ? `${s.collectionRate}%` : '—'}</td>
-                      <td className="px-4 py-3">
-                        {schools.find((school) => school.id === s.id) ? (
-                          <button type="button" onClick={() => enterSchoolFinance(schools.find((school) => school.id === s.id)!)}
-                            className="whitespace-nowrap text-xs font-black text-[#00334f] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0284c7]">
-                            Open school finance →
-                          </button>
-                        ) : <span className="text-xs font-semibold text-[#64748b]">Select school above</span>}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table></div>
+              <div className="p-3">
+                <ClientDataTable
+                  rows={visibleSchoolFinance}
+                  columns={[
+                    { key: 'name', label: 'School', sort: (s) => s.name, render: (s) => <span className="font-black text-[#00334f]">{s.name}</span> },
+                    { key: 'invoiced', label: 'Invoiced', sort: (s) => s.invoiced, align: 'right', render: (s) => <span className="whitespace-nowrap font-mono tabular-nums">{formatTZS(s.invoiced)}</span> },
+                    { key: 'collected', label: 'Collected', sort: (s) => s.collected, align: 'right', render: (s) => <span className="whitespace-nowrap font-mono tabular-nums text-[#10b981]">{formatTZS(s.collected)}</span> },
+                    { key: 'outstanding', label: 'Outstanding', sort: (s) => s.outstanding, align: 'right', render: (s) => <span className="whitespace-nowrap font-mono tabular-nums text-[#d97706]">{formatTZS(s.outstanding)}</span> },
+                    { key: 'collectionRate', label: 'Rate', sort: (s) => s.collectionRate ?? -1, align: 'right', render: (s) => <span className="font-mono font-black tabular-nums">{s.collectionRate != null ? `${s.collectionRate}%` : '—'}</span> },
+                    {
+                      key: 'next', label: 'Next step',
+                      render: (s) => schools.find((school) => school.id === s.id) ? (
+                        <button type="button" onClick={() => enterSchoolFinance(schools.find((school) => school.id === s.id)!)}
+                          className="whitespace-nowrap text-xs font-black text-[#00334f] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0284c7]">
+                          Open school finance →
+                        </button>
+                      ) : <span className="text-xs font-semibold text-[#64748b]">Select school above</span>,
+                    },
+                  ]}
+                  rowKey={(s) => s.id}
+                  unit="schools"
+                  initialSortBy="outstanding"
+                  initialSortDir="desc"
+                  storageKey="manager-school-finance"
+                  minWidth={680}
+                />
+              </div>
             </section>
           </div>
 

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../lib/api/client';
 import { arrayFromApi, payloadOf } from '../../../lib/api/response';
+import type { PrincipalPaymentApproval } from '../types/principal.types';
 
 // ─── Query key factory ────────────────────────────────────────────────────────
 
@@ -273,43 +274,92 @@ function waitingFor(from: unknown): { label: string; hours: number } {
   return { label: `${Math.floor(hours / 24)}d ${hours % 24}h`, hours };
 }
 
+/** One row of the approval queue: an approval record with its payment nested inside, shaped for the screens. */
+export function mapPendingApproval(raw: unknown): PrincipalPaymentApproval {
+  const a = raw as Record<string, unknown>;
+  const pay = (a.payment ?? {}) as Record<string, unknown>;
+  const waited = waitingFor(a.requestedAt ?? pay.createdAt);
+  const amount = Number(pay.amount ?? a.amount ?? 0);
+  const risk: 'critical' | 'high' | 'medium' | 'stable' = waited.hours >= 72 ? 'critical' : waited.hours >= 48 || amount >= 5_000_000 ? 'high' : waited.hours >= 24 ? 'medium' : 'stable';
+  return {
+    ...a,
+    id: String(a.id ?? crypto.randomUUID()),
+    paymentId: String(a.paymentId ?? pay.id ?? ''),
+    paymentNumber: String(pay.paymentNumber ?? ''),
+    student: resolveName(a.studentName ?? a.student ?? pay.payerName) || 'Student',
+    registration: String(a.registrationNumber ?? ''),
+    className: String(a.className ?? ''),
+    invoice: String(a.invoiceNumber ?? ''),
+    invoiceId: String(pay.invoiceId ?? ''),
+    paidAt: String(pay.paidAt ?? pay.createdAt ?? ''),
+    requestedAt: String(a.requestedAt ?? pay.createdAt ?? ''),
+    method: String(pay.method ?? a.method ?? ''),
+    amount,
+    reference: String(pay.referenceNumber ?? a.reference ?? ''),
+    enteredBy: 'Finance office',
+    enteredById: String(a.requestedById ?? ''),
+    age: waited.label,
+    ageHours: waited.hours,
+    risk,
+    notes: String(a.notes ?? pay.notes ?? ''),
+    evidenceUrl: String(a.supportingDocumentUrl ?? ''),
+  } as PrincipalPaymentApproval;
+}
+
 export function usePrincipalPendingPayments() {
   return useQuery({
     queryKey: principalKeys.pendingPayments(),
-    queryFn: () =>
-      api.get('/finance/payments/pending-approval').then((r) =>
-        arrayFromApi(payloadOf(r), ['items', 'payments', 'approvals']).map((raw) => {
-          // Each row is an approval record with its payment nested inside
-          const a = raw as Record<string, unknown>;
-          const pay = (a.payment ?? {}) as Record<string, unknown>;
-          const waited = waitingFor(a.requestedAt ?? pay.createdAt);
-          const amount = Number(pay.amount ?? a.amount ?? 0);
-          const risk: 'critical' | 'high' | 'medium' | 'stable' = waited.hours >= 72 ? 'critical' : waited.hours >= 48 || amount >= 5_000_000 ? 'high' : waited.hours >= 24 ? 'medium' : 'stable';
-          return {
-            ...a,
-            id: String(a.id ?? crypto.randomUUID()),
-            paymentId: String(a.paymentId ?? pay.id ?? ''),
-            paymentNumber: String(pay.paymentNumber ?? ''),
-            student: resolveName(a.studentName ?? a.student ?? pay.payerName) || 'Student',
-            registration: String(a.registrationNumber ?? ''),
-            invoice: String(a.invoiceNumber ?? ''),
-            invoiceId: String(pay.invoiceId ?? ''),
-            paidAt: String(pay.paidAt ?? pay.createdAt ?? ''),
-            method: String(pay.method ?? a.method ?? ''),
-            amount,
-            reference: String(pay.referenceNumber ?? a.reference ?? ''),
-            enteredBy: 'Finance office',
-            age: waited.label,
-            risk,
-            notes: String(a.notes ?? pay.notes ?? ''),
-            evidenceUrl: String(a.supportingDocumentUrl ?? ''),
-          };
-        }),
-      ),
+    queryFn: () => api.get('/finance/payments/pending-approval').then((r) => arrayFromApi(payloadOf(r), ['items', 'payments', 'approvals']).map(mapPendingApproval)),
     // A decision queue must not show yesterday's picture: reload on every visit and keep checking while it is open.
     staleTime: 0,
     refetchOnMount: 'always',
     refetchInterval: 20_000,
+  });
+}
+
+export type PendingApprovalPage = {
+  items: PrincipalPaymentApproval[];
+  meta: { page: number; limit: number; total: number; totalPages: number };
+  totals: { pendingAmount: number; pendingCount: number };
+};
+
+/** One page of the approval queue (search, method, sort and page size are decided on the server, so 500 waiting payments stay quick). */
+export function usePendingApprovalsPage(params: Record<string, string | number>) {
+  return useQuery({
+    queryKey: [...principalKeys.pendingPayments(), 'page', params] as const,
+    queryFn: () =>
+      api.get('/finance/payments/pending-approval', { params: { paged: 1, ...params } }).then((r): PendingApprovalPage => {
+        const p = payloadOf(r) as { items?: unknown[]; meta?: PendingApprovalPage['meta']; totals?: { pendingAmount?: string | number; pendingCount?: number } };
+        const items = (p.items ?? []).map(mapPendingApproval);
+        const meta = p.meta ?? { page: 1, limit: items.length, total: items.length, totalPages: 1 };
+        return { items, meta, totals: { pendingAmount: Number(p.totals?.pendingAmount ?? 0), pendingCount: Number(p.totals?.pendingCount ?? meta.total) } };
+      }),
+    placeholderData: (previous) => previous,
+    staleTime: 0,
+    refetchOnMount: 'always',
+    refetchInterval: 20_000,
+  });
+}
+
+/** Every waiting payment that matches the filters (up to 200), for "select everything that matches". */
+export async function fetchMatchingApprovals(params: Record<string, string | number>): Promise<PrincipalPaymentApproval[]> {
+  const r = await api.get('/finance/payments/pending-approval', { params: { ...params, paged: 1, page: 1, limit: 200 } });
+  const p = payloadOf(r) as { items?: unknown[] };
+  return (p.items ?? []).map(mapPendingApproval);
+}
+
+export type BulkDecisionResult = { decision: 'APPROVE' | 'REJECT'; requested: number; succeeded: number; done: string[]; failed: Array<{ approvalId: string; message: string }> };
+
+/** Approve or reject many waiting payments at once; each is decided on its own and the answer says which ones were not. */
+export function useDecidePaymentsMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { decision: 'APPROVE' | 'REJECT'; approvalIds: string[]; reason?: string }) =>
+      api.post('/finance/payments/approvals/decide', body).then((r): BulkDecisionResult => (r.data?.data ?? r.data) as BulkDecisionResult),
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: principalKeys.pendingPayments() });
+      void qc.invalidateQueries({ queryKey: principalKeys.schoolHealth() });
+    },
   });
 }
 
