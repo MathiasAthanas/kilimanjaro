@@ -121,3 +121,17 @@ Kept: the fee category "Term One Tuition Fee" and its 6 fee structures, the 29 O
 Backup taken first: `/opt/kilimanjaro/backups/finance_schema_pre_demo_cleanup_20261114T145426Z.dump` (finance schema, SHA-256 `061a1068030ee1728868e8434660bfa77af8e558b940c058f60215b31d4741c1`); restore with `pg_restore` of the finance schema if ever needed. After: invoices 1, payments 1, receipts 1, approvals 1; all 8 services online.
 
 Note: the working tree has uncommitted finance changes (short invoice numbers INV2600123 and payment changes) that are not part of any release yet.
+
+## 9. Finance release: short invoice numbers, payment approval queue (commits `76d3db5` backend, `37257de` dashboard)
+
+Deployed 2026-11-14 15:09 UTC as release `/opt/kilimanjaro/releases/finance-approval-37257de-20261114T150524Z` (previous `finance-fixes-1d0f889-20261113T114140Z`). Archive SHA-256 `2f1861249a347c981743019d46192c17457aef521c8bf5e54e71ca74078af1c3`. Dashboard bundle `index-DXtjzdUY.js`. No database migration.
+
+Contents: invoice numbers become INV + year + 5 digits (first new invoice INV2600001) from a single group-wide counter; the payment approval queue is paged, searchable, filterable and sortable with bulk approve/reject (each payment decided independently); nobody approves or rejects a payment they entered; the Head of Finance may now approve other people's payments; approval notes are stored; invoice, payment and receipt lists accept an allow-listed sort; class filters accept several class ids; a second price for the same class level, fee and term is refused; sortable/searchable tables for invoices, payments, receipts and the manager scorecards; the user's chosen school is remembered across refreshes; the newest structure wins when two prices match at the same level (earlier fix `61cbe14`); payment timeline wording and Payment Approval redesign were already live.
+
+Not included (still uncommitted in the working tree): the gateway/services throttle-removal work. `backend/scripts/finance-shorten-invoice-numbers.sql` was committed but deliberately NOT run on production (no legacy long invoice numbers remain except the 29 October QA invoice).
+
+Backups: database `/opt/kilimanjaro/backups/kilimanjaro_prod_pre_finance_approval_20261114T150603Z.dump` (SHA-256 `7e18d61c9951ff754502f7ed47ef72e37287d19f994c8378ec7c9d484ac342cd`) and `frontend_pre_finance_approval_20261114T150603Z.tar.gz`.
+
+Verification: all 8 services online, health OK, dashboard 200; compiled code contains the new numbering, bulk decisions and tie-break; `prisma migrate diff` shows no missing columns, tables or enum values; no fresh error lines in any log; finance rows unchanged (1 invoice, 1 payment, 1 receipt, 7 structures, 488 audit rows), users 1753 (staff activity). Local verification beforehand: backend tests 17 passed; payment approval end-to-end script 20/20; dashboard 205 tests, type check and lint clean; pages loaded on screen without console errors. Not viewed on production (no login there).
+
+Rollback: point `/opt/kilimanjaro/app` at the previous release and `pm2 startOrReload ecosystem.config.js --update-env`; restore the matching `frontend_pre_*` archive for the dashboard. Invoices created after this release carry the new numbers and remain valid either way.
