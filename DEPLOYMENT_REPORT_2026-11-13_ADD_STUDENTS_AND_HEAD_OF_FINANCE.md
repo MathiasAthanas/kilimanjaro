@@ -111,3 +111,13 @@ Open item found by inspection: production's only "current" term is the leftover 
 Deployed 2026-11-13 18:39 UTC as a dashboard-only publish (no backend restart, no database change), release `/opt/kilimanjaro/releases/dash-payapproval-447b6fb-20261113T183822Z`, archive SHA-256 `1f718f7a6a229c18e750cca7612b657568150682ce8fc7ec1794a6d695d98604`, bundle `index-wGewOmDY.js`. Previous dashboard archived as `frontend_pre_payapproval_*.tar.gz` in `/opt/kilimanjaro/backups`.
 
 New card layout for each pending payment, method-aware quick notes, Approve/Reject rules (confirmation box, 8-character note), a header without school-health figures and with the right role line for a Manager, a queue that refreshes on every visit and every 20 seconds, and a rebuilt detail page with evidence preview. Verified locally on screen (approve, reject, detail, phone width) and with 8 new tests; the full dashboard suite (188) passes. Not viewed on production (no login there).
+
+## 8. Demo finance data removed from production (2026-11-14 14:54 UTC)
+
+At the owner's request, the records created during the client demonstration on 2026-11-13 were deleted from the production finance database in one guarded transaction: 238 invoices (INV-KS-PRIMARY-SHOO-2026-…-00001 to -00238, Primary Shoo, Term 1, TZS 208,910,000 invoiced, 700,000 paid), their line items, payment PAY-KS-PRIMARY-SHOO-2026-00000001 (TZS 700,000 cash) with its approval record and receipt RCP-KS-PRIMARY-SHOO-2026-00000001, and the three number counters for that school (invoice, payment, receipt) so numbering restarts at 1. The transaction aborts unless exactly those counts are found.
+
+Kept: the fee category "Term One Tuition Fee" and its 6 fee structures, the 29 October mobile QA records (1 invoice, 1 payment, 1 receipt, QA category), and the whole financial audit trail (488 rows, which still lists the deleted demo actions).
+
+Backup taken first: `/opt/kilimanjaro/backups/finance_schema_pre_demo_cleanup_20261114T145426Z.dump` (finance schema, SHA-256 `061a1068030ee1728868e8434660bfa77af8e558b940c058f60215b31d4741c1`); restore with `pg_restore` of the finance schema if ever needed. After: invoices 1, payments 1, receipts 1, approvals 1; all 8 services online.
+
+Note: the working tree has uncommitted finance changes (short invoice numbers INV2600123 and payment changes) that are not part of any release yet.
