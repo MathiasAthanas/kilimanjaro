@@ -15,6 +15,7 @@ import { AccessControlService } from '../common/helpers/access-control.service';
 import { NumberSequenceService } from '../common/helpers/number-sequence.service';
 import { RequestUser } from '../common/interfaces/request-user.interface';
 import { PrismaService } from '../prisma/prisma.service';
+import { resolveSort } from '../common/helpers/sort.helper';
 import { schoolScopeFilter, assertSchoolInScope, schoolInScope } from '../common/helpers/school-scope.helper';
 import { RabbitMqService } from '../rabbitmq/rabbitmq.service';
 import { RedisService } from '../redis/redis.service';
@@ -34,6 +35,14 @@ type InvoiceGenerationJob = {
   };
   error?: string;
 };
+
+/** One class id, or several joined by commas (every stream of a class level), as a Prisma filter. */
+export function classIdFilter(value: unknown): string | { in: string[] } | undefined {
+  const text = typeof value === 'string' ? value.trim() : '';
+  if (!text) return undefined;
+  const ids = text.split(',').map((v) => v.trim()).filter(Boolean);
+  return ids.length > 1 ? { in: ids } : ids[0];
+}
 
 @Injectable()
 export class InvoicesService {
@@ -157,7 +166,7 @@ export class InvoicesService {
     const total = subtotal;
     const grace = Number(this.configService.get<string>('FEE_DUE_GRACE_DAYS', '14'));
     const dueDate = new Date(Date.now() + grace * 24 * 60 * 60 * 1000);
-    const invoiceNumber = await this.numberService.invoiceNumber(dto.termId.replace(/[^A-Za-z0-9]/g, '').toUpperCase(), schoolId);
+    const invoiceNumber = await this.numberService.invoiceNumber();
 
     const invoice = await this.prisma.invoice.create({
       data: {
@@ -356,7 +365,7 @@ export class InvoicesService {
           ...schoolScopeFilter(user),
           termId: filters.termId,
           academicYearId: filters.academicYearId,
-          classId: filters.classId,
+          classId: classIdFilter(filters.classId),
           status: filters.status,
         },
       });
@@ -393,7 +402,7 @@ export class InvoicesService {
       return this.describe(await this.prisma.invoice.findMany({
         where: {
           studentId: studentFilter || { in: studentIds },
-          classId: filters.classId,
+          classId: classIdFilter(filters.classId),
           termId: filters.termId,
           academicYearId: filters.academicYearId,
           status: filters.status,
@@ -409,7 +418,7 @@ export class InvoicesService {
       where: {
         ...schoolScopeFilter(user),
         studentId: studentFilter,
-        classId: filters.classId,
+        classId: classIdFilter(filters.classId),
         termId: filters.termId,
         academicYearId: filters.academicYearId,
         status: filters.status,
@@ -429,7 +438,7 @@ export class InvoicesService {
   private async listPaged(filters: any, user: RequestUser, page: number, limit: number) {
     const base: Prisma.InvoiceWhereInput = {
       ...schoolScopeFilter(user),
-      classId: filters.classId || undefined,
+      classId: classIdFilter(filters.classId),
       termId: filters.termId || undefined,
       academicYearId: filters.academicYearId || undefined,
       studentId: filters.studentId || undefined,
@@ -449,7 +458,21 @@ export class InvoicesService {
     const [rows, total, sums, byStatus, classGroups, termGroups] = await Promise.all([
       this.prisma.invoice.findMany({
         where,
-        orderBy: filters.sort === 'outstanding' ? [{ outstandingBalance: 'desc' }, { invoiceNumber: 'desc' }] : [{ dueDate: 'desc' }, { invoiceNumber: 'desc' }],
+        orderBy: resolveSort(
+          filters.sortBy,
+          filters.sortDir,
+          {
+            invoiceNumber: (d) => ({ invoiceNumber: d }),
+            dueDate: (d) => ({ dueDate: d }),
+            total: (d) => ({ totalAmount: d }),
+            paid: (d) => ({ paidAmount: d }),
+            outstanding: (d) => ({ outstandingBalance: d }),
+            status: (d) => ({ status: d }),
+            issuedAt: (d) => ({ issuedAt: d }),
+          },
+          filters.sort === 'outstanding' ? [{ outstandingBalance: 'desc' }, { invoiceNumber: 'desc' }] : [{ dueDate: 'desc' }, { invoiceNumber: 'desc' }],
+          { invoiceNumber: 'desc' },
+        ) as any,
         skip: (page - 1) * limit,
         take: limit,
       }),

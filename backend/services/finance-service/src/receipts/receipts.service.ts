@@ -1,3 +1,4 @@
+import { resolveSort } from '../common/helpers/sort.helper';
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { FinancialAuditAction, Prisma } from '../../generated/prisma';
@@ -220,7 +221,19 @@ export class ReceiptsService {
       this.prisma.receipt.findMany({
         where,
         include: { payment: { select: { paymentNumber: true } }, invoice: { select: { invoiceNumber: true } } },
-        orderBy: { issuedAt: 'desc' },
+        orderBy: resolveSort(
+          filters.sortBy,
+          filters.sortDir,
+          {
+            issuedAt: (d) => ({ issuedAt: d }),
+            amount: (d) => ({ amount: d }),
+            receiptNumber: (d) => ({ receiptNumber: d }),
+            studentName: (d) => ({ studentName: d }),
+            method: (d) => ({ method: d }),
+          },
+          [{ issuedAt: 'desc' }],
+          { receiptNumber: 'desc' },
+        ) as any,
         skip: (page - 1) * limit,
         take: limit,
       }),

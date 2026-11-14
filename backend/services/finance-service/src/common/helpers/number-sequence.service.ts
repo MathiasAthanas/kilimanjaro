@@ -2,6 +2,11 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StudentClientService } from '../../student-client/student-client.service';
 
+/** INV + last two digits of the year + the counter padded to five digits (grows past 99,999 rather than repeating). */
+export function formatInvoiceNumber(year: number, value: number): string {
+  return `INV${String(year % 100).padStart(2, '0')}${String(value).padStart(5, '0')}`;
+}
+
 @Injectable()
 export class NumberSequenceService {
   constructor(
@@ -36,10 +41,15 @@ export class NumberSequenceService {
     return Number(rows[0].value);
   }
 
-  async invoiceNumber(termCode: string, schoolId?: string | null): Promise<string> {
+  /**
+   * Parents type this number into mobile-money and bank prompts, so it is short: INV + two-digit year + five digits
+   * (INV2600123, 10 characters). One counter for the whole group keeps every number unique without a school or term
+   * code; the school and term are already on the invoice itself.
+   */
+  async invoiceNumber(): Promise<string> {
     const year = new Date().getUTCFullYear();
-    const value = await this.next('INV', year, schoolId);
-    return `INV-${await this.tag(schoolId)}${year}-${termCode}-${String(value).padStart(5, '0')}`;
+    const value = await this.next('INVS', year, null);
+    return formatInvoiceNumber(year, value);
   }
 
   async paymentNumber(schoolId?: string | null): Promise<string> {

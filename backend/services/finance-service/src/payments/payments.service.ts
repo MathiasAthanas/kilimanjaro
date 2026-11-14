@@ -20,6 +20,7 @@ import { NumberSequenceService } from '../common/helpers/number-sequence.service
 import { AuditService } from '../audit/audit.service';
 import { RabbitMqService } from '../rabbitmq/rabbitmq.service';
 import { RequestUser } from '../common/interfaces/request-user.interface';
+import { resolveSort } from '../common/helpers/sort.helper';
 import { schoolScopeFilter, assertSchoolInScope } from '../common/helpers/school-scope.helper';
 import { ReceiptsService } from '../receipts/receipts.service';
 import { StudentClientService } from '../student-client/student-client.service';
@@ -331,7 +332,19 @@ export class PaymentsService {
       this.prisma.payment.findMany({
         where,
         include: { invoice: { select: { invoiceNumber: true } }, receipt: { select: { receiptNumber: true, isVoided: true } } },
-        orderBy: { paidAt: 'desc' },
+        orderBy: resolveSort(
+          filters.sortBy,
+          filters.sortDir,
+          {
+            paidAt: (d) => ({ paidAt: d }),
+            amount: (d) => ({ amount: d }),
+            method: (d) => ({ method: d }),
+            status: (d) => ({ status: d }),
+            paymentNumber: (d) => ({ paymentNumber: d }),
+          },
+          [{ paidAt: 'desc' }],
+          { paymentNumber: 'desc' },
+        ) as any,
         skip: (page - 1) * limit,
         take: limit,
       }),
@@ -392,31 +405,111 @@ export class PaymentsService {
     };
   }
 
-  async pendingApprovals(user: RequestUser) {
-    const rows = await this.prisma.manualPaymentApproval.findMany({
-      where: {
-        decision: null,
-        payment: { ...schoolScopeFilter(user) },
-      },
-      include: { payment: { include: { invoice: { select: { invoiceNumber: true } } } } },
-      orderBy: { requestedAt: 'asc' },
-    });
+  /**
+   * The approval queue. Without paging parameters it returns every waiting payment (older clients). With `paged=1`
+   * (or a page/limit) it returns one page of `{ items, meta, totals }` so a queue of hundreds stays quick:
+   * searchable by student, invoice, reference or payer, filterable by method, sortable by age, amount or method.
+   */
+  async pendingApprovals(user: RequestUser, filters: any = {}) {
+    const paged = Boolean(filters.paged) || filters.page !== undefined || filters.limit !== undefined;
+    const page = Math.max(1, Number(filters.page || 1));
+    const limit = Math.min(200, Math.max(1, Number(filters.limit || 25)));
+    const q = String(filters.search ?? filters.q ?? '').trim();
+    const method = String(filters.method ?? '').trim().toUpperCase();
+
+    const paymentWhere: Prisma.PaymentWhereInput = {
+      ...schoolScopeFilter(user),
+      ...(method ? { method: method as PaymentMethod } : {}),
+    };
+    if (q) {
+      const ids = await this.studentClient.searchStudents(q);
+      paymentWhere.OR = [
+        { paymentNumber: { contains: q, mode: 'insensitive' } },
+        { referenceNumber: { contains: q, mode: 'insensitive' } },
+        { payerName: { contains: q, mode: 'insensitive' } },
+        { invoice: { invoiceNumber: { contains: q, mode: 'insensitive' } } },
+        ...(ids.length ? [{ studentId: { in: ids } }] : []),
+      ];
+    }
+    const where: any = { decision: null, payment: paymentWhere };
+
+    const dir: 'asc' | 'desc' = String(filters.sortDir ?? '').toLowerCase() === 'desc' ? 'desc' : 'asc';
+    const sortBy = String(filters.sortBy ?? 'requestedAt');
+    const orderBy: any[] =
+      sortBy === 'amount' ? [{ payment: { amount: dir } }, { requestedAt: 'asc' }]
+      : sortBy === 'method' ? [{ payment: { method: dir } }, { requestedAt: 'asc' }]
+      : sortBy === 'invoice' ? [{ payment: { invoice: { invoiceNumber: dir } } }, { requestedAt: 'asc' }]
+      : [{ requestedAt: dir }];
+
+    const [rows, total, sum] = await Promise.all([
+      this.prisma.manualPaymentApproval.findMany({
+        where,
+        include: { payment: { include: { invoice: { select: { invoiceNumber: true } } } } },
+        orderBy,
+        ...(paged ? { skip: (page - 1) * limit, take: limit } : {}),
+      }),
+      paged ? this.prisma.manualPaymentApproval.count({ where }) : Promise.resolve(0),
+      paged ? this.prisma.payment.aggregate({ where: { manualApproval: { is: { decision: null } }, ...paymentWhere }, _sum: { amount: true } }) : Promise.resolve(null),
+    ]);
     const names = await this.studentClient.lookupStudents(rows.map((r) => r.payment.studentId));
-    return rows.map((r) => ({
+    const items = rows.map((r) => ({
       ...r,
       studentName: names.get(r.payment.studentId)?.name ?? '',
       registrationNumber: names.get(r.payment.studentId)?.registrationNumber ?? '',
+      className: names.get(r.payment.studentId)?.className ?? null,
       invoiceNumber: r.payment.invoice?.invoiceNumber,
     }));
+    if (!paged) return items;
+    return {
+      items,
+      meta: { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) },
+      totals: { pendingAmount: (sum?._sum.amount ?? new Prisma.Decimal(0)).toString(), pendingCount: total },
+    };
   }
 
-  async approve(approvalId: string, user: RequestUser) {
+  /**
+   * Decide many waiting payments in one request (a bursar's day can leave a hundred). Each is decided on its own,
+   * so one that cannot be approved (the invoice was settled meanwhile, or you entered it yourself) never blocks the
+   * rest. Returns what happened to each.
+   */
+  async decideMany(input: { decision: 'APPROVE' | 'REJECT'; approvalIds: string[]; reason?: string }, user: RequestUser) {
+    const ids = [...new Set((input.approvalIds ?? []).filter((id) => typeof id === 'string' && id))];
+    if (!ids.length) throw new BadRequestException('Choose at least one payment');
+    if (ids.length > 200) throw new BadRequestException('Decide at most 200 payments at a time');
+    if (input.decision !== 'APPROVE' && input.decision !== 'REJECT') throw new BadRequestException('Decision must be APPROVE or REJECT');
+    const reason = (input.reason ?? '').trim();
+    if (input.decision === 'REJECT' && reason.length < 8) throw new BadRequestException('Give a reason of at least 8 characters for rejecting');
+
+    const done: string[] = [];
+    const failed: Array<{ approvalId: string; message: string }> = [];
+    // One at a time: each approval recalculates its invoice, and two payments can share one invoice.
+    for (const approvalId of ids) {
+      try {
+        if (input.decision === 'APPROVE') await this.approve(approvalId, user, reason || undefined);
+        else await this.reject(approvalId, reason, user);
+        done.push(approvalId);
+      } catch (error) {
+        failed.push({ approvalId, message: (error as Error)?.message ?? 'Could not be decided' });
+      }
+    }
+    return { decision: input.decision, requested: ids.length, succeeded: done.length, done, failed };
+  }
+
+  /** Nobody reviews a payment they entered themselves (the Head of Finance can enter and approve, but not both on one payment). */
+  private assertNotOwnEntry(approval: { requestedById: string }, user: RequestUser) {
+    if (approval.requestedById && approval.requestedById === user.id) {
+      throw new ForbiddenException('You entered this payment, so someone else must approve or reject it');
+    }
+  }
+
+  async approve(approvalId: string, user: RequestUser, notes?: string) {
     const approval = await this.prisma.manualPaymentApproval.findUnique({ where: { id: approvalId }, include: { payment: true } });
     if (!approval) throw new NotFoundException('Approval record not found');
     assertSchoolInScope(user, approval.payment?.schoolId ?? null);
     if (approval.decision !== null) {
       throw new BadRequestException(`Approval already ${approval.decision.toLowerCase()}`);
     }
+    this.assertNotOwnEntry(approval, user);
 
     // The invoice may have been settled, waived or cancelled since the payment was entered.
     const liveInvoice = await this.prisma.invoice.findUnique({ where: { id: approval.payment.invoiceId } });
@@ -430,7 +523,7 @@ export class PaymentsService {
 
     await this.prisma.manualPaymentApproval.update({
       where: { id: approvalId },
-      data: { decision: 'APPROVED', reviewedAt: new Date(), reviewedById: user.id },
+      data: { decision: 'APPROVED', reviewedAt: new Date(), reviewedById: user.id, ...(notes?.trim() ? { notes: notes.trim().slice(0, 500) } : {}) },
     });
 
     const payment = await this.prisma.payment.update({
@@ -472,6 +565,7 @@ export class PaymentsService {
     if (approval.decision !== null) {
       throw new BadRequestException(`Approval already ${approval.decision.toLowerCase()}`);
     }
+    this.assertNotOwnEntry(approval, user);
 
     await this.prisma.manualPaymentApproval.update({
       where: { id: approvalId },

@@ -45,8 +45,8 @@ export class PaymentsController {
 
   @Get('pending-approval')
   @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
-  pending(@CurrentUser() user?: RequestUser) {
-    return this.paymentsService.pendingApprovals(user!);
+  pending(@Query() query: any, @CurrentUser() user?: RequestUser) {
+    return this.paymentsService.pendingApprovals(user!, query);
   }
 
   @Get(':id')
@@ -55,14 +55,22 @@ export class PaymentsController {
     return this.paymentsService.byId(id, user!);
   }
 
+  // Approvers: Head of School, Manager and Head of Finance (and the platform administrators).
+  // The finance officer who enters a payment cannot approve it, and nobody reviews a payment they entered.
+  @Post('approvals/decide')
+  @Roles(ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.HEAD_OF_FINANCE, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
+  decideMany(@Body() body: { decision: 'APPROVE' | 'REJECT'; approvalIds: string[]; reason?: string }, @CurrentUser() user?: RequestUser) {
+    return this.paymentsService.decideMany(body, user!);
+  }
+
   @Patch('approvals/:approvalId/approve')
-  @Roles(ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
-  approve(@Param('approvalId') approvalId: string, @CurrentUser() user?: RequestUser) {
-    return this.paymentsService.approve(approvalId, user!);
+  @Roles(ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.HEAD_OF_FINANCE, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
+  approve(@Param('approvalId') approvalId: string, @Body() body: { notes?: string }, @CurrentUser() user?: RequestUser) {
+    return this.paymentsService.approve(approvalId, user!, body?.notes);
   }
 
   @Patch('approvals/:approvalId/reject')
-  @Roles(ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
+  @Roles(ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.HEAD_OF_FINANCE, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
   reject(@Param('approvalId') approvalId: string, @Body() dto: RejectApprovalDto, @CurrentUser() user?: RequestUser) {
     return this.paymentsService.reject(approvalId, dto.rejectionReason, user!);
   }

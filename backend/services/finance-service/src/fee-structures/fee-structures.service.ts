@@ -30,6 +30,26 @@ export class FeeStructuresService {
     }
 
     const schoolId = resolveRequiredWriteSchoolId(user);
+
+    // The database only keeps one price per class; a price set for a whole class level (every stream) has no
+    // class id, so two of them would both be accepted. Refuse the second here.
+    if (!dto.classId && dto.educationStage && !dto.studentGroup) {
+      const duplicate = await this.prisma.feeStructure.findFirst({
+        where: {
+          schoolId,
+          feeCategoryId: dto.feeCategoryId,
+          academicYearId: dto.academicYearId,
+          termId: dto.termId ?? null,
+          classId: null,
+          studentGroup: null,
+          educationStage: dto.educationStage as any,
+          classLevel: dto.classLevel ?? null,
+          isActive: true,
+        },
+      });
+      if (duplicate) throw new ConflictException('A price for this fee, class level and term already exists. Edit it instead of adding another.');
+    }
+
     const row = await this.prisma.feeStructure.create({
       data: {
         schoolId,
