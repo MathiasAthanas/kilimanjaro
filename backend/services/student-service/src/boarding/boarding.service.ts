@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { BedStatus, HostelLeaveStatus, Prisma, ResidenceType, RollCallSession } from '../../generated/prisma';
+import { BedStatus, HostelLeaveStatus, Prisma, ResidenceType, RollCallSession, StudentStatus } from '../../generated/prisma';
 import { PrismaService } from '../prisma/prisma.service';
 import { RequestUser } from '../common/interfaces/request-user.interface';
 import { assertSchoolInScope, requireWriteSchoolId, schoolScopeFilter } from '../common/helpers/school-scope.helper';
@@ -60,9 +60,13 @@ export class BoardingService {
       this.prisma.hostelRollCall.count({ where: { dormitoryId: { in: ids }, date: startOfToday, session: currentSession } }),
       this.prisma.studentLeave.count({ where: { dormitoryId: { in: ids }, status: HostelLeaveStatus.DEPARTED, expectedReturnAt: { gte: startOfToday, lt: startOfTomorrow } } }),
     ]) : [0, 0, 0, 0, 0];
+    const awaitingPlacement = await this.prisma.student.count({
+      where: { ...schoolScopeFilter(user), status: StudentStatus.ACTIVE, residenceType: ResidenceType.BOARDING, dormitoryAssignments: { none: { isActive: true } } },
+    });
     return {
       dormitories: dorms,
       totals: {
+        awaitingPlacement,
         dormitories: dorms.length,
         beds: dorms.reduce((sum, d) => sum + d.totalBeds, 0),
         occupied: dorms.reduce((sum, d) => sum + d.occupiedBeds, 0),
@@ -93,13 +97,26 @@ export class BoardingService {
     }));
   }
 
+  private async uniqueDormitoryCode(schoolId: string, name: string, wanted?: string) {
+    const base = (wanted?.trim() || name.trim().split(/\s+/).map((w) => w[0]).join('') || name.slice(0, 3)).toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 10) || 'DORM';
+    let code = base;
+    for (let n = 2; await this.prisma.dormitory.findUnique({ where: { schoolId_code: { schoolId, code } } }); n++) {
+      if (wanted?.trim()) throw new ConflictException(`A dormitory with code ${base} already exists in this school`);
+      code = `${base}${n}`;
+    }
+    return code;
+  }
+
   async createDormitory(dto: CreateDormitoryDto, actorId: string, user?: RequestUser) {
     const schoolId = requireWriteSchoolId(user, 'dormitory');
+    const name = dto.name.trim();
+    const code = await this.uniqueDormitoryCode(schoolId, name, dto.code);
+    const staff = [...new Map((dto.staff ?? []).map((s) => [s.staffUserId, s])).values()];
     return this.prisma.dormitory.create({
       data: {
         schoolId,
-        name: dto.name.trim(),
-        code: dto.code.trim().toUpperCase(),
+        name,
+        code,
         totalBeds: dto.totalBeds,
         notes: dto.notes,
         eligibilityNotes: dto.eligibilityNotes,
@@ -107,9 +124,36 @@ export class BoardingService {
         beds: dto.totalBeds > 0 ? {
           create: Array.from({ length: dto.totalBeds }, (_, index) => ({ label: `B${String(index + 1).padStart(3, '0')}` })),
         } : undefined,
+        staffAssignments: staff.length ? { create: staff.map((s) => ({ staffUserId: s.staffUserId, staffRole: s.staffRole, assignedBy: actorId })) } : undefined,
       },
-      include: { beds: true },
+      include: { beds: true, staffAssignments: true },
     });
+  }
+
+  /** Boarders who have no dormitory yet: the matron's and patron's to-do list. */
+  async awaiting(user?: RequestUser) {
+    const students = await this.prisma.student.findMany({
+      where: {
+        ...schoolScopeFilter(user),
+        status: StudentStatus.ACTIVE,
+        residenceType: ResidenceType.BOARDING,
+        dormitoryAssignments: { none: { isActive: true } },
+      },
+      select: {
+        id: true, firstName: true, lastName: true, registrationNumber: true, gender: true, schoolId: true, admissionDate: true,
+        enrolments: { where: { isActive: true }, take: 1, select: { class: { select: { name: true } } } },
+      },
+      orderBy: [{ admissionDate: 'desc' }, { firstName: 'asc' }],
+      take: 500,
+    });
+    const dormitories = (await this.listDormitories(user)).map((d) => ({
+      id: d.id, name: d.name, code: d.code, schoolId: d.schoolId, totalBeds: d.totalBeds, occupiedBeds: d.occupiedBeds, availableBeds: d.availableBeds,
+    }));
+    return {
+      total: students.length,
+      students: students.map(({ enrolments, ...s }) => ({ ...s, className: enrolments[0]?.class?.name ?? null })),
+      dormitories,
+    };
   }
 
   async updateDormitory(id: string, dto: UpdateDormitoryDto, user?: RequestUser) {

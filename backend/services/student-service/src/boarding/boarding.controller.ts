@@ -18,6 +18,9 @@ export class BoardingController {
   @Get('dashboard') @Roles(...BOARDING_READ)
   dashboard(@CurrentUser() user?: RequestUser) { return this.service.dashboard(user); }
 
+  @Get('awaiting') @Roles(...BOARDING_READ)
+  awaiting(@CurrentUser() user?: RequestUser) { return this.service.awaiting(user); }
+
   @Get('dormitories') @Roles(...BOARDING_READ)
   dormitories(@CurrentUser() user?: RequestUser) { return this.service.listDormitories(user); }
 

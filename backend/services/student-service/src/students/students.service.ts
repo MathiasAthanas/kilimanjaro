@@ -29,6 +29,7 @@ import {
 import { RabbitMqService } from '../rabbitmq/rabbitmq.service';
 import { assertSchoolInScope, resolveWriteSchoolId, schoolScopeFilter } from '../common/helpers/school-scope.helper';
 import { RedisService } from '../redis/redis.service';
+import { ResidenceService } from '../residence/residence.service';
 
 @Injectable()
 export class StudentsService {
@@ -38,6 +39,7 @@ export class StudentsService {
     private readonly prisma: PrismaService,
     private readonly rabbitMq: RabbitMqService,
     private readonly redis: RedisService,
+    private readonly residence: ResidenceService,
   ) {}
 
   /**
@@ -277,6 +279,25 @@ export class StudentsService {
       enrolledBy: actorId,
     });
 
+    if (dto.residenceType) {
+      // Start of the residence history: how the student was classified when they joined.
+      await this.prisma.residenceChange
+        .create({
+          data: {
+            studentId: (created as { id: string }).id,
+            schoolId: (created as { schoolId?: string | null }).schoolId ?? null,
+            fromType: null,
+            toType: dto.residenceType,
+            status: 'APPLIED',
+            source: 'ADMISSION',
+            changedBy: actorId,
+            changedByRole: user?.role ?? null,
+            appliedAt: new Date(),
+          },
+        })
+        .catch((err) => this.logger.warn(`Residence history was not recorded for the new student: ${(err as Error)?.message}`));
+    }
+
     await this.redis.set(`student:${(created as { id: string }).id}:profile`, created, 300);
     await this.redis.set(`student:reg:${(created as { registrationNumber: string }).registrationNumber}`, created, 300);
 
@@ -410,37 +431,23 @@ export class StudentsService {
 
     assertSchoolInScope(user, existing.schoolId ?? null);
 
-    if (dto.residenceType === ResidenceType.DAY_SCHOLAR && existing.residenceType !== ResidenceType.DAY_SCHOLAR) {
-      const activeDormitory = await this.prisma.dormitoryStudentAssignment.findFirst({
-        where: { studentId: id, isActive: true },
-        select: { id: true },
-      });
-      if (activeDormitory) {
-        throw new ConflictException('Remove the student from the active dormitory roster before changing to Day Scholar');
-      }
+    // Boarding / Day Scholar is never written straight onto the student: it goes through the residence service so the
+    // dormitory bed is freed, the change is recorded and finance hears about it.
+    const { residenceType: requestedResidence, ...rest } = dto;
+    if (requestedResidence && requestedResidence !== existing.residenceType) {
+      await this.residence.applyNow(id, requestedResidence, { source: 'EDIT', actorId: user?.id || 'system', actorRole: user?.role });
     }
 
     const updated = await this.prisma.student.update({
       where: { id },
       data: {
-        ...dto,
-        ...(dto.dateOfBirth ? { dateOfBirth: new Date(dto.dateOfBirth) } : {}),
+        ...rest,
+        ...(rest.dateOfBirth ? { dateOfBirth: new Date(rest.dateOfBirth) } : {}),
       },
       include: this.buildStudentProfileInclude(),
     });
 
     await this.redis.del(`student:${id}:profile`, `student:reg:${existing.registrationNumber}`);
-
-    if (dto.residenceType && dto.residenceType !== existing.residenceType) {
-      await this.rabbitMq.publish('student.residence.changed', {
-        studentId: id,
-        schoolId: existing.schoolId,
-        previousResidenceType: existing.residenceType,
-        residenceType: dto.residenceType,
-        changedBy: user?.id || 'system',
-        changedAt: new Date().toISOString(),
-      });
-    }
 
     return updated;
   }
@@ -474,6 +481,8 @@ export class StudentsService {
     });
 
     await this.redis.del(`student:${id}:profile`, `student:reg:${student.registrationNumber}`);
+
+    if (dto.status !== StudentStatus.ACTIVE) await this.residence.releaseForInactiveStudent(id);
 
     return updated;
   }

@@ -37,6 +37,14 @@ enum ResidenceType {
   @@schema("students")
 }
 
+enum ResidenceChangeStatus {
+  SCHEDULED
+  APPLIED
+  CANCELLED
+
+  @@schema("students")
+}
+
 enum BedStatus {
   AVAILABLE
   OCCUPIED
@@ -277,6 +285,7 @@ model Student {
   dormitoryAssignments DormitoryStudentAssignment[]
   hostelRollCalls    HostelRollCall[]
   hostelLeaves       StudentLeave[]
+  residenceChanges   ResidenceChange[]
 
   @@index([schoolId, legacyAdmissionNumber])
   @@index([schoolId, residenceType])
@@ -954,5 +963,32 @@ model StudentLeaveEvent {
   leave     StudentLeave       @relation(fields: [leaveId], references: [id], onDelete: Cascade)
 
   @@index([leaveId, createdAt])
+  @@schema("students")
+}
+
+/// One row per Boarding/Day Scholar classification change: the audit trail behind Student.residenceType.
+/// SCHEDULED rows take effect when their term starts (or when an admin applies them early).
+model ResidenceChange {
+  id                  String                 @id @default(uuid())
+  studentId           String
+  schoolId            String?
+  fromType            ResidenceType?
+  toType              ResidenceType
+  status              ResidenceChangeStatus  @default(APPLIED)
+  effectiveTermId     String?
+  effectiveFrom       DateTime?
+  reason              String?
+  releasedDormitoryId String?
+  /// CHANGE (guided action), BULK, EDIT (profile edit), ADMISSION
+  source              String                 @default("CHANGE")
+  changedBy           String
+  changedByRole       String?
+  createdAt           DateTime               @default(now())
+  appliedAt           DateTime?
+  student             Student                @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId, createdAt])
+  @@index([status, effectiveFrom])
+  @@index([schoolId, createdAt])
   @@schema("students")
 }

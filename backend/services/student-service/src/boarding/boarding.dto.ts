@@ -2,12 +2,20 @@ import { Type } from 'class-transformer';
 import { IsArray, IsDateString, IsEnum, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
 import { BedStatus, HostelLeaveStatus, HostelRollCallStatus, LeaveType, RollCallSession } from '../../generated/prisma';
 
+export class DormitoryStaffInputDto {
+  @IsString() staffUserId!: string;
+  @IsIn(['MATRON', 'PATRON']) staffRole!: 'MATRON' | 'PATRON';
+}
+
 export class CreateDormitoryDto {
   @IsString() @IsNotEmpty() name!: string;
-  @IsString() @IsNotEmpty() code!: string;
+  /** Optional: when blank a short code is made from the name. */
+  @IsOptional() @IsString() code?: string;
   @Type(() => Number) @IsInt() @Min(0) totalBeds!: number;
   @IsOptional() @IsString() notes?: string;
   @IsOptional() @IsString() eligibilityNotes?: string;
+  /** Matrons and patrons to put in charge straight away. */
+  @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => DormitoryStaffInputDto) staff?: DormitoryStaffInputDto[];
 }
 
 export class UpdateDormitoryDto {

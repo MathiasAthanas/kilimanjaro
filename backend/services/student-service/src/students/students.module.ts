@@ -5,8 +5,10 @@ import { StudentImportService } from './import/student-import.service';
 import { AuthClientService } from '../admissions/auth-client.service';
 import { AccessControlService } from '../common/helpers/access-control.service';
 import { StudentLifecycleService } from './student-lifecycle.service';
+import { ResidenceModule } from '../residence/residence.module';
 
 @Module({
+  imports: [ResidenceModule],
   controllers: [StudentsController],
   providers: [StudentsService, StudentImportService, AuthClientService, AccessControlService, StudentLifecycleService],
   exports: [StudentsService, AccessControlService],

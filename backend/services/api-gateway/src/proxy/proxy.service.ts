@@ -43,6 +43,9 @@ export class ProxyService {
     if (normalized.startsWith('/admissions/') || normalized === '/admissions') {
       return this.route('student', urls.student, path, normalized);
     }
+    if (normalized.startsWith('/residence/') || normalized === '/residence') {
+      return this.route('student', urls.student, path, normalized);
+    }
     if (normalized.startsWith('/boarding/') || normalized === '/boarding') {
       return this.route('student', urls.student, path, normalized);
     }
