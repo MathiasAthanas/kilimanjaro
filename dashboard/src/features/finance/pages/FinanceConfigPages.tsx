@@ -190,9 +190,8 @@ async function imageToDataUrl(file: File, maxSide: number): Promise<string> {
 }
 
 const brandingKinds: Array<{ kind: BrandingKind; title: string; hint: string; max: number }> = [
-  { kind: 'logo', title: 'School logo', hint: 'Printed top left. A square or round badge works best.', max: 400 },
-  { kind: 'signature', title: 'Signature', hint: 'The authorised signature, on a plain or transparent background.', max: 500 },
-  { kind: 'stamp', title: 'School stamp', hint: 'The official stamp, printed over the signature line.', max: 500 },
+  { kind: 'logo', title: 'School logo (optional)', hint: 'Printed top left. Leave empty to use the Kilimanjaro Schools badge.', max: 400 },
+  { kind: 'stamp', title: 'School stamp (optional)', hint: 'Printed at the bottom right of the invoice.', max: 500 },
 ];
 
 const swatches = ['#d59a1b', '#00334f', '#0f766e', '#7c3aed', '#be123c', '#1d4ed8'];
@@ -233,7 +232,8 @@ export function InvoiceBrandingPage() {
             <div className="space-y-gutter">
               <section className="rounded-lg border border-[#d5dde6] bg-white p-5">
                 <h2 className="font-display text-xl font-black text-[#00334f]">Pictures on the invoice</h2>
-                <div className="mt-4 grid gap-4 md:grid-cols-3">
+                <p className="mt-1 text-sm font-semibold text-[#64748b]">Invoices carry the Kilimanjaro Schools logo by default.</p>
+                <div className="mt-4 grid gap-4 md:grid-cols-2">
                   {brandingKinds.map(({ kind, title, hint, max }) => (
                     <div key={kind} className="rounded-lg border border-[#d5dde6] p-4">
                       <p className="font-black text-[#00334f]">{title}</p>
@@ -265,7 +265,6 @@ export function InvoiceBrandingPage() {
                   </div>
                   <label><span className={cap}>Document title</span><input value={form.invoiceTitle} maxLength={40} onChange={(e) => setForm({ ...form, invoiceTitle: e.target.value })} className={input} /></label>
                   <label className="md:col-span-2"><span className={cap}>Note at the bottom</span><textarea value={form.invoiceNote} maxLength={400} rows={2} onChange={(e) => setForm({ ...form, invoiceNote: e.target.value })} placeholder="Payment of 100% of the fees for the term is preferred." className="mt-1 w-full rounded border border-[#d5dde6] bg-[#f7f9fb] p-3 text-sm font-semibold outline-none focus:border-[#00334f]" /></label>
-                  <label><span className={cap}>Name under the signature (optional)</span><input value={form.signatoryName} maxLength={80} onChange={(e) => setForm({ ...form, signatoryName: e.target.value })} placeholder="For example: Bursar" className={input} /></label>
                 </div>
               </section>
 

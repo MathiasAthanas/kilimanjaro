@@ -12,10 +12,10 @@ Menu: Finance, Fee Setup.
 
 1. **Payment Info**: press *Add account* and enter each bank account and mobile-money number parents should pay into (bank or network, account name, number, a short description such as "Fees"). Only active accounts are printed on invoices.
 2. **Invoice Look**:
-   - Upload the school **logo**, the **signature** and the **stamp** (PNG or JPG).
-   - Pick the accent colour, write the note at the bottom, and the name to print under the signature (optional).
+   - Invoices carry the Kilimanjaro Schools logo automatically. Upload a different **logo** or a **stamp** only if the school wants one (PNG or JPG).
+   - Pick the accent colour and write the note at the bottom.
    - Choose the **residence rule**: when a student moves between in campus and off campus in the middle of a term, should the new fee apply *from next term*, *from this term*, or *ask each time*.
-   - Press **Save changes**, then **Preview invoice**. Check the logo, colours, accounts and stamp on the sample.
+   - Press **Save changes**, then **Preview invoice**. Check the logo, colours and accounts on the sample.
 3. **Fee Structures / Fee Matrix**: check that prices are set per class level (Class 1, Form 2). If a boarder pays more, add a second price for the same level marked *Boarding*; the normal price stays for day scholars.
 4. **Payment Plans**: press *New plan*. Choose which fees are split (usually tuition), then add the instalments (a percentage, a fixed amount or "the rest", due on a date or a number of days after the invoice). The right-hand panel shows what a parent would see. Percentages must add up to 100%.
 5. ⛔ **Wait** until the admission office has classified the students (step 3) **before** pressing *Generate Invoices*. Students who are not classified only receive prices that are not tied to boarding or day.

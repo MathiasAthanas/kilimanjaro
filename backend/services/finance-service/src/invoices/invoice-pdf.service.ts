@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { mkdirSync, createWriteStream } from 'fs';
+import { mkdirSync, createWriteStream, existsSync, readFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { SchoolProfile, fmtDate, newDocument } from '../common/pdf/pdf-layout';
 
@@ -57,7 +57,21 @@ function textOn(hex: string): string {
 
 @Injectable()
 export class InvoicePdfService {
+  private static defaultLogoCache: Buffer | null | undefined;
+
   constructor(private readonly configService: ConfigService) {}
+
+  /** The Kilimanjaro Schools badge, used when a school has not uploaded a logo of its own. */
+  private static defaultLogo(): Buffer | null {
+    if (InvoicePdfService.defaultLogoCache !== undefined) return InvoicePdfService.defaultLogoCache;
+    const found = [
+      join(__dirname, 'assets', 'kilimanjaro_logo.png'),
+      join(process.cwd(), 'src', 'invoices', 'assets', 'kilimanjaro_logo.png'),
+      join(process.cwd(), 'dist', 'src', 'invoices', 'assets', 'kilimanjaro_logo.png'),
+    ].find((candidate) => existsSync(candidate));
+    InvoicePdfService.defaultLogoCache = found ? readFileSync(found) : null;
+    return InvoicePdfService.defaultLogoCache;
+  }
 
   /** Draws the invoice and returns its path under the PDF storage folder. */
   async generate(invoice: InvoicePdfData): Promise<string> {
@@ -92,9 +106,10 @@ export class InvoicePdfService {
 
     // ── Header: logo + school identity ──
     let textX = M;
-    if (brand?.logo) {
+    const logo = brand?.logo ?? InvoicePdfService.defaultLogo();
+    if (logo) {
       try {
-        doc.image(brand.logo, M, 30, { fit: [74, 74] });
+        doc.image(logo, M, 30, { fit: [74, 74] });
         textX = M + 88;
       } catch {
         // an unreadable image never blocks an invoice
@@ -241,21 +256,15 @@ export class InvoicePdfService {
     doc.text(num(inv.outstandingBalance + inv.previousBalance), tx + 80, sy + 10, { width: 115, align: 'right' });
     ty = Math.max(ay, sy + 32) + 14;
 
-    // ── Note (left) and authorised signature with stamp (right) share one band ──
+    // ── Note, and the school stamp when one has been uploaded (no signature area) ──
     const note = brand?.note || 'Payment of 100% of the fees for the term is preferred.';
     ty = this.ensureSpace(doc, ty, 90);
     doc.fillColor(INK).font('Helvetica-Bold').fontSize(11).text('Note:', M, ty);
-    doc.fillColor(GREY).font('Helvetica').fontSize(8.5).text(note, M, ty + 15, { width: 270 });
-    const sx = W - M - 190;
-    if (brand?.signature) {
-      try { doc.image(brand.signature, sx + 10, ty, { fit: [110, 46] }); } catch { /* ignore */ }
-    }
+    doc.fillColor(GREY).font('Helvetica').fontSize(8.5).text(note, M, ty + 15, { width: 300 });
     if (brand?.stamp) {
-      try { doc.image(brand.stamp, sx + 70, ty - 8, { fit: [110, 80] }); } catch { /* ignore */ }
+      try { doc.image(brand.stamp, W - M - 120, ty - 6, { fit: [120, 84] }); } catch { /* ignore */ }
     }
-    doc.moveTo(sx, ty + 62).lineTo(sx + 190, ty + 62).lineWidth(1).strokeColor(INK).stroke();
-    doc.fillColor(INK).font('Helvetica').fontSize(9).text(brand?.signatoryName ? `Authorised Sign · ${brand.signatoryName}` : 'Authorised Sign', sx, ty + 67, { width: 190, align: 'center' });
-    doc.moveTo(M, ty + 62).lineTo(sx - 20, ty + 62).lineWidth(1.5).strokeColor(accent).stroke();
+    doc.moveTo(M, ty + 84).lineTo(W - M, ty + 84).lineWidth(1.5).strokeColor(accent).stroke();
 
     // ── Page footers ──
     const range = doc.bufferedPageRange();
