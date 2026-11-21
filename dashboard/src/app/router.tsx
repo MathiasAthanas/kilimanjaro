@@ -295,6 +295,7 @@ import { InvoiceBrandingPage, PaymentInfoPage, PaymentPlansPage } from '../featu
 import { ResidencePage } from '../features/residence/pages/ResidencePage';
 import { BoardingDashboardPage } from '../features/boarding/pages/BoardingDashboardPage';
 import { BoardingTodayPage } from '../features/boarding/pages/BoardingTodayPage';
+import { RollCallReportPage } from '../features/boarding/pages/RollCallReportPage';
 import { BoardingEntryPage, BoardingLeavesPage, BoardingRollCallDetailPage, BoardingRollCallsPage } from '../features/boarding/pages/BoardingStaffPages';
 import {
   ComposeReportCardsPage,
@@ -538,6 +539,7 @@ export const router = createBrowserRouter([
       { path: '/boarding/admin', element: <BoardingDashboardPage /> },
       { path: '/boarding/overview', element: <BoardingTodayPage /> },
       { path: '/boarding/roll-calls', element: <BoardingRollCallsPage /> },
+      { path: '/boarding/roll-call-report', element: <RollCallReportPage /> },
       { path: '/boarding/roll-calls/:dormitoryId/:date/:session', element: <BoardingRollCallDetailPage /> },
       { path: '/boarding/leaves', element: <BoardingLeavesPage /> },
       { path: '/admin', element: <AdminHomePage /> },

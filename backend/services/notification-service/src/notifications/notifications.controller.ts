@@ -24,6 +24,7 @@ export class NotificationsController {
     ROLES.TEACHER,
     ROLES.PARENT,
     ROLES.STUDENT,
+    ROLES.HEAD_OF_SCHOOL, ROLES.MANAGER, ROLES.SUPER_ADMIN, ROLES.ADMISSIONS, ROLES.MATRON, ROLES.PATRON,
   )
   list(@CurrentUser() user?: RequestUser, @Query() query?: NotificationsQueryDto) {
     return this.service.list(user!.id, query || {} as NotificationsQueryDto);
@@ -41,6 +42,7 @@ export class NotificationsController {
     ROLES.TEACHER,
     ROLES.PARENT,
     ROLES.STUDENT,
+    ROLES.HEAD_OF_SCHOOL, ROLES.MANAGER, ROLES.SUPER_ADMIN, ROLES.ADMISSIONS, ROLES.MATRON, ROLES.PATRON,
   )
   read(@Param('id') id: string, @CurrentUser() user?: RequestUser) {
     return this.service.markRead(id, user!.id);
@@ -58,6 +60,7 @@ export class NotificationsController {
     ROLES.TEACHER,
     ROLES.PARENT,
     ROLES.STUDENT,
+    ROLES.HEAD_OF_SCHOOL, ROLES.MANAGER, ROLES.SUPER_ADMIN, ROLES.ADMISSIONS, ROLES.MATRON, ROLES.PATRON,
   )
   readAll(@CurrentUser() user?: RequestUser) {
     return this.service.markAllRead(user!.id);
@@ -75,6 +78,7 @@ export class NotificationsController {
     ROLES.TEACHER,
     ROLES.PARENT,
     ROLES.STUDENT,
+    ROLES.HEAD_OF_SCHOOL, ROLES.MANAGER, ROLES.SUPER_ADMIN, ROLES.ADMISSIONS, ROLES.MATRON, ROLES.PATRON,
   )
   unread(@CurrentUser() user?: RequestUser) {
     return this.service.unreadCount(user!.id).then((count) => ({ count }));

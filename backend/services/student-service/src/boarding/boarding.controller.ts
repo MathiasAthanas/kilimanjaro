@@ -5,6 +5,7 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { RequestUser } from '../common/interfaces/request-user.interface';
 import { BoardingService } from './boarding.service';
+import { RollCallReportService } from './rollcall-report.service';
 import { AssignDormitoryStaffDto, AssignDormitoryStudentDto, CreateDormitoryDto, CreateStudentLeaveDto, RecordRollCallDto, TransitionStudentLeaveDto, UpdateBedDto, UpdateDormitoryDto } from './boarding.dto';
 
 const BOARDING_READ = ['MATRON', 'PATRON', 'SYSTEM_ADMIN', 'PRINCIPAL', 'HEAD_OF_SCHOOL', 'MANAGER', 'SUPER_ADMIN'] as const;
@@ -13,7 +14,7 @@ const BOARDING_ADMIN = ['SYSTEM_ADMIN', 'PRINCIPAL', 'HEAD_OF_SCHOOL', 'MANAGER'
 @Controller('boarding')
 @UseGuards(RolesGuard)
 export class BoardingController {
-  constructor(private readonly service: BoardingService) {}
+  constructor(private readonly service: BoardingService, private readonly rollCalls: RollCallReportService) {}
 
   @Get('dashboard') @Roles(...BOARDING_READ)
   dashboard(@CurrentUser() user?: RequestUser) { return this.service.dashboard(user); }
@@ -50,6 +51,17 @@ export class BoardingController {
 
   @Post('dormitories/:id/roll-call') @Roles(...BOARDING_READ)
   rollCall(@Param('id') id: string, @Body() dto: RecordRollCallDto, @CurrentUser() user?: RequestUser) { return this.service.recordRollCall(id, dto, user?.id || 'system', user); }
+
+  /** Today's roll calls, who is absent, the trend, per-dormitory rates and the most absent students. */
+  @Get('roll-call-report') @Roles(...BOARDING_READ)
+  rollCallReport(@Query('days') days?: string, @CurrentUser() user?: RequestUser) { return this.rollCalls.report(user, Number(days) || 14); }
+
+  /** Runs the overdue check (and optionally the daily summary) now. dryRun only shows what would be sent. */
+  @Post('roll-call-report/check-now') @Roles(...BOARDING_ADMIN)
+  async checkRollCalls(@Body() body: { dryRun?: boolean; summary?: boolean }) {
+    const dryRun = !!body?.dryRun;
+    return { alerts: await this.rollCalls.alertOverdue(new Date(), dryRun), summary: body?.summary ? await this.rollCalls.sendDailySummary(new Date(), dryRun) : undefined };
+  }
 
   @Get('roll-calls') @Roles(...BOARDING_READ)
   rollCallHistory(@Query('dormitoryId') dormitoryId: string | undefined, @CurrentUser() user?: RequestUser) { return this.service.listRollCalls(user, dormitoryId); }

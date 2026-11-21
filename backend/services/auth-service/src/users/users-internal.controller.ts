@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { IsEmail, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 import { Role } from '../../generated/prisma';
@@ -70,6 +70,12 @@ export class SetRegistrationNumberDto {
 @UseGuards(InternalApiGuard)
 export class UsersInternalController {
   constructor(private readonly usersService: UsersService) {}
+
+  /** Head of School, Principal and the group Manager of a school: who hears about overdue roll calls. */
+  @Get('school-leaders')
+  async schoolLeaders(@Query('schoolId') schoolId: string) {
+    return { userIds: await this.usersService.schoolLeaderIds(schoolId) };
+  }
 
   @Post('parent-account')
   async ensureParentAccount(@Body() dto: EnsureParentAccountDto) {
