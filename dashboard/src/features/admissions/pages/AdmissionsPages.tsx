@@ -281,7 +281,7 @@ function IdentityCard({ applicant }: { applicant: ApplicantRow }) {
             <DetailRow label="Nationality" value={applicant.nationality ?? 'Tanzanian'} />
             <DetailRow label="Previous School" value={applicant.previousSchool || '—'} />
             <DetailRow label="Target Class" value={classLabel} />
-            <DetailRow label="Residence" value={applicant.residenceType === 'BOARDING' ? 'Boarding' : applicant.residenceType === 'DAY_SCHOLAR' ? 'Day Scholar' : 'Not decided'} />
+            <DetailRow label="Residence" value={applicant.residenceType === 'BOARDING' ? 'In campus (Boarding)' : applicant.residenceType === 'DAY_SCHOLAR' ? 'Off campus (Day Scholar)' : 'Chosen when enrolled'} />
           </div>
           <div>
             <DetailRow label="Guardian" value={`${applicant.guardianFirstName} ${applicant.guardianLastName}`} />
@@ -326,10 +326,6 @@ function IdentityCard({ applicant }: { applicant: ApplicantRow }) {
             <input value={form.previousSchool} onChange={(e) => setForm((f) => ({ ...f, previousSchool: e.target.value }))}
               className="mt-2 h-11 w-full rounded-xl border border-[#d5dde6] px-3 font-semibold outline-none focus:border-[#00334f]" />
           </label>
-          <div className="md:col-span-2">
-            <span className="text-xs font-black uppercase text-[#64748b]">Where will the student stay?</span>
-            <div className="mt-2"><ResidenceChoice allowUndecided value={form.residenceType as ResidenceType | ''} onChange={(v) => setForm((f) => ({ ...f, residenceType: v }))} /></div>
-          </div>
           <label>
             <span className="text-xs font-black uppercase text-[#64748b]">Guardian Email</span>
             <input type="email" value={form.guardianEmail} onChange={(e) => setForm((f) => ({ ...f, guardianEmail: e.target.value }))}
@@ -922,6 +918,11 @@ export function AdmissionsIntakePage() {
   return (
     <AdmissionsWorkspaceShell title="New Inquiry" eyebrow="Capture a prospective student" action={<span />}>
       <AdmissionsBreadcrumb crumbs={[{ label: 'Admissions', to: '/admissions' }, { label: 'New Inquiry' }]} />
+      <div className="rounded-xl border border-[#d5dde6] bg-[#f7f9fb] px-4 py-3 text-sm font-semibold text-[#475569]">
+        <b className="text-[#00334f]">New Inquiry</b> is for a family that is only asking: the child is not in the school yet and goes through application, assessment and offer.
+        When the family accepts, you enrol the student from the applicant page and choose <b className="text-[#00334f]">in campus or off campus</b> there.
+        To add a student who is joining right now, use <NavLink to="/admissions/students/enrol" className="font-black text-[#0284c7] underline">Enrol Student</NavLink>.
+      </div>
       <form onSubmit={handleSubmit} className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-gutter">
           <section className="rounded-lg border border-[#d5dde6] bg-white p-6">
@@ -946,8 +947,6 @@ export function AdmissionsIntakePage() {
                   <option value="">Not decided yet</option>
                   {classes.map((cls) => <option key={cls.id} value={cls.id}>{formatClassLabel(cls.name, cls.stream)}</option>)}
                 </select></label>
-              <div className="md:col-span-3"><span className="text-xs font-black uppercase text-[#64748b]">Where will the student stay?</span>
-                <div className="mt-2"><ResidenceChoice allowUndecided value={form.residenceType as ResidenceType | ''} onChange={(v) => setForm((f) => ({ ...f, residenceType: v }))} /></div></div>
               <label className="md:col-span-3"><span className="text-xs font-black uppercase text-[#64748b]">Previous School</span>
                 <input value={form.previousSchool} onChange={set('previousSchool')} placeholder="e.g. Moshi Primary School" className={field} /></label>
             </div>

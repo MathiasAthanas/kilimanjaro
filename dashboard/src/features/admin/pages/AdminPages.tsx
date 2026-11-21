@@ -3863,6 +3863,10 @@ export function EnrolStudentPage({ basePath = '/admin' }: { basePath?: string } 
 
   return (
     <AdminShell title="Enrol Student" eyebrow="Admission workflow" subtitle={subtitle}>
+      <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600 shadow-sm">
+        <b className="text-[#00334f]">Enrol Student</b> adds a student who is joining the school now, with their class, guardian and portal account. This is where you choose whether the student is <b className="text-[#00334f]">in campus or off campus</b>.
+        For a family that is only asking, use <b>New Inquiry</b> instead.
+      </div>
       {/* Step progress bar */}
       <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white px-6 py-4 shadow-sm">
         <div className="flex min-w-max items-center gap-0">
