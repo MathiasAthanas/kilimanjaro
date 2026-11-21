@@ -1,7 +1,8 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { RabbitMqService } from './rabbitmq.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { InvoiceStatus } from '../../generated/prisma';
+import { FinancialAuditAction, InvoiceStatus, ResidenceType } from '../../generated/prisma';
+import { AuditService } from '../audit/audit.service';
 
 @Injectable()
 export class RabbitMqConsumer implements OnModuleInit {
@@ -10,6 +11,7 @@ export class RabbitMqConsumer implements OnModuleInit {
   constructor(
     private readonly rabbitMqService: RabbitMqService,
     private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
   ) {}
 
   private async handleEvent(routingKey: string, payload: any): Promise<void> {
@@ -31,6 +33,37 @@ export class RabbitMqConsumer implements OnModuleInit {
             cancellationReason: `Auto-cancelled due to student status ${status}`,
             cancelledAt: new Date(),
           },
+        });
+      }
+      return;
+    }
+
+    if (routingKey === 'student.residence.changed') {
+      const studentId = payload?.studentId as string | undefined;
+      const residenceType = payload?.residenceType as ResidenceType | undefined;
+      if (!studentId || !Object.values(ResidenceType).includes(residenceType!)) return;
+      const affected = await this.prisma.invoice.findMany({
+        where: {
+          studentId,
+          status: { in: [InvoiceStatus.DRAFT, InvoiceStatus.ISSUED, InvoiceStatus.PARTIALLY_PAID, InvoiceStatus.OVERDUE] },
+        },
+        select: { id: true, schoolId: true, residenceType: true },
+      });
+      const reason = `Residence changed from ${payload?.previousResidenceType || 'UNCLASSIFIED'} to ${residenceType}; fee review required`;
+      await this.prisma.invoice.updateMany({
+        where: { id: { in: affected.map((invoice) => invoice.id) } },
+        data: { feeReviewRequired: true, feeReviewReason: reason, feeReviewMarkedAt: new Date() },
+      });
+      for (const invoice of affected) {
+        await this.audit.log({
+          entityType: 'Invoice',
+          entityId: invoice.id,
+          action: FinancialAuditAction.INVOICE_FEE_REVIEW_MARKED,
+          performedById: payload?.changedBy || 'student-service',
+          performedByRole: 'SYSTEM',
+          previousValue: invoice,
+          newValue: { ...invoice, feeReviewRequired: true, feeReviewReason: reason },
+          metadata: { schoolId: invoice.schoolId, studentId, residenceType },
         });
       }
       return;
@@ -96,6 +129,7 @@ export class RabbitMqConsumer implements OnModuleInit {
     await channel.bindQueue('finance-service.student', 'student.events', 'student.enrolled');
     await channel.bindQueue('finance-service.student', 'student.events', 'student.promoted');
     await channel.bindQueue('finance-service.student', 'student.events', 'student.status.changed');
+    await channel.bindQueue('finance-service.student', 'student.events', 'student.residence.changed');
 
     await channel.assertExchange('academic.events', 'topic', { durable: true });
     await channel.assertQueue('finance-service.academic', {

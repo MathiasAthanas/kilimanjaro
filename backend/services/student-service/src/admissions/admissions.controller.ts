@@ -27,7 +27,7 @@ export class AdmissionsController {
   @Roles(...ADMISSIONS_WRITE)
   @ApiOperation({ summary: 'Capture a new admission inquiry / application' })
   async create(@Body() dto: CreateApplicantDto, @CurrentUser() user?: RequestUser) {
-    return this.admissionsService.create(dto, user?.id || 'system');
+    return this.admissionsService.create(dto, user?.id || 'system', user);
   }
 
   @Get('applicants')
@@ -47,15 +47,15 @@ export class AdmissionsController {
   @Get('applicants/:id')
   @Roles(...ADMISSIONS_READ)
   @ApiOperation({ summary: 'Full applicant profile with stage timeline, assessments and offer' })
-  async byId(@Param('id') id: string) {
-    return this.admissionsService.findById(id);
+  async byId(@Param('id') id: string, @CurrentUser() user?: RequestUser) {
+    return this.admissionsService.findById(id, user);
   }
 
   @Patch('applicants/:id')
   @Roles(...ADMISSIONS_WRITE)
   @ApiOperation({ summary: 'Update applicant details' })
-  async update(@Param('id') id: string, @Body() dto: UpdateApplicantDto) {
-    return this.admissionsService.update(id, dto);
+  async update(@Param('id') id: string, @Body() dto: UpdateApplicantDto, @CurrentUser() user?: RequestUser) {
+    return this.admissionsService.update(id, dto, user);
   }
 
   @Post('applicants/:id/transition')
@@ -66,7 +66,7 @@ export class AdmissionsController {
     @Body() dto: TransitionStageDto,
     @CurrentUser() user?: RequestUser,
   ) {
-    return this.admissionsService.transition(id, dto, user?.id || 'system');
+    return this.admissionsService.transition(id, dto, user?.id || 'system', user);
   }
 
   @Post('applicants/:id/assessments')
@@ -77,7 +77,7 @@ export class AdmissionsController {
     @Body() dto: ScheduleAssessmentDto,
     @CurrentUser() user?: RequestUser,
   ) {
-    return this.admissionsService.scheduleAssessment(id, dto, user?.id || 'system');
+    return this.admissionsService.scheduleAssessment(id, dto, user?.id || 'system', user);
   }
 
   @Patch('assessments/:assessmentId')
@@ -88,7 +88,7 @@ export class AdmissionsController {
     @Body() dto: RecordAssessmentDto,
     @CurrentUser() user?: RequestUser,
   ) {
-    return this.admissionsService.recordAssessment(assessmentId, dto, user?.id || 'system');
+    return this.admissionsService.recordAssessment(assessmentId, dto, user?.id || 'system', user);
   }
 
   @Post('applicants/:id/offer')
@@ -99,7 +99,7 @@ export class AdmissionsController {
     @Body() dto: IssueOfferDto,
     @CurrentUser() user?: RequestUser,
   ) {
-    return this.admissionsService.issueOffer(id, dto, user?.id || 'system');
+    return this.admissionsService.issueOffer(id, dto, user?.id || 'system', user);
   }
 
   @Post('applicants/:id/offer/decision')
@@ -110,7 +110,7 @@ export class AdmissionsController {
     @Body() dto: OfferDecisionDto,
     @CurrentUser() user?: RequestUser,
   ) {
-    return this.admissionsService.decideOffer(id, dto, user?.id || 'system');
+    return this.admissionsService.decideOffer(id, dto, user?.id || 'system', user);
   }
 
   @Post('applicants/:id/convert')
@@ -121,6 +121,6 @@ export class AdmissionsController {
     @Body() dto: ConvertApplicantDto,
     @CurrentUser() user?: RequestUser,
   ) {
-    return this.admissionsService.convert(id, dto, user?.id || 'system');
+    return this.admissionsService.convert(id, dto, user?.id || 'system', user);
   }
 }

@@ -7,7 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { FinancialAuditAction, InvoiceStatus, PaymentStatus, Prisma } from '../../generated/prisma';
+import { FinancialAuditAction, InvoiceStatus, PaymentStatus, Prisma, ResidenceType } from '../../generated/prisma';
 import { existsSync } from 'fs';
 import { join } from 'path';
 import { AuditService } from '../audit/audit.service';
@@ -22,6 +22,8 @@ import { RedisService } from '../redis/redis.service';
 import { StudentClientService } from '../student-client/student-client.service';
 import { GenerateInvoicesDto } from './dto/generate-invoices.dto';
 import { InvoicePdfService } from './invoice-pdf.service';
+import { selectApplicableStructures } from '../fee-structures/fee-matching';
+import { ApplyFeeRecalculationDto } from './dto/apply-fee-recalculation.dto';
 
 type InvoiceGenerationJob = {
   status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED';
@@ -79,6 +81,56 @@ export class InvoicesService {
     return dueDate < new Date() ? InvoiceStatus.OVERDUE : InvoiceStatus.ISSUED;
   }
 
+  private async applicableStructures(input: {
+    studentId: string;
+    schoolId: string | null;
+    classId: string;
+    educationStage?: string | null;
+    classLevel?: number | null;
+    residenceType?: ResidenceType | null;
+    academicYearId: string;
+    termId: string;
+  }) {
+    const [groupMemberships, assignments, structures] = await Promise.all([
+      this.prisma.studentGroupMembership.findMany({
+        where: { studentId: input.studentId, isActive: true, group: { isActive: true } },
+        include: { group: true },
+      }),
+      this.prisma.studentFeeAssignment.findMany({
+        where: {
+          studentId: input.studentId,
+          academicYearId: input.academicYearId,
+          isActive: true,
+          OR: [{ termId: input.termId }, { termId: null }],
+        },
+      }),
+      this.prisma.feeStructure.findMany({
+        where: {
+          academicYearId: input.academicYearId,
+          isActive: true,
+          ...(input.schoolId ? { OR: [{ schoolId: input.schoolId }, { schoolId: null }] } : { schoolId: null }),
+          AND: [{ OR: [{ termId: input.termId }, { termId: null }] }],
+        },
+        include: { feeCategory: true },
+      }),
+    ]);
+
+    return selectApplicableStructures(
+      structures,
+      {
+        schoolId: input.schoolId,
+        classId: input.classId,
+        educationStage: input.educationStage,
+        classLevel: input.classLevel,
+        studentGroupCodes: groupMemberships.map((membership) => membership.group.code),
+        residenceType: input.residenceType,
+        academicYearId: input.academicYearId,
+        termId: input.termId,
+      },
+      new Set(assignments.map((assignment) => assignment.feeCategoryId)),
+    );
+  }
+
   private async generateInvoiceForStudent(student: any, dto: GenerateInvoicesDto, actor: RequestUser) {
     const classId = student.enrolments?.[0]?.classId;
     if (!classId) return null;
@@ -100,66 +152,18 @@ export class InvoicesService {
     });
     if (existing) return null;
 
-    const [groupMemberships, assignments] = await Promise.all([
-      this.prisma.studentGroupMembership.findMany({
-        where: { studentId: student.id, isActive: true, group: { isActive: true } },
-        include: { group: true },
-      }),
-      this.prisma.studentFeeAssignment.findMany({
-        where: {
-          studentId: student.id,
-          academicYearId: dto.academicYearId,
-          isActive: true,
-          OR: [{ termId: dto.termId }, { termId: null }],
-        },
-      }),
-    ]);
-    const studentGroupCodes = groupMemberships.map((item) => item.group.code);
-
     const schoolId = studentSchoolId;
-
-    const structures = await this.prisma.feeStructure.findMany({
-      where: {
-        academicYearId: dto.academicYearId,
-        isActive: true,
-        ...(schoolId ? { OR: [{ schoolId }, { schoolId: null }] } : {}),
-        AND: [
-          { OR: [{ termId: dto.termId }, { termId: null }] },
-          {
-            OR: [
-              { classId },
-              { educationStage, classLevel },
-              { educationStage, classLevel: null },
-              ...(studentGroupCodes.length ? [{ studentGroup: { in: studentGroupCodes } }] : []),
-            ],
-          },
-        ],
-      },
-      include: { feeCategory: true },
+    const residenceType = Object.values(ResidenceType).includes(student.residenceType) ? student.residenceType as ResidenceType : null;
+    const applicable = await this.applicableStructures({
+      studentId: student.id,
+      schoolId,
+      classId,
+      educationStage,
+      classLevel,
+      residenceType,
+      academicYearId: dto.academicYearId,
+      termId: dto.termId,
     });
-
-    // Score specificity so that when multiple structures match the same category we keep
-    // the most targeted one (classId > stage+level > stage-only > studentGroup).
-    const specificity = (s: (typeof structures)[number]) => {
-      // A school's own price always beats a legacy group-wide one for the same category.
-      const schoolBonus = schoolId && s.schoolId === schoolId ? 10 : 0;
-      if (s.classId === classId) return 3 + schoolBonus;
-      if (s.educationStage === educationStage && s.classLevel === classLevel) return 2 + schoolBonus;
-      if (s.educationStage === educationStage && s.classLevel === null) return 1 + schoolBonus;
-      return 0 + schoolBonus;
-    };
-
-    const optionalSet = new Set(assignments.map((a) => a.feeCategoryId));
-    const deduped = new Map<string, (typeof structures)[number]>();
-    for (const s of structures) {
-      if (s.feeCategory.isOptional && !optionalSet.has(s.feeCategoryId)) continue;
-      const existing = deduped.get(s.feeCategoryId);
-      // Same category matched twice at the same level (an old and a corrected price): the newest one wins.
-      if (!existing || specificity(s) > specificity(existing) || (specificity(s) === specificity(existing) && s.createdAt > existing.createdAt)) {
-        deduped.set(s.feeCategoryId, s);
-      }
-    }
-    const applicable = [...deduped.values()];
     if (!applicable.length) return null;
 
     const subtotal = applicable.reduce((acc, item) => acc.plus(item.amount), new Prisma.Decimal(0));
@@ -178,6 +182,7 @@ export class InvoicesService {
         classLevel,
         academicYearId: dto.academicYearId,
         termId: dto.termId,
+        residenceType,
         subtotal,
         totalAmount: total,
         outstandingBalance: total,
@@ -555,6 +560,170 @@ export class InvoicesService {
 
     const [described] = await this.describe([invoice]);
     return { ...invoice, ...described, school: await this.studentClient.schoolProfile(invoice.schoolId) };
+  }
+
+  async previewFeeRecalculation(id: string, user: RequestUser) {
+    await this.byId(id, user);
+    const invoice = await this.prisma.invoice.findUnique({ where: { id }, include: { lineItems: true } });
+    if (!invoice) throw new NotFoundException('Invoice not found');
+
+    const studentPayload = await this.studentClient.get<any>(
+      `/students/${invoice.studentId}`,
+      {},
+      { 'X-User-Id': user.id, 'X-User-Role': user.role },
+    );
+    const student = this.unwrap<any>(studentPayload);
+    const residenceType = Object.values(ResidenceType).includes(student?.residenceType)
+      ? student.residenceType as ResidenceType
+      : null;
+    const applicable = await this.applicableStructures({
+      studentId: invoice.studentId,
+      schoolId: invoice.schoolId,
+      classId: invoice.classId,
+      educationStage: invoice.educationStage,
+      classLevel: invoice.classLevel,
+      residenceType,
+      academicYearId: invoice.academicYearId,
+      termId: invoice.termId,
+    });
+
+    const currentLines = invoice.lineItems.map((line) => ({
+      feeStructureId: line.feeStructureId,
+      feeCategoryId: line.feeCategoryId,
+      feeCategoryName: line.feeCategoryName,
+      amount: line.amount.toString(),
+      currency: line.currency,
+    }));
+    const proposedLines = applicable.map((structure) => ({
+      feeStructureId: structure.id,
+      feeCategoryId: structure.feeCategoryId,
+      feeCategoryName: structure.feeCategory.name,
+      amount: structure.amount.toString(),
+      currency: structure.currency,
+      residenceType: structure.residenceType,
+    }));
+    const currentByCategory = new Map(currentLines.map((line) => [line.feeCategoryId, line]));
+    const proposedByCategory = new Map(proposedLines.map((line) => [line.feeCategoryId, line]));
+    const additions = proposedLines.filter((line) => !currentByCategory.has(line.feeCategoryId));
+    const removals = currentLines.filter((line) => !proposedByCategory.has(line.feeCategoryId));
+    const amountChanges = proposedLines.flatMap((line) => {
+      const current = currentByCategory.get(line.feeCategoryId);
+      return current && current.amount !== line.amount ? [{ ...line, previousAmount: current.amount }] : [];
+    });
+    const proposedSubtotal = proposedLines.reduce((sum, line) => sum.plus(line.amount), new Prisma.Decimal(0));
+    const proposedTotal = Prisma.Decimal.max(proposedSubtotal.minus(invoice.discountAmount), new Prisma.Decimal(0));
+    const proposedBalance = proposedTotal.minus(invoice.paidAmount);
+    const blockedReasons: string[] = [];
+    const safeStatuses: InvoiceStatus[] = [InvoiceStatus.DRAFT, InvoiceStatus.ISSUED, InvoiceStatus.PARTIALLY_PAID, InvoiceStatus.OVERDUE];
+    if (!safeStatuses.includes(invoice.status)) blockedReasons.push(`Invoice status ${invoice.status} is not eligible for automatic recalculation`);
+    if (!residenceType) blockedReasons.push('Student must be classified as Boarding or Day Scholar');
+    if (invoice.discountAmount.gt(proposedSubtotal)) blockedReasons.push('The existing discount exceeds the proposed subtotal and requires manual finance review');
+    if (proposedTotal.lt(invoice.paidAmount)) blockedReasons.push('Proposed total is below the amount already paid; use the existing manual credit/refund decision path');
+
+    return {
+      invoiceId: invoice.id,
+      invoiceNumber: invoice.invoiceNumber,
+      studentId: invoice.studentId,
+      reviewRequired: invoice.feeReviewRequired,
+      reviewReason: invoice.feeReviewReason,
+      previousResidenceType: invoice.residenceType,
+      proposedResidenceType: residenceType,
+      currentLines,
+      proposedLines,
+      additions,
+      removals,
+      amountChanges,
+      currentSubtotal: invoice.subtotal.toString(),
+      proposedSubtotal: proposedSubtotal.toString(),
+      discountAmount: invoice.discountAmount.toString(),
+      currentTotal: invoice.totalAmount.toString(),
+      proposedTotal: proposedTotal.toString(),
+      paidAmount: invoice.paidAmount.toString(),
+      currentBalance: invoice.outstandingBalance.toString(),
+      proposedBalance: proposedBalance.toString(),
+      blocked: blockedReasons.length > 0,
+      blockedReasons,
+    };
+  }
+
+  async applyFeeRecalculation(id: string, dto: ApplyFeeRecalculationDto, user: RequestUser) {
+    const prior = await this.prisma.invoiceFeeRecalculation.findUnique({
+      where: { invoiceId_idempotencyKey: { invoiceId: id, idempotencyKey: dto.idempotencyKey } },
+    });
+    if (prior) return { alreadyApplied: true, invoice: await this.byId(id, user), recalculation: prior };
+
+    const preview = await this.previewFeeRecalculation(id, user);
+    if (preview.blocked) throw new ConflictException(preview.blockedReasons.join('; '));
+    if (!dto.reason.trim()) throw new BadRequestException('A recalculation reason is required');
+
+    const invoice = await this.prisma.invoice.findUnique({ where: { id }, include: { lineItems: true } });
+    if (!invoice) throw new NotFoundException('Invoice not found');
+    const proposedSubtotal = this.decimal(preview.proposedSubtotal);
+    const proposedTotal = this.decimal(preview.proposedTotal);
+    const proposedBalance = this.decimal(preview.proposedBalance);
+    const newStatus = this.status(proposedTotal, invoice.paidAmount, invoice.dueDate);
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const recalculation = await tx.invoiceFeeRecalculation.create({
+        data: {
+          invoiceId: id,
+          idempotencyKey: dto.idempotencyKey,
+          reason: dto.reason.trim(),
+          previousResidence: invoice.residenceType,
+          proposedResidence: preview.proposedResidenceType,
+          previousSubtotal: invoice.subtotal,
+          proposedSubtotal,
+          previousTotal: invoice.totalAmount,
+          proposedTotal,
+          paidAmount: invoice.paidAmount,
+          previousLines: preview.currentLines as Prisma.InputJsonValue,
+          proposedLines: preview.proposedLines as Prisma.InputJsonValue,
+          performedById: user.id,
+          performedByRole: user.role,
+        },
+      });
+      await tx.invoiceLineItem.deleteMany({ where: { invoiceId: id } });
+      for (const line of preview.proposedLines) {
+        await tx.invoiceLineItem.create({
+          data: {
+            invoiceId: id,
+            feeStructureId: line.feeStructureId,
+            feeCategoryId: line.feeCategoryId,
+            feeCategoryName: line.feeCategoryName,
+            amount: this.decimal(line.amount),
+            currency: line.currency,
+          },
+        });
+      }
+      const updated = await tx.invoice.update({
+        where: { id },
+        data: {
+          subtotal: proposedSubtotal,
+          totalAmount: proposedTotal,
+          outstandingBalance: proposedBalance,
+          status: newStatus,
+          residenceType: preview.proposedResidenceType,
+          feeReviewRequired: false,
+          feeReviewReason: null,
+          feeReviewMarkedAt: null,
+        },
+        include: { lineItems: true, payments: true },
+      });
+      return { updated, recalculation };
+    });
+
+    await this.audit.log({
+      entityType: 'Invoice',
+      entityId: id,
+      action: FinancialAuditAction.INVOICE_FEE_RECALCULATED,
+      performedById: user.id,
+      performedByRole: user.role,
+      previousValue: invoice,
+      newValue: result.updated,
+      metadata: { reason: dto.reason.trim(), idempotencyKey: dto.idempotencyKey, recalculationId: result.recalculation.id },
+    });
+    await this.redis.del(`student-balance:${invoice.studentId}`);
+    return { alreadyApplied: false, invoice: result.updated, recalculation: result.recalculation };
   }
 
   async byStudent(studentId: string, user: RequestUser) {

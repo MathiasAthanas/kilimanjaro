@@ -1,0 +1,49 @@
+KLM ADDITIONAL REQUIREMENTS — RELEASE RUNBOOK
+Prepared: 2026-11-19
+Status: Local implementation only; not deployed
+
+SCOPE
+- Phase 1: Boarding/Day Scholar admissions and student residence classification.
+- Phase 2: Matron/Patron roles and school/dorm-scoped hostel operations.
+- Phase 3: Residence-aware fee structures and controlled invoice recalculation.
+
+PRODUCTION DEPLOYMENT ORDER
+1. Take a verified PostgreSQL custom-format backup and record the restore command.
+2. Put finance configuration and student residence edits into a short maintenance window.
+3. Deploy application code while existing services continue using backward-compatible nullable fields.
+4. Apply auth migration 20261119080000_add_matron_patron_roles.
+5. Apply student migrations in order:
+   - 20261118090000_add_student_residence_type
+   - 20261119081000_add_hostel_operations
+6. Apply finance migration 20261119090000_add_residence_fee_recalculation.
+7. Regenerate Prisma clients and build auth, student, finance and API gateway services.
+8. Restart auth, student, finance and API gateway services.
+9. Verify health, admin login, admissions inquiry, student profile, fee structures,
+   invoice preview and an assigned Matron/Patron boarding dashboard.
+10. Do not bulk-classify historic students. Review and classify them explicitly.
+11. Do not recalculate invoices automatically. Finance must preview each flagged invoice,
+    supply a reason and confirm; blocked/overpaid cases stay in the manual decision path.
+
+ROLLBACK PLAN
+- Preferred rollback is application rollback while retaining the additive nullable columns/tables.
+  The prior application version ignores them and existing payments/invoices remain intact.
+- Stop residence edits and fee recalculations before rolling application code back.
+- Do not drop enum values or hostel/finance tables after live data exists.
+- If a migration itself fails before go-live, restore the pre-deployment backup into a new
+  database, verify counts/checksums, then switch services only after approval.
+- If a recalculation was applied incorrectly, do not delete its audit record or payments.
+  Review its InvoiceFeeRecalculation snapshot and correct it through an approved finance
+  adjustment/recalculation with a new idempotency key and reason.
+
+LOCAL RECOVERY POINTS
+- Before Phase 2: /tmp/klm-before-hostel-phase2.dump
+- Before Phase 3: /tmp/klm-before-residence-fees-phase3.dump
+
+RELEASE SAFETY
+- No production connection, push or deployment was performed during local implementation.
+- Matron/Patron authorization is based on school membership plus explicit dorm assignment,
+  never staff or student gender.
+- Residence classification alone does not add a charge. Only an active matching fee structure
+  and existing optional-fee assignment rules can produce an invoice line.
+- Recalculation preserves payments, receipts and paidAmount, is transactional and idempotent,
+  and refuses totals below paidAmount or closed invoice states.

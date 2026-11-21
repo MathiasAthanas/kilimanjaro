@@ -22,8 +22,8 @@ export class FeeStructuresService {
   }
 
   async create(dto: CreateFeeStructureDto, user: RequestUser) {
-    if (!dto.classId && dto.classLevel === undefined && !dto.educationStage && !dto.studentGroup) {
-      throw new BadRequestException('Provide classId, educationStage/classLevel, or studentGroup');
+    if (!dto.classId && dto.classLevel === undefined && !dto.educationStage && !dto.studentGroup && !dto.residenceType) {
+      throw new BadRequestException('Provide classId, educationStage/classLevel, studentGroup, or residenceType');
     }
     if (dto.classLevel !== undefined && !dto.educationStage && !dto.classId) {
       throw new BadRequestException('Provide educationStage when targeting by classLevel');
@@ -58,6 +58,7 @@ export class FeeStructuresService {
         educationStage: dto.educationStage,
         classLevel: dto.classLevel,
         studentGroup: dto.studentGroup,
+        residenceType: dto.residenceType,
         academicYearId: dto.academicYearId,
         termId: dto.termId,
         amount: this.decimal(dto.amount),
@@ -88,6 +89,7 @@ export class FeeStructuresService {
       educationStage?: string;
       classLevel?: string;
       studentGroup?: string;
+      residenceType?: string;
       academicYearId?: string;
       termId?: string;
       isActive?: string;
@@ -102,6 +104,7 @@ export class FeeStructuresService {
         educationStage: filters.educationStage as any,
         classLevel: filters.classLevel ? Number(filters.classLevel) : undefined,
         studentGroup: filters.studentGroup,
+        residenceType: filters.residenceType as any,
         academicYearId: filters.academicYearId,
         termId: filters.termId,
         isActive: filters.isActive === undefined ? undefined : filters.isActive === 'true',
@@ -134,7 +137,8 @@ export class FeeStructuresService {
     const categories = [...new Map(rows.map((r) => [r.feeCategoryId, r.feeCategory])).values()];
     const matrix: Record<string, Record<string, string>> = {};
     for (const row of rows) {
-      const classKey = row.classId || row.studentGroup || `${row.educationStage || 'ANY'}_LEVEL_${row.classLevel}`;
+      const baseKey = row.classId || row.studentGroup || `${row.educationStage || 'ANY'}_LEVEL_${row.classLevel}`;
+      const classKey = `${baseKey}__${row.residenceType || 'ALL_RESIDENCE'}`;
       if (!matrix[classKey]) matrix[classKey] = {};
       matrix[classKey][row.feeCategoryId] = row.amount.toString();
     }
@@ -169,6 +173,7 @@ export class FeeStructuresService {
         educationStage: dto.educationStage,
         classLevel: dto.classLevel,
         studentGroup: dto.studentGroup,
+        residenceType: dto.residenceType,
         academicYearId: dto.academicYearId,
         termId: dto.termId,
         amount: dto.amount ? this.decimal(dto.amount) : undefined,

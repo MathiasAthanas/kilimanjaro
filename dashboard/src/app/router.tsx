@@ -291,6 +291,8 @@ import {
   ManagerSchoolsPage,
 } from '../features/manager/pages/ManagerPages';
 import { SchoolFormPage, SuperAdminHomePage } from '../features/superadmin/pages/SuperAdminPages';
+import { BoardingDashboardPage } from '../features/boarding/pages/BoardingDashboardPage';
+import { BoardingEntryPage, BoardingLeavesPage, BoardingRollCallDetailPage, BoardingRollCallsPage, BoardingStaffOverviewPage } from '../features/boarding/pages/BoardingStaffPages';
 import {
   ComposeReportCardsPage,
   ExamTypesPage,
@@ -525,6 +527,12 @@ export const router = createBrowserRouter([
       { path: '/admissions/students/import', element: <ClassImportPage /> },
       { path: '/admissions/students/enrol', element: <AdmissionsEnrolStudentPage /> },
       { path: '/admissions/students/:id', element: <AdmissionsStudentProfilePage /> },
+      { path: '/boarding', element: <BoardingEntryPage /> },
+      { path: '/boarding/admin', element: <BoardingDashboardPage /> },
+      { path: '/boarding/overview', element: <BoardingStaffOverviewPage /> },
+      { path: '/boarding/roll-calls', element: <BoardingRollCallsPage /> },
+      { path: '/boarding/roll-calls/:dormitoryId/:date/:session', element: <BoardingRollCallDetailPage /> },
+      { path: '/boarding/leaves', element: <BoardingLeavesPage /> },
       { path: '/admin', element: <AdminHomePage /> },
       { path: '/admin/users', element: <AdminUsersPage /> },
       { path: '/admin/users/create', element: <CreateUserPage /> },

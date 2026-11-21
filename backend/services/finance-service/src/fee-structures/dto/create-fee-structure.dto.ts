@@ -1,4 +1,5 @@
 import { IsEnum, IsInt, IsNotEmpty, IsNumberString, IsOptional, IsString } from 'class-validator';
+import { ResidenceType } from '../../../generated/prisma';
 
 export enum EducationStageDto {
   PRIMARY = 'PRIMARY',
@@ -26,6 +27,10 @@ export class CreateFeeStructureDto {
   @IsOptional()
   @IsString()
   studentGroup?: string;
+
+  @IsOptional()
+  @IsEnum(ResidenceType)
+  residenceType?: ResidenceType;
 
   @IsString()
   @IsNotEmpty()

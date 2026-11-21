@@ -82,12 +82,14 @@ export function priceTarget(group: ClassLevelGroup, activeSchoolId: string | nul
   return { mode: 'classes', classIds: group.classIds };
 }
 
-type StructureLike = { id: string; category?: string; classId?: string | null; educationStage?: string | null; rawClassLevel?: number | null; schoolId?: string | null; termId?: string | null; active?: boolean };
+type StructureLike = { id: string; category?: string; classId?: string | null; educationStage?: string | null; rawClassLevel?: number | null; schoolId?: string | null; termId?: string | null; active?: boolean; residenceType?: string | null };
 
-/** Every live structure that prices this fee for this group in this term, whichever way it was stored. */
-export function structuresFor<T extends StructureLike>(structures: T[], category: string, group: Pick<ClassLevelGroup, 'classIds' | 'educationStage' | 'level' | 'schoolId' | 'ambiguous'>, termId: string): T[] {
+/** Every live structure that prices this fee for this group in this term (and residence, when given), whichever way it was stored. */
+export function structuresFor<T extends StructureLike>(structures: T[], category: string, group: Pick<ClassLevelGroup, 'classIds' | 'educationStage' | 'level' | 'schoolId' | 'ambiguous'>, termId: string, residenceType?: string): T[] {
   return structures.filter((s) => {
     if (s.active === false || s.category !== category) return false;
+    // Boarding and Day Scholar prices are separate; '' means "all students" (no residence set)
+    if (residenceType !== undefined && (s.residenceType || '') !== residenceType) return false;
     if (termId ? s.termId !== termId : Boolean(s.termId)) return false;
     if (s.classId) return group.classIds.includes(s.classId);
     if (group.ambiguous) return false;

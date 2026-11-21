@@ -20,6 +20,9 @@ module.exports = {
     env: {
       NODE_ENV: 'development',
       PORT: String(port),
+      // UploadController reads this while its module is loaded, before Nest
+      // loads each service's .env file. Keep development uploads writable.
+      UPLOAD_DIR: `${process.cwd()}/storage/uploads`,
     },
   })),
 };

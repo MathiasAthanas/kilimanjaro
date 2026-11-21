@@ -28,13 +28,14 @@ export class FeeStructuresController {
     @Query('educationStage') educationStage?: string,
     @Query('classLevel') classLevel?: string,
     @Query('studentGroup') studentGroup?: string,
+    @Query('residenceType') residenceType?: string,
     @Query('academicYearId') academicYearId?: string,
     @Query('termId') termId?: string,
     @Query('isActive') isActive?: string,
     @CurrentUser() user?: RequestUser,
   ) {
     return this.feeStructuresService.list(
-      { feeCategoryId, classId, educationStage, classLevel, studentGroup, academicYearId, termId, isActive },
+      { feeCategoryId, classId, educationStage, classLevel, studentGroup, residenceType, academicYearId, termId, isActive },
       user,
     );
   }

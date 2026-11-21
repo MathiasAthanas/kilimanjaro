@@ -8,6 +8,7 @@ import {
 import { randomUUID } from 'crypto';
 import {
   Prisma,
+  ResidenceType,
   StudentStatus,
 } from '../../generated/prisma';
 import { PrismaService } from '../prisma/prisma.service';
@@ -188,6 +189,7 @@ export class StudentsService {
           legacyAdmissionNumber: dto.legacyAdmissionNumber?.trim() || null,
           dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : null,
           gender: dto.gender,
+          residenceType: dto.residenceType,
           nationality: dto.nationality || 'Tanzanian',
           admissionDate,
           createdBy: actorId,
@@ -271,6 +273,7 @@ export class StudentsService {
       registrationNumber: (created as { registrationNumber: string }).registrationNumber,
       classId: dto.classId,
       academicYearId: dto.academicYearId,
+      residenceType: dto.residenceType ?? null,
       enrolledBy: actorId,
     });
 
@@ -407,6 +410,16 @@ export class StudentsService {
 
     assertSchoolInScope(user, existing.schoolId ?? null);
 
+    if (dto.residenceType === ResidenceType.DAY_SCHOLAR && existing.residenceType !== ResidenceType.DAY_SCHOLAR) {
+      const activeDormitory = await this.prisma.dormitoryStudentAssignment.findFirst({
+        where: { studentId: id, isActive: true },
+        select: { id: true },
+      });
+      if (activeDormitory) {
+        throw new ConflictException('Remove the student from the active dormitory roster before changing to Day Scholar');
+      }
+    }
+
     const updated = await this.prisma.student.update({
       where: { id },
       data: {
@@ -417,6 +430,17 @@ export class StudentsService {
     });
 
     await this.redis.del(`student:${id}:profile`, `student:reg:${existing.registrationNumber}`);
+
+    if (dto.residenceType && dto.residenceType !== existing.residenceType) {
+      await this.rabbitMq.publish('student.residence.changed', {
+        studentId: id,
+        schoolId: existing.schoolId,
+        previousResidenceType: existing.residenceType,
+        residenceType: dto.residenceType,
+        changedBy: user?.id || 'system',
+        changedAt: new Date().toISOString(),
+      });
+    }
 
     return updated;
   }

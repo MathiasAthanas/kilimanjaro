@@ -1,5 +1,5 @@
 import { IsDateString, IsEnum, IsOptional, IsString } from 'class-validator';
-import { Gender, StudentStatus } from '../../../generated/prisma';
+import { Gender, ResidenceType, StudentStatus } from '../../../generated/prisma';
 
 export class UpdateStudentDto {
   @IsOptional()
@@ -41,4 +41,8 @@ export class UpdateStudentDto {
   @IsOptional()
   @IsEnum(StudentStatus)
   status?: StudentStatus;
+
+  @IsOptional()
+  @IsEnum(ResidenceType)
+  residenceType?: ResidenceType;
 }

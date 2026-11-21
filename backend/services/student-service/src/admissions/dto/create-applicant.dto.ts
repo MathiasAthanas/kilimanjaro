@@ -11,6 +11,7 @@ import {
   EducationStage,
   Gender,
   GuardianRelationship,
+  ResidenceType,
 } from '../../../generated/prisma';
 
 export class CreateApplicantDto {
@@ -49,6 +50,10 @@ export class CreateApplicantDto {
   @IsOptional()
   @IsEnum(EducationStage)
   educationStage?: EducationStage;
+
+  @IsOptional()
+  @IsEnum(ResidenceType)
+  residenceType?: ResidenceType;
 
   @IsString()
   @IsNotEmpty()

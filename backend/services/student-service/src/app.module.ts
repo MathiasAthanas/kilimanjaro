@@ -16,6 +16,7 @@ import { InternalModule } from './internal/internal.module';
 import { HealthModule } from './health/health.module';
 import { DepartmentsModule } from './departments/departments.module';
 import { AdmissionsModule } from './admissions/admissions.module';
+import { BoardingModule } from './boarding/boarding.module';
 import { SchoolsModule } from './schools/schools.module';
 import { RolesGuard } from './common/guards/roles.guard';
 import { IdentityMiddleware } from './common/middleware/identity.middleware';
@@ -46,6 +47,7 @@ import { validateEnv } from './config/env.validation';
     HealthModule,
     DepartmentsModule,
     AdmissionsModule,
+    BoardingModule,
     SchoolsModule,
   ],
   providers: [

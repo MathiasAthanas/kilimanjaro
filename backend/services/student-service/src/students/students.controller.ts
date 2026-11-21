@@ -84,7 +84,7 @@ export class StudentsController {
   }
 
   @Get()
-  @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN', 'ACADEMIC_QA', 'FINANCE', 'HEAD_OF_FINANCE', 'HEAD_OF_DEPARTMENT', 'TEACHER', 'ADMISSIONS')
+  @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN', 'ACADEMIC_QA', 'FINANCE', 'HEAD_OF_FINANCE', 'HEAD_OF_DEPARTMENT', 'TEACHER', 'ADMISSIONS', 'MATRON', 'PATRON')
   @ApiOperation({ summary: 'Paginated list of students with filters' })
   async list(@Query() query: ListStudentsDto, @CurrentUser() user?: RequestUser) {
     return this.studentsService.list(query, user);
@@ -106,6 +106,8 @@ export class StudentsController {
     'HEAD_OF_DEPARTMENT',
     'TEACHER',
     'ADMISSIONS',
+    'MATRON',
+    'PATRON',
     'PARENT',
     'STUDENT',
   )

@@ -8,6 +8,8 @@ export type UserRole =
   | 'PRINCIPAL'
   | 'ADMIN'
   | 'ADMISSIONS'
+  | 'MATRON'
+  | 'PATRON'
   | 'SUPER_ADMIN'
   | 'MANAGER'
   | 'HEAD_OF_SCHOOL'
@@ -23,6 +25,8 @@ const defaultRoutes: Record<UserRole, string> = {
   PRINCIPAL: '/principal',
   ADMIN: '/admin',
   ADMISSIONS: '/admissions',
+  MATRON: '/boarding',
+  PATRON: '/boarding',
   SUPER_ADMIN: '/superadmin',
   MANAGER: '/manager',
   HEAD_OF_SCHOOL: '/principal',
@@ -35,7 +39,7 @@ export function getDefaultRouteForRole(role: UserRole) {
 
 export function isWebPrimaryRole(role: UserRole) {
   return [
-    'TEACHER', 'HOD', 'AQA', 'FINANCE', 'PRINCIPAL', 'ADMIN', 'ADMISSIONS',
+    'TEACHER', 'HOD', 'AQA', 'FINANCE', 'PRINCIPAL', 'ADMIN', 'ADMISSIONS', 'MATRON', 'PATRON',
     'SUPER_ADMIN', 'MANAGER', 'HEAD_OF_SCHOOL', 'HEAD_OF_FINANCE',
   ].includes(role);
 }
@@ -63,6 +67,7 @@ export function canAccessRoute(role: UserRole | undefined, route: string) {
   // enter it when they drill into a school (school scope comes from the header)
   if (route.startsWith('/principal')) return ['PRINCIPAL', 'HEAD_OF_SCHOOL', 'MANAGER', 'SUPER_ADMIN', 'ADMIN'].includes(role);
   if (route.startsWith('/admissions')) return ['ADMISSIONS', 'PRINCIPAL', 'HEAD_OF_SCHOOL', 'MANAGER', 'SUPER_ADMIN', 'ADMIN'].includes(role);
+  if (route.startsWith('/boarding')) return ['MATRON', 'PATRON', 'PRINCIPAL', 'HEAD_OF_SCHOOL', 'MANAGER', 'SUPER_ADMIN', 'ADMIN'].includes(role);
   if (route.startsWith('/admin')) return role === 'ADMIN' || role === 'SUPER_ADMIN' || role === 'MANAGER';
   if (route.startsWith('/reports')) return ['TEACHER', 'HOD', 'AQA', 'FINANCE', 'PRINCIPAL', 'ADMIN', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN', 'HEAD_OF_FINANCE'].includes(role);
   if (route.startsWith('/academics')) return ['TEACHER', 'HOD', 'AQA', 'PRINCIPAL', 'ADMIN', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN'].includes(role);

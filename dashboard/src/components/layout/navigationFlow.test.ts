@@ -6,6 +6,7 @@ const homes: Record<UserRole, string> = {
   STUDENT: '/app/mobile-guidance', PARENT: '/app/mobile-guidance',
   TEACHER: '/teacher', HOD: '/hod', AQA: '/aqa', FINANCE: '/finance',
   PRINCIPAL: '/principal', ADMIN: '/admin', ADMISSIONS: '/admissions',
+  MATRON: '/boarding', PATRON: '/boarding',
   SUPER_ADMIN: '/superadmin', MANAGER: '/manager',
   HEAD_OF_SCHOOL: '/principal', HEAD_OF_FINANCE: '/finance-group',
 };

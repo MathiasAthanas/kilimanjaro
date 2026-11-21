@@ -229,6 +229,7 @@ function IdentityCard({ applicant }: { applicant: ApplicantRow }) {
     dateOfBirth: applicant.dateOfBirth ? applicant.dateOfBirth.slice(0, 10) : '',
     gender: applicant.gender ?? '',
     prospectiveClassId: applicant.prospectiveClassId ?? '',
+    residenceType: applicant.residenceType ?? '',
     previousSchool: applicant.previousSchool ?? '',
     guardianEmail: applicant.guardianEmail ?? '',
     notes: applicant.notes ?? '',
@@ -243,6 +244,7 @@ function IdentityCard({ applicant }: { applicant: ApplicantRow }) {
         dateOfBirth: form.dateOfBirth || undefined,
         gender: form.gender || undefined,
         prospectiveClassId: form.prospectiveClassId || undefined,
+        residenceType: form.residenceType || undefined,
         previousSchool: form.previousSchool || undefined,
         guardianEmail: form.guardianEmail || undefined,
         notes: form.notes || undefined,
@@ -277,6 +279,7 @@ function IdentityCard({ applicant }: { applicant: ApplicantRow }) {
             <DetailRow label="Nationality" value={applicant.nationality ?? 'Tanzanian'} />
             <DetailRow label="Previous School" value={applicant.previousSchool || '—'} />
             <DetailRow label="Target Class" value={classLabel} />
+            <DetailRow label="Residence" value={applicant.residenceType === 'BOARDING' ? 'Boarding' : applicant.residenceType === 'DAY_SCHOLAR' ? 'Day Scholar' : 'Not decided'} />
           </div>
           <div>
             <DetailRow label="Guardian" value={`${applicant.guardianFirstName} ${applicant.guardianLastName}`} />
@@ -320,6 +323,15 @@ function IdentityCard({ applicant }: { applicant: ApplicantRow }) {
             <span className="text-xs font-black uppercase text-[#64748b]">Previous School</span>
             <input value={form.previousSchool} onChange={(e) => setForm((f) => ({ ...f, previousSchool: e.target.value }))}
               className="mt-2 h-11 w-full rounded-xl border border-[#d5dde6] px-3 font-semibold outline-none focus:border-[#00334f]" />
+          </label>
+          <label>
+            <span className="text-xs font-black uppercase text-[#64748b]">Residence Type</span>
+            <select value={form.residenceType} onChange={(e) => setForm((f) => ({ ...f, residenceType: e.target.value }))}
+              className="mt-2 h-11 w-full rounded-xl border border-[#d5dde6] bg-white px-3 font-semibold outline-none focus:border-[#00334f]">
+              <option value="">Not decided yet</option>
+              <option value="BOARDING">Boarding</option>
+              <option value="DAY_SCHOLAR">Day Scholar</option>
+            </select>
           </label>
           <label>
             <span className="text-xs font-black uppercase text-[#64748b]">Guardian Email</span>
@@ -607,15 +619,17 @@ function NextStepCard({ applicant }: { applicant: ApplicantRow }) {
   const transition = useTransitionStageMutation();
   const [confirming, setConfirming] = useState(false);
   const [admissionDate, setAdmissionDate] = useState(new Date().toISOString().slice(0, 10));
+  const [residenceType, setResidenceType] = useState(applicant.residenceType ?? '');
 
   const missing: string[] = [];
   if (!applicant.dateOfBirth) missing.push('date of birth');
   if (!applicant.gender) missing.push('gender');
   if (!applicant.offer?.classId && !applicant.prospectiveClassId) missing.push('target class');
+  if (!applicant.residenceType) missing.push('residence type');
 
   const handleConvert = () => {
     convertMutation.mutate(
-      { id: applicant.id, admissionDate },
+      { id: applicant.id, admissionDate, residenceType: residenceType as 'BOARDING' | 'DAY_SCHOLAR' },
       {
         onSuccess: (data) => {
           toast(`Enrolled as ${data.student.registrationNumber}. Parent account linked by phone.`, 'success');
@@ -694,12 +708,21 @@ function NextStepCard({ applicant }: { applicant: ApplicantRow }) {
             <input type="date" value={admissionDate} onChange={(e) => setAdmissionDate(e.target.value)}
               className="mt-2 h-11 w-full rounded-xl border border-[#d5dde6] px-3 font-semibold outline-none focus:border-[#00334f]" />
           </label>
+          <label className="block">
+            <span className="text-xs font-black uppercase text-[#64748b]">Residence Type</span>
+            <select value={residenceType} onChange={(e) => setResidenceType(e.target.value)}
+              className="mt-2 h-11 w-full rounded-xl border border-[#d5dde6] bg-white px-3 font-semibold outline-none focus:border-[#00334f]">
+              <option value="">Select…</option>
+              <option value="BOARDING">Boarding</option>
+              <option value="DAY_SCHOLAR">Day Scholar</option>
+            </select>
+          </label>
           <div className="rounded-xl bg-[#f0fdf9] border border-emerald-200 p-3 text-[12px] font-semibold text-emerald-800">
             One click enrols {applicantFullName(applicant)}, generates the registration number, links the guardian ({applicant.guardianPhone}), and notifies finance. This cannot be undone.
           </div>
           <div className="flex gap-2">
             <Button variant="secondary" className="flex-1 rounded-xl" onClick={() => setConfirming(false)} disabled={convertMutation.isPending}>Back</Button>
-            <Button className="flex-1 rounded-xl bg-emerald-600 hover:bg-emerald-700" onClick={handleConvert} disabled={convertMutation.isPending}>
+            <Button className="flex-1 rounded-xl bg-emerald-600 hover:bg-emerald-700" onClick={handleConvert} disabled={convertMutation.isPending || !residenceType}>
               {convertMutation.isPending ? 'Enrolling…' : 'Confirm Enrolment'}
             </Button>
           </div>
@@ -856,6 +879,7 @@ export function AdmissionsIntakePage() {
   const [form, setForm] = useState({
     firstName: '', middleName: '', lastName: '',
     dateOfBirth: '', gender: '',
+    residenceType: '',
     prospectiveClassId: '', previousSchool: '',
     guardianFirstName: '', guardianLastName: '', guardianPhone: '', guardianEmail: '',
     guardianRelationship: 'GUARDIAN', sourceChannel: 'WALK_IN', notes: '',
@@ -875,6 +899,7 @@ export function AdmissionsIntakePage() {
         lastName: form.lastName.trim(),
         dateOfBirth: form.dateOfBirth || undefined,
         gender: form.gender || undefined,
+        residenceType: form.residenceType || undefined,
         prospectiveClassId: form.prospectiveClassId || undefined,
         previousSchool: form.previousSchool.trim() || undefined,
         guardianFirstName: form.guardianFirstName.trim(),
@@ -927,6 +952,10 @@ export function AdmissionsIntakePage() {
                 <select value={form.prospectiveClassId} onChange={set('prospectiveClassId')} className={selectField}>
                   <option value="">Not decided yet</option>
                   {classes.map((cls) => <option key={cls.id} value={cls.id}>{formatClassLabel(cls.name, cls.stream)}</option>)}
+                </select></label>
+              <label><span className="text-xs font-black uppercase text-[#64748b]">Residence Type</span>
+                <select value={form.residenceType} onChange={set('residenceType')} className={selectField}>
+                  <option value="">Not decided yet</option><option value="BOARDING">Boarding</option><option value="DAY_SCHOLAR">Day Scholar</option>
                 </select></label>
               <label className="md:col-span-3"><span className="text-xs font-black uppercase text-[#64748b]">Previous School</span>
                 <input value={form.previousSchool} onChange={set('previousSchool')} placeholder="e.g. Moshi Primary School" className={field} /></label>

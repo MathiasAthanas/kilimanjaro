@@ -177,6 +177,9 @@ function normaliseInvoice(raw: unknown) {
     studentId: strOf(inv.studentId),
     lineItems,
     payments: invoicePayments,
+    residenceType: strOf(inv.residenceType),
+    feeReviewRequired: Boolean(inv.feeReviewRequired),
+    feeReviewReason: strOf(inv.feeReviewReason),
   };
 }
 
@@ -227,6 +230,59 @@ export function useInvoice(id: string) {
     queryKey: financeKeys.invoice(id),
     queryFn: async () => normaliseInvoice(await api.get(`/finance/invoices/${id}`).then(payloadOf)),
     enabled: Boolean(id),
+  });
+}
+
+export type FeeRecalculationLine = {
+  feeStructureId: string;
+  feeCategoryId: string;
+  feeCategoryName: string;
+  amount: string;
+  currency: string;
+  previousAmount?: string;
+  residenceType?: 'BOARDING' | 'DAY_SCHOLAR' | null;
+};
+
+export type FeeRecalculationPreview = {
+  invoiceId: string;
+  invoiceNumber: string;
+  reviewRequired: boolean;
+  reviewReason?: string | null;
+  previousResidenceType?: 'BOARDING' | 'DAY_SCHOLAR' | null;
+  proposedResidenceType?: 'BOARDING' | 'DAY_SCHOLAR' | null;
+  currentLines: FeeRecalculationLine[];
+  proposedLines: FeeRecalculationLine[];
+  additions: FeeRecalculationLine[];
+  removals: FeeRecalculationLine[];
+  amountChanges: FeeRecalculationLine[];
+  currentSubtotal: string;
+  proposedSubtotal: string;
+  currentTotal: string;
+  proposedTotal: string;
+  paidAmount: string;
+  currentBalance: string;
+  proposedBalance: string;
+  blocked: boolean;
+  blockedReasons: string[];
+};
+
+export function useFeeRecalculationPreview(id: string, enabled = true) {
+  return useQuery({
+    queryKey: [...financeKeys.invoice(id), 'fee-recalculation-preview'],
+    queryFn: () => api.get(`/finance/invoices/${id}/fee-recalculation/preview`).then(payloadOf) as Promise<FeeRecalculationPreview>,
+    enabled: Boolean(id) && enabled,
+  });
+}
+
+export function useApplyFeeRecalculationMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, reason, idempotencyKey }: { id: string; reason: string; idempotencyKey: string }) =>
+      api.post(`/finance/invoices/${id}/fee-recalculation/apply`, { reason, idempotencyKey }).then(payloadOf),
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({ queryKey: financeKeys.invoice(variables.id) });
+      qc.invalidateQueries({ queryKey: financeKeys.all });
+    },
   });
 }
 
@@ -482,6 +538,7 @@ export function useFeeStructures() {
           className,
           educationStage: stage,
           studentGroup: strOf(s.studentGroup, s.group, s.groupName),
+          residenceType: strOf(s.residenceType),
           effectiveTerm: strOf(s.effectiveTerm, s.term, s.termName),
           amount: decimalToNumber(s.amount ?? s.feeAmount),
           currency: strOf(s.currency) || 'TZS',
