@@ -136,7 +136,7 @@ export function footer(doc: PDFKit.PDFDocument, text: string): void {
 }
 
 export function newDocument(): PDFKit.PDFDocument {
-  return new PDFDocument({ size: 'A4', margin: 0 });
+  return new PDFDocument({ size: 'A4', margin: 0, bufferPages: true });
 }
 
 export const PDF_COLORS = { NAVY, GOLD, GREY, INK, LINE, GREEN: '#10b981', RED: '#e11d48', AMBER: '#d59a1b', SLATE: '#64748b' };

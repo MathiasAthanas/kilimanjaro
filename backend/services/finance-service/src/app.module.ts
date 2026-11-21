@@ -2,7 +2,6 @@ import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
-import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { HealthModule } from './health/health.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { RabbitMqConsumer } from './rabbitmq/rabbitmq.consumer';
@@ -35,14 +34,6 @@ import { validateEnv } from './config/env.validation';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, validate: validateEnv }),
-    ThrottlerModule.forRoot({
-      throttlers: [
-        {
-          ttl: Number(process.env.THROTTLE_TTL || 60),
-          limit: Number(process.env.THROTTLE_LIMIT || 120),
-        },
-      ],
-    }),
     ScheduleModule.forRoot(),
     PrismaModule,
     RedisModule,
@@ -70,7 +61,6 @@ import { validateEnv } from './config/env.validation';
   providers: [
     RabbitMqConsumer,
     NumberSequenceService,
-    { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: InternalApiGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
   ],

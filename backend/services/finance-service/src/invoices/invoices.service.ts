@@ -21,9 +21,12 @@ import { RabbitMqService } from '../rabbitmq/rabbitmq.service';
 import { RedisService } from '../redis/redis.service';
 import { StudentClientService } from '../student-client/student-client.service';
 import { GenerateInvoicesDto } from './dto/generate-invoices.dto';
-import { InvoicePdfService } from './invoice-pdf.service';
+import { InvoicePdfData, InvoicePdfService } from './invoice-pdf.service';
+import { PaymentPlansService } from '../payment-plans/payment-plans.service';
+import { FinanceSettingsService } from '../finance-settings/finance-settings.service';
 import { selectApplicableStructures } from '../fee-structures/fee-matching';
 import { ApplyFeeRecalculationDto } from './dto/apply-fee-recalculation.dto';
+import { allocatePaid } from '../payment-plans/plan-schedule';
 
 type InvoiceGenerationJob = {
   status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED';
@@ -61,7 +64,65 @@ export class InvoicesService {
     private readonly rabbitMq: RabbitMqService,
     private readonly pdf: InvoicePdfService,
     private readonly accessControl: AccessControlService,
+    private readonly plans: PaymentPlansService,
+    private readonly settings: FinanceSettingsService,
   ) {}
+
+
+  /** Everything the invoice PDF prints, read fresh from the database so it always shows the current paid amount and plan. */
+  private async pdfDataFor(
+    invoice: Prisma.InvoiceGetPayload<{ include: { lineItems: true } }>,
+    student: any,
+    className: string,
+  ): Promise<InvoicePdfData> {
+    const labels = await this.studentClient.termLabels();
+    const [school, accounts, branding, installments, previous] = await Promise.all([
+      this.studentClient.schoolProfile(invoice.schoolId),
+      this.settings.activeAccountsForSchool(invoice.schoolId),
+      this.settings.brandingForPdf(invoice.schoolId),
+      this.prisma.invoiceInstallment.findMany({ where: { invoiceId: invoice.id }, orderBy: { sequence: 'asc' } }),
+      this.prisma.invoice.aggregate({
+        _sum: { outstandingBalance: true },
+        where: {
+          studentId: invoice.studentId,
+          id: { not: invoice.id },
+          status: { in: [InvoiceStatus.ISSUED, InvoiceStatus.PARTIALLY_PAID, InvoiceStatus.OVERDUE] },
+          createdAt: { lt: invoice.createdAt },
+        },
+      }),
+    ]);
+    let remaining = Number(invoice.paidAmount);
+    const lineItems = invoice.lineItems.map((item) => {
+      const amount = Number(item.amount);
+      const paid = Math.min(remaining, amount);
+      remaining -= paid;
+      return { name: item.feeCategoryName, amount, paid, balance: amount - paid };
+    });
+    const discount = Number(invoice.discountAmount ?? 0);
+    if (discount > 0) lineItems.push({ name: 'Discount', amount: -discount, paid: 0, balance: -discount });
+    const paidSoFar = Number(invoice.paidAmount);
+    const schedule = allocatePaid(installments.map((r) => ({ ...r, amount: Number(r.amount) })), paidSoFar);
+    return {
+      invoiceNumber: invoice.invoiceNumber,
+      createdAt: invoice.issuedAt ?? invoice.createdAt,
+      dueDate: invoice.dueDate,
+      status: invoice.status,
+      studentName: `${student?.firstName ?? ''} ${student?.lastName ?? ''}`.trim() || invoice.studentId,
+      registrationNumber: student?.registrationNumber || '-',
+      className,
+      academicYearName: labels.get(invoice.termId)?.academicYearName ?? null,
+      termName: labels.get(invoice.termId)?.name ?? null,
+      school,
+      branding,
+      lineItems,
+      installments: schedule.map((r) => ({ groupLabel: r.groupLabel, label: r.label, description: r.description, dueDate: r.dueDate, amount: r.amount, balance: r.balance })),
+      accounts: accounts.map((a) => ({ bankName: a.bankName, accountName: a.accountName, accountNumber: a.accountNumber, description: a.description })),
+      totalAmount: Number(invoice.totalAmount),
+      paidAmount: paidSoFar,
+      previousBalance: Number(previous._sum.outstandingBalance ?? 0),
+      outstandingBalance: Number(invoice.outstandingBalance),
+    };
+  }
 
   private unwrap<T>(payload: any): T {
     if (payload && typeof payload === 'object' && 'success' in payload && 'data' in payload) {
@@ -205,25 +266,16 @@ export class InvoicesService {
 
     // PDF rendering is decoupled from invoice creation: a rendering hiccup must
     // not lose or miscount an otherwise-valid invoice (it can be regenerated).
+    // A matching payment plan (if finance has set one up) splits the invoice into instalments.
+    try {
+      await this.plans.attach(invoice.id, null, actor);
+    } catch (err) {
+      this.logger.warn(`Payment plan was not attached to ${invoice.invoiceNumber}: ${(err as Error)?.message}`);
+    }
+
     let pdfUrl: string | null = null;
     try {
-      pdfUrl = await this.pdf.generate({
-        invoiceNumber: invoice.invoiceNumber,
-        studentName: `${student.firstName ?? ''} ${student.lastName ?? ''}`.trim() || 'Student',
-        registrationNumber: student.registrationNumber,
-        className: student.enrolments?.[0]?.class?.name || classId,
-        termId: dto.termId,
-        academicYearId: dto.academicYearId,
-        termName: (await this.studentClient.termLabels()).get(dto.termId)?.name ?? null,
-        academicYearName: (await this.studentClient.termLabels()).get(dto.termId)?.academicYearName ?? null,
-        school: await this.studentClient.schoolProfile(invoice.schoolId),
-        status: invoice.status,
-        lineItems: invoice.lineItems.map((item) => ({ feeCategoryName: item.feeCategoryName, amount: item.amount.toString() })),
-        totalAmount: invoice.totalAmount.toString(),
-        paidAmount: invoice.paidAmount.toString(),
-        outstandingBalance: invoice.outstandingBalance.toString(),
-        dueDate: invoice.dueDate,
-      });
+      pdfUrl = await this.pdf.generate(await this.pdfDataFor(invoice, student, student.enrolments?.[0]?.class?.name || classId));
     } catch (err) {
       this.logger.error(
         `Invoice PDF generation failed for ${invoice.invoiceNumber} (${invoice.id}): ${(err as Error)?.stack ?? err}`,
@@ -260,6 +312,28 @@ export class InvoicesService {
     return withPdf;
   }
 
+  /** Every student matching the filter, fetched page by page (the student service caps a page at 100). */
+  private async allStudents(params: Record<string, unknown>, headers: Record<string, string>): Promise<any[]> {
+    const pageSize = 100;
+    const seen = new Set<string>();
+    const all: any[] = [];
+    for (let page = 1; page <= 500; page++) {
+      const payload = this.unwrap<any>(await this.studentClient.get<any>('/students', { ...params, page, limit: pageSize }, headers));
+      const items: any[] = payload?.items || [];
+      let added = 0;
+      for (const item of items) {
+        if (item?.id && !seen.has(item.id)) {
+          seen.add(item.id);
+          all.push(item);
+          added++;
+        }
+      }
+      const totalPages = Number(payload?.meta?.totalPages ?? 0);
+      if (items.length < pageSize || added === 0 || (totalPages && page >= totalPages)) break;
+    }
+    return all;
+  }
+
   private async runGenerationJob(jobId: string, dto: GenerateInvoicesDto, user: RequestUser): Promise<void> {
     InvoicesService.generationJobs.set(jobId, {
       status: 'RUNNING',
@@ -267,31 +341,11 @@ export class InvoicesService {
     });
 
     try {
-      const studentsPayload = dto.classIds?.length
-        ? await Promise.all(
-            dto.classIds.map((classId) =>
-              this.studentClient.get<any>(
-                '/students',
-                { classId, page: 1, limit: 2000 },
-                {
-                  'X-User-Id': user.id,
-                  'X-User-Role': user.role,
-                },
-              ),
-            ),
-          )
-        : [
-            await this.studentClient.get<any>(
-              '/students',
-              { page: 1, limit: 5000 },
-              {
-                'X-User-Id': user.id,
-                'X-User-Role': user.role,
-              },
-            ),
-          ];
-
-      const students = studentsPayload.flatMap((payload) => this.unwrap<any>(payload)?.items || []);
+      // The student list answers at most 100 per page, so walk every page: a class of 227 students must get 227 invoices.
+      const headers = { 'X-User-Id': user.id, 'X-User-Role': user.role };
+      const students: any[] = dto.classIds?.length
+        ? (await Promise.all(dto.classIds.map((classId) => this.allStudents({ classId }, headers)))).flat()
+        : await this.allStudents({}, headers);
 
       let generated = 0;
       let skipped = 0;
@@ -723,6 +777,7 @@ export class InvoicesService {
       metadata: { reason: dto.reason.trim(), idempotencyKey: dto.idempotencyKey, recalculationId: result.recalculation.id },
     });
     await this.redis.del(`student-balance:${invoice.studentId}`);
+    await this.plans.refreshAfterChange(id, user);
     return { alreadyApplied: false, invoice: result.updated, recalculation: result.recalculation };
   }
 
@@ -807,6 +862,7 @@ export class InvoicesService {
       newValue: updated,
     });
     await this.redis.del(`student-balance:${invoice.studentId}`);
+    await this.plans.refreshAfterChange(id, user);
     return updated;
   }
 
@@ -872,6 +928,75 @@ export class InvoicesService {
     return updated;
   }
 
+  /** Tell the student's guardian about this invoice again (the notification service delivers it by their preferred channels). */
+  async notifyParent(id: string, user: RequestUser) {
+    const invoice = await this.byId(id, user);
+    if (invoice.status === InvoiceStatus.CANCELLED) throw new BadRequestException('A cancelled invoice cannot be sent');
+    await this.rabbitMq.publish('invoice.generated', {
+      invoiceId: invoice.id,
+      studentId: invoice.studentId,
+      totalAmount: invoice.outstandingBalance.toString(),
+      dueDate: invoice.dueDate.toISOString(),
+      termId: invoice.termId,
+      resend: true,
+    });
+    await this.audit.log({
+      entityType: 'Invoice',
+      entityId: id,
+      action: FinancialAuditAction.INVOICE_ISSUED,
+      performedById: user.id,
+      performedByRole: user.role,
+      metadata: { schoolId: invoice.schoolId, resentToParent: true },
+    });
+    return { sent: true, invoiceId: id };
+  }
+
+  /** A made-up invoice drawn with the school real branding, payment accounts and an example payment plan. */
+  async samplePdf(user: RequestUser) {
+    const schoolId = user.activeSchoolId ?? (user.schoolIds ?? []).filter((id) => id && id !== '*')[0] ?? null;
+    if (!schoolId) throw new BadRequestException('Select a school first (use the school switcher at the top).');
+    assertSchoolInScope(user, schoolId);
+    const [school, accounts, branding] = await Promise.all([
+      this.studentClient.schoolProfile(schoolId),
+      this.settings.activeAccountsForSchool(schoolId),
+      this.settings.brandingForPdf(schoolId),
+    ]);
+    const issued = new Date();
+    const day = 24 * 60 * 60 * 1000;
+    const lines = [
+      { name: 'Tuition Fee', amount: 4740000 },
+      { name: 'Admission form', amount: 200000 },
+      { name: 'Development fee', amount: 400000 },
+      { name: 'Text book', amount: 600000 },
+    ].map((l) => ({ ...l, paid: 0, balance: l.amount }));
+    const total = lines.reduce((s, l) => s + l.amount, 0);
+    const pdfPath = await this.pdf.generate({
+      invoiceNumber: 'SAMPLE',
+      createdAt: issued,
+      dueDate: new Date(issued.getTime() + 14 * day),
+      status: 'ISSUED',
+      studentName: 'SAMPLE STUDENT NAME',
+      registrationNumber: 'REG/0001',
+      className: 'Class 4',
+      academicYearName: String(issued.getFullYear()),
+      termName: 'Term 1',
+      school,
+      branding,
+      lineItems: lines,
+      installments: [
+        { groupLabel: 'Term I', label: 'First installment (50%)', description: 'Tuition Fee', dueDate: new Date(issued.getTime() + 30 * day), amount: 2370000, balance: 2370000 },
+        { groupLabel: 'Term II', label: 'Second installment (50%)', description: 'Tuition Fee', dueDate: new Date(issued.getTime() + 120 * day), amount: 2370000, balance: 2370000 },
+        { groupLabel: null, label: 'Other items', description: 'Admission form (200,000), Development fee (400,000), Text book (600,000)', dueDate: issued, amount: 1200000, balance: 1200000 },
+      ],
+      accounts: accounts.map((a) => ({ bankName: a.bankName, accountName: a.accountName, accountNumber: a.accountNumber, description: a.description })),
+      totalAmount: total,
+      paidAmount: 0,
+      previousBalance: 0,
+      outstandingBalance: total,
+    });
+    return { fullPath: join(this.configService.get<string>('PDF_STORAGE_PATH', './storage'), pdfPath) };
+  }
+
   async getPdfFile(id: string, user: RequestUser) {
     let invoice = await this.byId(id, user);
     const root = this.configService.get<string>('PDF_STORAGE_PATH', './storage');
@@ -912,23 +1037,7 @@ export class InvoicesService {
       student = {};
     }
 
-    const pdfUrl = await this.pdf.generate({
-      invoiceNumber: invoice.invoiceNumber,
-      studentName: `${student.firstName || ''} ${student.lastName || ''}`.trim() || invoice.studentId,
-      registrationNumber: student.registrationNumber || '-',
-      className: student.enrolments?.[0]?.class?.name || invoice.classId,
-      termId: invoice.termId,
-      academicYearId: invoice.academicYearId,
-      termName: (await this.studentClient.termLabels()).get(invoice.termId)?.name ?? null,
-      academicYearName: (await this.studentClient.termLabels()).get(invoice.termId)?.academicYearName ?? null,
-      school: await this.studentClient.schoolProfile(invoice.schoolId),
-      status: invoice.status,
-      lineItems: invoice.lineItems.map((item) => ({ feeCategoryName: item.feeCategoryName, amount: item.amount.toString() })),
-      totalAmount: invoice.totalAmount.toString(),
-      paidAmount: invoice.paidAmount.toString(),
-      outstandingBalance: invoice.outstandingBalance.toString(),
-      dueDate: invoice.dueDate,
-    });
+    const pdfUrl = await this.pdf.generate(await this.pdfDataFor(invoice, student, student.enrolments?.[0]?.class?.name || invoice.classId));
 
     return this.prisma.invoice.update({ where: { id }, data: { pdfUrl } });
   }

@@ -42,6 +42,7 @@ export class FeeStructuresService {
           termId: dto.termId ?? null,
           classId: null,
           studentGroup: null,
+          residenceType: dto.residenceType ?? null,
           educationStage: dto.educationStage as any,
           classLevel: dto.classLevel ?? null,
           isActive: true,

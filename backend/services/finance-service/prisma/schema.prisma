@@ -99,6 +99,12 @@ enum FinancialAuditAction {
   STORE_STOCK_RECEIVED
   STORE_STOCK_ISSUED
   STORE_STOCK_ADJUSTED
+  PAYMENT_ACCOUNT_CREATED
+  PAYMENT_ACCOUNT_UPDATED
+  PAYMENT_ACCOUNT_REMOVED
+  FINANCE_SETTINGS_UPDATED
+  PAYMENT_PLAN_SAVED
+  INVOICE_PLAN_APPLIED
 
   @@schema("finance")
 }
@@ -298,6 +304,7 @@ model Invoice {
   payments           Payment[]
   receipts           Receipt[]
   feeRecalculations  InvoiceFeeRecalculation[]
+  installments       InvoiceInstallment[]
 
   @@unique([studentId, termId, academicYearId])
   @@index([studentId, status])
@@ -763,5 +770,122 @@ model StoreMovement {
 
   @@index([storeItemId, occurredAt])
   @@index([type, occurredAt])
+  @@schema("finance")
+}
+
+enum PaymentAccountType {
+  BANK
+  MOBILE_MONEY
+  OTHER
+
+  @@schema("finance")
+}
+
+/// Where parents pay. Every active account of a school is printed on that school's invoices.
+model PaymentAccount {
+  id            String             @id @default(uuid())
+  schoolId      String
+  type          PaymentAccountType @default(BANK)
+  /// Bank name, or the mobile-money network (for example M-Pesa)
+  bankName      String
+  accountName   String
+  accountNumber String
+  description   String?
+  displayOrder  Int                @default(0)
+  isActive      Boolean            @default(true)
+  createdById   String
+  updatedById   String?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  @@index([schoolId, isActive, displayOrder])
+  @@schema("finance")
+}
+
+/// One row per school: how its invoices look and how residence changes are billed.
+model SchoolFinanceSettings {
+  schoolId              String   @id
+  /// #RRGGBB accent used for the invoice bands and total box
+  accentColor           String?
+  invoiceTitle          String?
+  invoiceNote           String?
+  /// Files under PDF_STORAGE_PATH/branding/schoolId/
+  logoFile              String?
+  signatureFile         String?
+  stampFile             String?
+  signatoryName         String?
+  /// NEXT_TERM, THIS_TERM or ASK: when a student switches Boarding/Day mid-term, which term the new fee applies from
+  residenceChangePolicy String   @default("ASK")
+  updatedById           String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@schema("finance")
+}
+
+/// How a fee (usually tuition) is paid in instalments. Targets are optional and combine (all that are set must match).
+model PaymentPlanTemplate {
+  id                 String                   @id @default(uuid())
+  schoolId           String
+  name               String
+  description        String?
+  isActive           Boolean                  @default(true)
+  residenceType      ResidenceType?
+  educationStage     EducationStage?
+  classLevel         Int?
+  academicYearId     String?
+  termId             String?
+  /// Fee categories this plan splits. Empty means every fee on the invoice. Other fees go into one "other items" instalment.
+  coveredCategoryIds String[]                 @default([])
+  otherItemsLabel    String?
+  otherItemsDueDays  Int                      @default(0)
+  createdById        String
+  updatedById        String?
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
+  installments       PaymentPlanInstallment[]
+
+  @@index([schoolId, isActive])
+  @@schema("finance")
+}
+
+model PaymentPlanInstallment {
+  id                String              @id @default(uuid())
+  templateId        String
+  sequence          Int
+  /// Optional heading shown with the label, for example "Term I"
+  groupLabel        String?
+  label             String
+  /// Share of the covered amount (0-100). One of percent, fixedAmount or isRemainder is used.
+  percent           Decimal?            @db.Decimal(7, 4)
+  fixedAmount       Decimal?            @db.Decimal(12, 2)
+  isRemainder       Boolean             @default(false)
+  dueDate           DateTime?
+  dueDaysAfterIssue Int?
+  template          PaymentPlanTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@unique([templateId, sequence])
+  @@schema("finance")
+}
+
+/// The instalment schedule copied onto one invoice. Paid and balance per row come from Invoice.paidAmount (earliest due first).
+model InvoiceInstallment {
+  id          String   @id @default(uuid())
+  invoiceId   String
+  sequence    Int
+  groupLabel  String?
+  label       String
+  /// What the instalment pays for, for example "Tuition Fee"
+  description String?
+  amount      Decimal  @db.Decimal(12, 2)
+  dueDate     DateTime
+  templateId  String?
+  /// true when finance built this schedule by hand for this invoice
+  isCustom    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@unique([invoiceId, sequence])
+  @@index([invoiceId, dueDate])
   @@schema("finance")
 }

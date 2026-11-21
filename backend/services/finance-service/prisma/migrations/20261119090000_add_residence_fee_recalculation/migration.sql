@@ -10,6 +10,23 @@ ALTER TABLE finance."FeeStructure" ADD COLUMN IF NOT EXISTS "residenceType" fina
 DROP INDEX IF EXISTS finance."FeeStructure_feeCategoryId_classId_termId_academicYearId_key";
 CREATE INDEX IF NOT EXISTS "FeeStructure_residenceType_termId_academicYearId_idx"
   ON finance."FeeStructure"("residenceType", "termId", "academicYearId");
+-- Older duplicate prices for the same target (same school, category, class/stage/level, group, residence, year, term)
+-- are switched off, never deleted, so invoice line items that reference them stay valid. The newest one stays active.
+UPDATE finance."FeeStructure" f
+SET "isActive" = false
+FROM (
+  SELECT id,
+         ROW_NUMBER() OVER (
+           PARTITION BY "schoolId", "feeCategoryId", "classId", "educationStage", "classLevel",
+                        "studentGroup", "residenceType", "academicYearId", "termId"
+           ORDER BY "createdAt" DESC, id DESC
+         ) AS rn
+  FROM finance."FeeStructure"
+  WHERE "isActive" = true
+) d
+WHERE f.id = d.id AND d.rn > 1;
+
+-- One live price per target; switched-off history may repeat.
 CREATE UNIQUE INDEX IF NOT EXISTS "FeeStructure_target_key"
   ON finance."FeeStructure" (
     "schoolId",
@@ -21,7 +38,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS "FeeStructure_target_key"
     "residenceType",
     "academicYearId",
     "termId"
-  ) NULLS NOT DISTINCT;
+  ) NULLS NOT DISTINCT
+  WHERE "isActive" = true;
 
 ALTER TABLE finance."Invoice"
   ADD COLUMN IF NOT EXISTS "residenceType" finance."ResidenceType",

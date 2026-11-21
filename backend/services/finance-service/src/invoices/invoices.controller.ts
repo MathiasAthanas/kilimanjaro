@@ -18,6 +18,16 @@ import { InvoicesService } from './invoices.service';
 export class InvoicesController {
   constructor(private readonly invoicesService: InvoicesService) {}
 
+  /** A sample invoice in this school's own look (logo, colours, payment info), for the branding and payment-info screens. */
+  @Get('preview/pdf')
+  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
+  async sample(@CurrentUser() user: RequestUser, @Res() res: Response) {
+    const file = await this.invoicesService.samplePdf(user);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'inline; filename="sample-invoice.pdf"');
+    createReadStream(file.fullPath).pipe(res);
+  }
+
   @Post('generate')
   @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
   generate(@Body() dto: GenerateInvoicesDto, @CurrentUser() user?: RequestUser) {
@@ -106,6 +116,12 @@ export class InvoicesController {
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${file.fileName}"`);
     createReadStream(file.fullPath).pipe(res);
+  }
+
+  @Post(':id/send')
+  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
+  send(@Param('id') id: string, @CurrentUser() user: RequestUser) {
+    return this.invoicesService.notifyParent(id, user);
   }
 
   @Post(':id/regenerate-pdf')
