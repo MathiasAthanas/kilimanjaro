@@ -127,7 +127,7 @@ export class ClassesController {
   }
 
   @Get('terms')
-  @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN', 'ACADEMIC_QA', 'FINANCE', 'HEAD_OF_DEPARTMENT', 'TEACHER', 'STUDENT', 'PARENT', 'GUARDIAN')
+  @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN', 'ACADEMIC_QA', 'FINANCE', 'HEAD_OF_DEPARTMENT', 'TEACHER', 'STUDENT', 'PARENT', 'GUARDIAN', 'MATRON', 'PATRON')
   @ApiOperation({ summary: 'List terms by academic year/current flag' })
   async listTerms(@Query('academicYearId') academicYearId?: string, @Query('isCurrent') isCurrent?: string) {
     return this.classesService.listTerms({

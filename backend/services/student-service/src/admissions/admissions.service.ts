@@ -20,6 +20,7 @@ import { RecordAssessmentDto, ScheduleAssessmentDto } from './dto/assessment.dto
 import { IssueOfferDto, OfferDecisionDto } from './dto/offer.dto';
 import { ConvertApplicantDto } from './dto/convert-applicant.dto';
 import { formatClassLabel } from '../common/helpers/class-label.helper';
+import { assertSchoolInScope, requireWriteSchoolId, schoolScopeFilter } from '../common/helpers/school-scope.helper';
 
 /** Allowed pipeline moves. ENROLLED is only reachable through convert(). */
 const STAGE_TRANSITIONS: Record<AdmissionStage, AdmissionStage[]> = {
@@ -60,12 +61,15 @@ export class AdmissionsService {
     };
   }
 
-  async create(dto: CreateApplicantDto, actorId: string) {
+  async create(dto: CreateApplicantDto, actorId: string, user?: RequestUser) {
     let schoolId: string | null = null;
     if (dto.prospectiveClassId) {
       const cls = await this.prisma.class.findUnique({ where: { id: dto.prospectiveClassId } });
       if (!cls) throw new BadRequestException('Prospective class not found');
       schoolId = cls.schoolId ?? null;
+      assertSchoolInScope(user, schoolId);
+    } else {
+      schoolId = requireWriteSchoolId(user, 'admission inquiry');
     }
 
     const applicant = await this.prisma.applicant.create({
@@ -79,6 +83,7 @@ export class AdmissionsService {
         previousSchool: dto.previousSchool,
         prospectiveClassId: dto.prospectiveClassId,
         educationStage: dto.educationStage,
+        residenceType: dto.residenceType,
         guardianFirstName: dto.guardianFirstName,
         guardianLastName: dto.guardianLastName,
         guardianPhone: AdmissionsService.normalisePhone(dto.guardianPhone),
@@ -111,10 +116,8 @@ export class AdmissionsService {
 
   async list(query: ListApplicantsDto, user?: RequestUser) {
     const pagination = paginate(query.page, query.limit);
-    const schoolId = user?.scope === 'SCHOOL' ? (user.activeSchoolId ?? user.schoolIds?.find((id) => id !== '*') ?? null) : null;
-
     const where: Prisma.ApplicantWhereInput = {
-      ...(schoolId ? { schoolId } : {}),
+      ...schoolScopeFilter(user),
       stage: query.stage,
       sourceChannel: query.sourceChannel,
       prospectiveClassId: query.prospectiveClassId,
@@ -149,23 +152,26 @@ export class AdmissionsService {
     return { items, meta: buildPageMeta(pagination.page, pagination.limit, total) };
   }
 
-  async findById(id: string) {
+  async findById(id: string, user?: RequestUser) {
     const applicant = await this.prisma.applicant.findUnique({
       where: { id },
       include: this.applicantInclude(),
     });
     if (!applicant) throw new NotFoundException('Applicant not found');
+    assertSchoolInScope(user, applicant.schoolId);
     return applicant;
   }
 
-  async update(id: string, dto: UpdateApplicantDto) {
-    const existing = await this.findById(id);
+  async update(id: string, dto: UpdateApplicantDto, user?: RequestUser) {
+    const existing = await this.findById(id, user);
     if (existing.stage === AdmissionStage.ENROLLED) {
       throw new BadRequestException('Enrolled applicants can no longer be edited — update the student record instead');
     }
     if (dto.prospectiveClassId) {
       const cls = await this.prisma.class.findUnique({ where: { id: dto.prospectiveClassId } });
       if (!cls) throw new BadRequestException('Prospective class not found');
+      assertSchoolInScope(user, cls.schoolId);
+      if (cls.schoolId !== existing.schoolId) throw new BadRequestException('Target class must belong to the applicant school');
     }
 
     return this.prisma.applicant.update({
@@ -180,6 +186,7 @@ export class AdmissionsService {
         previousSchool: dto.previousSchool,
         prospectiveClassId: dto.prospectiveClassId,
         educationStage: dto.educationStage,
+        residenceType: dto.residenceType,
         guardianFirstName: dto.guardianFirstName,
         guardianLastName: dto.guardianLastName,
         guardianPhone: dto.guardianPhone ? AdmissionsService.normalisePhone(dto.guardianPhone) : undefined,
@@ -192,8 +199,8 @@ export class AdmissionsService {
     });
   }
 
-  async transition(id: string, dto: TransitionStageDto, actorId: string) {
-    const applicant = await this.findById(id);
+  async transition(id: string, dto: TransitionStageDto, actorId: string, user?: RequestUser) {
+    const applicant = await this.findById(id, user);
 
     if (dto.toStage === AdmissionStage.ENROLLED) {
       throw new BadRequestException('Use the convert endpoint to enrol an applicant');
@@ -232,8 +239,8 @@ export class AdmissionsService {
     return updated;
   }
 
-  async scheduleAssessment(applicantId: string, dto: ScheduleAssessmentDto, actorId: string) {
-    const applicant = await this.findById(applicantId);
+  async scheduleAssessment(applicantId: string, dto: ScheduleAssessmentDto, actorId: string, user?: RequestUser) {
+    const applicant = await this.findById(applicantId, user);
 
     const assessment = await this.prisma.admissionAssessment.create({
       data: {
@@ -248,15 +255,19 @@ export class AdmissionsService {
 
     // Scheduling an assessment implicitly moves an APPLICATION forward
     if (applicant.stage === AdmissionStage.APPLICATION) {
-      await this.transition(applicantId, { toStage: AdmissionStage.ASSESSMENT, note: 'Entrance assessment scheduled' }, actorId);
+      await this.transition(applicantId, { toStage: AdmissionStage.ASSESSMENT, note: 'Entrance assessment scheduled' }, actorId, user);
     }
 
     return assessment;
   }
 
-  async recordAssessment(assessmentId: string, dto: RecordAssessmentDto, actorId: string) {
-    const assessment = await this.prisma.admissionAssessment.findUnique({ where: { id: assessmentId } });
+  async recordAssessment(assessmentId: string, dto: RecordAssessmentDto, actorId: string, user?: RequestUser) {
+    const assessment = await this.prisma.admissionAssessment.findUnique({
+      where: { id: assessmentId },
+      include: { applicant: { select: { schoolId: true } } },
+    });
     if (!assessment) throw new NotFoundException('Assessment not found');
+    assertSchoolInScope(user, assessment.applicant.schoolId);
 
     return this.prisma.admissionAssessment.update({
       where: { id: assessmentId },
@@ -270,8 +281,8 @@ export class AdmissionsService {
     });
   }
 
-  async issueOffer(applicantId: string, dto: IssueOfferDto, actorId: string) {
-    const applicant = await this.findById(applicantId);
+  async issueOffer(applicantId: string, dto: IssueOfferDto, actorId: string, user?: RequestUser) {
+    const applicant = await this.findById(applicantId, user);
     const offerableStages: AdmissionStage[] = [AdmissionStage.APPLICATION, AdmissionStage.ASSESSMENT, AdmissionStage.OFFER];
     if (!offerableStages.includes(applicant.stage)) {
       throw new BadRequestException(`Cannot issue an offer while applicant is in ${applicant.stage}`);
@@ -279,6 +290,8 @@ export class AdmissionsService {
 
     const cls = await this.prisma.class.findUnique({ where: { id: dto.classId } });
     if (!cls) throw new BadRequestException('Offered class not found');
+    assertSchoolInScope(user, cls.schoolId);
+    if (cls.schoolId !== applicant.schoolId) throw new BadRequestException('Offered class must belong to the applicant school');
 
     const offer = await this.prisma.admissionOffer.upsert({
       where: { applicantId },
@@ -304,14 +317,14 @@ export class AdmissionsService {
     // Update prospective class to match the offer and advance the stage
     await this.prisma.applicant.update({ where: { id: applicantId }, data: { prospectiveClassId: dto.classId } });
     if (applicant.stage !== AdmissionStage.OFFER) {
-      await this.transition(applicantId, { toStage: AdmissionStage.OFFER, note: 'Admission offer issued' }, actorId);
+      await this.transition(applicantId, { toStage: AdmissionStage.OFFER, note: 'Admission offer issued' }, actorId, user);
     }
 
     return offer;
   }
 
-  async decideOffer(applicantId: string, dto: OfferDecisionDto, actorId: string) {
-    const applicant = await this.findById(applicantId);
+  async decideOffer(applicantId: string, dto: OfferDecisionDto, actorId: string, user?: RequestUser) {
+    const applicant = await this.findById(applicantId, user);
     if (!applicant.offer) throw new BadRequestException('No offer has been issued for this applicant');
     if (applicant.stage !== AdmissionStage.OFFER) {
       throw new BadRequestException(`Offer decisions require the applicant to be in OFFER stage (currently ${applicant.stage})`);
@@ -330,6 +343,7 @@ export class AdmissionsService {
       applicantId,
       { toStage, note: dto.note || `Offer ${dto.decision.toLowerCase()} by guardian` },
       actorId,
+      user,
     );
   }
 
@@ -342,8 +356,8 @@ export class AdmissionsService {
    *     `student.enrolled` event (finance invoice + welcome notification react)
    *  4. back-fill the registration number onto the student auth account
    */
-  async convert(applicantId: string, dto: ConvertApplicantDto, actorId: string) {
-    const applicant = await this.findById(applicantId);
+  async convert(applicantId: string, dto: ConvertApplicantDto, actorId: string, user?: RequestUser) {
+    const applicant = await this.findById(applicantId, user);
 
     if (applicant.stage !== AdmissionStage.ACCEPTED) {
       throw new BadRequestException('Only applicants in ACCEPTED stage can be enrolled');
@@ -354,6 +368,10 @@ export class AdmissionsService {
     if (!applicant.dateOfBirth || !applicant.gender) {
       throw new BadRequestException('Date of birth and gender are required before enrolment — edit the applicant first');
     }
+    const residenceType = dto.residenceType ?? applicant.residenceType;
+    if (!residenceType) {
+      throw new BadRequestException('Boarding or Day Scholar classification is required before enrolment');
+    }
 
     const classId = applicant.offer?.classId || applicant.prospectiveClassId;
     if (!classId) {
@@ -361,6 +379,8 @@ export class AdmissionsService {
     }
     const cls = await this.prisma.class.findUnique({ where: { id: classId } });
     if (!cls) throw new BadRequestException('Target class no longer exists');
+    assertSchoolInScope(user, cls.schoolId);
+    if (cls.schoolId !== applicant.schoolId) throw new BadRequestException('Target class must belong to the applicant school');
 
     const studentAccount = await this.authClient.createStudentAccount({
       firstName: applicant.firstName,
@@ -391,6 +411,7 @@ export class AdmissionsService {
           lastName: applicant.lastName,
           dateOfBirth: applicant.dateOfBirth.toISOString().slice(0, 10),
           gender: applicant.gender,
+          residenceType,
           nationality: applicant.nationality,
           admissionDate: dto.admissionDate || new Date().toISOString().slice(0, 10),
           classId,
@@ -408,6 +429,7 @@ export class AdmissionsService {
           ],
         },
         actorId,
+        user,
       )) as { id: string; registrationNumber: string };
     } catch (err: unknown) {
       // P2002 = unique constraint on authUserId: student was created in a prior partial attempt.
@@ -439,6 +461,7 @@ export class AdmissionsService {
       data: {
         stage: AdmissionStage.ENROLLED,
         studentId: student.id,
+        residenceType,
         stageEvents: {
           create: {
             fromStage: applicant.stage,
@@ -456,6 +479,7 @@ export class AdmissionsService {
       studentId: student.id,
       registrationNumber: student.registrationNumber,
       classId,
+      residenceType,
       actorId,
     });
 
@@ -467,8 +491,7 @@ export class AdmissionsService {
    * seat capacity vs. filled per class (current academic year).
    */
   async analytics(user?: RequestUser) {
-    const schoolId = user?.scope === 'SCHOOL' ? (user.activeSchoolId ?? user.schoolIds?.find((id) => id !== '*') ?? null) : null;
-    const schoolFilter = schoolId ? { schoolId } : {};
+    const schoolFilter = schoolScopeFilter(user);
 
     const [stageCounts, sourceCounts, currentYear] = await Promise.all([
       this.prisma.applicant.groupBy({ by: ['stage'], where: schoolFilter, _count: { _all: true } }),

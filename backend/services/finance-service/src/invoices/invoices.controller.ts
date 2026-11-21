@@ -10,6 +10,7 @@ import { ApplyDiscountDto } from './dto/apply-discount.dto';
 import { CancelInvoiceDto } from './dto/cancel-invoice.dto';
 import { GenerateInvoicesDto } from './dto/generate-invoices.dto';
 import { WaiveInvoiceDto } from './dto/waive-invoice.dto';
+import { ApplyFeeRecalculationDto } from './dto/apply-fee-recalculation.dto';
 import { InvoicesService } from './invoices.service';
 
 @ApiTags('Finance - Invoices')
@@ -42,6 +43,18 @@ export class InvoicesController {
   @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
   jobStatus(@Param('jobId') jobId: string) {
     return this.invoicesService.getJob(jobId);
+  }
+
+  @Get(':id/fee-recalculation/preview')
+  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
+  feeRecalculationPreview(@Param('id') id: string, @CurrentUser() user: RequestUser) {
+    return this.invoicesService.previewFeeRecalculation(id, user);
+  }
+
+  @Post(':id/fee-recalculation/apply')
+  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
+  applyFeeRecalculation(@Param('id') id: string, @Body() dto: ApplyFeeRecalculationDto, @CurrentUser() user: RequestUser) {
+    return this.invoicesService.applyFeeRecalculation(id, dto, user);
   }
 
   @Get(':id')

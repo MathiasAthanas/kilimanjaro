@@ -6,6 +6,8 @@ describe('auth api role normalization', () => {
     expect(normalizeRole('HEAD_OF_DEPARTMENT')).toBe('HOD');
     expect(normalizeRole('ACADEMIC_QA')).toBe('AQA');
     expect(normalizeRole('SYSTEM_ADMIN')).toBe('ADMIN');
+    expect(normalizeRole('MATRON')).toBe('MATRON');
+    expect(normalizeRole('PATRON')).toBe('PATRON');
   });
 
   it('keeps existing web role names unchanged', () => {

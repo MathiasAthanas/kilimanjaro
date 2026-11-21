@@ -34,7 +34,7 @@ export class PerformanceController {
   }
 
   @Get('performance/alerts/class/:classId')
-  @Roles(ROLES.TEACHER, ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA)
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.TEACHER, ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA)
   alertsByClass(@Param('classId') classId: string, @CurrentUser() user?: RequestUser) {
     return this.performanceProxyService.alertsByClass(classId, user!);
   }
@@ -60,7 +60,7 @@ export class PerformanceController {
   }
 
   @Get('performance/pairings')
-  @Roles(ROLES.TEACHER, ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA)
+  @Roles(ROLES.SYSTEM_ADMIN, ROLES.TEACHER, ROLES.HEAD_OF_DEPARTMENT, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA)
   pairings(@Query() query: Record<string, unknown>, @CurrentUser() user?: RequestUser) {
     return this.performanceProxyService.pairings(query, user!);
   }

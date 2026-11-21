@@ -23,6 +23,8 @@ export type AdmissionSourceChannel =
   | 'SCHOOL_EVENT'
   | 'OTHER';
 
+export type ResidenceType = 'BOARDING' | 'DAY_SCHOLAR';
+
 export interface ApplicantRow {
   id: string;
   firstName: string;
@@ -35,6 +37,7 @@ export interface ApplicantRow {
   prospectiveClassId?: string | null;
   prospectiveClass?: { id: string; name: string; stream?: string | null; level?: number; capacity?: number } | null;
   educationStage?: string | null;
+  residenceType?: ResidenceType | null;
   guardianFirstName: string;
   guardianLastName: string;
   guardianPhone: string;
@@ -179,8 +182,8 @@ export function useScheduleAssessmentMutation() {
 export function useRecordAssessmentMutation() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ assessmentId, applicantId: _applicantId, ...body }: { assessmentId: string; applicantId: string; score?: number; outcome?: string; notes?: string }) =>
-      api.patch(`/admissions/assessments/${assessmentId}`, body).then((r) => payloadOf(r)),
+    mutationFn: (input: { assessmentId: string; applicantId: string; score?: number; outcome?: string; notes?: string }) =>
+      api.patch(`/admissions/assessments/${input.assessmentId}`, { score: input.score, outcome: input.outcome, notes: input.notes }).then((r) => payloadOf(r)),
     onSuccess: (_data, variables) => invalidateAdmissions(qc, variables.applicantId),
   });
 }
@@ -206,8 +209,8 @@ export function useOfferDecisionMutation() {
 export function useConvertApplicantMutation() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, admissionDate }: { id: string; admissionDate?: string }) =>
-      api.post(`/admissions/applicants/${id}/convert`, { admissionDate }).then((r) => payloadOf(r) as { applicant: ApplicantRow; student: { id: string; registrationNumber: string } }),
+    mutationFn: ({ id, admissionDate, residenceType }: { id: string; admissionDate?: string; residenceType: ResidenceType }) =>
+      api.post(`/admissions/applicants/${id}/convert`, { admissionDate, residenceType }).then((r) => payloadOf(r) as { applicant: ApplicantRow; student: { id: string; registrationNumber: string } }),
     onSuccess: (_data, variables) => invalidateAdmissions(qc, variables.id),
   });
 }

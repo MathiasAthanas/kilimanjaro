@@ -28,6 +28,58 @@ enum StudentStatus {
   @@schema("students")
 }
 
+/// A student's residence arrangement. Nullable on Student/Applicant so
+/// existing records are not silently classified during the rollout.
+enum ResidenceType {
+  BOARDING
+  DAY_SCHOLAR
+
+  @@schema("students")
+}
+
+enum BedStatus {
+  AVAILABLE
+  OCCUPIED
+  MAINTENANCE
+  INACTIVE
+
+  @@schema("students")
+}
+
+enum RollCallSession {
+  MORNING
+  EVENING
+
+  @@schema("students")
+}
+
+enum HostelRollCallStatus {
+  PRESENT
+  ABSENT
+  ON_LEAVE
+  EXCUSED
+
+  @@schema("students")
+}
+
+enum LeaveType {
+  HOME
+  TEMPORARY
+
+  @@schema("students")
+}
+
+enum HostelLeaveStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+  DEPARTED
+  RETURNED
+  CANCELLED
+
+  @@schema("students")
+}
+
 enum GuardianRelationship {
   FATHER
   MOTHER
@@ -176,6 +228,7 @@ model School {
   updatedAt DateTime     @updatedAt
   classes   Class[]
   students  Student[]
+  dormitories Dormitory[]
 
   @@schema("students")
 }
@@ -198,6 +251,7 @@ model Student {
   nationality        String                @default("Tanzanian")
   profilePhotoUrl    String?
   status             StudentStatus         @default(ACTIVE)
+  residenceType      ResidenceType?
   admissionDate      DateTime
   graduationDate     DateTime?
   transferDate       DateTime?
@@ -220,8 +274,12 @@ model Student {
   performanceAlerts  PerformanceAlert[]
   pairingsAsStudent  PeerPairing[]         @relation("PairingsStudent")
   pairingsAsPeer     PeerPairing[]         @relation("PairingsPeer")
+  dormitoryAssignments DormitoryStudentAssignment[]
+  hostelRollCalls    HostelRollCall[]
+  hostelLeaves       StudentLeave[]
 
   @@index([schoolId, legacyAdmissionNumber])
+  @@index([schoolId, residenceType])
   @@schema("students")
 }
 
@@ -287,6 +345,7 @@ model Term {
   attendance     AttendanceRecord[]
   snapshots      PerformanceSnapshot[]
   pairings       PeerPairing[]
+  hostelLeaves   StudentLeave[]
 
   @@unique([academicYearId, name])
   @@schema("students")
@@ -682,6 +741,7 @@ model Applicant {
   previousSchool       String?
   prospectiveClassId   String?
   educationStage       EducationStage?
+  residenceType        ResidenceType?
   guardianFirstName    String
   guardianLastName     String
   /// Normalised on write (+255XXXXXXXXX) — same scheme as parent auth accounts
@@ -704,6 +764,7 @@ model Applicant {
   @@index([stage, createdAt])
   @@index([guardianPhone])
   @@index([prospectiveClassId, stage])
+  @@index([schoolId, residenceType])
   @@schema("students")
 }
 
@@ -755,5 +816,143 @@ model AdmissionOffer {
   note            String?
   applicant       Applicant              @relation(fields: [applicantId], references: [id], onDelete: Cascade)
 
+  @@schema("students")
+}
+
+// ─── Boarding and hostel operations ─────────────────────────────────────────
+
+model Dormitory {
+  id          String   @id @default(uuid())
+  schoolId    String
+  name        String
+  code        String
+  totalBeds   Int      @default(0)
+  isActive    Boolean  @default(true)
+  notes       String?
+  eligibilityNotes String?
+  createdBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  school      School   @relation(fields: [schoolId], references: [id])
+  beds        DormitoryBed[]
+  staffAssignments DormitoryStaffAssignment[]
+  studentAssignments DormitoryStudentAssignment[]
+  rollCalls   HostelRollCall[]
+  leaves      StudentLeave[]
+
+  @@unique([schoolId, code])
+  @@index([schoolId, isActive])
+  @@schema("students")
+}
+
+model DormitoryBed {
+  id           String    @id @default(uuid())
+  dormitoryId  String
+  label        String
+  status       BedStatus @default(AVAILABLE)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  dormitory    Dormitory @relation(fields: [dormitoryId], references: [id], onDelete: Cascade)
+  assignments  DormitoryStudentAssignment[]
+
+  @@unique([dormitoryId, label])
+  @@index([dormitoryId, status])
+  @@schema("students")
+}
+
+model DormitoryStaffAssignment {
+  id           String    @id @default(uuid())
+  dormitoryId  String
+  staffUserId  String
+  staffRole    String
+  isActive     Boolean   @default(true)
+  assignedBy   String
+  assignedAt   DateTime  @default(now())
+  endedAt      DateTime?
+  dormitory    Dormitory @relation(fields: [dormitoryId], references: [id], onDelete: Cascade)
+
+  @@unique([dormitoryId, staffUserId])
+  @@index([staffUserId, isActive])
+  @@schema("students")
+}
+
+model DormitoryStudentAssignment {
+  id           String         @id @default(uuid())
+  dormitoryId  String
+  studentId    String
+  bedId        String?
+  isActive     Boolean        @default(true)
+  assignedBy   String
+  assignedAt   DateTime       @default(now())
+  endedAt      DateTime?
+  dormitory    Dormitory      @relation(fields: [dormitoryId], references: [id], onDelete: Cascade)
+  student      Student        @relation(fields: [studentId], references: [id])
+  bed          DormitoryBed?  @relation(fields: [bedId], references: [id])
+
+  @@index([dormitoryId, isActive])
+  @@index([studentId, isActive])
+  @@index([bedId, isActive])
+  @@schema("students")
+}
+
+model HostelRollCall {
+  id           String               @id @default(uuid())
+  dormitoryId  String
+  studentId    String
+  date         DateTime             @db.Date
+  session      RollCallSession
+  status       HostelRollCallStatus
+  note         String?
+  markedBy     String
+  markedAt     DateTime             @default(now())
+  dormitory    Dormitory            @relation(fields: [dormitoryId], references: [id], onDelete: Cascade)
+  student      Student              @relation(fields: [studentId], references: [id])
+
+  @@unique([dormitoryId, studentId, date, session])
+  @@index([dormitoryId, date, session])
+  @@schema("students")
+}
+
+model StudentLeave {
+  id               String             @id @default(uuid())
+  schoolId         String
+  dormitoryId      String
+  studentId        String
+  termId           String
+  leaveType        LeaveType
+  reason           String
+  departureAt      DateTime
+  expectedReturnAt DateTime
+  actualReturnAt   DateTime?
+  status           HostelLeaveStatus  @default(REQUESTED)
+  requestedBy      String
+  decidedBy        String?
+  departedBy       String?
+  returnedBy       String?
+  decisionNote     String?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  dormitory        Dormitory          @relation(fields: [dormitoryId], references: [id], onDelete: Cascade)
+  student          Student            @relation(fields: [studentId], references: [id])
+  term             Term               @relation(fields: [termId], references: [id])
+  events           StudentLeaveEvent[]
+
+  @@index([schoolId, status])
+  @@index([dormitoryId, status])
+  @@index([studentId, status])
+  @@schema("students")
+}
+
+model StudentLeaveEvent {
+  id        String             @id @default(uuid())
+  leaveId   String
+  fromStatus HostelLeaveStatus?
+  toStatus  HostelLeaveStatus
+  note      String?
+  actorId   String
+  createdAt DateTime           @default(now())
+  leave     StudentLeave       @relation(fields: [leaveId], references: [id], onDelete: Cascade)
+
+  @@index([leaveId, createdAt])
   @@schema("students")
 }

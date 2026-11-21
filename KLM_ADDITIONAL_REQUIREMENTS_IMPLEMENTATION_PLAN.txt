@@ -1,0 +1,196 @@
+KLM ADDITIONAL REQUIREMENTS — THREE-PHASE IMPLEMENTATION PLAN
+Version: 2026-11-18
+Status: Approved direction; implement one phase at a time
+
+OBJECTIVE
+Extend the existing Kilimanjaro platform with residence classification,
+Matron/Patron hostel operations, and residence-aware fee configuration while
+enhancing—not duplicating—the existing admissions pipeline. Preserve existing
+students, applicants, invoices, payments, routes, colours, permissions, and
+production data.
+
+GLOBAL IMPLEMENTATION RULES
+- Reuse the current student-service admissions pipeline and StudentsService.
+- Keep all records school-scoped. A staff member may only access schools and
+  dormitories assigned through existing membership and new hostel assignments.
+- Never derive student eligibility from the words Matron or Patron. Staff gender,
+  title, and student gender are independent.
+- Residence classification alone never creates a fee or invoice line. Only an
+  active configured fee structure may create a charge.
+- Existing invoices must never be silently rewritten. Any recalculation uses a
+  preview, explicit confirmation, an idempotent diff, and an audit record.
+- Migrations must be additive/backward-compatible and must not guess residence
+  type for historic students. Existing unknown values remain unclassified until
+  reviewed, unless a separately approved deterministic migration is supplied.
+- Work locally first. Do not connect to or migrate the production database and
+  do not push or deploy unless separately requested.
+- At the end of each phase, list changed files, migrations, checks, known gaps,
+  and stop unless the user explicitly asked to continue.
+
+==========================================================================
+PHASE 1 — ADMISSIONS ENHANCEMENT AND RESIDENCE FOUNDATION
+IMPLEMENTATION STATUS: COMPLETE LOCALLY — 2026-11-19
+==========================================================================
+GOAL
+Introduce the canonical Boarding/Day Scholar classification and carry it
+through the current admissions and student-enrolment workflows without adding
+a second admissions implementation or changing finance behaviour.
+
+BACKEND AND DATABASE
+1. Add a students.ResidenceType enum with BOARDING and DAY_SCHOLAR.
+2. Add nullable residenceType fields to Student and Applicant. Nullable is
+   intentional for existing records; no historic student is silently guessed.
+3. Add an additive student-service migration and regenerate the Prisma client.
+4. Extend CreateApplicantDto, UpdateApplicantDto, CreateStudentDto and
+   UpdateStudentDto with validated residenceType values.
+5. Extend ConvertApplicantDto so an admissions officer may confirm/override the
+   residence type during final conversion. Conversion must require a resolved
+   residence type and persist the same value on both Applicant and Student.
+6. Keep StudentsService.create as the single creation path. Do not duplicate
+   guardian, auth-account, registration-number, class enrolment, event, or
+   duplicate-student logic.
+7. Include residenceType in the existing student.enrolled event payload only as
+   descriptive data; finance must not charge from it during this phase.
+8. Harden applicant access: list, profile, edit, stage transition, assessment,
+   offer, decision and conversion must all enforce current school scope. A
+   direct applicant ID must not bypass the selected school/membership boundary.
+9. When an applicant has no class yet, stamp the inquiry with the current school
+   context; group users must select a school before creating school-owned data.
+
+FRONTEND
+1. Add Boarding/Day Scholar to the existing New Inquiry screen with a clear
+   “Not decided yet” state; do not create a new admissions screen.
+2. Show and edit the value on Applicant 360°. Make it a required prerequisite
+   at conversion and confirm it in the final conversion panel.
+3. Add the same required choice to direct student enrolment and show it in the
+   review step.
+4. Show residence type in the student profile and preserve the existing form
+   layout, palette, responsiveness, payloads and navigation.
+5. Keep existing applicant stages, offers, assessments, guardian deduplication,
+   auth account creation, class enrolment, duplicate checks and redirects.
+
+PHASE 1 ACCEPTANCE CHECKS
+- Existing nullable records still load.
+- A new inquiry can be saved as Boarding, Day Scholar, or undecided.
+- Accepted applicants cannot convert without a selected residence type.
+- Conversion creates one student with matching residence type and retains all
+  current class, guardian, account and registration behaviour.
+- Direct enrolment persists the selected type.
+- Applicant direct links and mutations reject out-of-scope school access.
+- No invoice or fee structure is added or recalculated.
+- Run focused student-service tests/build and dashboard typecheck/tests/build.
+
+==========================================================================
+PHASE 2 — MATRON/PATRON HOSTEL OPERATIONS
+IMPLEMENTATION STATUS: COMPLETE LOCALLY — 2026-11-19
+==========================================================================
+GOAL
+Add school-scoped hostel operations and a task-oriented dashboard for assigned
+Matron/Patron staff, administrators, and authorized school leadership.
+
+AUTHORIZATION FOUNDATION
+1. Add MATRON and PATRON as school-scoped auth roles, memberships, dashboard
+   roles, session normalization, route guards, user-creation options and tests.
+2. Both roles have identical hostel capabilities by default. Their title never
+   implies student gender. Authorization is based on explicit dorm assignment.
+3. ADMIN/SYSTEM_ADMIN manages dorms and assignments; authorized Principal/Head
+   of School may oversee. Matron/Patron see only assigned dormitories.
+
+HOSTEL DOMAIN (STUDENT SERVICE)
+1. Dormitory: school, name/code, active state, optional descriptive student
+   eligibility, total bed count, notes and audit timestamps.
+2. DormitoryBed: dormitory, unique label/number, active/maintenance state.
+   Changing total beds must never delete an occupied bed. Capacity changes use
+   validation and preserve assignments.
+3. DormitoryStaffAssignment: dormitory, auth user, role/title, active dates,
+   assigned-by actor. Support many staff per dorm and many dorms per staff.
+4. DormitoryStudentAssignment: boarding student, dormitory, optional bed,
+   active dates and actor. Enforce one active dorm assignment per student and
+   one active occupant per bed. Day Scholars cannot be actively housed.
+5. HostelRollCall: dorm, student, date, session, status, note and marker. Enforce
+   one mark per student/date/session and identify students currently on leave.
+6. StudentLeave: school, dorm, student, active term, reason, HOME/TEMPORARY type,
+   departure, expected return, actual return, status, permission actors and an
+   auditable state history. Supported state flow: REQUESTED -> APPROVED/REJECTED
+   -> DEPARTED -> RETURNED, with controlled cancellation where valid.
+7. Add capacity, assignment, state-transition, school-scope, and dorm-scope
+   validation in services—not only in the UI.
+
+FRONTEND
+1. Add /boarding workspace: dashboard, dormitory directory/detail, roster and
+   beds, roll call, leave queue/currently-away/returns, and staff assignment
+   administration where authorized.
+2. Matron/Patron landing page shows only assigned dorms, occupancy/capacity,
+   missing roll calls, students away, expected returns, and next actions.
+3. Dorm detail is the context hub: roster -> bed assignment -> roll call ->
+   leave/return -> back to the same dorm.
+4. Keep school, dormitory, term, date/session and role context visible. Support
+   empty/loading/error states, keyboard use and narrow screens.
+
+PHASE 2 ACCEPTANCE CHECKS
+- Multiple dormitories and multiple staff assignments work.
+- Matron/Patron cannot access an unassigned dorm by changing the URL.
+- Staff gender/title never filters students automatically.
+- Capacity cannot be overfilled; occupied beds cannot be duplicated/deleted.
+- Roll call is idempotent per session.
+- Leave permission, departure, current-away list and return are auditable.
+- Existing admissions, students, attendance and roles remain unchanged.
+
+==========================================================================
+PHASE 3 — RESIDENCE-AWARE FEES, CONTROLLED RECALCULATION AND RELEASE GATE
+IMPLEMENTATION STATUS: COMPLETE LOCALLY — 2026-11-19
+==========================================================================
+GOAL
+Allow configured fee structures to vary by Boarding/Day Scholar and class,
+then safely update applicable existing invoices without duplicate charges or
+damage to payment history.
+
+FEE CONFIGURATION
+1. Inspect and extend the existing FeeStructure model rather than creating a
+   parallel fee engine. Add an optional residenceType target that can combine
+   with existing class/stage/level/term/year targets.
+2. Update uniqueness so the same category/class/term/year may have distinct
+   Boarding and Day Scholar structures without ambiguity.
+3. Matching is conjunctive: every populated target dimension must match. Rank
+   exact class+residence above broader residence/stage rules. Select at most one
+   applicable structure per fee category using deterministic specificity.
+4. Keep optional-category and explicit student-assignment rules. A Boarding
+   classification alone must never add Boarding Fee; an active configured
+   structure/assignment is required.
+5. Add clear selectors and matrix labels in existing fee setup screens, including
+   class-specific combinations such as Standard One Boarding versus other
+   classes. Preserve all approvals and permission boundaries.
+
+EXISTING-INVOICE RECALCULATION
+1. Residence changes mark affected open/current invoices as needing review; do
+   not mutate them automatically.
+2. Add preview endpoint/UI showing current lines, proposed configured lines,
+   additions, removals, amount changes, paid amount, new total and new balance.
+3. Apply only after explicit confirmation and reason. Use a transaction,
+   idempotency key and audit record. Re-running the same change adds no duplicate.
+4. Preserve receipts, payments and paidAmount. Never delete financial history.
+   If a proposed total is below paidAmount, block automatic application and send
+   it to the existing/manual credit/refund decision path; do not invent a refund.
+5. Do not change PAID/VOID/overpayment semantics without a separately reviewed
+   accounting decision. Restrict recalculation to statuses the current financial
+   rules safely support and report blocked invoices clearly.
+
+INTEGRATION AND RELEASE GATE
+1. Verify admissions -> residence -> dorm eligibility -> configured fees.
+2. Verify residence change removes/adds only configured applicable lines after
+   preview, while payment totals and audit history remain intact.
+3. Verify school/group scope, finance permissions, Matron/Patron dorm scope,
+   direct URLs, responsive views and error feedback.
+4. Run backend/dashboard typecheck, focused and integration tests, lint and
+   production builds. Produce changed-file/migration list and deployment order.
+5. Provide a production migration/runbook and rollback plan, but do not deploy.
+
+FINAL DEFINITION OF DONE
+- Admissions remains one pipeline and produces one student record.
+- Every student can be explicitly classified Boarding or Day Scholar.
+- Assigned Matron/Patron staff can safely manage their dorms, beds, roll call,
+  leave and returns without gender hardcoding or cross-school leakage.
+- Fees arise only from configured fee structures; class and residence rules can
+  coexist; existing invoices update only through previewed audited recalculation.
+- Existing records, payments, routes, permissions, colours and APIs outside the
+  approved extensions remain functional.

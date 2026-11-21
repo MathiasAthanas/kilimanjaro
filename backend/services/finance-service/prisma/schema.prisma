@@ -70,6 +70,8 @@ enum FinancialAuditAction {
   INVOICE_CANCELLED
   INVOICE_WAIVED
   INVOICE_DISCOUNT_APPLIED
+  INVOICE_FEE_REVIEW_MARKED
+  INVOICE_FEE_RECALCULATED
   STUDENT_FEE_ASSIGNED
   STUDENT_FEE_REMOVED
   PAYMENT_RECORDED
@@ -150,6 +152,13 @@ enum EducationStage {
   @@schema("finance")
 }
 
+enum ResidenceType {
+  BOARDING
+  DAY_SCHOLAR
+
+  @@schema("finance")
+}
+
 model FeeCategory {
   id                String                 @id @default(uuid())
   schoolId          String?
@@ -211,6 +220,7 @@ model FeeStructure {
   educationStage EducationStage?
   classLevel     Int?
   studentGroup   String?
+  residenceType  ResidenceType?
   academicYearId String
   termId         String?
   amount         Decimal           @db.Decimal(12, 2)
@@ -225,10 +235,10 @@ model FeeStructure {
   feeCategory    FeeCategory       @relation(fields: [feeCategoryId], references: [id], onDelete: Restrict)
   lineItems      InvoiceLineItem[]
 
-  @@unique([feeCategoryId, classId, termId, academicYearId])
   @@index([classId, termId, academicYearId])
   @@index([educationStage, classLevel, termId, academicYearId])
   @@index([studentGroup, termId, academicYearId])
+  @@index([residenceType, termId, academicYearId])
   @@schema("finance")
 }
 
@@ -278,16 +288,46 @@ model Invoice {
   waiverReason       String?
   pdfUrl             String?
   academicCleared    Boolean           @default(false)
+  residenceType      ResidenceType?
+  feeReviewRequired  Boolean           @default(false)
+  feeReviewReason    String?
+  feeReviewMarkedAt  DateTime?
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
   lineItems          InvoiceLineItem[]
   payments           Payment[]
   receipts           Receipt[]
+  feeRecalculations  InvoiceFeeRecalculation[]
 
   @@unique([studentId, termId, academicYearId])
   @@index([studentId, status])
   @@index([termId, status])
   @@index([dueDate, status])
+  @@index([feeReviewRequired, status])
+  @@schema("finance")
+}
+
+model InvoiceFeeRecalculation {
+  id                 String   @id @default(uuid())
+  invoiceId          String
+  idempotencyKey     String
+  reason             String
+  previousResidence  ResidenceType?
+  proposedResidence  ResidenceType?
+  previousSubtotal   Decimal  @db.Decimal(12, 2)
+  proposedSubtotal   Decimal  @db.Decimal(12, 2)
+  previousTotal      Decimal  @db.Decimal(12, 2)
+  proposedTotal      Decimal  @db.Decimal(12, 2)
+  paidAmount         Decimal  @db.Decimal(12, 2)
+  previousLines      Json
+  proposedLines      Json
+  performedById      String
+  performedByRole    String
+  createdAt          DateTime @default(now())
+  invoice            Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+
+  @@unique([invoiceId, idempotencyKey])
+  @@index([invoiceId, createdAt])
   @@schema("finance")
 }
 

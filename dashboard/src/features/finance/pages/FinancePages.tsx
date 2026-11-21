@@ -107,6 +107,8 @@ import {
   useFeeDefaulters,
   useDefaulterContacts,
   useAddDefaulterContactMutation,
+  useFeeRecalculationPreview,
+  useApplyFeeRecalculationMutation,
 } from '../api/finance.hooks';
 import {
   ActionPanel,
@@ -833,6 +835,11 @@ export function InvoiceDetailPage() {
   const cancelMutation   = useCancelInvoiceMutation();
   const discountMutation = useApplyInvoiceDiscountMutation();
   const waiveMutation    = useWaiveInvoiceMutation();
+  const [showFeeReview, setShowFeeReview] = useState(false);
+  const feePreview = useFeeRecalculationPreview(id ?? '', showFeeReview);
+  const applyFeeRecalculation = useApplyFeeRecalculationMutation();
+  const [feeReviewReason, setFeeReviewReason] = useState('');
+  const [feeReviewKey] = useState(() => crypto.randomUUID());
   const navigate = useNavigate();
 
   type ActiveAction = 'discount' | 'waive' | 'cancel' | null;
@@ -856,6 +863,7 @@ export function InvoiceDetailPage() {
   const hasConfirmedPayment = invoicePayments.some((p) => String(p.status).toUpperCase() === 'CONFIRMED');
   const isPending = cancelMutation.isPending || discountMutation.isPending || waiveMutation.isPending || pdfLoading;
   const discountPreviewBalance = invoice.outstanding - (Number(discountForm.amount) || 0);
+  const invoiceMeta = invoice as unknown as { feeReviewRequired?: boolean; feeReviewReason?: string; residenceType?: string };
 
   const handleDownloadPdf = async () => {
     if (pdfLoading) return;
@@ -904,6 +912,30 @@ export function InvoiceDetailPage() {
   return (
     <FinanceWorkspaceShell title={invoice.number} eyebrow="Invoice detail">
       <FinanceBreadcrumb crumbs={[{ label: 'Finance', to: '/finance' }, { label: 'Invoices', to: '/finance/invoices' }, { label: invoice.number }]} />
+
+      {invoiceMeta.feeReviewRequired && (
+        <div className="rounded-lg border border-[#d59a1b]/40 bg-[#fffbeb] p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div><p className="font-black text-[#7a5200]">Fee review required</p><p className="mt-1 text-sm font-semibold text-[#7a5200]/80">{invoiceMeta.feeReviewReason || 'The student residence classification changed.'}</p></div>
+            <Button className="rounded" onClick={() => setShowFeeReview(true)}>Preview Recalculation</Button>
+          </div>
+        </div>
+      )}
+
+      {showFeeReview && (
+        <section className="rounded-lg border border-[#4338CA]/30 bg-white p-5 shadow-sm">
+          <div className="flex items-start justify-between gap-3"><div><p className="text-[11px] font-black uppercase tracking-widest text-[#4338CA]">Controlled fee recalculation</p><h2 className="mt-1 text-lg font-black text-[#00334f]">Current invoice versus configured fees</h2></div><button aria-label="Close fee recalculation preview" onClick={() => setShowFeeReview(false)}><X className="h-5 w-5 text-slate-500" /></button></div>
+          {feePreview.isLoading ? <div className="mt-4"><SkeletonTable cols={3} /></div> : feePreview.isError ? <p className="mt-4 text-sm font-bold text-rose-600">Unable to load the fee preview.</p> : feePreview.data && <>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {[['Residence', feePreview.data.proposedResidenceType?.replace('_', ' ') || 'Unclassified'], ['Current total', formatTZS(Number(feePreview.data.currentTotal))], ['Proposed total', formatTZS(Number(feePreview.data.proposedTotal))], ['Paid (preserved)', formatTZS(Number(feePreview.data.paidAmount))]].map(([label, value]) => <div key={label} className="rounded border border-slate-200 bg-slate-50 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-slate-500">{label}</p><p className="mt-1 font-black text-[#00334f]">{value}</p></div>)}
+            </div>
+            <div className="mt-4 grid gap-4 lg:grid-cols-3">
+              {[['Additions', feePreview.data.additions], ['Removals', feePreview.data.removals], ['Amount changes', feePreview.data.amountChanges]].map(([label, rows]) => <div key={String(label)} className="rounded border border-slate-200 p-3"><p className="text-xs font-black uppercase text-slate-500">{String(label)}</p><div className="mt-2 space-y-2">{(rows as typeof feePreview.data.additions).length ? (rows as typeof feePreview.data.additions).map((line) => <div key={`${line.feeCategoryId}-${line.amount}`} className="flex justify-between gap-2 text-sm"><span className="font-bold">{line.feeCategoryName}</span><span className="font-mono">{formatTZS(Number(line.amount))}</span></div>) : <p className="text-sm text-slate-400">None</p>}</div></div>)}
+            </div>
+            {feePreview.data.blocked ? <div className="mt-4 rounded border border-rose-200 bg-rose-50 p-3"><p className="font-black text-rose-700">Manual finance decision required</p>{feePreview.data.blockedReasons.map((reason) => <p key={reason} className="mt-1 text-sm font-semibold text-rose-700">• {reason}</p>)}</div> : <div className="mt-4"><label className="block"><span className="text-[11px] font-black uppercase tracking-widest text-slate-500">Confirmation reason *</span><input value={feeReviewReason} onChange={(event) => setFeeReviewReason(event.target.value)} className="mt-2 h-11 w-full rounded border border-slate-200 px-3 font-semibold" placeholder="Why this invoice must use the newly configured fees" /></label><Button className="mt-3 rounded" disabled={feeReviewReason.trim().length < 5 || applyFeeRecalculation.isPending} onClick={() => applyFeeRecalculation.mutate({ id: invoice.id, reason: feeReviewReason, idempotencyKey: feeReviewKey }, { onSuccess: () => { toast('Invoice fees recalculated without changing payment history', 'success'); setShowFeeReview(false); }, onError: (error) => toast(errorMessage(error, 'Fee recalculation failed'), 'error') })}>{applyFeeRecalculation.isPending ? 'Applying…' : 'Confirm & Apply Configured Fees'}</Button></div>}
+          </>}
+        </section>
+      )}
 
       {/* Student identity card */}
       <NavLink
@@ -2796,11 +2828,12 @@ export function FeeStructuresPage() {
           ]}
         />
       </div>
-      <FinanceTable columns={['Category', 'Target', 'Stage', 'Group', 'Amount', 'Term', 'Status', 'Actions']} minWidth={960}>
+      <FinanceTable columns={['Category', 'Target', 'Residence', 'Stage', 'Group', 'Amount', 'Term', 'Status', 'Actions']} minWidth={1060}>
         {apiStructures.map((structure) => (
           <tr key={structure.id} className="even:bg-[#f7f9fb]">
             <Td>{structure.category}</Td>
             <Td>{structure.className || '—'}</Td>
+            <Td><Badge tone={(structure as unknown as { residenceType?: string }).residenceType ? 'blue' : 'slate'}>{(structure as unknown as { residenceType?: string }).residenceType?.replace('_', ' ') || 'All students'}</Badge></Td>
             <Td>{structure.educationStage ? structure.educationStage.replaceAll('_', ' ') : '—'}</Td>
             <Td>{structure.studentGroup || (structure.classLevel ? `Level ${structure.classLevel}` : '—')}</Td>
             <Td amount><AmountDisplay amount={structure.amount} /></Td>
@@ -2836,6 +2869,7 @@ export function FeeMatrixPage() {
 
   const [yearId, setYearId] = useState('');
   const [termId, setTermId] = useState('');
+  const [matrixResidenceType, setMatrixResidenceType] = useState('');
   const [stageTab, setStageTab] = useState<StageLabel>('O-Level');
   const [stagePicked, setStagePicked] = useState(false);
   const [columns, setColumns] = useState<ColDef[]>([]);
@@ -2898,8 +2932,8 @@ export function FeeMatrixPage() {
       newOrig[cat.id] = {};
       columns.forEach((col) => {
         // Match on the class id (class names repeat across schools and carry streams), preferring the chosen term
-        const candidates = (apiStructures as unknown as Array<{ id: string; category: string; classId?: string; termId?: string; amount: number }>).filter((s) =>
-          s.category === cat.name && s.classId && col.classIds.includes(s.classId),
+        const candidates = (apiStructures as unknown as Array<{ id: string; category: string; classId?: string; termId?: string; residenceType?: string; amount: number }>).filter((s) =>
+          s.category === cat.name && s.classId && col.classIds.includes(s.classId) && (s.residenceType || '') === matrixResidenceType,
         );
         const struct = (termId ? candidates.find((s) => s.termId === termId) : undefined) ?? candidates.find((s) => !s.termId) ?? candidates[0];
         const amt = struct ? String(struct.amount) : '';
@@ -2909,7 +2943,7 @@ export function FeeMatrixPage() {
     });
     setMatrix(newMat);
     setOriginal(newOrig);
-  }, [matrixNeedsInit, structuresReady, columns, categories, apiStructures, apiClasses]);
+  }, [matrixNeedsInit, structuresReady, columns, categories, apiStructures, apiClasses, matrixResidenceType, termId]);
 
   const effectiveAmt = (catId: string, colId: string): string => {
     const col = columns.find((c) => c.id === colId);
@@ -2983,7 +3017,7 @@ export function FeeMatrixPage() {
             saved++;
           } else {
             for (const classId of col.classIds) {
-              await createMutation.mutateAsync({ feeCategoryId: cat.id, classId, amount: String(amount), academicYearId: effectiveYearId, termId: termId || undefined, currency: 'TZS' });
+              await createMutation.mutateAsync({ feeCategoryId: cat.id, classId, residenceType: matrixResidenceType || undefined, amount: String(amount), academicYearId: effectiveYearId, termId: termId || undefined, currency: 'TZS' });
               saved++;
             }
           }
@@ -3027,10 +3061,19 @@ export function FeeMatrixPage() {
         </div>
         <div>
           <p className={cap}>Term</p>
-          <select value={termId} onChange={(e) => setTermId(e.target.value)}
+          <select value={termId} onChange={(e) => { setTermId(e.target.value); setMatrixNeedsInit(true); }}
             className="mt-1 h-9 rounded border border-[#d5dde6] bg-white px-3 text-sm font-semibold text-[#00334f] outline-none focus:border-[#00334f]">
             <option value="">All Terms</option>
             {filteredTerms.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+        </div>
+        <div>
+          <p className={cap}>Residence</p>
+          <select value={matrixResidenceType} onChange={(e) => { setMatrixResidenceType(e.target.value); setMatrixNeedsInit(true); }}
+            className="mt-1 h-9 rounded border border-[#d5dde6] bg-white px-3 text-sm font-semibold text-[#00334f] outline-none focus:border-[#00334f]">
+            <option value="">All students</option>
+            <option value="BOARDING">Boarding</option>
+            <option value="DAY_SCHOLAR">Day Scholar</option>
           </select>
         </div>
         <div className="ml-auto flex items-center gap-2">
@@ -3327,6 +3370,7 @@ export function CreateFeeStructurePage() {
   const [educationStage, setEducationStage] = useState('O_LEVEL');
   const [classLevel, setClassLevel] = useState('');
   const [studentGroup, setStudentGroup] = useState('');
+  const [residenceType, setResidenceType] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   // Default to current academic year once loaded
@@ -3344,7 +3388,7 @@ export function CreateFeeStructurePage() {
     e.preventDefault();
     if (!categoryId || !amount) { toast('Fee category and amount are required', 'error'); return; }
     if (!effectiveYearId) { toast('Academic year is required', 'error'); return; }
-    const base = { feeCategoryId: categoryId, academicYearId: effectiveYearId, termId: termId || undefined, amount: String(amount), currency: 'TZS' };
+    const base = { feeCategoryId: categoryId, academicYearId: effectiveYearId, termId: termId || undefined, residenceType: residenceType || undefined, amount: String(amount), currency: 'TZS' };
 
     let payloads: Record<string, unknown>[] = [];
     if (mode === 'class') {
@@ -3407,6 +3451,15 @@ export function CreateFeeStructurePage() {
                 <option value="">All terms / annual</option>
                 {yearTerms.map((t) => <option key={t.id} value={t.id}>{t.name}{t.isCurrent ? ' (current)' : ''}</option>)}
               </select>
+            </label>
+            <label className="block">
+              <span className={cap}>Residence Target</span>
+              <select value={residenceType} onChange={(e) => setResidenceType(e.target.value)} className={sel}>
+                <option value="">All students</option>
+                <option value="BOARDING">Boarding only</option>
+                <option value="DAY_SCHOLAR">Day Scholars only</option>
+              </select>
+              <span className="mt-1 block text-xs font-semibold text-[#64748b]">Classification alone never creates a charge; this configured structure determines applicability.</span>
             </label>
           </div>
 
@@ -3483,6 +3536,7 @@ export function CreateFeeStructurePage() {
           ['Category', categoryId ? (apiCategories.find((c) => c.id === categoryId)?.name ?? '—') : '—'],
           ['Amount', amount ? formatTZS(Number(amount)) : '—'],
           ['Applies to', mode === 'class' ? `${selectedClasses.length} class(es)` : mode === 'stage' ? `${educationStage.replaceAll('_', ' ')}${classLevel ? ` · L${classLevel}` : ''}` : (studentGroup || 'group')],
+          ['Residence', residenceType ? residenceType.replace('_', ' ') : 'All students'],
           ['Term', termId ? (yearTerms.find((t) => t.id === termId)?.name ?? '—') : 'Annual'],
         ]} />
       </div>
