@@ -114,14 +114,32 @@ export function useBoardingStudents() {
   });
 }
 
+export type BoardingStaffMember = { id: string; firstName?: string; lastName?: string; name?: string; role: 'MATRON' | 'PATRON'; email?: string };
+
+/** Every matron and patron of the selected school (two role queries, so neither is lost behind a page limit). */
 export function useBoardingStaff(enabled = true) {
   const activeSchoolKey = useActiveSchoolKey();
   return useQuery({
     queryKey: [...keys.all, 'staff', activeSchoolKey],
-    queryFn: () => api.get('/auth/users', { params: { category: 'STAFF', limit: 100 } }).then((r) =>
-      arrayFromApi(payloadOf(r), ['items', 'users']).filter((row) => ['MATRON', 'PATRON'].includes(String((row as Record<string, unknown>).role))),
-    ),
+    queryFn: async () => {
+      const [matrons, patrons] = await Promise.all(['MATRON', 'PATRON'].map((role) =>
+        api.get('/auth/users', { params: { role, limit: 100 } }).then((r) => arrayFromApi(payloadOf(r), ['items', 'users']) as unknown as BoardingStaffMember[]),
+      ));
+      return [...matrons, ...patrons].filter((row) => ['MATRON', 'PATRON'].includes(String(row.role)));
+    },
     enabled,
+  });
+}
+
+export type AwaitingStudent = { id: string; firstName: string; lastName: string; registrationNumber: string; gender?: string; className: string | null; admissionDate?: string };
+export type AwaitingDormitory = { id: string; name: string; code: string; schoolId: string; totalBeds: number; occupiedBeds: number; availableBeds: number };
+
+/** Boarders who still need a dormitory: the matron and patron to-do list. */
+export function useBoardingAwaiting() {
+  const activeSchoolKey = useActiveSchoolKey();
+  return useQuery({
+    queryKey: [...keys.all, 'awaiting', activeSchoolKey],
+    queryFn: () => api.get('/boarding/awaiting').then((r) => payloadOf(r) as { total: number; students: AwaitingStudent[]; dormitories: AwaitingDormitory[] }),
   });
 }
 
@@ -162,7 +180,7 @@ function boardingMutation<T extends Record<string, unknown>>(fn: (input: T) => P
   };
 }
 
-export const useCreateDormitory = boardingMutation((body: { name: string; code: string; totalBeds: number; notes?: string; eligibilityNotes?: string }) =>
+export const useCreateDormitory = boardingMutation((body: { name: string; code?: string; totalBeds: number; notes?: string; eligibilityNotes?: string; staff?: Array<{ staffUserId: string; staffRole: 'MATRON' | 'PATRON' }> }) =>
   api.post('/boarding/dormitories', body).then(payloadOf));
 export const useUpdateDormitory = boardingMutation(({ id, ...body }: { id: string; name?: string; totalBeds?: number; notes?: string; eligibilityNotes?: string }) =>
   api.patch(`/boarding/dormitories/${id}`, body).then(payloadOf));

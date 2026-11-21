@@ -291,8 +291,11 @@ import {
   ManagerSchoolsPage,
 } from '../features/manager/pages/ManagerPages';
 import { SchoolFormPage, SuperAdminHomePage } from '../features/superadmin/pages/SuperAdminPages';
+import { InvoiceBrandingPage, PaymentInfoPage, PaymentPlansPage } from '../features/finance/pages/FinanceConfigPages';
+import { ResidencePage } from '../features/residence/pages/ResidencePage';
 import { BoardingDashboardPage } from '../features/boarding/pages/BoardingDashboardPage';
-import { BoardingEntryPage, BoardingLeavesPage, BoardingRollCallDetailPage, BoardingRollCallsPage, BoardingStaffOverviewPage } from '../features/boarding/pages/BoardingStaffPages';
+import { BoardingTodayPage } from '../features/boarding/pages/BoardingTodayPage';
+import { BoardingEntryPage, BoardingLeavesPage, BoardingRollCallDetailPage, BoardingRollCallsPage } from '../features/boarding/pages/BoardingStaffPages';
 import {
   ComposeReportCardsPage,
   ExamTypesPage,
@@ -466,6 +469,10 @@ export const router = createBrowserRouter([
       { path: '/finance/fee-structures/matrix', element: <FeeMatrixPage /> },
       { path: '/finance/fee-structures/create', element: <CreateFeeStructurePage /> },
       { path: '/finance/fee-assignments', element: <FeeAssignmentsPage /> },
+      { path: '/finance/payment-info', element: <PaymentInfoPage /> },
+      { path: '/finance/invoice-branding', element: <InvoiceBrandingPage /> },
+      { path: '/finance/payment-plans', element: <PaymentPlansPage /> },
+      { path: '/residence', element: <ResidencePage /> },
       { path: '/finance/assets', element: <AssetsListPage /> },
       { path: '/finance/assets/create', element: <CreateAssetPage /> },
       { path: '/finance/assets/:id/edit', element: <EditAssetPage /> },
@@ -529,7 +536,7 @@ export const router = createBrowserRouter([
       { path: '/admissions/students/:id', element: <AdmissionsStudentProfilePage /> },
       { path: '/boarding', element: <BoardingEntryPage /> },
       { path: '/boarding/admin', element: <BoardingDashboardPage /> },
-      { path: '/boarding/overview', element: <BoardingStaffOverviewPage /> },
+      { path: '/boarding/overview', element: <BoardingTodayPage /> },
       { path: '/boarding/roll-calls', element: <BoardingRollCallsPage /> },
       { path: '/boarding/roll-calls/:dormitoryId/:date/:session', element: <BoardingRollCallDetailPage /> },
       { path: '/boarding/leaves', element: <BoardingLeavesPage /> },

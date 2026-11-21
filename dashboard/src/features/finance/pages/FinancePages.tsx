@@ -138,6 +138,7 @@ import { EXPORTS, exportFinanceCsv } from '../utils/exportCsv';
 import type { ExportKey } from '../utils/exportCsv';
 import { LedgerPager, LedgerSearch, LedgerTabs, selectClass, useDebounced, useLedgerView } from '../components/LedgerControls';
 import { groupClassesByLevel, priceTarget, structuresFor, type ClassLevelGroup } from '../utils/classLevels';
+import { InvoicePlanPanel } from './FinanceConfigPages';
 import { useSchoolStore } from '../../../lib/school/schoolStore';
 import { useSchools } from '../../manager/api/manager.hooks';
 
@@ -999,6 +1000,8 @@ export function InvoiceDetailPage() {
             },
             { label: 'Status', value: invoice.status, detail: formatDate(invoice.dueDate), tone: 'slate' },
           ]} />
+
+          <InvoicePlanPanel invoiceId={invoice.id} status={String(invoice.status)} total={Number(invoice.total)} />
 
           {/* Inline action forms */}
           {activeAction === 'discount' && (

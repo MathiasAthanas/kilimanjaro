@@ -32,6 +32,11 @@ export function financeHeaderLinks(pathname: string): FinanceHeaderLink[] {
   if (pathname.startsWith('/finance/fee-categories/')) return [
     { to: '/finance/fee-categories', label: 'Back to Categories' },
   ];
+  if (pathname === '/finance/payment-plans' || pathname === '/finance/payment-info' || pathname === '/finance/invoice-branding') return [
+    { to: '/finance/payment-plans', label: 'Payment Plans' },
+    { to: '/finance/payment-info', label: 'Payment Info' },
+    { to: '/finance/invoice-branding', label: 'Invoice Look' },
+  ];
   if (pathname === '/finance/fee-structures') return [
     { to: '/finance/fee-structures/matrix', label: 'Fee Matrix' },
     { to: '/finance/fee-structures/create', label: 'Create Structure', primary: true },

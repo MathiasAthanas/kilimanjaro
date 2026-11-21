@@ -67,6 +67,7 @@ export function canAccessRoute(role: UserRole | undefined, route: string) {
   // enter it when they drill into a school (school scope comes from the header)
   if (route.startsWith('/principal')) return ['PRINCIPAL', 'HEAD_OF_SCHOOL', 'MANAGER', 'SUPER_ADMIN', 'ADMIN'].includes(role);
   if (route.startsWith('/admissions')) return ['ADMISSIONS', 'PRINCIPAL', 'HEAD_OF_SCHOOL', 'MANAGER', 'SUPER_ADMIN', 'ADMIN'].includes(role);
+  if (route.startsWith('/residence')) return ['ADMIN', 'ADMISSIONS', 'PRINCIPAL', 'HEAD_OF_SCHOOL', 'MANAGER', 'SUPER_ADMIN', 'FINANCE', 'HEAD_OF_FINANCE'].includes(role);
   if (route.startsWith('/boarding')) return ['MATRON', 'PATRON', 'PRINCIPAL', 'HEAD_OF_SCHOOL', 'MANAGER', 'SUPER_ADMIN', 'ADMIN'].includes(role);
   if (route.startsWith('/admin')) return role === 'ADMIN' || role === 'SUPER_ADMIN' || role === 'MANAGER';
   if (route.startsWith('/reports')) return ['TEACHER', 'HOD', 'AQA', 'FINANCE', 'PRINCIPAL', 'ADMIN', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN', 'HEAD_OF_FINANCE'].includes(role);

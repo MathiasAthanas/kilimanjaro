@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react';
+import { ResidenceChoice } from '../../residence/components/ResidenceChoice';
+import type { ResidenceType } from '../../residence/api/residence.hooks';
 import { NavLink, useNavigate, useParams } from 'react-router-dom';
 import {
   BadgeCheck, CalendarPlus, Check, ClipboardList, GraduationCap,
@@ -324,15 +326,10 @@ function IdentityCard({ applicant }: { applicant: ApplicantRow }) {
             <input value={form.previousSchool} onChange={(e) => setForm((f) => ({ ...f, previousSchool: e.target.value }))}
               className="mt-2 h-11 w-full rounded-xl border border-[#d5dde6] px-3 font-semibold outline-none focus:border-[#00334f]" />
           </label>
-          <label>
-            <span className="text-xs font-black uppercase text-[#64748b]">Residence Type</span>
-            <select value={form.residenceType} onChange={(e) => setForm((f) => ({ ...f, residenceType: e.target.value }))}
-              className="mt-2 h-11 w-full rounded-xl border border-[#d5dde6] bg-white px-3 font-semibold outline-none focus:border-[#00334f]">
-              <option value="">Not decided yet</option>
-              <option value="BOARDING">Boarding</option>
-              <option value="DAY_SCHOLAR">Day Scholar</option>
-            </select>
-          </label>
+          <div className="md:col-span-2">
+            <span className="text-xs font-black uppercase text-[#64748b]">Where will the student stay?</span>
+            <div className="mt-2"><ResidenceChoice allowUndecided value={form.residenceType as ResidenceType | ''} onChange={(v) => setForm((f) => ({ ...f, residenceType: v }))} /></div>
+          </div>
           <label>
             <span className="text-xs font-black uppercase text-[#64748b]">Guardian Email</span>
             <input type="email" value={form.guardianEmail} onChange={(e) => setForm((f) => ({ ...f, guardianEmail: e.target.value }))}
@@ -708,15 +705,11 @@ function NextStepCard({ applicant }: { applicant: ApplicantRow }) {
             <input type="date" value={admissionDate} onChange={(e) => setAdmissionDate(e.target.value)}
               className="mt-2 h-11 w-full rounded-xl border border-[#d5dde6] px-3 font-semibold outline-none focus:border-[#00334f]" />
           </label>
-          <label className="block">
-            <span className="text-xs font-black uppercase text-[#64748b]">Residence Type</span>
-            <select value={residenceType} onChange={(e) => setResidenceType(e.target.value)}
-              className="mt-2 h-11 w-full rounded-xl border border-[#d5dde6] bg-white px-3 font-semibold outline-none focus:border-[#00334f]">
-              <option value="">Select…</option>
-              <option value="BOARDING">Boarding</option>
-              <option value="DAY_SCHOLAR">Day Scholar</option>
-            </select>
-          </label>
+          <div className="block">
+            <span className="text-xs font-black uppercase text-[#64748b]">Where will the student stay? *</span>
+            <div className="mt-2"><ResidenceChoice value={residenceType as ResidenceType | ''} onChange={(v) => setResidenceType(v)} /></div>
+            {residenceType === 'BOARDING' && <p className="mt-2 text-xs font-semibold text-emerald-700">After enrolment the student appears in the matron and patron list to be given a dormitory.</p>}
+          </div>
           <div className="rounded-xl bg-[#f0fdf9] border border-emerald-200 p-3 text-[12px] font-semibold text-emerald-800">
             One click enrols {applicantFullName(applicant)}, generates the registration number, links the guardian ({applicant.guardianPhone}), and notifies finance. This cannot be undone.
           </div>
@@ -953,10 +946,8 @@ export function AdmissionsIntakePage() {
                   <option value="">Not decided yet</option>
                   {classes.map((cls) => <option key={cls.id} value={cls.id}>{formatClassLabel(cls.name, cls.stream)}</option>)}
                 </select></label>
-              <label><span className="text-xs font-black uppercase text-[#64748b]">Residence Type</span>
-                <select value={form.residenceType} onChange={set('residenceType')} className={selectField}>
-                  <option value="">Not decided yet</option><option value="BOARDING">Boarding</option><option value="DAY_SCHOLAR">Day Scholar</option>
-                </select></label>
+              <div className="md:col-span-3"><span className="text-xs font-black uppercase text-[#64748b]">Where will the student stay?</span>
+                <div className="mt-2"><ResidenceChoice allowUndecided value={form.residenceType as ResidenceType | ''} onChange={(v) => setForm((f) => ({ ...f, residenceType: v }))} /></div></div>
               <label className="md:col-span-3"><span className="text-xs font-black uppercase text-[#64748b]">Previous School</span>
                 <input value={form.previousSchool} onChange={set('previousSchool')} placeholder="e.g. Moshi Primary School" className={field} /></label>
             </div>

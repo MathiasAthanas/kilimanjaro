@@ -259,6 +259,10 @@ const financeSections: SidebarSection[] = [
       { to: '/finance/fee-structures',         icon: FileSpreadsheet,label: 'Fee Structures',  end: true },
       { to: '/finance/fee-structures/matrix',  icon: BarChart3,      label: 'Fee Matrix'                },
       { to: '/finance/fee-assignments',        icon: Users,          label: 'Fee Assignments'           },
+      { to: '/finance/payment-plans',          icon: ClipboardCheck, label: 'Payment Plans'             },
+      { to: '/finance/payment-info',           icon: Landmark,       label: 'Payment Info'              },
+      { to: '/finance/invoice-branding',       icon: FileText,       label: 'Invoice Look'              },
+      { to: '/residence',                      icon: Users,          label: 'In / Off Campus'           },
     ],
   },
   {
@@ -511,6 +515,26 @@ const admissionsSections: SidebarSection[] = [
   },
 ];
 
+const residenceSections: SidebarSection[] = [
+  {
+    title: 'Residence',
+    items: [
+      { to: '/residence', icon: Users, label: 'In / Off Campus', end: true },
+    ],
+  },
+];
+
+const billingSetupSections: SidebarSection[] = [
+  {
+    title: 'Billing Setup',
+    items: [
+      { to: '/finance/payment-info',     icon: Landmark,       label: 'Payment Info',   end: true },
+      { to: '/finance/invoice-branding', icon: FileText,       label: 'Invoice Look',   end: true },
+      { to: '/finance/payment-plans',    icon: ClipboardCheck, label: 'Payment Plans',  end: true },
+    ],
+  },
+];
+
 const boardingSections: SidebarSection[] = [
   {
     title: 'Boarding',
@@ -524,9 +548,9 @@ const boardingStaffSections: SidebarSection[] = [
   {
     title: 'Boarding',
     items: [
-      { to: '/boarding/overview', icon: Building2, label: 'Dormitories & Roster', end: true },
-      { to: '/boarding/roll-calls', icon: ClipboardCheck, label: 'Daily Roll Call', end: true },
-      { to: '/boarding/leaves', icon: CalendarCheck, label: 'Leave Management', end: true },
+      { to: '/boarding/overview', icon: Building2, label: 'Today', end: true },
+      { to: '/boarding/roll-calls', icon: ClipboardCheck, label: 'Roll Call', end: true },
+      { to: '/boarding/leaves', icon: CalendarCheck, label: 'Leave & Returns', end: true },
     ],
   },
 ];
@@ -660,15 +684,15 @@ export function getSectionsForRole(role: string | undefined): SidebarSection[] {
   if (role === 'HOD')       return [...hodSections,        ...sharedSections];
   if (role === 'AQA')       return [...aqaSections,        ...sharedSections];
   if (role === 'FINANCE')   return [...financeSections,    ...sharedSections];
-  if (role === 'PRINCIPAL') return [...principalSections, ...boardingSections, ...sharedSections];
-  if (role === 'ADMIN')     return [...adminSections, ...boardingSections, ...sharedSections];
-  if (role === 'ADMISSIONS') return [...admissionsSections, ...sharedSections];
+  if (role === 'PRINCIPAL') return [...principalSections, ...residenceSections, ...boardingSections, ...billingSetupSections, ...sharedSections];
+  if (role === 'ADMIN')     return [...adminSections, ...residenceSections, ...boardingSections, ...billingSetupSections, ...sharedSections];
+  if (role === 'ADMISSIONS') return [...admissionsSections, ...residenceSections, ...sharedSections];
   if (role === 'MATRON' || role === 'PATRON') return [...boardingStaffSections, ...sharedSections];
-  if (role === 'MANAGER')          return [...managerSections, ...boardingSections, ...sharedSections];
-  if (role === 'SUPER_ADMIN')      return [...superAdminSections, ...boardingSections, ...sharedSections];
+  if (role === 'MANAGER')          return [...managerSections, ...residenceSections, ...boardingSections, ...billingSetupSections, ...sharedSections];
+  if (role === 'SUPER_ADMIN')      return [...superAdminSections, ...residenceSections, ...boardingSections, ...billingSetupSections, ...sharedSections];
   // Head of Finance: group totals plus everything a finance officer does, in any school.
   if (role === 'HEAD_OF_FINANCE')  return [...headOfFinanceSections, ...financeSections, ...sharedSections];
-  if (role === 'HEAD_OF_SCHOOL')   return [...principalSections, ...boardingSections, ...sharedSections];
+  if (role === 'HEAD_OF_SCHOOL')   return [...principalSections, ...residenceSections, ...boardingSections, ...billingSetupSections, ...sharedSections];
   if (role === 'STUDENT') return studentSections;
   if (role === 'PARENT' || role === 'GUARDIAN') return parentSections;
   return [...genericSections, ...sharedSections];
