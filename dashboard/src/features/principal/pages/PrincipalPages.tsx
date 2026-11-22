@@ -15,8 +15,11 @@ import {
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import React, { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { NavLink, useNavigate, useParams } from 'react-router-dom';
 import { toast } from '../../../lib/toast';
+import { api } from '../../../lib/api/client';
+import { arrayFromApi, payloadOf } from '../../../lib/api/response';
 import { Badge } from '../../../components/common/Badge';
 import { Button } from '../../../components/common/Button';
 import type {
@@ -55,7 +58,7 @@ import { useInvoiceLedger } from '../../finance/api/finance.hooks';
 import { FinanceStatusBadge } from '../../finance/components/FinanceWorkspaceShell';
 import { LedgerPager, LedgerSearch, LedgerTabs, useDebounced, useLedgerView } from '../../finance/components/LedgerControls';
 import { downloadReportWhenReady, useGenerateReportMutation, useGenerateReportCardsMutation } from '../../operations/api/operations.hooks';
-import { useAcademicYears, useTerms } from '../../admin/api/admin.hooks';
+import { useAcademicYears, useAdminClasses, useTerms } from '../../admin/api/admin.hooks';
 import { useAqaSchoolSummary, useAqaPairings, useCreateAqaInterventionMutation } from '../../aqa/api/aqa.hooks';
 import {
   AnnouncementCard,
@@ -98,18 +101,12 @@ export function PrincipalHomePage() {
   const { data: apiHealth = EMPTY_HEALTH } = usePrincipalSchoolHealth() as { data: SchoolHealth };
   const { data: apiAudit = [] as PrincipalAuditEvent[] } = usePrincipalAudit() as { data: PrincipalAuditEvent[] };
   const { data: apiAssessments = [] as PrincipalAssessment[] } = usePendingMarkApprovals() as { data: PrincipalAssessment[] };
-  const { data: apiApprovals = [] as PrincipalPaymentApproval[] } = usePrincipalPendingPayments() as { data: PrincipalPaymentApproval[] };
   const { data: apiPublishClasses = [] as PublishClass[] } = usePublishReadiness() as { data: PublishClass[] };
-  const { data: fin } = usePrincipalFinanceOverview();
 
   const marksCount    = apiAssessments.length;
-  const paymentsCount = apiApprovals.length;
   const resultsCount  = apiPublishClasses.filter((c) => c.missingItems === 0 && c.reportCardReadiness >= 80).length;
   const reportCards   = apiPublishClasses.reduce((s, c) => s + (c.students ?? 0), 0);
-  const totalPending  = marksCount + paymentsCount;
-
-  const trendValues   = fin?.collectionTrend.length ? fin.collectionTrend : [];
-  const collectionRate = fin?.collectionRate ?? 0;
+  const totalPending  = marksCount;
 
   return (
     <PrincipalWorkspaceShell title="Executive Decision Room" eyebrow="Headmaster command center">
@@ -118,7 +115,7 @@ export function PrincipalHomePage() {
         <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-ks-rose/30 bg-ks-rose/8 p-4">
           <AlertTriangle className="h-5 w-5 shrink-0 text-ks-rose" />
           <p className="font-black text-ks-rose">
-            {totalPending} decision{totalPending !== 1 ? 's' : ''} pending your authorization — marks approvals and payment approvals require action.
+            {totalPending} decision{totalPending !== 1 ? 's' : ''} pending your authorization — marks approvals require action.
           </p>
           <NavLink to="/principal/approvals" className="ml-auto">
             <Button className="rounded-xl bg-ks-rose py-2 text-xs hover:bg-ks-rose/90">Review Now</Button>
@@ -135,14 +132,6 @@ export function PrincipalHomePage() {
           urgency={marksCount > 0 ? 'high' : 'stable'}
           to="/principal/approvals"
           meta={['Final lock', 'Audited']}
-        />
-        <PrincipalActionCard
-          title="Payment Approvals"
-          count={String(paymentsCount)}
-          detail="Manual finance entries requiring executive authorization."
-          urgency={paymentsCount > 0 ? 'critical' : 'stable'}
-          to="/principal/finance/approvals"
-          meta={['Cash / Bank', 'Evidence required']}
         />
         <PrincipalActionCard
           title="Results Ready"
@@ -169,27 +158,20 @@ export function PrincipalHomePage() {
           <SchoolHealthScore health={apiHealth} />
 
           {/* 3-panel snapshot */}
-          <div className="grid gap-gutter xl:grid-cols-3">
+          <div className="grid gap-gutter xl:grid-cols-2">
             <ExecutiveBarChart
               title="Health Indicators"
               subtitle="Live school health scores"
               values={[
                 { label: 'Academic',    value: apiHealth.academic,    tone: 'bg-ks-blue' },
-                { label: 'Finance',     value: apiHealth.finance,     tone: 'bg-ks-gold' },
                 { label: 'Operations',  value: apiHealth.operations,  tone: 'bg-ks-emerald' },
               ]}
-            />
-            <ExecutiveLineChart
-              title="Finance Collection"
-              subtitle="Term II trend (%)"
-              values={trendValues.length >= 2 ? trendValues : [0, collectionRate]}
             />
             <ExecutiveBarChart
               title="Decision Queue"
               subtitle="Pending actions by type"
               values={[
                 { label: 'Marks',    value: marksCount,    tone: 'bg-ks-amber' },
-                { label: 'Payments', value: paymentsCount, tone: 'bg-ks-rose' },
                 { label: 'Results',  value: resultsCount,  tone: 'bg-ks-blue' },
               ]}
             />
@@ -1001,7 +983,6 @@ export function PrincipalStudentProfilePage() {
       <ExecutiveMetricGrid items={[
         { label: 'Academic',    value: `${selectedStudent.academicAverage}%`,   detail: selectedStudent.alertStatus,                                          tone: selectedStudent.academicAverage < 50 ? 'critical' : 'stable' },
         { label: 'Attendance',  value: `${selectedStudent.attendance}%`,        detail: 'Current term',                                               tone: selectedStudent.attendance < 80 ? 'high' : 'stable' },
-        { label: 'Finance',     value: money(selectedStudent.financeBalance),   detail: selectedStudent.financeBalance > 0 ? 'Balance due' : 'Account clear',  tone: selectedStudent.financeBalance > 0 ? 'high' : 'stable' },
         { label: 'Discipline',  value: selectedStudent.disciplineStatus,        detail: `Guardian: ${selectedStudent.guardian}`,                              tone: selectedStudent.disciplineStatus === 'Open' ? 'high' : 'stable' },
       ]} />
 
@@ -1018,7 +999,7 @@ export function PrincipalStudentProfilePage() {
             values={[
               { label: 'Attendance',   value: selectedStudent.attendance,                    tone: 'bg-ks-emerald' },
               { label: 'Academic',     value: selectedStudent.academicAverage,               tone: 'bg-ks-blue' },
-              { label: 'Finance Risk', value: selectedStudent.financeBalance > 0 ? 70 : 8,  tone: 'bg-ks-gold' },
+              { label: 'Discipline',   value: selectedStudent.disciplineStatus === 'Open' ? 70 : 8, tone: 'bg-ks-amber' },
             ]}
           />
 
@@ -1146,12 +1127,10 @@ export function PrincipalStudentProfilePage() {
 // ─── All students ─────────────────────────────────────────────────────────────
 
 export function PrincipalStudentsPage() {
-  const [filter, setFilter] = useState<'all' | 'critical' | 'finance'>('all');
+  const [filter, setFilter] = useState<'all' | 'critical'>('all');
   const { data: apiStudents = [] as PrincipalStudent[], isLoading, isError, refetch } = usePrincipalStudents() as { data: PrincipalStudent[]; isLoading: boolean; isError: boolean; refetch: () => void };
   const filtered = filter === 'critical'
     ? apiStudents.filter((s) => s.alertStatus === 'Critical' || s.alertStatus === 'Watch')
-    : filter === 'finance'
-    ? apiStudents.filter((s) => s.financeBalance > 0)
     : apiStudents;
   const paged = usePagedRows(filtered, {
     storageKey: 'principal-students',
@@ -1159,7 +1138,7 @@ export function PrincipalStudentsPage() {
     initialSortBy: 'name',
     sortAccessors: {
       name: (s) => s.name, className: (s) => s.className, average: (s) => s.academicAverage, attendance: (s) => s.attendance,
-      finance: (s) => s.financeBalance, alert: (s) => s.alertStatus, discipline: (s) => s.disciplineStatus,
+      alert: (s) => s.alertStatus, discipline: (s) => s.disciplineStatus,
     },
   });
 
@@ -1170,10 +1149,10 @@ export function PrincipalStudentsPage() {
       {/* Quick filters */}
       <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-ks-line bg-white p-3 shadow-sm">
         <span className="text-[10px] font-black uppercase tracking-widest text-ks-muted">View:</span>
-        {[['all', 'All Students'], ['critical', 'Critical Only'], ['finance', 'Finance Risk']].map(([key, label]) => (
+        {[['all', 'All Students'], ['critical', 'Critical Only']].map(([key, label]) => (
           <button
             key={key}
-            onClick={() => setFilter(key as 'all' | 'critical' | 'finance')}
+            onClick={() => setFilter(key as 'all' | 'critical')}
             className={`rounded-xl border px-3 py-1.5 text-xs font-black transition ${
               filter === key ? 'border-ks-navy bg-ks-navy text-white' : 'border-ks-line text-ks-muted hover:border-ks-navy/40 hover:text-ks-navy'
             }`}
@@ -1192,7 +1171,7 @@ export function PrincipalStudentsPage() {
         <EmptyState title={filter === 'all' ? 'No students enrolled' : 'No students match this filter'} description={filter === 'all' ? 'Students will appear here once they are enrolled.' : 'Try adjusting the filter above.'} />
       ) : (
       <ExecutiveTable
-        columns={[{ label: 'Student', key: 'name' }, { label: 'Class', key: 'className' }, { label: 'Average', key: 'average' }, { label: 'Attendance', key: 'attendance' }, { label: 'Finance', key: 'finance' }, { label: 'Alert', key: 'alert' }, { label: 'Discipline', key: 'discipline' }, 'Guardian', 'Actions']}
+        columns={[{ label: 'Student', key: 'name' }, { label: 'Class', key: 'className' }, { label: 'Average', key: 'average' }, { label: 'Attendance', key: 'attendance' }, { label: 'Alert', key: 'alert' }, { label: 'Discipline', key: 'discipline' }, 'Guardian', 'Actions']}
         sort={paged.sort}
         footer={paged.pager}
       >
@@ -1206,11 +1185,6 @@ export function PrincipalStudentsPage() {
               </span>
             </Td>
             <Td>{student.attendance}%</Td>
-            <Td>
-              <span className={student.financeBalance > 0 ? 'font-black text-ks-rose' : 'font-black text-ks-emerald'}>
-                {money(student.financeBalance)}
-              </span>
-            </Td>
             <Td><Badge tone={student.alertStatus === 'Critical' ? 'rose' : student.alertStatus === 'Watch' ? 'amber' : 'emerald'}>{student.alertStatus}</Badge></Td>
             <Td><Badge tone={student.disciplineStatus === 'Open' ? 'amber' : 'slate'}>{student.disciplineStatus}</Badge></Td>
             <Td className="text-xs">{student.guardian}</Td>
@@ -1566,12 +1540,10 @@ export function CreatePrincipalAnnouncementPage() {
 // Live analytics dashboard
 
 export function PrincipalAnalyticsPage() {
-  const [tab, setTab] = useState<'academic' | 'finance' | 'operations'>('academic');
+  const [tab, setTab] = useState<'academic' | 'operations'>('academic');
 
   const { data: apiHealth = EMPTY_HEALTH as SchoolHealthWithStats } = usePrincipalSchoolHealth() as { data: SchoolHealthWithStats };
   const { data: schoolSummary } = useAqaSchoolSummary() as { data: Record<string, unknown> | undefined };
-  const { data: fin } = usePrincipalFinanceOverview();
-  const { data: apiApprovals = [] as PrincipalPaymentApproval[] } = usePrincipalPendingPayments() as { data: PrincipalPaymentApproval[] };
   const { data: apiIncidents = [] as DisciplineIncident[] } = usePrincipalDiscipline() as { data: DisciplineIncident[] };
   const { data: apiStaff = [] as StaffMember[] } = usePrincipalStaff() as { data: StaffMember[] };
 
@@ -1581,18 +1553,6 @@ export function PrincipalAnalyticsPage() {
   const atRisk = Number(perf.atRiskCount ?? apiHealth.atRisk ?? 0);
   const improving = Number(perf.improvingCount ?? 0);
 
-  const collectionRate = fin?.collectionRate ?? 0;
-  const outstanding = fin?.totalOutstanding ?? 0;
-  const totalCollected = fin?.totalCollected ?? 0;
-  const overdueCount = fin?.overdueCount ?? 0;
-  const trendValues = fin?.collectionTrend.length ? fin.collectionTrend : [];
-  const byClassValues = fin?.byClass.length
-    ? fin.byClass.slice(0, 6).map((c, i) => ({
-        label: c.label || `Class ${i + 1}`,
-        value: c.value,
-        tone: (['bg-ks-rose', 'bg-ks-gold', 'bg-ks-blue', 'bg-ks-emerald', 'bg-ks-amber', 'bg-ks-sky'] as const)[i],
-      }))
-    : [];
 
   const openIncidents = apiIncidents.filter((i) => i.status === 'OPEN').length;
   const staffWithSyllabus = apiStaff.filter((s) => s.syllabus > 0);
@@ -1609,7 +1569,6 @@ export function PrincipalAnalyticsPage() {
       <div className="flex gap-2 rounded-2xl border border-ks-line bg-white p-2 shadow-sm">
         {[
           { key: 'academic', label: 'Academic', icon: GraduationCap },
-          { key: 'finance', label: 'Finance', icon: WalletCards },
           { key: 'operations', label: 'Operations', icon: TrendingUp },
         ].map(({ key, label, icon: Icon }) => (
           <button
@@ -1643,21 +1602,6 @@ export function PrincipalAnalyticsPage() {
                 { label: 'Improving', value: improving, tone: 'bg-ks-emerald' },
               ]}
             />
-          </div>
-        </div>
-      )}
-
-      {tab === 'finance' && (
-        <div className="space-y-gutter">
-          <ExecutiveMetricGrid items={[
-            { label: 'Collection Rate', value: `${collectionRate.toFixed(1)}%`, detail: 'Current finance aggregate', tone: collectionRate >= 80 ? 'stable' : collectionRate >= 60 ? 'medium' : 'critical' },
-            { label: 'Outstanding', value: money(outstanding), detail: `${overdueCount} overdue invoices`, tone: outstanding > 0 ? 'critical' : 'stable' },
-            { label: 'Total Collected', value: money(totalCollected), detail: 'Cash and bank receipts', tone: 'high' },
-            { label: 'Pending Approvals', value: String(apiApprovals.length), detail: 'Manual entries awaiting sign-off', tone: apiApprovals.length > 0 ? 'high' : 'stable' },
-          ]} />
-          <div className="grid gap-gutter xl:grid-cols-2">
-            <ExecutiveLineChart title="Collection Trend" subtitle="Rate by period (%)" values={trendValues} />
-            <ExecutiveBarChart title="Outstanding by Class" subtitle="Overdue invoices per class" values={byClassValues} />
           </div>
         </div>
       )}
@@ -1701,34 +1645,147 @@ export function PrincipalAnalyticsPage() {
 const REPORT_TYPE_MAP: Record<string, string> = {
   'School Overview':      'SCHOOL_OVERVIEW',
   'Academic Performance': 'PERFORMANCE_ENGINE',
-  'Finance Overview':     'FINANCE_COLLECTION',
   'Attendance Summary':   'ATTENDANCE_SUMMARY',
-  'Outstanding Balances': 'OUTSTANDING_BALANCES',
   'Performance Engine':   'PERFORMANCE_ENGINE',
   'Board Executive':      'BOARD_EXECUTIVE',
 };
+
+type PrincipalReportFilters = { academicYearId?: string; termId?: string; scopeId?: string; fromDate?: string; toDate?: string; status?: string; className?: string; role?: string; severity?: string; category?: string };
+
+type PublishedResultRecord = { id: string; subjectName: string; weightedTotal: number; isPassing: boolean; resultStatus: string; grade: string };
+
+async function fetchPublishedResults(classId: string, termId: string): Promise<PublishedResultRecord[]> {
+  const response = await api.get('/academics/results', { params: { classId, termId, isPublished: 'true' } });
+  return arrayFromApi(payloadOf(response), ['results', 'items']).map((raw) => {
+    const row = raw as Record<string, unknown>;
+    return { id: String(row.id ?? ''), subjectName: String(row.subjectName ?? 'Subject'), weightedTotal: Number(row.weightedTotal ?? 0), isPassing: row.isPassing === true, resultStatus: String(row.resultStatus ?? ''), grade: String(row.grade ?? '') };
+  });
+}
+
+function summarizePublishedResults(results: PublishedResultRecord[]) {
+  const bySubject = new Map<string, { total: number; scored: number; scoreSum: number; passing: number }>();
+  for (const result of results) {
+    const item = bySubject.get(result.subjectName) ?? { total: 0, scored: 0, scoreSum: 0, passing: 0 };
+    item.total += 1;
+    if (result.resultStatus === 'SCORED') { item.scored += 1; item.scoreSum += result.weightedTotal; if (result.isPassing) item.passing += 1; }
+    bySubject.set(result.subjectName, item);
+  }
+  return [...bySubject.entries()].map(([subject, count]) => ({ subject, total: count.total, scored: count.scored, average: count.scored ? Math.round(count.scoreSum / count.scored) : null, passRate: count.scored ? Math.round(count.passing / count.scored * 100) : null })).sort((a, b) => a.subject.localeCompare(b.subject));
+}
+
+function downloadPrincipalCsv(filename: string, headers: string[], rows: Array<Array<string | number>>) {
+  const escapeCell = (value: string | number) => {
+    const raw = String(value ?? '');
+    const safe = /^[=+@\-\t\r]/.test(raw) ? `'${raw}` : raw;
+    return `"${safe.replaceAll('"', '""')}"`;
+  };
+  const csv = [headers, ...rows].map((row) => row.map(escapeCell).join(',')).join('\r\n');
+  const url = URL.createObjectURL(new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8' }));
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/** Request only dimensions consumed by the existing report generator. */
+function PrincipalReportRequest({ title, reportType, intent, onClose, onView, onDownload }: {
+  title: string; reportType: string; intent: 'view' | 'download'; onClose: () => void;
+  onView: (filters: PrincipalReportFilters) => void; onDownload: (filters: PrincipalReportFilters) => void;
+}) {
+  const formRef = React.useRef<HTMLFormElement>(null);
+  const { data: yearRows = [] } = useAcademicYears();
+  const { data: termRows = [] } = useTerms();
+  const { data: classRows = [] } = useAdminClasses();
+  const { data: students = [] as PrincipalStudent[] } = usePrincipalStudents() as { data: PrincipalStudent[] };
+  const { data: staff = [] as StaffMember[] } = usePrincipalStaff() as { data: StaffMember[] };
+  const { data: incidents = [] as DisciplineIncident[] } = usePrincipalDiscipline() as { data: DisciplineIncident[] };
+  const [yearId, setYearId] = useState('');
+  const [termId, setTermId] = useState('');
+  const [scopeId, setScopeId] = useState('');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+  const [status, setStatus] = useState('');
+  const [className, setClassName] = useState('');
+  const [role, setRole] = useState('');
+  const [severity, setSeverity] = useState('');
+  const [category, setCategory] = useState('');
+  const isCsv = title.endsWith(' CSV');
+  const isDisciplinePdf = title === 'Discipline Report PDF';
+  const isPublishedPdf = title === 'Published Results Summary PDF';
+  const hasTerm = !isCsv && (isPublishedPdf || ['PERFORMANCE_ENGINE', 'ATTENDANCE_SUMMARY', 'CLASS_ACADEMIC', 'TEACHER_PERFORMANCE'].includes(reportType));
+  const hasClass = !isCsv && (isPublishedPdf || reportType === 'CLASS_ACADEMIC');
+  const hasStudent = !isCsv && reportType === 'STUDENT_PROFILE';
+  const hasTeacher = !isCsv && reportType === 'TEACHER_PERFORMANCE';
+  const needsScope = hasClass || hasStudent || hasTeacher;
+  const isIncomplete = (needsScope && !scopeId) || (isPublishedPdf && !termId);
+  const years = yearRows as Array<Record<string, unknown>>;
+  const terms = (termRows as Array<Record<string, unknown>>).filter((term) => !yearId || !term.academicYearId || term.academicYearId === yearId);
+  const filters = { academicYearId: !isCsv && !isDisciplinePdf ? yearId || undefined : undefined, termId: hasTerm ? termId || undefined : undefined, scopeId: needsScope ? scopeId || undefined : undefined, fromDate: isCsv || isDisciplinePdf ? fromDate || undefined : undefined, toDate: isCsv || isDisciplinePdf ? toDate || undefined : undefined, status: isCsv || isDisciplinePdf ? status || undefined : undefined, className: isCsv ? className || undefined : undefined, role: isCsv ? role || undefined : undefined, severity: isDisciplinePdf ? severity || undefined : undefined, category: isDisciplinePdf ? category || undefined : undefined };
+  const availableClasses = [...new Set(students.map((row) => row.className).filter(Boolean))].sort();
+  const availableStatuses = [...new Set(students.map((row) => row.alertStatus).filter((value) => value && !['NORMAL', 'IMPROVING', 'CLEAR'].includes(value.toUpperCase())))].sort();
+  const availableRoles = [...new Set(staff.map((row) => row.role).filter(Boolean))].sort();
+  const availableSeverities = [...new Set(incidents.map((row) => row.severity).filter(Boolean))].sort();
+  const availableCategories = [...new Set(incidents.map((row) => row.category).filter(Boolean))].sort();
+  useEffect(() => {
+    const previousFocus = document.activeElement as HTMLElement | null;
+    const focusable = () => [...(formRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), select:not(:disabled), input:not(:disabled)') ?? [])];
+    focusable()[0]?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+      if (event.key !== 'Tab') return;
+      const items = focusable();
+      if (!items.length) return;
+      if (event.shiftKey && document.activeElement === items[0]) { event.preventDefault(); items[items.length - 1].focus(); }
+      else if (!event.shiftKey && document.activeElement === items[items.length - 1]) { event.preventDefault(); items[0].focus(); }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => { window.removeEventListener('keydown', onKeyDown); previousFocus?.focus(); };
+  }, [onClose]);
+  const selector = 'mt-1 h-10 w-full rounded-xl border border-ks-line bg-white px-3 text-sm font-semibold text-ks-navy focus:border-ks-blue focus:outline-none focus:ring-2 focus:ring-ks-blue/20';
+  return <div className="fixed inset-0 z-[90] overflow-y-auto bg-ks-navy/50 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="principal-report-request-title">
+    <form ref={formRef} className="mx-auto my-8 max-w-xl rounded-2xl bg-white p-5 shadow-2xl sm:p-7" onSubmit={(event) => { event.preventDefault(); if (isIncomplete) return; (intent === 'view' ? onView : onDownload)(filters); }}>
+      <div className="flex items-start justify-between gap-4"><div><p className="text-[10px] font-black uppercase tracking-widest text-ks-muted">Report request</p><h2 id="principal-report-request-title" className="font-display text-2xl font-black text-ks-navy">{title}</h2><p className="mt-1 text-sm text-ks-muted">Choose the available report scope before {intent === 'view' ? 'viewing the overview' : 'generating the download'}.</p></div><button type="button" className="rounded-lg px-2 py-1 text-lg text-ks-muted hover:bg-ks-paper focus-visible:outline focus-visible:outline-2 focus-visible:outline-ks-blue" aria-label="Close report request" onClick={onClose}>×</button></div>
+      <div className="mt-6 grid gap-4 sm:grid-cols-2">
+        {!isCsv && !isDisciplinePdf && <label className="text-xs font-black uppercase tracking-wide text-ks-muted">Academic year<select className={selector} value={yearId} onChange={(event) => { setYearId(event.target.value); setTermId(''); }}><option value="">All available years</option>{years.map((row) => <option key={String(row.id)} value={String(row.id)}>{String(row.name ?? row.label ?? row.year ?? row.id)}</option>)}</select></label>}
+        {hasTerm && <label className="text-xs font-black uppercase tracking-wide text-ks-muted">Term{isPublishedPdf ? ' *' : ''}<select required={isPublishedPdf} className={selector} value={termId} onChange={(event) => setTermId(event.target.value)}><option value="">{isPublishedPdf ? 'Select term…' : 'All available terms'}</option>{terms.map((row) => <option key={String(row.id)} value={String(row.id)}>{String(row.name ?? row.label ?? row.id)}</option>)}</select></label>}
+        {hasClass && <label className="text-xs font-black uppercase tracking-wide text-ks-muted sm:col-span-2">Class *<select required className={selector} value={scopeId} onChange={(event) => setScopeId(event.target.value)}><option value="">Select class…</option>{classRows.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label>}
+        {hasStudent && <label className="text-xs font-black uppercase tracking-wide text-ks-muted sm:col-span-2">Student *<select required className={selector} value={scopeId} onChange={(event) => setScopeId(event.target.value)}><option value="">Select student…</option>{students.map((row) => <option key={row.id} value={row.id}>{row.name} · {row.className}</option>)}</select></label>}
+        {hasTeacher && <label className="text-xs font-black uppercase tracking-wide text-ks-muted sm:col-span-2">Teacher *<select required className={selector} value={scopeId} onChange={(event) => setScopeId(event.target.value)}><option value="">Select teacher…</option>{staff.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label>}
+        {title === 'Decision Audit CSV' && <><label className="text-xs font-black uppercase tracking-wide text-ks-muted">From date<input type="date" className={selector} value={fromDate} max={toDate || undefined} onChange={(event) => setFromDate(event.target.value)} /></label><label className="text-xs font-black uppercase tracking-wide text-ks-muted">To date<input type="date" className={selector} value={toDate} min={fromDate || undefined} onChange={(event) => setToDate(event.target.value)} /></label></>}
+        {title === 'Performance Alerts CSV' && <><label className="text-xs font-black uppercase tracking-wide text-ks-muted">Class<select className={selector} value={className} onChange={(event) => setClassName(event.target.value)}><option value="">All classes</option>{availableClasses.map((name) => <option key={name} value={name}>{name}</option>)}</select></label><label className="text-xs font-black uppercase tracking-wide text-ks-muted">Alert status<select className={selector} value={status} onChange={(event) => setStatus(event.target.value)}><option value="">All alert statuses</option>{availableStatuses.map((name) => <option key={name} value={name}>{name}</option>)}</select></label></>}
+        {title === 'Staff Overview CSV' && <label className="text-xs font-black uppercase tracking-wide text-ks-muted sm:col-span-2">Role<select className={selector} value={role} onChange={(event) => setRole(event.target.value)}><option value="">All roles</option>{availableRoles.map((name) => <option key={name} value={name}>{name}</option>)}</select></label>}
+        {isDisciplinePdf && <><label className="text-xs font-black uppercase tracking-wide text-ks-muted">From date<input type="date" className={selector} value={fromDate} max={toDate || undefined} onChange={(event) => setFromDate(event.target.value)} /></label><label className="text-xs font-black uppercase tracking-wide text-ks-muted">To date<input type="date" className={selector} value={toDate} min={fromDate || undefined} onChange={(event) => setToDate(event.target.value)} /></label><label className="text-xs font-black uppercase tracking-wide text-ks-muted">Severity<select className={selector} value={severity} onChange={(event) => setSeverity(event.target.value)}><option value="">All severities</option>{availableSeverities.map((value) => <option key={value} value={value}>{value}</option>)}</select></label><label className="text-xs font-black uppercase tracking-wide text-ks-muted">Category<select className={selector} value={category} onChange={(event) => setCategory(event.target.value)}><option value="">All categories</option>{availableCategories.map((value) => <option key={value} value={value}>{value}</option>)}</select></label><label className="text-xs font-black uppercase tracking-wide text-ks-muted sm:col-span-2">Status<select className={selector} value={status} onChange={(event) => setStatus(event.target.value)}><option value="">All statuses</option><option value="OPEN">Open</option><option value="RESOLVED">Resolved</option></select></label></>}
+      </div>
+      <p className="mt-5 rounded-xl bg-ks-paper p-3 text-xs font-semibold text-ks-muted">{isCsv || isDisciplinePdf || isPublishedPdf ? 'This file uses the current school data visible to this role and is downloaded locally; it does not create a server-side report job.' : 'The live overview and generated file may show different detail: the download is produced by the existing report service. Only filters supported by that service are sent.'}</p>
+      <div className="mt-5 flex flex-wrap justify-end gap-2"><Button type="button" variant="secondary" className="rounded-xl" onClick={onClose}>Cancel</Button><Button type="submit" className="rounded-xl" disabled={isIncomplete}>{intent === 'view' ? 'View overview' : 'Generate download'}</Button></div>
+    </form>
+  </div>;
+}
 
 export function PrincipalReportsPage() {
   const { mutate: generateReport } = useGenerateReportMutation();
   // null = idle | title = loading (queuing or preparing download)
   const [loadingReport, setLoadingReport] = useState<string | null>(null);
   const [loadingLabel, setLoadingLabel] = useState('Queuing…');
+  const [request, setRequest] = useState<{ title: string; intent: 'view' | 'download' } | null>(null);
+  const [preview, setPreview] = useState<{ title: string; filters: PrincipalReportFilters } | null>(null);
 
   const reports = [
-    ['School Overview',      'Full institutional health across academic, finance, and operations.'],
+    ['School Overview',      'Full institutional health across academic and school operations.'],
     ['Academic Performance', 'Academic risk engine, alert resolution, pairings, and intervention evidence.'],
-    ['Finance Overview',     'Collection rate, outstanding balances, daily and term trends.'],
     ['Attendance Summary',   'School-wide and class-level attendance for the reporting period.'],
-    ['Outstanding Balances', 'Overdue invoices, ageing buckets, and highest-risk balances.'],
     ['Performance Engine',   'AQA alerts, interventions, pairings, hotspots, and success stories.'],
     ['Board Executive',      'High-level board-ready report with health scores and key metrics.'],
   ] as const;
 
-  function handleGenerate(title: string) {
+  function handleGenerate(title: string, filters: PrincipalReportFilters = {}) {
     setLoadingReport(title);
     setLoadingLabel('Queuing…');
     generateReport(
-      { reportType: REPORT_TYPE_MAP[title] ?? 'CUSTOM', scope: 'school' },
+      { reportType: REPORT_TYPE_MAP[title] ?? 'CUSTOM', scope: 'school', ...filters },
       {
         onSuccess: async (data) => {
           const reportId = (data as Record<string, unknown>)?.reportId as string | undefined;
@@ -1774,14 +1831,72 @@ export function PrincipalReportsPage() {
             key={title}
             title={title}
             detail={detail}
-            onGenerate={() => handleGenerate(title)}
+            onGenerate={() => setRequest({ title, intent: 'download' })}
+            onView={() => setRequest({ title, intent: 'view' })}
             loading={loadingReport === title}
             loadingLabel={loadingReport === title ? loadingLabel : undefined}
           />
         ))}
       </div>
+      {request && <PrincipalReportRequest title={request.title} reportType={REPORT_TYPE_MAP[request.title] ?? 'CUSTOM'} intent={request.intent} onClose={() => setRequest(null)} onView={(filters) => { setPreview({ title: request.title, filters }); setRequest(null); }} onDownload={(filters) => { handleGenerate(request.title, filters); setRequest(null); }} />}
+      {preview && <PrincipalReportPreview title={preview.title} filters={preview.filters} onClose={() => setPreview(null)} onDownload={() => handleGenerate(preview.title, preview.filters)} />}
     </PrincipalWorkspaceShell>
   );
+}
+
+/** Read-only, live preview used before the existing audited report download. */
+function PrincipalReportPreview({ title, filters, onClose, onDownload }: { title: string; filters: PrincipalReportFilters; onClose: () => void; onDownload: () => void }) {
+  const { data: students = [] as PrincipalStudent[] } = usePrincipalStudents() as { data: PrincipalStudent[] };
+  const { data: staff = [] as StaffMember[] } = usePrincipalStaff() as { data: StaffMember[] };
+  const { data: incidents = [] as DisciplineIncident[] } = usePrincipalDiscipline() as { data: DisciplineIncident[] };
+  const { data: approvals = [] as PrincipalAssessment[] } = usePendingMarkApprovals() as { data: PrincipalAssessment[] };
+  const { data: audit = [] as PrincipalAuditEvent[] } = usePrincipalAudit() as { data: PrincipalAuditEvent[] };
+  const { data: classes = [] } = useAdminClasses();
+  const { data: terms = [] } = useTerms();
+  const isPublished = title === 'Published Results Summary PDF';
+  const isLocalFile = isPublished || title.endsWith(' CSV') || title === 'Discipline Report PDF';
+  const scopeLabel = isPublished ? `${classes.find((row) => row.id === filters.scopeId)?.name ?? 'Selected class'} · ${String((terms as Array<Record<string, unknown>>).find((row) => row.id === filters.termId)?.name ?? 'Selected term')}` : `${filters.academicYearId ? 'Selected academic year' : 'All years'} · ${filters.termId ? 'Selected term' : 'All terms'}`;
+  const published = useQuery({ queryKey: ['principal', 'published-report-preview', filters.scopeId, filters.termId], queryFn: () => fetchPublishedResults(filters.scopeId!, filters.termId!), enabled: isPublished && !!filters.scopeId && !!filters.termId });
+  const publishedSummary = summarizePublishedResults(published.data ?? []);
+  const isAudit = title.includes('Audit');
+  const isStaff = title.includes('Staff');
+  const isDiscipline = title.includes('Discipline');
+  const isApprovals = title !== 'Performance Alerts CSV' && (title.includes('Performance') || title.includes('Academic'));
+  const rows = isPublished
+    ? publishedSummary.map((row) => ({ id: row.subject, primary: row.subject, secondary: `${row.total} published results`, metric: row.average === null ? 'No scored results' : `${row.average}% average`, status: row.passRate === null ? '—' : `${row.passRate}% passing` }))
+    : isAudit
+    ? audit.map((row) => ({ id: row.id, primary: row.decision, secondary: row.entity, metric: row.actor, status: row.date }))
+    : isStaff
+    ? staff.map((row) => ({ id: row.id, primary: row.name, secondary: row.role, metric: `${row.syllabus}% syllabus`, status: `${row.onTime}% on time` }))
+    : isDiscipline
+      ? incidents.filter((row) => (!filters.fromDate || row.date.slice(0, 10) >= filters.fromDate) && (!filters.toDate || row.date.slice(0, 10) <= filters.toDate) && (!filters.severity || row.severity === filters.severity) && (!filters.category || row.category === filters.category)).map((row) => ({ id: row.id, primary: row.student, secondary: row.className, metric: row.category, status: row.status }))
+      : isApprovals
+        ? approvals.map((row) => ({ id: row.id, primary: row.className, secondary: row.subject, metric: `${row.average ?? 0}% average`, status: row.principalStatus ?? 'Pending review' }))
+        : students.filter((row) => title !== 'Performance Alerts CSV' || !['NORMAL', 'IMPROVING', 'CLEAR'].includes(row.alertStatus.toUpperCase())).map((row) => ({ id: row.id, primary: row.name, secondary: row.className, metric: `${row.academicAverage}% average`, status: row.alertStatus || 'Normal' }));
+  const scopedRows = rows.filter((row) => {
+    if (filters.scopeId && (isStaff || title.includes('Performance Alerts')) && row.id !== filters.scopeId) return false;
+    if (isAudit && filters.fromDate && row.status.slice(0, 10) < filters.fromDate) return false;
+    if (isAudit && filters.toDate && row.status.slice(0, 10) > filters.toDate) return false;
+    if (isStaff && filters.role && row.secondary !== filters.role) return false;
+    if (filters.className && row.secondary !== filters.className) return false;
+    if (filters.status && row.status !== filters.status) return false;
+    return true;
+  });
+  const paged = usePagedRows(scopedRows, {
+    storageKey: `principal-report-preview-${title.toLowerCase().replace(/\W+/g, '-')}`,
+    unit: 'rows',
+    sortAccessors: { primary: (row) => row.primary, secondary: (row) => row.secondary, metric: (row) => row.metric, status: (row) => row.status },
+  });
+  const distribution = scopedRows.reduce((counts, row) => { const label = isDiscipline ? row.metric : isAudit ? row.primary : isStaff ? row.secondary : row.status; counts[label] = (counts[label] ?? 0) + 1; return counts; }, {} as Record<string, number>);
+  const bars = isPublished
+    ? publishedSummary.filter((row) => row.average !== null).map((row) => ({ label: row.subject, value: row.average!, tone: 'bg-ks-blue' }))
+    : Object.entries(distribution).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([label, value], index) => ({ label, value, tone: ['bg-ks-blue', 'bg-ks-emerald', 'bg-ks-amber', 'bg-ks-rose'][index % 4] }));
+  return <div className="fixed inset-0 z-[90] overflow-y-auto bg-ks-navy/50 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label={`${title} report preview`}>
+    <div className="mx-auto my-4 max-w-6xl rounded-2xl bg-white shadow-2xl sm:my-8">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-ks-line px-5 py-4 sm:px-7"><div><p className="text-[10px] font-black uppercase tracking-widest text-ks-muted">{isLocalFile ? 'Filtered live preview' : 'Live school overview · generated file may differ'}</p><h2 className="font-display text-2xl font-black text-ks-navy">{title}</h2><p className="mt-1 text-xs text-ks-muted">{scopeLabel}</p></div><div className="flex gap-2"><Button variant="secondary" className="rounded-xl" onClick={onClose}>Close</Button><Button className="rounded-xl" onClick={onDownload}><Download className="h-4 w-4" /> Download / Export</Button></div></header>
+      <div className="space-y-5 p-5 sm:p-7">{published.isLoading && isPublished && <p className="text-sm text-ks-muted">Loading published results…</p>}{published.isError && isPublished && <DataError message="Could not load published results for this class and term." onRetry={() => published.refetch()} />}<ExecutiveBarChart title={isPublished ? 'Average score by subject' : 'Distribution'} subtitle={isPublished ? 'Published, scored results only' : 'Current live records; downloaded report may contain additional detail'} values={bars} /><ExecutiveTable columns={[{ label: isPublished ? 'Subject' : isAudit ? 'Decision' : isStaff ? 'Staff member' : isDiscipline ? 'Student' : isApprovals ? 'Class' : 'Student', key: 'primary' }, { label: isPublished ? 'Published rows' : isAudit ? 'Entity' : isStaff ? 'Role' : isDiscipline ? 'Class' : isApprovals ? 'Subject' : 'Class', key: 'secondary' }, { label: isAudit ? 'Actor' : 'Indicator', key: 'metric' }, { label: isPublished ? 'Pass rate' : isAudit ? 'Date' : 'Status', key: 'status' }]} minWidth={720} sort={paged.sort} footer={paged.pager}>{paged.rows.map((row) => <tr key={row.id} className="hover:bg-ks-paper"><Td className="font-black text-ks-navy">{row.primary}</Td><Td>{row.secondary}</Td><Td>{row.metric}</Td><Td><Badge tone={String(row.status).toUpperCase().includes('OPEN') || String(row.status).toUpperCase().includes('RISK') ? 'rose' : 'blue'}>{row.status}</Badge></Td></tr>)}</ExecutiveTable></div>
+    </div>
+  </div>;
 }
 
 // ─── School settings ──────────────────────────────────────────────────────────
@@ -1891,7 +2006,6 @@ export function SchoolSettingsPage() {
             <div className="mt-4 space-y-2">
               {[
                 ['Performance Engine Config', '/aqa/engine'],
-                ['Fee Categories', '/finance/fee-structures'],
                 ['Grading Scale Detail', '/principal/settings/school'],
               ].map(([label, to]) => (
                 <NavLink
@@ -1990,14 +2104,9 @@ export function PrincipalAuditPage() {
 
 // Maps export label → backend ReportType
 const EXPORT_TYPE_MAP: Record<string, string> = {
-  'Decision Audit CSV':           'AUDIT_EXPORT',
   'School Health PDF':            'SCHOOL_OVERVIEW',
-  'Finance Overview PDF':         'FINANCE_COLLECTION',
   'Academic Overview PDF':        'CLASS_ACADEMIC',
-  'Performance Alerts CSV':       'STUDENT_PROFILE',
   'Discipline Report PDF':        'TERM_SUMMARY',
-  'Staff Overview CSV':           'TEACHER_PERFORMANCE',
-  'Published Results Summary PDF':'BOARD_EXECUTIVE',
 };
 
 const emptyIdentity = {
@@ -2018,13 +2127,20 @@ const emptyCalendar = {
 
 export function PrincipalExportsPage() {
   const { mutate: generateReport } = useGenerateReportMutation();
+  const { data: audit = [] as PrincipalAuditEvent[] } = usePrincipalAudit() as { data: PrincipalAuditEvent[] };
+  const { data: students = [] as PrincipalStudent[] } = usePrincipalStudents() as { data: PrincipalStudent[] };
+  const { data: staff = [] as StaffMember[] } = usePrincipalStaff() as { data: StaffMember[] };
+  const { data: incidents = [] as DisciplineIncident[] } = usePrincipalDiscipline() as { data: DisciplineIncident[] };
+  const { data: classes = [] } = useAdminClasses();
+  const { data: terms = [] } = useTerms();
   const [generating, setGenerating] = useState<string | null>(null);
   const [loadingLabel, setLoadingLabel] = useState('Queuing…');
+  const [request, setRequest] = useState<{ title: string; intent: 'view' | 'download' } | null>(null);
+  const [preview, setPreview] = useState<{ title: string; filters: PrincipalReportFilters } | null>(null);
 
   const items = [
     ['Decision Audit CSV',            'All principal decisions with timestamps, reasons, and correlation IDs.'],
-    ['School Health PDF',              'Full institutional health score with academic, finance, and ops scores.'],
-    ['Finance Overview PDF',           'Collection rate, outstanding balances, and payment approval history.'],
+    ['School Health PDF',              'Full institutional health score with academic and operations scores.'],
     ['Academic Overview PDF',          'Subject rankings, class averages, pass rates, and at-risk summary.'],
     ['Performance Alerts CSV',         'All active and resolved alerts with student, subject, and AQA data.'],
     ['Discipline Report PDF',          'Incidents by severity, category, resolution, and recurrence.'],
@@ -2032,11 +2148,77 @@ export function PrincipalExportsPage() {
     ['Published Results Summary PDF',  'Class-level results summary for published terms.'],
   ] as const;
 
-  const handleExport = (title: string) => {
+  const handleExport = async (title: string, filters: PrincipalReportFilters = {}) => {
+    if (title.endsWith(' CSV')) {
+      if (title === 'Decision Audit CSV') {
+        const selected = audit.filter((row) => (!filters.fromDate || row.date.slice(0, 10) >= filters.fromDate) && (!filters.toDate || row.date.slice(0, 10) <= filters.toDate));
+        downloadPrincipalCsv('decision-audit.csv', ['Date', 'Actor', 'Decision', 'Entity', 'Reason', 'Correlation ID'], selected.map((row) => [row.date, row.actor, row.decision, row.entity, row.reason, row.correlationId]));
+      } else if (title === 'Performance Alerts CSV') {
+        const selected = students.filter((row) => !['NORMAL', 'IMPROVING', 'CLEAR'].includes(row.alertStatus.toUpperCase()) && (!filters.className || row.className === filters.className) && (!filters.status || row.alertStatus === filters.status));
+        downloadPrincipalCsv('performance-alerts.csv', ['Student', 'Class', 'Academic average', 'Attendance', 'Alert status'], selected.map((row) => [row.name, row.className, row.academicAverage, row.attendance, row.alertStatus]));
+      } else {
+        const selected = staff.filter((row) => !filters.role || row.role === filters.role);
+        downloadPrincipalCsv('staff-overview.csv', ['Name', 'Role', 'Department', 'Classes', 'On-time %', 'Syllabus %'], selected.map((row) => [row.name, row.role, row.department, row.classes, row.onTime, row.syllabus]));
+      }
+      toast(`${title} download started`, 'success');
+      return;
+    }
+    if (title === 'Discipline Report PDF') {
+      setGenerating(title);
+      try {
+        const selected = incidents.filter((row) => (!filters.fromDate || row.date.slice(0, 10) >= filters.fromDate) && (!filters.toDate || row.date.slice(0, 10) <= filters.toDate) && (!filters.severity || row.severity === filters.severity) && (!filters.category || row.category === filters.category) && (!filters.status || row.status === filters.status));
+        const { jsPDF } = await import('jspdf');
+        const document = new jsPDF();
+        const drawHeader = () => { document.setTextColor(0, 51, 79); document.setFontSize(18); document.text('Discipline Report', 18, 22); document.setFontSize(9); document.setTextColor(100, 116, 139); document.text(`Generated ${new Date().toLocaleString()} · ${selected.length} incident${selected.length === 1 ? '' : 's'}`, 18, 30); document.setDrawColor(213, 221, 230); document.line(18, 34, 192, 34); };
+        drawHeader();
+        let y = 43;
+        if (!selected.length) document.text('No incidents match the selected filters.', 18, y);
+        for (const row of selected) {
+          const details = document.splitTextToSize(`${row.category} · ${row.severity} · ${row.status} · ${row.description}`, 174) as string[];
+          const height = 13 + details.length * 4.5;
+          if (y + height > 278) { document.addPage(); drawHeader(); y = 43; }
+          document.setFontSize(10); document.setTextColor(0, 51, 79); document.text(`${row.student} · ${row.className} · ${row.date.slice(0, 10)}`, 18, y);
+          document.setFontSize(9); document.setTextColor(71, 85, 105); document.text(details, 18, y + 6);
+          y += height;
+        }
+        document.save('discipline-report.pdf');
+        toast('Discipline report download started', 'success');
+      } catch { toast('Could not prepare the discipline report. Please retry.', 'error'); }
+      finally { setGenerating(null); }
+      return;
+    }
+    if (title === 'Published Results Summary PDF') {
+      if (!filters.scopeId || !filters.termId) { toast('Select a class and term first.', 'warning'); return; }
+      setGenerating(title);
+      try {
+        const records = await fetchPublishedResults(filters.scopeId, filters.termId);
+        const summary = summarizePublishedResults(records);
+        const classLabel = classes.find((row) => row.id === filters.scopeId)?.name ?? 'Selected class';
+        const termLabel = (terms as Array<Record<string, unknown>>).find((row) => row.id === filters.termId)?.name ?? 'Selected term';
+        const { jsPDF } = await import('jspdf');
+        const document = new jsPDF();
+        document.setTextColor(0, 51, 79); document.setFontSize(18); document.text('Published Results Summary', 18, 22);
+        document.setFontSize(10); document.text(`${classLabel} · ${String(termLabel)}`, 18, 30);
+        document.setTextColor(100, 116, 139); document.setFontSize(9); document.text(`${records.length} published subject results · ${summary.length} subjects · generated ${new Date().toLocaleString()}`, 18, 38);
+        document.setDrawColor(213, 221, 230); document.line(18, 43, 192, 43);
+        let y = 52;
+        if (!summary.length) document.text('No published results match the selected class and term.', 18, y);
+        for (const row of summary) {
+          if (y > 276) { document.addPage(); y = 22; }
+          document.setTextColor(0, 51, 79); document.setFontSize(10); document.text(row.subject, 18, y);
+          document.setTextColor(71, 85, 105); document.setFontSize(9); document.text(`${row.total} results · ${row.scored} scored · average ${row.average === null ? '—' : `${row.average}%`} · pass rate ${row.passRate === null ? '—' : `${row.passRate}%`}`, 18, y + 6);
+          y += 19;
+        }
+        document.save('published-results-summary.pdf');
+        toast('Published results summary download started', 'success');
+      } catch { toast('Could not load published results. Check your school, class and term selection.', 'error'); }
+      finally { setGenerating(null); }
+      return;
+    }
     setGenerating(title);
     setLoadingLabel('Queuing…');
     generateReport(
-      { reportType: EXPORT_TYPE_MAP[title] ?? 'CUSTOM', scope: 'school' },
+      { reportType: EXPORT_TYPE_MAP[title] ?? 'CUSTOM', scope: 'school', ...filters },
       {
         onSuccess: async (data) => {
           const reportId = (data as Record<string, unknown>)?.reportId as string | undefined;
@@ -2064,9 +2246,7 @@ export function PrincipalExportsPage() {
     <PrincipalWorkspaceShell title="Executive Export Center" eyebrow="Board and stakeholder packets">
       <PrincipalBreadcrumb crumbs={[{ label: 'Executive', to: '/principal' }, { label: 'Exports' }]} />
       <div className="rounded-2xl border border-ks-navy/15 bg-ks-navy/5 p-4">
-        <p className="text-sm font-black text-ks-navy">
-          Every export creates an immutable audit record with actor, filters applied, timestamp, and file hash.
-        </p>
+        <p className="text-sm font-black text-ks-navy">Most PDF reports are generated by the existing report service. CSV and Discipline PDF files use the current school data visible here; they are prepared locally and do not create a server-side report job.</p>
       </div>
       <div className="grid gap-gutter md:grid-cols-2 xl:grid-cols-4">
         {items.map(([title, detail]) => (
@@ -2074,16 +2254,12 @@ export function PrincipalExportsPage() {
             <Download className="h-5 w-5 text-ks-blue" />
             <h3 className="mt-3 font-display text-base font-black text-ks-navy">{title}</h3>
             <p className="mt-1 grow text-xs font-semibold text-ks-muted">{detail}</p>
-            <Button
-              className="mt-4 w-full rounded-xl bg-ks-navy text-sm"
-              disabled={generating === title}
-              onClick={() => handleExport(title)}
-            >
-              <Download className="h-3.5 w-3.5" /> {generating === title ? loadingLabel : 'Download'}
-            </Button>
+            <div className="mt-4 flex gap-2"><Button variant="secondary" className="flex-1 rounded-xl text-sm" onClick={() => setRequest({ title, intent: 'view' })}>View</Button><Button className="flex-1 rounded-xl bg-ks-navy text-sm" disabled={generating === title} onClick={() => setRequest({ title, intent: 'download' })}><Download className="h-3.5 w-3.5" /> {generating === title ? loadingLabel : 'Download'}</Button></div>
           </div>
         ))}
       </div>
+      {request && <PrincipalReportRequest title={request.title} reportType={EXPORT_TYPE_MAP[request.title] ?? 'CUSTOM'} intent={request.intent} onClose={() => setRequest(null)} onView={(filters) => { setPreview({ title: request.title, filters }); setRequest(null); }} onDownload={(filters) => { handleExport(request.title, filters); setRequest(null); }} />}
+      {preview && <PrincipalReportPreview title={preview.title} filters={preview.filters} onClose={() => setPreview(null)} onDownload={() => handleExport(preview.title, preview.filters)} />}
     </PrincipalWorkspaceShell>
   );
 }

@@ -2,12 +2,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../lib/api/client';
 import { arrayFromApi, payloadOf } from '../../../lib/api/response';
 import { useSchoolStore } from '../../../lib/school/schoolStore';
+import { fetchAllUsers } from '../../admin/api/admin.hooks';
 
 export type BoardingStudent = {
   id: string;
   firstName: string;
   lastName: string;
   registrationNumber: string;
+  gender?: string | null;
   residenceType?: 'BOARDING' | 'DAY_SCHOLAR' | null;
 };
 
@@ -15,6 +17,7 @@ export type Dormitory = {
   id: string;
   name: string;
   code: string;
+  gender: 'MALE' | 'FEMALE' | null;
   totalBeds: number;
   occupiedBeds: number;
   availableBeds: number;
@@ -123,7 +126,7 @@ export function useBoardingStaff(enabled = true) {
     queryKey: [...keys.all, 'staff', activeSchoolKey],
     queryFn: async () => {
       const [matrons, patrons] = await Promise.all(['MATRON', 'PATRON'].map((role) =>
-        api.get('/auth/users', { params: { role, limit: 100 } }).then((r) => arrayFromApi(payloadOf(r), ['items', 'users']) as unknown as BoardingStaffMember[]),
+        fetchAllUsers({ role }) as Promise<BoardingStaffMember[]>,
       ));
       return [...matrons, ...patrons].filter((row) => ['MATRON', 'PATRON'].includes(String(row.role)));
     },
@@ -132,7 +135,7 @@ export function useBoardingStaff(enabled = true) {
 }
 
 export type AwaitingStudent = { id: string; firstName: string; lastName: string; registrationNumber: string; gender?: string; className: string | null; admissionDate?: string };
-export type AwaitingDormitory = { id: string; name: string; code: string; schoolId: string; totalBeds: number; occupiedBeds: number; availableBeds: number };
+export type AwaitingDormitory = { id: string; name: string; code: string; gender: 'MALE' | 'FEMALE' | null; schoolId: string; totalBeds: number; occupiedBeds: number; availableBeds: number };
 
 /** Boarders who still need a dormitory: the matron and patron to-do list. */
 export function useBoardingAwaiting() {
@@ -180,9 +183,9 @@ function boardingMutation<T extends Record<string, unknown>>(fn: (input: T) => P
   };
 }
 
-export const useCreateDormitory = boardingMutation((body: { name: string; code?: string; totalBeds: number; notes?: string; eligibilityNotes?: string; staff?: Array<{ staffUserId: string; staffRole: 'MATRON' | 'PATRON' }> }) =>
+export const useCreateDormitory = boardingMutation((body: { name: string; gender: 'MALE' | 'FEMALE'; code?: string; totalBeds: number; notes?: string; eligibilityNotes?: string; staff?: Array<{ staffUserId: string; staffRole: 'MATRON' | 'PATRON' }> }) =>
   api.post('/boarding/dormitories', body).then(payloadOf));
-export const useUpdateDormitory = boardingMutation(({ id, ...body }: { id: string; name?: string; totalBeds?: number; notes?: string; eligibilityNotes?: string }) =>
+export const useUpdateDormitory = boardingMutation(({ id, ...body }: { id: string; name?: string; gender?: 'MALE' | 'FEMALE'; totalBeds?: number; notes?: string; eligibilityNotes?: string }) =>
   api.patch(`/boarding/dormitories/${id}`, body).then(payloadOf));
 export const useAssignDormitoryStaff = boardingMutation(({ dormitoryId, ...body }: { dormitoryId: string; staffUserId: string; staffRole: string }) =>
   api.post(`/boarding/dormitories/${dormitoryId}/staff`, body).then(payloadOf));

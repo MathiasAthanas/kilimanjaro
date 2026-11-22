@@ -4,7 +4,7 @@ import { BoardingService } from './boarding.service';
 
 const schoolAdmin = { id: 'admin-1', role: 'SYSTEM_ADMIN', scope: 'SCHOOL' as const, schoolIds: ['school-a'], activeSchoolId: 'school-a' };
 const matron = { id: 'matron-1', role: 'MATRON', scope: 'SCHOOL' as const, schoolIds: ['school-a'], activeSchoolId: 'school-a' };
-const dorm = { id: 'dorm-a', schoolId: 'school-a', name: 'Kibo', code: 'KB', totalBeds: 1, isActive: true };
+const dorm = { id: 'dorm-a', schoolId: 'school-a', name: 'Kibo', code: 'KB', gender: Gender.MALE, totalBeds: 1, isActive: true };
 
 function buildService() {
   const prisma = {
@@ -41,11 +41,38 @@ describe('BoardingService hostel boundaries', () => {
   it('prevents dormitory capacity from being exceeded', async () => {
     const { service, prisma } = buildService();
     prisma.dormitory.findUnique.mockResolvedValue(dorm);
-    prisma.student.findUnique.mockResolvedValue({ id: 'student-1', schoolId: 'school-a', residenceType: ResidenceType.BOARDING });
+    prisma.student.findUnique.mockResolvedValue({ id: 'student-1', schoolId: 'school-a', residenceType: ResidenceType.BOARDING, gender: Gender.MALE });
     prisma.dormitoryStudentAssignment.findFirst.mockResolvedValue(null);
     prisma.dormitoryStudentAssignment.count.mockResolvedValue(1);
     await expect(service.assignStudent(dorm.id, { studentId: 'student-1' }, schoolAdmin.id, schoolAdmin))
       .rejects.toThrow(ConflictException);
+  });
+
+  it('rejects placing a girl in a boys dormitory regardless of assigned staff role', async () => {
+    const { service, prisma } = buildService();
+    prisma.dormitory.findUnique.mockResolvedValue(dorm);
+    prisma.student.findUnique.mockResolvedValue({ id: 'student-1', schoolId: 'school-a', residenceType: ResidenceType.BOARDING, gender: Gender.FEMALE });
+    await expect(service.assignStudent(dorm.id, { studentId: 'student-1' }, schoolAdmin.id, schoolAdmin))
+      .rejects.toThrow('gender does not match');
+    expect(prisma.dormitoryStudentAssignment.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('requires legacy dormitories to be classified before new placements', async () => {
+    const { service, prisma } = buildService();
+    prisma.dormitory.findUnique.mockResolvedValue({ ...dorm, gender: null });
+    prisma.student.findUnique.mockResolvedValue({ id: 'student-1', schoolId: 'school-a', residenceType: ResidenceType.BOARDING, gender: Gender.MALE });
+    await expect(service.assignStudent(dorm.id, { studentId: 'student-1' }, schoolAdmin.id, schoolAdmin))
+      .rejects.toThrow('Set this dormitory');
+  });
+
+  it('does not let an admin relabel a dormitory while students of the other gender remain', async () => {
+    const { service, prisma } = buildService();
+    prisma.dormitory.findUnique.mockResolvedValue(dorm);
+    prisma.dormitoryStudentAssignment.count.mockResolvedValue(1);
+    prisma.dormitoryStudentAssignment.findFirst.mockResolvedValue({ studentId: 'student-1' });
+    await expect(service.updateDormitory(dorm.id, { gender: Gender.FEMALE }, schoolAdmin))
+      .rejects.toThrow('Move them first');
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
   it('rejects leave state changes outside the controlled flow', async () => {

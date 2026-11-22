@@ -965,21 +965,20 @@ export function DecisionAuditTimeline({ rows }: { rows: Array<{ id: string; date
 
 // ─── Report tile ──────────────────────────────────────────────────────────────
 
-export function FancyReportTile({ title, detail, onGenerate, loading = false, loadingLabel }: { title: string; detail: string; onGenerate: () => void; loading?: boolean; loadingLabel?: string }) {
+export function FancyReportTile({ title, detail, onGenerate, onView, loading = false, loadingLabel }: { title: string; detail: string; onGenerate: () => void; onView?: () => void; loading?: boolean; loadingLabel?: string }) {
   return (
-    <button
-      onClick={onGenerate}
-      disabled={loading}
-      className="group relative w-full overflow-hidden rounded-2xl border border-ks-line bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-layer disabled:cursor-wait disabled:opacity-60"
-    >
+    <div className="group relative w-full overflow-hidden rounded-2xl border border-ks-line bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-layer">
       <PieChart className="pointer-events-none absolute -right-4 -top-4 h-24 w-24 text-ks-gold/10" />
       <Download className="h-6 w-6 text-ks-gold" />
       <h3 className="mt-4 font-display text-lg font-black text-ks-navy">{title}</h3>
       <p className="mt-2 text-sm font-semibold text-ks-muted">{detail}</p>
-      <span className="mt-5 inline-flex items-center gap-1 text-xs font-black uppercase tracking-widest text-ks-blue transition group-hover:gap-2">
-        {loading ? (loadingLabel ?? 'Queuing…') : 'Generate'} <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-1" />
-      </span>
-    </button>
+      <div className="mt-5 flex gap-2">
+        {onView && <Button variant="secondary" className="rounded-xl text-xs" onClick={onView}>View</Button>}
+        <Button className="rounded-xl text-xs" onClick={onGenerate} disabled={loading}>
+          {loading ? (loadingLabel ?? 'Queuing…') : 'Download'} <ArrowRight className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+    </div>
   );
 }
 

@@ -20,6 +20,8 @@ const GROUP_READ = [
   'TEACHER',
   'PARENT',
   'ADMISSIONS',
+  'MATRON',
+  'PATRON',
 ] as const;
 
 @ApiTags('Schools')

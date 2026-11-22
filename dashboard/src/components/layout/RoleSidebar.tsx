@@ -319,16 +319,6 @@ const principalSections: SidebarSection[] = [
     ],
   },
   {
-    title: 'Finance',
-    items: [
-      { to: '/principal/finance',           icon: WalletCards,label: 'Finance Oversight', end: true },
-      { to: '/principal/finance/approvals', icon: Banknote,   label: 'Payment Approval',  end: true },
-      { to: '/principal/finance/fund-approvals', icon: HandCoins, label: 'Fund Approvals', end: true },
-      { to: '/principal/finance/statement', icon: FileText,   label: 'Financial Statement', end: true },
-      { to: '/principal/finance/invoices',  icon: FileText,   label: 'Invoice View'                },
-    ],
-  },
-  {
     title: 'People & School',
     items: [
       { to: '/principal/performance',   icon: TrendingUp,   label: 'Performance',   end: true },

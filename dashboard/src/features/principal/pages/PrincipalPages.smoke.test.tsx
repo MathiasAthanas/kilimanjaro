@@ -4,7 +4,7 @@
  */
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
@@ -52,6 +52,12 @@ vi.mock('../../operations/api/operations.hooks', () => ({
   useGenerateReportMutation:       () => ({ mutate: vi.fn(), isPending: false, data: undefined }),
   useGenerateReportCardsMutation:  () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
   downloadReportWhenReady:         vi.fn(),
+}));
+
+vi.mock('../../admin/api/admin.hooks', () => ({
+  useAcademicYears: () => ({ data: [{ id: 'year-1', name: 'Year 1' }] }),
+  useTerms: () => ({ data: [{ id: 'term-1', name: 'Term 1', academicYearId: 'year-1' }] }),
+  useAdminClasses: () => ({ data: [{ id: 'class-1', name: 'Form 1' }] }),
 }));
 
 // ─── Mock elearning hooks (used by PrincipalElearningPage) ───────────────────
@@ -125,6 +131,38 @@ import {
 
 describe('Principal pages smoke tests — all routes render without crashing', () => {
   beforeEach(() => { vi.clearAllMocks(); });
+
+  it('opens a report request before previewing', () => {
+    render(<Wrapper path="/principal/reports"><PrincipalReportsPage /></Wrapper>);
+    fireEvent.click(screen.getAllByRole('button', { name: 'View' })[0]);
+    expect(screen.getByRole('dialog', { name: 'School Overview' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'View overview' })).toBeTruthy();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: 'School Overview' })).toBeNull();
+  });
+
+  it('asks for report-specific CSV filters before downloading', () => {
+    render(<Wrapper path="/principal/exports"><PrincipalExportsPage /></Wrapper>);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Download' })[0]);
+    expect(screen.getByRole('dialog', { name: 'Decision Audit CSV' })).toBeTruthy();
+    expect(screen.getByText('From date')).toBeTruthy();
+    expect(screen.getByText('To date')).toBeTruthy();
+  });
+
+  it('asks for discipline filters before preparing that PDF', () => {
+    render(<Wrapper path="/principal/exports"><PrincipalExportsPage /></Wrapper>);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Download' })[4]);
+    expect(screen.getByRole('dialog', { name: 'Discipline Report PDF' })).toBeTruthy();
+    expect(screen.getByText('Severity')).toBeTruthy();
+    expect(screen.getByText('Category')).toBeTruthy();
+  });
+
+  it('requires class and term before a published-results preview', () => {
+    render(<Wrapper path="/principal/exports"><PrincipalExportsPage /></Wrapper>);
+    fireEvent.click(screen.getAllByRole('button', { name: 'View' })[6]);
+    expect(screen.getByRole('dialog', { name: 'Published Results Summary PDF' })).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'View overview' }) as HTMLButtonElement).disabled).toBe(true);
+  });
 
   it('/principal — PrincipalHomePage renders', () => {
     render(<Wrapper><PrincipalHomePage /></Wrapper>);

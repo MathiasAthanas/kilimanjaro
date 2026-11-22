@@ -431,6 +431,15 @@ export class StudentsService {
 
     assertSchoolInScope(user, existing.schoolId ?? null);
 
+    if (dto.gender && dto.gender !== existing.gender) {
+      const boardingAssignment = await this.prisma.dormitoryStudentAssignment.findFirst({
+        where: { studentId: id, isActive: true }, include: { dormitory: true },
+      });
+      if (boardingAssignment?.dormitory.gender && boardingAssignment.dormitory.gender !== dto.gender) {
+        throw new BadRequestException('This student is assigned to a dormitory for another gender. Move the student before changing gender.');
+      }
+    }
+
     // Boarding / Day Scholar is never written straight onto the student: it goes through the residence service so the
     // dormitory bed is freed, the change is recorded and finance hears about it.
     const { residenceType: requestedResidence, ...rest } = dto;

@@ -58,8 +58,6 @@ import {
   FinancialStatementPage,
 } from '../features/finance/pages/FinanceOpsPages';
 import { HodFundRequestsPage, HodFundRequestDetailPage } from '../features/hod/pages/HodFundRequestsPage';
-import { PrincipalFundApprovalsPage } from '../features/principal/pages/PrincipalFundApprovalsPage';
-import { PrincipalFinancialStatementPage } from '../features/principal/pages/PrincipalFinancialStatementPage';
 import { LandingPage } from '../features/public/LandingPage';
 import { AccountDeletionPage, LegalLinksPage, PrivacyPolicyPage, SupportPage, TermsOfServicePage } from '../features/public/LegalPages';
 // StatusPage import removed — now using AdminSystemStatusPage for /admin/system-status
@@ -159,15 +157,11 @@ import {
 import {
   CreatePrincipalAnnouncementPage,
   DisciplineOverviewPage,
-  FinanceOversightPage,
   MarksFinalApprovalPage,
-  PaymentApprovalDetailPage,
-  PaymentApprovalsPage,
   PrincipalAnnouncementsPage,
   PrincipalAuditPage,
   PrincipalExportsPage,
   PrincipalHomePage,
-  PrincipalInvoiceManagementPage,
   PrincipalMarksReviewPage,
   PrincipalReportCardDetailPage,
   PrincipalReportsPage,
@@ -495,12 +489,6 @@ export const router = createBrowserRouter([
       { path: '/principal/results/publish', element: <ResultsPublishingPage /> },
       { path: '/principal/report-cards', element: <ReportCardsManagementPage /> },
       { path: '/principal/report-cards/:id', element: <PrincipalReportCardDetailPage /> },
-      { path: '/principal/finance', element: <FinanceOversightPage /> },
-      { path: '/principal/finance/approvals', element: <PaymentApprovalsPage /> },
-      { path: '/principal/finance/approvals/:id', element: <PaymentApprovalDetailPage /> },
-      { path: '/principal/finance/invoices', element: <PrincipalInvoiceManagementPage /> },
-      { path: '/principal/finance/fund-approvals', element: <PrincipalFundApprovalsPage /> },
-      { path: '/principal/finance/statement', element: <PrincipalFinancialStatementPage /> },
       { path: '/principal/performance', element: <PrincipalPerformanceOverviewPage /> },
       { path: '/principal/students', element: <PrincipalStudentsPage /> },
       { path: '/principal/students/:studentId', element: <PrincipalStudentProfilePage /> },

@@ -6,6 +6,7 @@ import * as XLSX from 'xlsx';
 import { toast } from '../../../lib/toast';
 import { errorMessage } from '../../../lib/api/errors';
 import { Badge } from '../../../components/common/Badge';
+import { BarChart } from '../../analytics/components/Charts';
 import { Button } from '../../../components/common/Button';
 import { Card } from '../../../components/common/Card';
 import {
@@ -108,6 +109,11 @@ export function TeacherHomePage() {
           { label: 'Syllabus covered', value: withSyllabus.length ? `${avgSyllabus}%` : '—', detail: 'Average across your classes', inverted: true, icon: ShieldCheck },
         ]}
       />
+
+      <div className="grid gap-gutter lg:grid-cols-2">
+        <BarChart title="Syllabus progress by class" subtitle="Percentage covered in your currently visible teaching assignments" values={myClasses.filter((row) => row.syllabusTotal > 0).map((row) => ({ label: `${row.className} · ${row.subject}`, value: Math.round(row.syllabus) })).sort((a, b) => b.value - a.value).slice(0, 8)} />
+        <BarChart title="Assessment workflow" subtitle="Your assigned assessments by current status" values={Object.entries(assessments.reduce((counts: Record<string, number>, row) => { counts[row.status] = (counts[row.status] ?? 0) + 1; return counts; }, {})).map(([label, value]) => ({ label, value: Number(value) }))} />
+      </div>
 
       {todo.length > 0 && (
         <Card className="rounded-xl border-l-4 border-l-ks-amber p-5">

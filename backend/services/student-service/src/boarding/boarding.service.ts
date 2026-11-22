@@ -117,6 +117,7 @@ export class BoardingService {
         schoolId,
         name,
         code,
+        gender: dto.gender,
         totalBeds: dto.totalBeds,
         notes: dto.notes,
         eligibilityNotes: dto.eligibilityNotes,
@@ -147,7 +148,7 @@ export class BoardingService {
       take: 500,
     });
     const dormitories = (await this.listDormitories(user)).map((d) => ({
-      id: d.id, name: d.name, code: d.code, schoolId: d.schoolId, totalBeds: d.totalBeds, occupiedBeds: d.occupiedBeds, availableBeds: d.availableBeds,
+      id: d.id, name: d.name, code: d.code, gender: d.gender, schoolId: d.schoolId, totalBeds: d.totalBeds, occupiedBeds: d.occupiedBeds, availableBeds: d.availableBeds,
     }));
     return {
       total: students.length,
@@ -161,6 +162,12 @@ export class BoardingService {
     const occupied = await this.prisma.dormitoryStudentAssignment.count({ where: { dormitoryId: id, isActive: true } });
     if (dto.totalBeds != null && dto.totalBeds < occupied) {
       throw new BadRequestException(`Total beds cannot be below the ${occupied} occupied beds`);
+    }
+    if (dto.gender && dto.gender !== dorm.gender) {
+      const mismatch = await this.prisma.dormitoryStudentAssignment.findFirst({
+        where: { dormitoryId: id, isActive: true, student: { gender: { not: dto.gender } } },
+      });
+      if (mismatch) throw new BadRequestException('Cannot change dormitory gender while students of another gender are assigned. Move them first.');
     }
     return this.prisma.$transaction(async (tx) => {
       if (dto.totalBeds != null && dto.totalBeds !== dorm.totalBeds) {
@@ -226,6 +233,8 @@ export class BoardingService {
     assertSchoolInScope(user, student.schoolId);
     if (student.schoolId !== dorm.schoolId) throw new BadRequestException('Student and dormitory must belong to the same school');
     if (student.residenceType !== ResidenceType.BOARDING) throw new BadRequestException('Only students classified as Boarding may be assigned to a dormitory');
+    if (!dorm.gender) throw new BadRequestException('Set this dormitory’s boys/girls designation before placing students');
+    if (student.gender !== dorm.gender) throw new BadRequestException('Student gender does not match this dormitory’s boys/girls designation');
     const existing = await this.prisma.dormitoryStudentAssignment.findFirst({ where: { studentId: dto.studentId, isActive: true } });
     if (existing) throw new ConflictException('Student already has an active dormitory assignment');
     const occupancy = await this.prisma.dormitoryStudentAssignment.count({ where: { dormitoryId, isActive: true } });

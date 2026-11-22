@@ -5,6 +5,28 @@ import { motion } from 'framer-motion';
 
 type BarItem = { label: string; value: number; tone?: string };
 
+/** Shared-count column comparison with a line for the remaining count. */
+export function MixedHistogram({ title, subtitle, rows }: { title: string; subtitle?: string; rows: Array<{ label: string; total: number; occupied: number }> }) {
+  const [hovered, setHovered] = useState<number | null>(null);
+  const width = Math.max(480, rows.length * 76 + 58);
+  const height = 210;
+  const max = Math.max(1, ...rows.map((row) => row.total));
+  const x = (index: number) => 42 + index * ((width - 65) / Math.max(rows.length, 1)) + (width - 65) / Math.max(rows.length, 1) / 2;
+  const y = (value: number) => 170 - (value / max) * 132;
+  const line = rows.map((row, index) => `${index ? 'L' : 'M'}${x(index)},${y(Math.max(0, row.total - row.occupied))}`).join(' ');
+  return <section className="rounded-2xl border border-ks-line bg-white p-5 shadow-sm" aria-label={title}>
+    <h3 className="font-display text-lg font-black text-ks-navy">{title}</h3>
+    {subtitle && <p className="mt-1 text-xs font-semibold text-ks-muted">{subtitle}</p>}
+    <div className="mt-3 flex flex-wrap gap-4 text-[11px] font-bold text-ks-muted"><span><span className="mr-1 inline-block h-2.5 w-2.5 rounded-sm bg-[#00334f]" />Beds</span><span><span className="mr-1 inline-block h-2.5 w-2.5 rounded-sm bg-[#6C63FF]" />Occupied</span><span><span className="mr-1 inline-block h-2.5 w-2.5 rounded-sm bg-[#d59a1b]" />Available</span></div>
+    {rows.length === 0 ? <p className="mt-5 rounded-xl bg-ks-paper p-5 text-sm text-ks-muted">No dormitories to compare yet.</p> : <div className="mt-3 overflow-x-auto"><svg viewBox={`0 0 ${width} ${height}`} style={{ minWidth: width }} className="h-[210px] w-full" role="img" aria-label={`${title}: ${rows.map((row) => `${row.label}, ${row.occupied} of ${row.total} beds occupied`).join('; ')}`}>
+      {[0, 0.5, 1].map((fraction) => <g key={fraction}><line x1="35" x2={width - 10} y1={y(fraction * max)} y2={y(fraction * max)} stroke="#e2e8f0" /><text x="28" y={y(fraction * max) + 3} textAnchor="end" fontSize="10" fill="#64748b">{Math.round(fraction * max)}</text></g>)}
+      {rows.map((row, index) => <g key={`${row.label}-${index}`} onMouseEnter={() => setHovered(index)} onMouseLeave={() => setHovered(null)}><rect x={x(index) - 25} y={y(row.total)} width="21" height={170 - y(row.total)} rx="4" fill="#00334f" opacity={hovered === null || hovered === index ? 1 : .5} /><rect x={x(index) + 2} y={y(row.occupied)} width="21" height={170 - y(row.occupied)} rx="4" fill="#6C63FF" opacity={hovered === null || hovered === index ? 1 : .5} /><text x={x(index)} y="193" textAnchor="middle" fontSize="10" fill="#64748b" fontWeight="700">{row.label.length > 12 ? `${row.label.slice(0, 11)}…` : row.label}</text><title>{row.label}: {row.total} beds, {row.occupied} occupied, {Math.max(0, row.total - row.occupied)} available</title></g>)}
+      {rows.length > 1 && <path d={line} fill="none" stroke="#d59a1b" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />}
+      {rows.map((row, index) => <circle key={`${row.label}-free`} cx={x(index)} cy={y(Math.max(0, row.total - row.occupied))} r="4" fill="#d59a1b" />)}
+    </svg></div>}
+  </section>;
+}
+
 export function BarChart({ title, subtitle, values }: { title: string; subtitle?: string; values: BarItem[] }) {
   const max = Math.max(...values.map((v) => v.value), 1);
   const total = values.reduce((s, v) => s + v.value, 0);
@@ -15,6 +37,7 @@ export function BarChart({ title, subtitle, values }: { title: string; subtitle?
       <h3 className="font-display text-lg font-black text-ks-navy">{title}</h3>
       {subtitle && <p className="mt-0.5 text-xs font-semibold text-ks-muted">{subtitle}</p>}
       <div className="mt-5 space-y-4">
+        {values.length === 0 && <p className="rounded-xl border border-dashed border-ks-line bg-ks-paper px-4 py-6 text-center text-sm font-semibold text-ks-muted">No data available yet.</p>}
         {values.map((item, i) => {
           const pct = Math.round((item.value / max) * 100);
           const share = total > 0 ? Math.round((item.value / total) * 100) : 0;

@@ -2,6 +2,7 @@ import { BedDouble, CalendarCheck, ClipboardCheck, Home, LogIn, UserPlus, Users,
 import { useEffect, useMemo, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { Badge } from '../../../components/common/Badge';
+import { MixedHistogram } from '../../analytics/components/Charts';
 import { Button } from '../../../components/common/Button';
 import { SkeletonTable } from '../../../components/common/SkeletonTable';
 import { ConfirmDialog } from '../../../components/feedback/ConfirmDialog';
@@ -12,6 +13,7 @@ import { useAuthStore } from '../../../lib/auth/authStore';
 import { toast } from '../../../lib/toast';
 import { useBoardingDashboard, useDormitory, useUnassignDormitoryStudent } from '../api/boarding.hooks';
 import { AwaitingPlacementPanel } from '../components/AwaitingPlacementPanel';
+import { BoardingRollCallTrend } from '../components/BoardingRollCallTrend';
 
 function greeting() {
   const hour = new Date().getHours();
@@ -70,6 +72,8 @@ export function BoardingTodayPage() {
         <Task to="/boarding/leaves" icon={LogIn} count={totals.expectedReturnsToday ?? 0} title="Returning today" hint={`${totals.studentsAway ?? 0} away in total`} tone="green" />
       </section>
 
+      <div className="grid gap-4 xl:grid-cols-2"><MixedHistogram title="My dormitory capacity" subtitle="Live bed availability across your assigned dormitories" rows={dorms.map((dorm) => ({ label: dorm.name, total: dorm.totalBeds, occupied: dorm.occupiedBeds }))} /><BoardingRollCallTrend /></div>
+
       <AwaitingPlacementPanel />
 
       <section aria-labelledby="my-dorms" className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -85,7 +89,7 @@ export function BoardingTodayPage() {
                   <button key={d.id} onClick={() => setOpenId(d.id)} aria-pressed={openId === d.id} className={`rounded-xl border-2 p-4 text-left transition ${openId === d.id ? 'border-[#00334f] bg-[#eef5f8]' : 'border-slate-200 hover:border-[#00334f]/40'}`}>
                     <div className="flex items-center justify-between gap-2"><span className="flex items-center gap-2 font-black text-slate-900"><Home className="h-4 w-4 text-[#00334f]" /> {d.name}</span><Badge tone={d.availableBeds ? 'emerald' : 'rose'}>{d.occupiedBeds}/{d.totalBeds}</Badge></div>
                     <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-[#00334f]" style={{ width: `${pct}%` }} /></div>
-                    <p className="mt-1 text-xs font-semibold text-slate-500">{d.availableBeds} free bed{d.availableBeds === 1 ? '' : 's'}</p>
+                    <p className="mt-1 text-xs font-semibold text-slate-500">{d.gender === 'MALE' ? 'Boys' : d.gender === 'FEMALE' ? 'Girls' : 'Gender not set'} · {d.availableBeds} free bed{d.availableBeds === 1 ? '' : 's'}</p>
                   </button>
                 );
               })}
@@ -95,7 +99,7 @@ export function BoardingTodayPage() {
               {detail.isLoading ? <SkeletonTable cols={4} /> : !selected ? null : (
                 <>
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h3 className="font-black text-[#00334f]">{selected.name} · who sleeps here</h3>
+                    <h3 className="font-black text-[#00334f]">{selected.name} · {selected.gender === 'MALE' ? 'Boys' : selected.gender === 'FEMALE' ? 'Girls' : 'Gender not set'} · who sleeps here</h3>
                     <span className="inline-flex gap-2">
                       <NavLink to="/boarding/roll-calls"><Button variant="secondary" className="!px-3 !py-1.5 text-xs"><ClipboardCheck className="h-3.5 w-3.5" /> Roll call</Button></NavLink>
                       <NavLink to="/boarding/leaves"><Button variant="secondary" className="!px-3 !py-1.5 text-xs"><CalendarCheck className="h-3.5 w-3.5" /> Leave</Button></NavLink>
@@ -106,11 +110,12 @@ export function BoardingTodayPage() {
                   ) : (
                     <div className="mt-3 overflow-x-auto rounded-xl border border-slate-200">
                       <table className="w-full text-sm">
-                        <thead className="bg-slate-50 text-[11px] font-black uppercase tracking-widest text-slate-500"><tr><th className="px-4 py-2 text-left">Student</th><th className="px-4 py-2 text-left">Class</th><th className="px-4 py-2 text-left">Bed</th><th className="px-4 py-2 text-right" /></tr></thead>
+                        <thead className="bg-slate-50 text-[11px] font-black uppercase tracking-widest text-slate-500"><tr><th className="px-4 py-2 text-left">Student</th><th className="px-4 py-2 text-left">Gender</th><th className="px-4 py-2 text-left">Class</th><th className="px-4 py-2 text-left">Bed</th><th className="px-4 py-2 text-right" /></tr></thead>
                         <tbody className="divide-y divide-slate-100">
                           {selected.studentAssignments.map((a) => (
                             <tr key={a.id} className="hover:bg-slate-50">
                               <td className="px-4 py-2.5"><span className="font-bold text-slate-800">{a.student.firstName} {a.student.lastName}</span><span className="block font-mono text-xs text-slate-500">{a.student.registrationNumber}</span></td>
+                              <td className="px-4 py-2.5 font-semibold text-slate-600">{a.student.gender ? a.student.gender.charAt(0) + a.student.gender.slice(1).toLowerCase() : '—'}</td>
                               <td className="px-4 py-2.5 font-semibold text-slate-600">{a.student.enrolments?.[0]?.class?.name ?? '-'}</td>
                               <td className="px-4 py-2.5"><span className="inline-flex items-center gap-1 font-semibold text-slate-700"><BedDouble className="h-3.5 w-3.5 text-slate-400" /> {a.bed?.label ?? 'No bed'}</span></td>
                               <td className="px-4 py-2.5 text-right"><button className="text-xs font-black uppercase text-rose-600 hover:underline" onClick={() => setRemoving({ studentId: a.studentId, name: `${a.student.firstName} ${a.student.lastName}` })}>Remove</button></td>

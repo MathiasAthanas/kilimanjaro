@@ -7,6 +7,7 @@ import {
   Pencil, Phone, Search, Send, UserPlus, X,
 } from 'lucide-react';
 import { Badge } from '../../../components/common/Badge';
+import { BarChart, MixedHistogram } from '../../analytics/components/Charts';
 import { Button } from '../../../components/common/Button';
 import { DataError } from '../../../components/feedback/DataError';
 import { EmptyState } from '../../../components/feedback/EmptyState';
@@ -71,6 +72,7 @@ export function AdmissionsHomePage() {
           { label: 'Conversion Rate', value: `${totals?.conversionRate ?? 0}%`, detail: `${totals?.enrolled ?? 0} enrolled of ${totals?.total ?? 0} applicants`, tone: (totals?.conversionRate ?? 0) >= 30 ? 'green' : 'slate', progress: totals?.conversionRate ?? 0 },
         ]}
       />
+      <BarChart title="Applicants by stage" subtitle="Live admissions pipeline · current school" values={funnel.filter((row) => row.count > 0).map((row) => ({ label: STAGE_META[row.stage].label, value: row.count }))} />
       <AdmissionsPipelineBoard />
     </AdmissionsWorkspaceShell>
   );
@@ -774,6 +776,8 @@ export function AdmissionsAnalyticsPage() {
               { label: 'Conversion Rate', value: `${data.totals.conversionRate}%`, detail: `${data.totals.rejected} rejected · ${data.totals.withdrawn} withdrawn`, tone: data.totals.conversionRate >= 30 ? 'green' : 'slate', progress: data.totals.conversionRate },
             ]}
           />
+
+          <MixedHistogram title="Seat capacity by class" subtitle="Filled seats compared with class capacity and remaining places" rows={capacity.map((row) => ({ label: row.className, total: row.capacity, occupied: row.filled }))} />
 
           <div className="grid gap-gutter xl:grid-cols-2">
             <section className="rounded-lg border border-[#d5dde6] bg-white p-6">

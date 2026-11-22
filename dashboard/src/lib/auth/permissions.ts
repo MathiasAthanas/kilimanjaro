@@ -62,7 +62,7 @@ export function canAccessRoute(role: UserRole | undefined, route: string) {
   if (route.startsWith('/teacher')) return role === 'TEACHER' || role === 'HOD' || role === 'ADMIN';
   if (route.startsWith('/hod')) return role === 'HOD' || role === 'ADMIN';
   if (route.startsWith('/aqa')) return role === 'AQA' || role === 'ADMIN';
-  if (route.startsWith('/finance')) return ['FINANCE', 'PRINCIPAL', 'ADMIN', 'HEAD_OF_FINANCE', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN'].includes(role);
+  if (route.startsWith('/finance')) return ['FINANCE', 'ADMIN', 'HEAD_OF_FINANCE', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN'].includes(role);
   // The principal workspace is the Head of School portal; Manager/Super Admin
   // enter it when they drill into a school (school scope comes from the header)
   if (route.startsWith('/principal')) return ['PRINCIPAL', 'HEAD_OF_SCHOOL', 'MANAGER', 'SUPER_ADMIN', 'ADMIN'].includes(role);

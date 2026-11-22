@@ -835,6 +835,7 @@ model Dormitory {
   schoolId    String
   name        String
   code        String
+  gender      Gender?
   totalBeds   Int      @default(0)
   isActive    Boolean  @default(true)
   notes       String?

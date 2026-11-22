@@ -8,6 +8,7 @@ import { errorMessage } from '../../../lib/api/errors';
 import { formatClassLabel } from '../../../lib/classLabel';
 import { buildCreateTermPayload } from '../utils/termPayload';
 import { Badge } from '../../../components/common/Badge';
+import { BarChart } from '../../analytics/components/Charts';
 import { Button } from '../../../components/common/Button';
 import {
   adminAuditEvents, adminClasses, adminStudents, adminSubjects,
@@ -158,6 +159,11 @@ export function AdminHomePage() {
         { label: 'Audit',      value: String(apiAudit.length),    detail: 'Recent events',         tone: 'rose'  },
         { label: 'Failed SMS', value: String(failedSms),          detail: 'Notification logs',     tone: 'rose'  },
       ]} />
+
+      <div className="grid gap-gutter lg:grid-cols-2">
+        <BarChart title="Staff by role" subtitle="Current user directory · compare active role counts" values={Object.entries(apiUsers.reduce((counts: Record<string, number>, user: { role: string }) => { const role = user.role || 'Other'; counts[role] = (counts[role] ?? 0) + 1; return counts; }, {})).map(([label, value]) => ({ label: label.replaceAll('_', ' '), value: Number(value) })).sort((a, b) => b.value - a.value).slice(0, 8)} />
+        <BarChart title="Class enrolment" subtitle="Current class directory · students per class" values={apiClasses.map((row: { name: string; students: number }) => ({ label: row.name, value: Number(row.students ?? 0) })).sort((a, b) => b.value - a.value).slice(0, 8)} />
+      </div>
 
       <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_380px]">
         <div className="space-y-4">

@@ -4,6 +4,7 @@ import React, { useMemo, useState } from 'react';
 import { NavLink, useNavigate, useParams } from 'react-router-dom';
 import { toast } from '../../../lib/toast';
 import { Badge } from '../../../components/common/Badge';
+import { BarChart } from '../../analytics/components/Charts';
 import { Button } from '../../../components/common/Button';
 import { Card } from '../../../components/common/Card';
 import { hodAlerts, hodApprovals, hodInterventions, hodMarks, hodPairings, hodSubjects, hodTeachers } from '../api/hodApi';
@@ -122,6 +123,8 @@ function AcademicHodHome({ deptName }: { deptName?: string }) {
           );
         })}
       </div>
+
+      <BarChart title="Subject averages" subtitle="Current department subject performance · percentages" values={apiSubjects.map((subject) => ({ label: subject.name, value: Number(subject.average ?? 0) })).sort((a, b) => b.value - a.value)} />
 
       <div className="grid grid-cols-12 gap-gutter">
         {/* Left: Approvals queue */}

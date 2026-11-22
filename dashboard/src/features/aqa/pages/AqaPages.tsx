@@ -26,6 +26,7 @@ import React, { useMemo, useState } from 'react';
 import { NavLink, useNavigate, useParams } from 'react-router-dom';
 import { toast } from '../../../lib/toast';
 import { Badge } from '../../../components/common/Badge';
+import { BarChart } from '../../analytics/components/Charts';
 import { Button } from '../../../components/common/Button';
 import { Card } from '../../../components/common/Card';
 import { aqaAlerts, heatmap, pairings, reports, thresholds } from '../api/aqaApi';
@@ -126,6 +127,8 @@ export function AqaHomePage() {
           </Button>
         </div>
       </div>
+
+      <BarChart title="Alert severity distribution" subtitle="Live academic performance alerts" values={Object.entries((apiAlerts as Array<{ severity: string }>).reduce((counts: Record<string, number>, row) => { const severity = row.severity || 'OTHER'; counts[severity] = (counts[severity] ?? 0) + 1; return counts; }, {})).map(([label, value]) => ({ label, value: Number(value) }))} />
 
       <div className="grid gap-gutter xl:grid-cols-[320px_minmax(0,1fr)_320px]">
         {/* Left: Engine + Critical */}
