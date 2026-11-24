@@ -1,5 +1,5 @@
 import { ReportType } from '../../generated/prisma';
-import { IsEnum, IsObject, IsOptional, IsString } from 'class-validator';
+import { IsEnum, IsIn, IsObject, IsOptional, IsString } from 'class-validator';
 
 export class GenerateReportDto {
   @IsEnum(ReportType)
@@ -24,6 +24,11 @@ export class GenerateReportDto {
   @IsOptional()
   @IsString()
   termId?: string;
+
+  /** File format of the download. Defaults to PDF; report cards are PDF only. */
+  @IsOptional()
+  @IsIn(['PDF', 'XLSX', 'CSV'])
+  format?: 'PDF' | 'XLSX' | 'CSV';
 
   @IsOptional()
   @IsObject()

@@ -380,34 +380,41 @@ export class ReportCardGenerator {
     doc.y = y + 52;
   }
 
+  /**
+   * pdfkit adds a page whenever text lands below the bottom margin, which is where a footer lives.
+   * The margin is lowered to zero while it is drawn so a footer can never create a blank page.
+   */
   private footer(doc: any, data: ReportCardData) {
-    const pages = doc.bufferedPageRange();
-    for (let i = 0; i < pages.count; i++) {
-      doc.switchToPage(i);
+    const range = doc.bufferedPageRange();
+    for (let i = 0; i < range.count; i++) {
+      doc.switchToPage(range.start + i);
+      const savedBottom = doc.page.margins.bottom;
+      doc.page.margins.bottom = 0;
       doc
         .save()
         .moveTo(PAGE.margin, PAGE.height - 44)
         .lineTo(PAGE.width - PAGE.margin, PAGE.height - 44)
         .lineWidth(0.6)
         .strokeColor(COLORS.line)
-        .stroke();
+        .stroke()
+        .restore();
       doc
         .font('Helvetica')
         .fontSize(7.5)
         .fillColor(COLORS.muted)
         .text(
-          `Kilimanjaro Schools | Official report card — ${data.student.registrationNumber}`,
+          `Kilimanjaro Schools | Official report card - ${data.student.registrationNumber}`,
           PAGE.margin,
           PAGE.height - 34,
-          { width: 300 },
+          { width: 300, lineBreak: false },
         )
         .text(
-          `Generated ${new Date().toLocaleDateString('en-GB', { dateStyle: 'medium' })} | Page ${i + 1} of ${pages.count}`,
+          `Generated ${new Date().toLocaleDateString('en-GB', { dateStyle: 'medium' })} | Page ${i + 1} of ${range.count}`,
           PAGE.width - PAGE.margin - 240,
           PAGE.height - 34,
-          { width: 240, align: 'right' },
-        )
-        .restore();
+          { width: 240, align: 'right', lineBreak: false },
+        );
+      doc.page.margins.bottom = savedBottom;
     }
   }
 }

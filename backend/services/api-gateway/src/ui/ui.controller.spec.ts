@@ -39,6 +39,7 @@ describe('UiController routing', () => {
       .expect(200)
       .expect((response) => {
         expect(response.body.data.reports).toEqual(expect.any(Array));
+        expect(response.body.data.catalog.map((item: { id: string }) => item.id)).toEqual(expect.arrayContaining(['SCHOOL_OVERVIEW', 'OUTSTANDING_BALANCES', 'REPORT_CARD']));
       });
   });
 

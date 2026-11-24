@@ -13,6 +13,23 @@ const FINANCE_ROLES = ['FINANCE', 'HEAD_OF_FINANCE', 'PRINCIPAL', 'HEAD_OF_SCHOO
 const PRINCIPAL_ROLES = ['PRINCIPAL', 'HEAD_OF_SCHOOL', 'MANAGER', 'SUPER_ADMIN', 'SYSTEM_ADMIN'];
 const ADMIN_ROLES = ['SYSTEM_ADMIN'];
 const LEADERSHIP_ROLES = ['SYSTEM_ADMIN', 'PRINCIPAL', 'ACADEMIC_QA', 'HEAD_OF_DEPARTMENT', 'FINANCE', 'HEAD_OF_FINANCE'];
+/** Everyone the analytics service lets generate or read reports (the dashboard shows /reports to all of them). */
+const REPORT_ROLES = ['SYSTEM_ADMIN', 'SUPER_ADMIN', 'PRINCIPAL', 'HEAD_OF_SCHOOL', 'MANAGER', 'MANAGING_DIRECTOR', 'BOARD_DIRECTOR', 'ACADEMIC_QA', 'HEAD_OF_DEPARTMENT', 'FINANCE', 'HEAD_OF_FINANCE', 'TEACHER'];
+
+/** The reports the analytics service can really produce. `needs` is the record a report is about. */
+const REPORT_CATALOG = [
+  { id: 'SCHOOL_OVERVIEW', title: 'School Overview', domain: 'executive', description: 'Enrolment, academic, finance and attendance summary with class and subject tables.', needs: 'school', formats: ['PDF', 'XLSX', 'CSV'] },
+  { id: 'TERM_SUMMARY', title: 'Term Summary', domain: 'executive', description: 'End-of-term academic, finance and attendance summary.', needs: 'school', formats: ['PDF', 'XLSX', 'CSV'] },
+  { id: 'BOARD_EXECUTIVE', title: 'Board Executive Report', domain: 'executive', description: 'Institutional health, key metrics and year-over-year comparison for board review.', needs: 'school', formats: ['PDF', 'XLSX', 'CSV'] },
+  { id: 'FINANCE_COLLECTION', title: 'Fee Collection', domain: 'finance', description: 'Invoiced, collected and outstanding by fee category, class and payment method.', needs: 'school', formats: ['PDF', 'XLSX', 'CSV'] },
+  { id: 'OUTSTANDING_BALANCES', title: 'Outstanding Balances', domain: 'finance', description: 'Every learner who still owes fees, biggest balance first.', needs: 'school', formats: ['PDF', 'XLSX', 'CSV'] },
+  { id: 'ATTENDANCE_SUMMARY', title: 'Attendance Summary', domain: 'academic', description: 'Attendance by class, day and month, with learners below 80% and chronic absentees.', needs: 'school', formats: ['PDF', 'XLSX', 'CSV'] },
+  { id: 'PERFORMANCE_ENGINE', title: 'Performance Engine', domain: 'academic', description: 'Alerts, peer pairings, interventions and success stories.', needs: 'school', formats: ['PDF', 'XLSX', 'CSV'] },
+  { id: 'CLASS_ACADEMIC', title: 'Class Academic Performance', domain: 'academic', description: 'Grade distribution, subject results and ranking for one class.', needs: 'class', formats: ['PDF', 'XLSX', 'CSV'] },
+  { id: 'TEACHER_PERFORMANCE', title: 'Teacher Performance', domain: 'academic', description: 'Class averages, pass rates and submission timeliness for one teacher.', needs: 'teacher', formats: ['PDF', 'XLSX', 'CSV'] },
+  { id: 'STUDENT_PROFILE', title: 'Student Profile', domain: 'academic', description: 'Academic, attendance and fee summary for one learner.', needs: 'student', formats: ['PDF', 'XLSX', 'CSV'] },
+  { id: 'REPORT_CARD', title: 'Student Report Card', domain: 'academic', description: 'The official report card of one learner for a term.', needs: 'student', formats: ['PDF'] },
+];
 
 @Controller(['', 'api/v1'])
 export class UiController {
@@ -900,28 +917,35 @@ export class UiController {
   }
 
   @Get('reports/catalog')
-  @Roles(...LEADERSHIP_ROLES)
+  @Roles(...REPORT_ROLES)
   reportsCatalog(): UiEnvelope {
-    return this.ui.envelope({
-      reports: [
-        { id: 'academic-overview', title: 'Academic Overview', source: '/analytics/academic/overview' },
-        { id: 'attendance-overview', title: 'Attendance Overview', source: '/analytics/attendance/overview' },
-        { id: 'finance-overview', title: 'Finance Overview', source: '/analytics/finance/overview' },
-        { id: 'student-risk', title: 'Students At Risk', source: '/analytics/students/at-risk' },
-        { id: 'fee-defaulters', title: 'Fee Defaulters', source: '/finance/reports/fee-defaulters' },
-      ],
-    });
+    // `reports` is the older key other clients (mobile) still read.
+    return this.ui.envelope({ catalog: REPORT_CATALOG, reports: REPORT_CATALOG });
   }
 
   @Get('reports/jobs')
-  @Roles(...LEADERSHIP_ROLES)
+  @Roles(...REPORT_ROLES)
   async reportsJobs(@CurrentUser() user: GatewayUser): Promise<UiEnvelope> {
-    const result = await this.ui.tryGet({ service: 'analytics', path: '/analytics/reports' }, [], user);
-    return this.ui.envelope({ jobs: this.ui.asArray(result.data), raw: result.data }, this.warning(result));
+    const result = await this.ui.tryGet({ service: 'analytics', path: '/analytics/reports', params: { limit: 100 } }, [], user);
+    const titles = new Map(REPORT_CATALOG.map((item) => [item.id, item.title]));
+    const jobs = (this.ui.asArray(result.data) as Array<Record<string, unknown>>).map((row) => ({
+      id: row.id,
+      name: titles.get(String(row.reportType)) ?? row.title,
+      type: row.reportType,
+      status: row.status === 'READY' ? 'COMPLETED' : row.status,
+      format: row.format ?? 'PDF',
+      scope: row.scope,
+      requestedByRole: row.generatedByRole,
+      createdAt: row.createdAt,
+      completedAt: row.completedAt,
+      sizeBytes: row.sizeBytes ?? null,
+      error: row.error ?? null,
+    }));
+    return this.ui.envelope({ jobs }, this.warning(result));
   }
 
   @Get('reports/scheduled')
-  @Roles(...LEADERSHIP_ROLES)
+  @Roles(...REPORT_ROLES)
   async scheduledReports(@CurrentUser() user: GatewayUser): Promise<UiEnvelope> {
     const result = await this.ui.tryGet({ service: 'analytics', path: '/analytics/reports', params: { scheduled: true } }, [], user);
     return this.ui.envelope({ scheduledReports: this.ui.asArray(result.data), raw: result.data }, this.warning(result));

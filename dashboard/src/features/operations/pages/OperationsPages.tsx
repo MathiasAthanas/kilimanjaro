@@ -3,6 +3,7 @@ import { NavLink, useNavigate, useParams } from 'react-router-dom';
 import { toast } from '../../../lib/toast';
 import { formatClassLabel } from '../../../lib/classLabel';
 import { errorMessage } from '../../../lib/api/errors';
+import { downloadStudentStatement, exportReport, formatLabel, type ReportFormat } from '../../../lib/reports/exportReport';
 import { Badge } from '../../../components/common/Badge';
 import { Button } from '../../../components/common/Button';
 import { DataError } from '../../../components/feedback/DataError';
@@ -37,7 +38,7 @@ import {
   useTeacherAnalyticsDetail,
   downloadReportWhenReady,
 } from '../api/operations.hooks';
-import { AnalyticsInsightPanel, BulkMarksGrid, ChartCard, ExportCenterDrawer, OperationsShell, OperationsTable, ReportBuilderCanvas, ReportTile, Td, TimetableMatrix } from '../components/OperationsWorkspace';
+import { AnalyticsInsightPanel, BulkMarksGrid, ChartCard, DownloadJobButton, ExportCenterDrawer, type ExportJob, OperationsShell, OperationsTable, ReportBuilderCanvas, ReportTile, Td, TimetableMatrix } from '../components/OperationsWorkspace';
 
 export function ReportsHomePage() {
   const { data: apiCatalog = [], isLoading: catLoading } = useReportCatalog() as { data: Array<Record<string, unknown>>; isLoading: boolean };
@@ -49,7 +50,7 @@ export function ReportsHomePage() {
           {catLoading && <SkeletonTable cols={3} />}
           {!catLoading && apiCatalog.length === 0 && <EmptyState title="No report catalog" description="Reports will appear here once generated." />}
           {apiCatalog.map((report) => (
-            <ReportTile key={String(report.id)} title={String(report.title ?? '')} detail={`${String(report.domain ?? '')} / ${(Array.isArray(report.roles) ? report.roles : []).join(', ')}`} to="/reports/builder" />
+            <ReportTile key={String(report.id)} title={String(report.title ?? '')} detail={`${String(report.description ?? report.domain ?? '')}${Array.isArray(report.formats) && report.formats.length ? ` (${(report.formats as string[]).map(formatLabel).join(', ')})` : ''}`} to={`/reports/builder?type=${String(report.id)}`} />
           ))}
         </div>
         <ExportCenterDrawer jobs={jobsLoading ? [] : apiJobs as Parameters<typeof ExportCenterDrawer>[0]['jobs']} />
@@ -72,19 +73,23 @@ function JobsTable() {
   if (isError) return <DataError onRetry={refetch} />;
   if (apiJobs.length === 0) return <EmptyState title="No report jobs" description="Report generation jobs will appear here." />;
   return (
-    <OperationsTable columns={['Job', 'Status', 'Requested By', 'Role', 'Scope', 'Format', 'Created', 'Actions']}>
+    <OperationsTable columns={['Report', 'Status', 'Requested By', 'Format', 'Created', 'Actions']}>
       {apiJobs.map((job) => {
         const status = String(job.status ?? '');
+        const jobRow = job as unknown as ExportJob;
         return (
           <tr key={String(job.id)}>
-            <Td>{String(job.name ?? '')}</Td>
-            <Td><Badge tone={status === 'COMPLETED' ? 'emerald' : status === 'FAILED' ? 'rose' : 'amber'}>{status}</Badge></Td>
-            <Td>{String(job.requestedBy ?? '—')}</Td>
-            <Td>{String(job.role ?? '—')}</Td>
-            <Td>{String(job.scope ?? '—')}</Td>
-            <Td>{String(job.format ?? '—')}</Td>
-            <Td>{String(job.created ?? job.createdAt ?? '').slice(0, 10)}</Td>
-            <Td><NavLink className="font-black text-ks-blue" to={`/reports/jobs/${String(job.id)}`}>Open</NavLink></Td>
+            <Td>{String(job.name ?? '')}{status === 'FAILED' && job.error ? <span className="mt-0.5 block text-xs font-semibold text-ks-rose">{String(job.error)}</span> : null}</Td>
+            <Td><Badge tone={status === 'COMPLETED' ? 'emerald' : status === 'FAILED' ? 'rose' : 'amber'}>{status === 'COMPLETED' ? 'READY' : status}</Badge></Td>
+            <Td>{String(job.requestedBy || '—')}</Td>
+            <Td>{formatLabel(String(job.format ?? 'PDF'))}</Td>
+            <Td>{String(job.created ?? job.createdAt ?? '').slice(0, 16).replace('T', ' ')}</Td>
+            <Td>
+              <div className="flex items-center gap-3">
+                <NavLink className="font-black text-ks-blue" to={`/reports/jobs/${String(job.id)}`}>Open</NavLink>
+                <DownloadJobButton job={jobRow} className="rounded-lg px-2.5 py-1 text-xs" />
+              </div>
+            </Td>
           </tr>
         );
       })}
@@ -105,7 +110,7 @@ export function ReportJobDetailPage() {
           <p className="text-[11px] font-black uppercase tracking-widest text-ks-muted">Report job</p>
           <h2 className="mt-3 font-display text-3xl font-black text-ks-navy">{String(job.name ?? 'Report')}</h2>
           <div className="mt-6 grid gap-3 md:grid-cols-2">
-            {([['Status', String(job.status ?? '—')], ['Requested By', String(job.requestedBy ?? '—')], ['Scope', String(job.scope ?? '—')], ['Format', String(job.format ?? 'PDF')], ['Created', String(job.created ?? '').slice(0, 16).replace('T', ' ')]] as Array<[string, string]>).map(([label, value]) => (
+            {([['Status', String(job.status ?? '—') === 'COMPLETED' ? 'READY' : String(job.status ?? '—')], ['Requested By', String(job.requestedBy || '—')], ['Scope', String(job.scope || '—')], ['Format', formatLabel(String(job.format ?? 'PDF'))], ['Created', String(job.created ?? '').slice(0, 16).replace('T', ' ')], ['Problem', String(job.error ?? 'None')]] as Array<[string, string]>).map(([label, value]) => (
               <div key={label} className="rounded-xl border border-ks-line bg-ks-paper p-4">
                 <p className="text-[10px] font-black uppercase tracking-widest text-ks-muted">{label}</p>
                 <p className="mt-1 font-black text-ks-navy">{value}</p>
@@ -944,24 +949,20 @@ const FINANCE_REPORT_TYPE_MAP: Record<string, string> = {
 };
 
 export function FinanceReportPage({ type, scopeId }: { type: string; scopeId?: string }) {
-  const generateReport = useGenerateReportMutation();
-  const [downloading, setDownloading] = useState(false);
-  const reportType = scopeId ? 'STUDENT_PROFILE' : FINANCE_REPORT_TYPE_MAP[type] ?? 'FINANCE_COLLECTION';
+  const [busy, setBusy] = useState<ReportFormat | null>(null);
+  const reportType = FINANCE_REPORT_TYPE_MAP[type] ?? 'FINANCE_COLLECTION';
+  const filename = type.replace(/\s+/g, '_');
 
-  const handleDownload = async () => {
-    setDownloading(true);
+  const run = async (format: ReportFormat) => {
+    setBusy(format);
     try {
-      const result = (await generateReport.mutateAsync({
-        reportType,
-        scope: scopeId ? 'student' : 'school',
-        scopeId,
-      })) as Record<string, unknown>;
-      await downloadReportWhenReady(String(result.reportId), `${type.replace(/\s+/g, '_')}.pdf`);
+      if (scopeId) await downloadStudentStatement(scopeId);
+      else await exportReport({ reportType, scope: 'school', format }, filename);
       toast('Report downloaded', 'success');
-    } catch {
-      toast('Report generation failed. Please try again.', 'error');
+    } catch (error) {
+      toast(errorMessage(error, 'Report generation failed. Please try again.'), 'error');
     } finally {
-      setDownloading(false);
+      setBusy(null);
     }
   };
 
@@ -969,14 +970,18 @@ export function FinanceReportPage({ type, scopeId }: { type: string; scopeId?: s
     <OperationsShell title={type} eyebrow="Finance report">
       <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="rounded-2xl border border-ks-line bg-white p-8">
-          <p className="text-[11px] font-black uppercase tracking-widest text-ks-muted">Official branded PDF</p>
+          <p className="text-[11px] font-black uppercase tracking-widest text-ks-muted">{scopeId ? 'Official branded PDF' : 'PDF, Excel or CSV'}</p>
           <h2 className="mt-3 font-display text-3xl font-black text-ks-navy">{type}</h2>
           <p className="mt-3 max-w-xl text-sm font-semibold leading-6 text-ks-muted">
-            Generates the latest {type.toLowerCase()} from live finance data and downloads it as a branded PDF. Generation is audited under your account.
+            Generates the latest {type.toLowerCase()} from live finance data{scopeId ? ' as a branded PDF' : ''}. Generation is audited under your account.
           </p>
-          <Button className="mt-6 rounded-xl" disabled={downloading} onClick={handleDownload}>
-            {downloading ? 'Generating…' : 'Generate & Download PDF'}
-          </Button>
+          <div className="mt-6 flex flex-wrap gap-2">
+            {(scopeId ? (['PDF'] as ReportFormat[]) : (['PDF', 'XLSX', 'CSV'] as ReportFormat[])).map((format) => (
+              <Button key={format} className="rounded-xl" variant={format === 'PDF' ? 'primary' : 'secondary'} disabled={busy !== null} onClick={() => run(format)}>
+                {busy === format ? 'Generating…' : `Download ${formatLabel(format)}`}
+              </Button>
+            ))}
+          </div>
         </div>
         <AnalyticsInsightPanel title="Audit Context" insight="Sensitive finance downloads are generated per-request and recorded against your user account in the report registry." />
       </div>

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../lib/api/client';
 import { arrayFromApi, dedupeById, payloadOf } from '../../../lib/api/response';
+import { downloadReport, waitForReport } from '../../../lib/reports/exportReport';
 
 // ─── Query key factory ────────────────────────────────────────────────────────
 
@@ -55,6 +56,12 @@ export function useReportCatalog() {
   });
 }
 
+const humanize = (value: unknown) =>
+  String(value ?? '')
+    .replace(/_/g, ' ')
+    .toLowerCase()
+    .replace(/\w/g, (c) => c.toUpperCase());
+
 export function useReportJobs() {
   return useQuery({
     queryKey: operationsKeys.reportJobs(),
@@ -67,11 +74,13 @@ export function useReportJobs() {
             id: String(j.id ?? crypto.randomUUID()),
             name: String(j.name ?? j.title ?? j.reportName ?? ''),
             status: String(j.status ?? j.jobStatus ?? ''),
-            requestedBy: String(j.requestedBy ?? j.createdBy ?? j.requestedByName ?? ''),
-            role: String(j.role ?? j.requestedByRole ?? ''),
-            scope: String(j.scope ?? j.reportScope ?? ''),
-            format: String(j.format ?? j.outputFormat ?? ''),
+            requestedBy: humanize(j.requestedBy ?? j.createdBy ?? j.requestedByName ?? j.requestedByRole ?? j.role),
+            role: humanize(j.role ?? j.requestedByRole),
+            scope: humanize(j.scope ?? j.reportScope),
+            format: String(j.format ?? j.outputFormat ?? 'PDF').toUpperCase(),
             created: String(j.created ?? j.createdAt ?? j.created_at ?? j.requestedAt ?? ''),
+            sizeBytes: typeof j.sizeBytes === 'number' ? j.sizeBytes : null,
+            error: j.error ? String(j.error) : null,
           };
         })),
       ),
@@ -507,57 +516,12 @@ export function useGenerateReportMutation() {
 }
 
 /**
- * Polls /analytics/reports/:id every 2 s until status is READY, then
- * fetches /analytics/reports/:id/download as a blob and triggers a browser
- * download — no navigation required. Rejects on FAILED or after 60 s.
+ * Waits for a report to be ready, then downloads it as a file (no navigation). Rejects with the
+ * server's reason when generation fails, so callers can show it.
  */
 export async function downloadReportWhenReady(reportId: string, filename: string): Promise<void> {
-  const MAX_ATTEMPTS = 30; // 30 × 2 s = 60 s timeout
-  for (let i = 0; i < MAX_ATTEMPTS; i++) {
-    await new Promise<void>((r) => setTimeout(r, 2000));
-    const result = await api.get(`/analytics/reports/${reportId}`).then(payloadOf) as Record<string, unknown> | null;
-    const status = String(result?.status ?? '');
-    if (status === 'READY') {
-      const raw = await api
-        .get(`/analytics/reports/${reportId}/download`, { responseType: 'blob' })
-        .then((r) => r.data as Blob);
-
-      // The backend ResponseInterceptor may wrap the PDF bytes inside a JSON
-      // string, producing Content-Type: application/json with body `"<PDF bytes>"`.
-      // Detect this by finding the %PDF magic header and slicing from there.
-      let blob = raw;
-      if (!raw.type.startsWith('application/pdf')) {
-        const buf = await raw.arrayBuffer();
-        const view = new Uint8Array(buf);
-        // Find the %PDF magic bytes (0x25 0x50 0x44 0x46)
-        let pdfStart = -1;
-        for (let j = 0; j < Math.min(view.length, 8); j++) {
-          if (view[j] === 0x25 && view[j + 1] === 0x50 && view[j + 2] === 0x44 && view[j + 3] === 0x46) {
-            pdfStart = j;
-            break;
-          }
-        }
-        if (pdfStart >= 0) {
-          // Also strip a trailing JSON closing quote if present
-          let pdfEnd = buf.byteLength;
-          if (view[pdfEnd - 1] === 0x22) pdfEnd -= 1;
-          blob = new Blob([buf.slice(pdfStart, pdfEnd)], { type: 'application/pdf' });
-        }
-      }
-
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url), 30_000);
-      return;
-    }
-    if (status === 'FAILED') throw new Error('generation-failed');
-  }
-  throw new Error('timeout');
+  const report = await waitForReport(reportId);
+  await downloadReport(reportId, filename, report);
 }
 
 export function useDeleteTimetableMutation() {

@@ -46,7 +46,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate, NavLink, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { PaymentApprovalQueue } from '../../principal/components/PaymentApprovalQueue';
 import { usePendingApprovalsPage } from '../../principal/api/principal.hooks';
-import { downloadReportWhenReady, useGenerateReportMutation } from '../../operations/api/operations.hooks';
+import { downloadStudentStatement } from '../../../lib/reports/exportReport';
 import { toast } from '../../../lib/toast';
 import { Badge } from '../../../components/common/Badge';
 import { Button } from '../../../components/common/Button';
@@ -100,7 +100,6 @@ import {
   useGenerateInvoicesMutation,
   useInvoiceJob,
   useStudentInvoices,
-  useStudentStatement,
   useCashPaymentMutation,
   useBankTransferMutation,
   useAddPaymentNoteMutation,
@@ -1153,9 +1152,8 @@ export function StudentLedgerPage() {
   const { data: studentInvoices = [] as typeof invoices, isLoading } = useStudentInvoices(studentId ?? '') as unknown as { data: typeof invoices; isLoading: boolean };
   const { data: paymentLedger } = usePaymentLedger({ page: 1, limit: 100, studentId: studentId ?? '' }, { enabled: Boolean(studentId) });
   const { data: receiptLedger } = useReceiptLedger({ page: 1, limit: 100, studentId: studentId ?? '' }, { enabled: Boolean(studentId) });
-  const { data: statementData } = useStudentStatement(studentId ?? '') as unknown as { data?: { url?: string } };
   const navigate = useNavigate();
-  const generateStatement = useGenerateReportMutation();
+  const [statementBusy, setStatementBusy] = useState(false);
 
   type LedgerTab = 'invoices' | 'payments' | 'receipts';
   const [activeTab, setActiveTab] = useState<LedgerTab>('invoices');
@@ -1182,20 +1180,16 @@ export function StudentLedgerPage() {
     });
   };
 
-  const handleDownloadStatement = () => {
-    if (statementData?.url) {
-      window.open(statementData.url, '_blank');
-    } else {
-      generateStatement.mutate(
-        { reportType: 'STUDENT_STATEMENT', params: { studentId: studentId ?? '' } },
-        {
-          onSuccess: (job) => {
-            const reportId = typeof job === 'string' ? job : String((job as Record<string, unknown>)?.id ?? (job as Record<string, unknown>)?.jobId ?? '');
-            if (reportId) void downloadReportWhenReady(reportId, `student-statement-${studentId ?? 'student'}.pdf`);
-          },
-          onError: (e) => toast(errorMessage(e, 'Failed to generate statement'), 'error'),
-        },
-      );
+  const handleDownloadStatement = async () => {
+    if (!studentId) return;
+    setStatementBusy(true);
+    try {
+      await downloadStudentStatement(studentId);
+      toast('Statement downloaded', 'success');
+    } catch (error) {
+      toast(errorMessage(error, 'Failed to generate statement'), 'error');
+    } finally {
+      setStatementBusy(false);
     }
   };
 
@@ -1267,10 +1261,10 @@ export function StudentLedgerPage() {
           <Button
             className="rounded bg-[#00334f] text-white hover:bg-[#001e30] hover:shadow-none"
             onClick={handleDownloadStatement}
-            disabled={generateStatement.isPending}
+            disabled={statementBusy}
           >
             <Download className="h-4 w-4" />
-            {generateStatement.isPending ? 'Generating…' : 'Download Statement'}
+            {statementBusy ? 'Generating…' : 'Download Statement'}
           </Button>
         </div>
       </div>

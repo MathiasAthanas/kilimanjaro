@@ -2,10 +2,16 @@ import { AlertTriangle, ArrowRight, CheckCircle2, Download, FileText, Grid3X3, P
 import { AnimatePresence, motion } from 'framer-motion';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useSearchParams } from 'react-router-dom';
+import { toast } from '../../../lib/toast';
+import { errorMessage } from '../../../lib/api/errors';
+import { formatClassLabel } from '../../../lib/classLabel';
+import { downloadReport, exportReport, formatLabel, type ReportFormat } from '../../../lib/reports/exportReport';
+import { useTerms } from '../../admin/api/admin.hooks';
+import { useOperationsClasses, useReportCatalog } from '../api/operations.hooks';
 import { Badge } from '../../../components/common/Badge';
 import { Button } from '../../../components/common/Button';
-import { exportReasonIsValid, markIsValid, reportBuilderIsValid, timetableHasConflict } from '../utils/operationsValidation';
+import { exportReasonIsValid, markIsValid, timetableHasConflict } from '../utils/operationsValidation';
 
 export function OperationsShell({ title, eyebrow, children }: { title: string; eyebrow: string; children: ReactNode }) {
   return (
@@ -43,16 +49,45 @@ export function Td({ children, className = '' }: { children: ReactNode; classNam
   return <td className={`px-5 py-3.5 font-semibold text-ks-slate ${className}`}>{children}</td>;
 }
 
-export function ExportCenterDrawer({ jobs }: { jobs: Array<{ id: string; name: string; status: string; format: string; requestedBy: string; expiry: string }> }) {
+export type ExportJob = { id: string; name: string; status: string; format: string; requestedBy?: string; created?: string; sizeBytes?: number | null; error?: string | null };
+
+const sizeLabel = (bytes?: number | null) => (bytes ? (bytes > 1_000_000 ? `${(bytes / 1_000_000).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1000))} KB`) : '');
+
+export function DownloadJobButton({ job, className = 'rounded-lg py-1.5 text-xs' }: { job: ExportJob; className?: string }) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <Button
+      disabled={job.status !== 'COMPLETED' || busy}
+      variant="secondary"
+      className={className}
+      onClick={async () => {
+        setBusy(true);
+        try {
+          await downloadReport(job.id);
+        } catch (error) {
+          toast(errorMessage(error, 'The file could not be downloaded.'), 'error');
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      <Download className="h-3.5 w-3.5" /> {busy ? 'Preparing…' : 'Download'}
+    </Button>
+  );
+}
+
+export function ExportCenterDrawer({ jobs }: { jobs: ExportJob[] }) {
   return (
     <div className="rounded-2xl border border-ks-line bg-white p-5 shadow-sm">
       <h2 className="font-display text-xl font-black text-ks-navy">Export Center</h2>
       <div className="mt-4 space-y-3">
-        {jobs.map((job) => (
+        {jobs.length === 0 && <p className="text-sm font-semibold text-ks-muted">No reports yet. Generate one from the Report Builder.</p>}
+        {jobs.slice(0, 12).map((job) => (
           <div key={job.id} className="rounded-xl border border-ks-line bg-ks-paper p-4">
-            <div className="flex items-center justify-between gap-3"><p className="font-black text-ks-navy">{job.name}</p><Badge tone={job.status === 'COMPLETED' ? 'emerald' : job.status === 'FAILED' ? 'rose' : 'amber'}>{job.status}</Badge></div>
-            <p className="mt-1 text-xs font-bold text-ks-muted">{job.format} / {job.requestedBy} / expires {job.expiry}</p>
-            <Button disabled={job.status !== 'COMPLETED'} variant="secondary" className="mt-3 rounded-lg py-1.5 text-xs"><Download className="h-3.5 w-3.5" /> Download</Button>
+            <div className="flex items-center justify-between gap-3"><p className="font-black text-ks-navy">{job.name}</p><Badge tone={job.status === 'COMPLETED' ? 'emerald' : job.status === 'FAILED' ? 'rose' : 'amber'}>{job.status === 'COMPLETED' ? 'READY' : job.status}</Badge></div>
+            <p className="mt-1 text-xs font-bold text-ks-muted">{[formatLabel(job.format), job.requestedBy, job.created ? job.created.slice(0, 16).replace('T', ' ') : '', sizeLabel(job.sizeBytes)].filter(Boolean).join(' / ')}</p>
+            {job.status === 'FAILED' && job.error && <p className="mt-1 text-xs font-semibold text-ks-rose">{job.error}</p>}
+            <DownloadJobButton job={job} className="mt-3 rounded-lg py-1.5 text-xs" />
           </div>
         ))}
       </div>
@@ -60,26 +95,91 @@ export function ExportCenterDrawer({ jobs }: { jobs: Array<{ id: string; name: s
   );
 }
 
+type CatalogEntry = { id: string; title: string; domain: string; description?: string; needs?: string; formats?: string[] };
+
 export function ReportBuilderCanvas() {
-  const [domain, setDomain] = useState('academic');
+  const [params] = useSearchParams();
+  const { data: rawCatalog = [] } = useReportCatalog() as { data: Array<Record<string, unknown>> };
+  const { data: classes = [] } = useOperationsClasses() as { data: Array<{ id: string; name: string; stream?: unknown }> };
+  const { data: terms = [] } = useTerms() as { data: Array<Record<string, unknown>> };
+  const catalog = rawCatalog as unknown as CatalogEntry[];
+  const [typeId, setTypeId] = useState(params.get('type') ?? '');
+  const [format, setFormat] = useState<ReportFormat>('PDF');
+  const [classId, setClassId] = useState('');
+  const [termId, setTermId] = useState('');
   const [reason, setReason] = useState('Board review packet');
-  const valid = reportBuilderIsValid({ domain, type: 'overview', scope: 'school', format: 'PDF' }) && exportReasonIsValid(reason);
+  const [busy, setBusy] = useState(false);
+
+  const report = catalog.find((item) => item.id === typeId) ?? catalog[0];
+  const formats = (report?.formats?.length ? report.formats : ['PDF']) as ReportFormat[];
+  const activeFormat = formats.includes(format) ? format : formats[0];
+  const needs = report?.needs ?? 'school';
+  const supported = needs === 'school' || needs === 'class';
+  const missing = needs === 'class' && !classId ? 'Choose the class first.' : !exportReasonIsValid(reason) ? 'Say why you need this report (a few words are enough).' : '';
+  const where = needs === 'teacher' ? 'the teacher page in Department or Academics' : 'the learner page (or Report Cards for report cards)';
+
+  const generate = async () => {
+    if (!report) return;
+    setBusy(true);
+    try {
+      const name = await exportReport({ reportType: report.id, scope: needs, scopeId: needs === 'class' ? classId : undefined, termId: termId || undefined, format: activeFormat });
+      toast(`${name} downloaded`, 'success');
+    } catch (error) {
+      toast(errorMessage(error, 'The report could not be generated.'), 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const selectClass = 'mt-1 block w-full rounded-xl border border-ks-line bg-white p-3 text-sm font-semibold normal-case tracking-normal text-ks-navy';
   return (
     <div className="grid gap-gutter xl:grid-cols-[300px_minmax(0,1fr)_320px]">
       <div className="rounded-2xl border border-ks-line bg-white p-5">
-        <h2 className="font-display text-xl font-black text-ks-navy">Configuration</h2>
-        {['academic', 'finance', 'attendance', 'enrolment', 'notification', 'audit'].map((item) => (
-          <button key={item} onClick={() => setDomain(item)} className={`mt-2 block w-full rounded-xl border px-4 py-3 text-left text-sm font-black ${domain === item ? 'border-ks-blue bg-ks-blue text-white' : 'border-ks-line bg-ks-paper text-ks-navy'}`}>{item}</button>
+        <h2 className="font-display text-xl font-black text-ks-navy">Reports</h2>
+        {catalog.map((item) => (
+          <button key={item.id} onClick={() => setTypeId(item.id)} className={`mt-2 block w-full rounded-xl border px-4 py-3 text-left text-sm font-black ${report?.id === item.id ? 'border-ks-blue bg-ks-blue text-white' : 'border-ks-line bg-ks-paper text-ks-navy'}`}>
+            {item.title}
+            <span className={`block text-[10px] font-bold uppercase tracking-widest ${report?.id === item.id ? 'text-white/80' : 'text-ks-muted'}`}>{item.domain}</span>
+          </button>
         ))}
       </div>
       <div className="rounded-2xl border border-ks-line bg-white p-6">
-        <p className="text-[11px] font-black uppercase tracking-widest text-ks-muted">Preview canvas</p>
-        <h2 className="mt-2 font-display text-3xl font-black text-ks-navy">{domain} overview report</h2>
-        <div className="mt-6 grid gap-3 md:grid-cols-3">{['Scope', 'Columns', 'Grouping'].map((item) => <div key={item} className="rounded-xl border border-ks-line bg-ks-paper p-4"><p className="font-black text-ks-navy">{item}</p><p className="text-sm font-semibold text-ks-muted">Configured</p></div>)}</div>
-        <textarea value={reason} onChange={(event) => setReason(event.target.value)} className="mt-5 h-24 w-full rounded-xl border border-ks-line p-3 font-semibold outline-none focus:border-ks-blue" />
-        <Button disabled={!valid} className="mt-4 rounded-xl"><Send className="h-4 w-4" /> Generate Report</Button>
+        <p className="text-[11px] font-black uppercase tracking-widest text-ks-muted">{report?.domain ?? 'report'}</p>
+        <h2 className="mt-2 font-display text-3xl font-black text-ks-navy">{report?.title ?? 'Choose a report'}</h2>
+        <p className="mt-2 text-sm font-semibold text-ks-muted">{report?.description}</p>
+        {supported ? (
+          <div className="mt-6 grid gap-4 md:grid-cols-2">
+            <label className="text-xs font-black uppercase tracking-widest text-ks-muted">Format
+              <select value={activeFormat} onChange={(e) => setFormat(e.target.value as ReportFormat)} className={selectClass}>
+                {formats.map((item) => <option key={item} value={item}>{formatLabel(item)}</option>)}
+              </select>
+            </label>
+            <label className="text-xs font-black uppercase tracking-widest text-ks-muted">Term
+              <select value={termId} onChange={(e) => setTermId(e.target.value)} className={selectClass}>
+                <option value="">Current term</option>
+                {terms.map((term) => <option key={String(term.id)} value={String(term.id)}>{String(term.name ?? term.id)}</option>)}
+              </select>
+            </label>
+            {needs === 'class' && (
+              <label className="text-xs font-black uppercase tracking-widest text-ks-muted md:col-span-2">Class
+                <select value={classId} onChange={(e) => setClassId(e.target.value)} className={selectClass}>
+                  <option value="">Choose a class…</option>
+                  {classes.map((item) => <option key={item.id} value={item.id}>{formatClassLabel(item.name, item.stream ? String(item.stream) : null)}</option>)}
+                </select>
+              </label>
+            )}
+            <label className="text-xs font-black uppercase tracking-widest text-ks-muted md:col-span-2">Reason (kept in the audit trail)
+              <textarea value={reason} onChange={(event) => setReason(event.target.value)} className="mt-1 h-20 w-full rounded-xl border border-ks-line p-3 text-sm font-semibold normal-case tracking-normal outline-none focus:border-ks-blue" />
+            </label>
+            <div className="md:col-span-2">
+              <Button disabled={busy || !!missing} className="rounded-xl" onClick={generate}><Send className="h-4 w-4" /> {busy ? 'Generating…' : `Generate ${formatLabel(activeFormat)}`}</Button>
+            </div>
+          </div>
+        ) : (
+          <p className="mt-6 rounded-xl border border-ks-line bg-ks-paper p-4 text-sm font-semibold text-ks-muted">This report is about one {needs}. Open it from {where}.</p>
+        )}
       </div>
-      <AnalyticsInsightPanel title="Validation" insight={valid ? 'Report can be generated. Sensitive export reason is captured.' : 'Complete scope, format, and audit reason before generating.'} />
+      <AnalyticsInsightPanel title="Validation" insight={!supported ? 'Open this report from the record it is about.' : missing || 'Report can be generated. The file downloads when it is ready.'} />
     </div>
   );
 }

@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { BarChart3, Download } from 'lucide-react';
+import { BarChart3 } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 import { toast } from '../../../lib/toast';
+import { errorMessage } from '../../../lib/api/errors';
+import { exportReport, formatLabel, type ReportFormat } from '../../../lib/reports/exportReport';
 import { AdminShell, AdminMetricStrip } from '../../admin/components/AdminConsole';
 import { Badge } from '../../../components/common/Badge';
 import { Button } from '../../../components/common/Button';
@@ -11,9 +13,6 @@ import {
   useSchoolOverview,
   useBoardDashboard,
   useAtRiskStudents,
-  useReportsList,
-  useGenerateReportMutation,
-  useReportDetail,
   useFinanceAnalyticsOverview,
   useAcademicOverview,
 } from '../api/analytics.hooks';
@@ -138,10 +137,9 @@ function AtRiskTable({ students }: { students: any[] }) {
 
 // ─── Report launcher ──────────────────────────────────────────────────────────
 
+// Reports about the whole school. Class, teacher and student reports are opened from the record they describe.
 const REPORT_TYPES = [
   { type: 'SCHOOL_OVERVIEW', label: 'School Overview', tone: 'blue' },
-  { type: 'CLASS_ACADEMIC', label: 'Class Academic', tone: 'emerald' },
-  { type: 'TEACHER_PERFORMANCE', label: 'Teacher Performance', tone: 'amber' },
   { type: 'FINANCE_COLLECTION', label: 'Finance Collection', tone: 'gold' },
   { type: 'OUTSTANDING_BALANCES', label: 'Outstanding Balances', tone: 'rose' },
   { type: 'ATTENDANCE_SUMMARY', label: 'Attendance Summary', tone: 'slate' },
@@ -150,51 +148,36 @@ const REPORT_TYPES = [
 ] as const;
 
 function ReportLauncher({ yearId, termId }: { yearId: string; termId: string }) {
-  const [activeId, setActiveId] = useState('');
-  useReportDetail(activeId);
-  const gen = useGenerateReportMutation();
-  const { data: reports = [] } = useReportsList();
+  const [busy, setBusy] = useState<string | null>(null);
 
-  const launch = async (reportType: string) => {
+  const launch = async (reportType: string, label: string, format: ReportFormat) => {
+    setBusy(`${reportType}:${format}`);
     try {
-      const result: any = await gen.mutateAsync({ reportType, academicYearId: yearId || undefined, termId: termId || undefined, scope: 'school' });
-      const id = result?.id || result?.data?.id;
-      if (id) setActiveId(id);
-    } catch { toast('Failed to generate report', 'error'); }
-  };
-
-  const handleDownload = async (id: string) => {
-    try {
-      const a = document.createElement('a');
-      a.href = `/api/analytics/reports/${id}/download`;
-      a.download = `report-${id}.pdf`;
-      a.click();
-    } catch { toast('Download failed', 'error'); }
+      const name = await exportReport({ reportType, academicYearId: yearId || undefined, termId: termId || undefined, scope: 'school', format }, label.replace(/\s+/g, '_'));
+      toast(`${name} downloaded`, 'success');
+    } catch (error) {
+      toast(errorMessage(error, 'Failed to generate report'), 'error');
+    } finally {
+      setBusy(null);
+    }
   };
 
   return (
     <div className="rounded-2xl border border-ks-line bg-white p-6 shadow-sm">
       <h3 className="mb-4 font-display text-lg font-black text-ks-navy">Generate Reports</h3>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {REPORT_TYPES.map(({ type, label, tone }) => {
-          const existing = (reports as any[]).find((r: any) => r.reportType === type);
-          const isReady = existing?.status === 'READY';
-          const isGenerating = existing?.status === 'GENERATING' || (gen.isPending && gen.variables?.reportType === type);
-          return (
-            <div key={type} className="rounded-xl border border-ks-line p-4 space-y-2">
-              <Badge tone={tone as any}>{label}</Badge>
-              {isReady ? (
-                <Button variant="success" className="w-full" onClick={() => handleDownload(existing.id)}>
-                  <Download className="h-3.5 w-3.5" /> Download PDF
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {REPORT_TYPES.map(({ type, label, tone }) => (
+          <div key={type} className="rounded-xl border border-ks-line p-4 space-y-2">
+            <Badge tone={tone as any}>{label}</Badge>
+            <div className="flex gap-2">
+              {(['PDF', 'XLSX', 'CSV'] as ReportFormat[]).map((format) => (
+                <Button key={format} variant="secondary" className="flex-1" loading={busy === `${type}:${format}`} disabled={busy !== null} onClick={() => launch(type, label, format)}>
+                  {busy === `${type}:${format}` ? '…' : formatLabel(format)}
                 </Button>
-              ) : (
-                <Button variant="secondary" className="w-full" loading={isGenerating} onClick={() => launch(type)}>
-                  {isGenerating ? 'Generating…' : 'Generate'}
-                </Button>
-              )}
+              ))}
             </div>
-          );
-        })}
+          </div>
+        ))}
       </div>
     </div>
   );

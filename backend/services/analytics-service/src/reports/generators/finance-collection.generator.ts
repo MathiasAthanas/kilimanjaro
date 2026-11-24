@@ -1,102 +1,130 @@
 import { Injectable } from '@nestjs/common';
-import { createPdf } from './pdf.helper';
+import { createReport } from './pdf.helper';
 import { formatClassLabel } from '../../common/helpers/class-label.helper';
+import { num, pct, tzs } from './report.format';
 
 @Injectable()
 export class FinanceCollectionGenerator {
   async generate(filePath: string, data: any) {
-    const money = (v: any) => `TZS ${Number(v?.toString?.() ?? v ?? 0).toLocaleString('en-US')}`;
-    const rate = Number(data.billing?.collectionRate ?? 0);
-    const overdueAmount = Number(data.overdueAnalysis?.overdueAmount?.toString?.() ?? 0);
+    const rate = num(data.billing?.collectionRate);
+    const overdueAmount = num(data.overdueAnalysis?.overdueAmount);
+    const defaulters: any[] = data.topDefaulters || [];
     const financeActions = [
       rate < 80
-        ? `Collection is below the 80% management threshold at ${rate.toFixed(2)}%; prioritize classes and categories with the largest gap.`
-        : `Collection rate is ${rate.toFixed(2)}%, which is within the expected operating range.`,
+        ? `Collection is below the 80% management threshold at ${pct(rate)}; prioritize classes and categories with the largest gap.`
+        : `Collection rate is ${pct(rate)}, which is within the expected operating range.`,
       overdueAmount > 0
-        ? `${money(overdueAmount)} is overdue; assign daily follow-up owners and review payment plans for top balances.`
+        ? `${tzs(overdueAmount)} is overdue; assign daily follow-up owners and review payment plans for top balances.`
         : 'No overdue balance is currently recorded for the selected period.',
-      (data.topDefaulters || []).length
-        ? `${(data.topDefaulters || []).length} high-risk defaulter records are listed for executive follow-up.`
+      defaulters.length
+        ? `${defaulters.length} high-risk defaulter records are listed for executive follow-up.`
         : 'No defaulter records were returned for this period.',
     ];
 
-    const categoryBullets = (data.byFeeCategory || [])
-      .slice(0, 10)
-      .map(
-        (row: any) =>
-          `${row.categoryName}: billed ${money(row.totalBilled)}, collected ${money(row.totalCollected)}, outstanding ${money(row.outstandingAmount)}, collection ${Number(row.collectionRate || 0).toFixed(2)}%.`,
-      );
-    const classBullets = (data.byClass || [])
-      .slice(0, 10)
-      .map((row: any) => `${formatClassLabel(row.className, row.stream)}: ${Number(row.collectionRate || 0).toFixed(2)}% collected, ${money(row.totalCollected)} received, ${row.overdueCount || 0} overdue invoices.`);
-    const trendBullets = (data.collectionTrend || [])
-      .slice(-6)
-      .map((row: any) => `${row.period}: ${Number(row.rate || 0).toFixed(2)}% collection (${money(row.collected)} collected against ${money(row.billed)} billed).`);
-    const methodBullets = (data.byPaymentMethod || [])
-      .slice(0, 8)
-      .map((row: any) => `${String(row.method || 'Unknown').replaceAll('_', ' ')}: ${money(row.totalAmount)} across ${row.transactionCount || 0} transactions; average ${money(row.averageTransactionAmount)}.`);
-    const dailyBullets = (data.dailyCollectionThisMonth || [])
-      .slice(-10)
-      .map((row: any) => `${row.date}: ${money(row.amount)} from ${row.transactionCount || 0} transactions.`);
-
-    await createPdf(filePath, 'Finance Collection Report', [
+    await createReport(filePath, 'Finance Collection Report', [
       {
         heading: 'Executive Finance Interpretation',
         rows: [
-          ['Collection Rate', data.billing?.collectionRate ?? 0],
-          ['Outstanding Exposure', data.billing?.totalOutstanding?.toString?.() ?? 0],
-          ['Overdue Amount', data.overdueAnalysis?.overdueAmount?.toString?.() ?? 0],
-          ['Confirmed Payment Channels', (data.byPaymentMethod || []).length],
+          ['Collection Rate', data.billing?.collectionRate ?? 0, 'percent'],
+          ['Outstanding Exposure', data.billing?.totalOutstanding?.toString?.() ?? 0, 'money'],
+          ['Overdue Amount', data.overdueAnalysis?.overdueAmount?.toString?.() ?? 0, 'money'],
+          ['Confirmed Payment Channels', (data.byPaymentMethod || []).length, 'int'],
         ],
         bullets: financeActions,
       },
       {
         heading: 'Billing',
         rows: [
-          ['Total Invoiced', data.billing?.totalInvoiced?.toString?.() ?? 0],
-          ['Total Collected', data.billing?.totalCollected?.toString?.() ?? 0],
-          ['Total Outstanding', data.billing?.totalOutstanding?.toString?.() ?? 0],
-          ['Collection Rate', data.billing?.collectionRate ?? 0],
-          ['Waived Amount', data.billing?.waivedAmount?.toString?.() ?? 0],
-          ['Discounted Amount', data.billing?.discountedAmount?.toString?.() ?? 0],
+          ['Total Invoiced', data.billing?.totalInvoiced?.toString?.() ?? 0, 'money'],
+          ['Total Collected', data.billing?.totalCollected?.toString?.() ?? 0, 'money'],
+          ['Total Outstanding', data.billing?.totalOutstanding?.toString?.() ?? 0, 'money'],
+          ['Collection Rate', data.billing?.collectionRate ?? 0, 'percent'],
+          ['Waived Amount', data.billing?.waivedAmount?.toString?.() ?? 0, 'money'],
+          ['Discounted Amount', data.billing?.discountedAmount?.toString?.() ?? 0, 'money'],
         ],
       },
       {
         heading: 'Overdue',
         rows: [
-          ['Overdue Count', data.overdueAnalysis?.overdueCount ?? 0],
-          ['Overdue Amount', data.overdueAnalysis?.overdueAmount?.toString?.() ?? 0],
+          ['Overdue Count', data.overdueAnalysis?.overdueCount ?? 0, 'int'],
+          ['Overdue Amount', data.overdueAnalysis?.overdueAmount?.toString?.() ?? 0, 'money'],
         ],
-        bullets: (data.overdueAnalysis?.byDaysOverdue || []).map((row: any) => `${row.bucket}: ${row.count || 0} invoices (${row.amount?.toString?.() ?? 0})`),
+        tables: [
+          {
+            title: 'Overdue by age',
+            columns: [{ header: 'Age' }, { header: 'Invoices', kind: 'int' }, { header: 'Amount', kind: 'money' }],
+            rows: (data.overdueAnalysis?.byDaysOverdue || []).map((row: any) => [row.bucket, num(row.count), num(row.amount)]),
+          },
+        ],
       },
       {
         heading: 'Collections Breakdown',
         rows: [
-          ['Fee Categories Included', (data.byFeeCategory || []).length],
-          ['Classes Included', (data.byClass || []).length],
-          ['Payment Methods Used', (data.byPaymentMethod || []).length],
+          ['Fee Categories Included', (data.byFeeCategory || []).length, 'int'],
+          ['Classes Included', (data.byClass || []).length, 'int'],
+          ['Payment Methods Used', (data.byPaymentMethod || []).length, 'int'],
         ],
-        bullets: [...categoryBullets, ...classBullets],
+        tables: [
+          {
+            title: 'By fee category',
+            columns: [
+              { header: 'Fee category', weight: 2.4 },
+              { header: 'Billed', kind: 'money' },
+              { header: 'Collected', kind: 'money' },
+              { header: 'Outstanding', kind: 'money' },
+              { header: 'Collected %', kind: 'percent', weight: 0.8 },
+            ],
+            rows: (data.byFeeCategory || []).map((row: any) => [row.categoryName, num(row.totalBilled), num(row.totalCollected), num(row.outstandingAmount), num(row.collectionRate)]),
+          },
+          {
+            title: 'By class',
+            columns: [
+              { header: 'Class', weight: 1.8 },
+              { header: 'Billed', kind: 'money' },
+              { header: 'Collected', kind: 'money' },
+              { header: 'Collected %', kind: 'percent', weight: 0.8 },
+              { header: 'Overdue', kind: 'int', weight: 0.7 },
+            ],
+            rows: (data.byClass || []).map((row: any) => [formatClassLabel(row.className, row.stream), num(row.totalBilled), num(row.totalCollected), num(row.collectionRate), num(row.overdueCount)]),
+          },
+        ],
       },
       {
         heading: 'Payment Channels & Daily Cashflow',
         rows: [
-          ['Payment Methods Used', (data.byPaymentMethod || []).length],
-          ['Collection Days This Month', (data.dailyCollectionThisMonth || []).length],
+          ['Payment Methods Used', (data.byPaymentMethod || []).length, 'int'],
+          ['Collection Days This Month', (data.dailyCollectionThisMonth || []).length, 'int'],
         ],
-        bullets: [...methodBullets, ...dailyBullets],
+        tables: [
+          {
+            title: 'By payment method',
+            columns: [{ header: 'Method' }, { header: 'Transactions', kind: 'int' }, { header: 'Amount', kind: 'money' }, { header: 'Average', kind: 'money' }],
+            rows: (data.byPaymentMethod || []).map((row: any) => [String(row.method || 'Unknown').replaceAll('_', ' '), num(row.transactionCount), num(row.totalAmount), num(row.averageTransactionAmount)]),
+          },
+          {
+            title: 'Daily collections this month',
+            columns: [{ header: 'Date' }, { header: 'Transactions', kind: 'int' }, { header: 'Amount', kind: 'money' }],
+            rows: (data.dailyCollectionThisMonth || []).map((row: any) => [row.date, num(row.transactionCount), num(row.amount)]),
+          },
+        ],
       },
       {
         heading: 'Trend & Defaulters',
         rows: [
-          ['Collection Period Points', (data.collectionTrend || []).length],
-          ['Top Defaulters Listed', (data.topDefaulters || []).length],
+          ['Collection Period Points', (data.collectionTrend || []).length, 'int'],
+          ['Top Defaulters Listed', defaulters.length, 'int'],
         ],
-        bullets: [
-          ...trendBullets,
-          ...(data.topDefaulters || [])
-            .slice(0, 10)
-            .map((row: any) => `${row.studentName} (${row.className}) outstanding ${money(row.outstandingBalance)}, overdue ${row.daysOverdue || 0} days.`),
+        tables: [
+          {
+            title: 'Collection by term',
+            columns: [{ header: 'Term' }, { header: 'Billed', kind: 'money' }, { header: 'Collected', kind: 'money' }, { header: 'Collected %', kind: 'percent', weight: 0.8 }],
+            rows: (data.collectionTrend || []).map((row: any) => [row.period, num(row.billed), num(row.collected), num(row.rate)]),
+          },
+          {
+            title: 'Top defaulters',
+            columns: [{ header: 'Learner', weight: 2.2 }, { header: 'Class', weight: 1.4 }, { header: 'Outstanding', kind: 'money' }, { header: 'Days overdue', kind: 'int', weight: 0.8 }],
+            rows: defaulters.map((row) => [row.studentName, row.className, num(row.outstandingBalance), num(row.daysOverdue)]),
+          },
         ],
       },
     ]);

@@ -1,84 +1,107 @@
 import { Injectable } from '@nestjs/common';
-import { createPdf } from './pdf.helper';
+import { createReport } from './pdf.helper';
 import { formatClassLabel } from '../../common/helpers/class-label.helper';
+import { num, pct } from './report.format';
 
 @Injectable()
 export class AttendanceSummaryGenerator {
   async generate(filePath: string, data: any) {
-    const rate = Number(data.schoolAttendanceRate ?? 0);
-    const classBullets = (data.byClass || [])
-      .slice(0, 15)
-      .map(
-        (row: any) =>
-          `${formatClassLabel(row.className, row.stream)}: ${Number(row.attendanceRate || 0).toFixed(2)}% attendance, ${row.totalAbsent || 0} absences, ${row.studentsBelow80 || 0} learners below 80%.`,
-      );
-    const dayBullets = (data.byDay || [])
-      .filter((row: any) => Number(row.rate || 0) > 0)
-      .map((row: any) => `${row.dayOfWeek}: ${Number(row.rate || 0).toFixed(2)}% attendance.`);
-    const monthBullets = (data.byMonth || [])
-      .slice(-8)
-      .map((row: any) => `${row.month}: ${Number(row.rate || 0).toFixed(2)}% attendance.`);
+    const rate = num(data.schoolAttendanceRate);
+    const below80: any[] = data.studentsBelow80Percent || [];
+    const chronic: any[] = data.chronicAbsentees || [];
     const actions = [
       rate < 90
-        ? `School attendance is ${rate.toFixed(2)}%; require class-level intervention plans for any group below 90%.`
-        : `School attendance is healthy at ${rate.toFixed(2)}%.`,
-      (data.studentsBelow80Percent || []).length
-        ? `${(data.studentsBelow80Percent || []).length} learners are below 80%; schedule guardian contact and daily monitoring.`
+        ? `School attendance is ${pct(rate)}; require class-level intervention plans for any group below 90%.`
+        : `School attendance is healthy at ${pct(rate)}.`,
+      below80.length
+        ? `${below80.length} learners are below 80%; schedule guardian contact and daily monitoring.`
         : 'No learners below 80% were returned for this reporting period.',
-      (data.chronicAbsentees || []).length
-        ? `${(data.chronicAbsentees || []).length} chronic absentee records require escalation.`
+      chronic.length
+        ? `${chronic.length} chronic absentee records require escalation.`
         : 'No chronic absentee list was returned for this reporting period.',
     ];
 
-    await createPdf(filePath, 'Attendance Summary Report', [
+    await createReport(filePath, 'Attendance Summary Report', [
       {
         heading: 'Attendance Management View',
         rows: [
-          ['School Attendance Rate', data.schoolAttendanceRate ?? 0],
-          ['Classes Tracked', (data.byClass || []).length],
-          ['Learners Below 80%', (data.studentsBelow80Percent || []).length],
-          ['Chronic Absentees', (data.chronicAbsentees || []).length],
+          ['School Attendance Rate', data.schoolAttendanceRate ?? 0, 'percent'],
+          ['Classes Tracked', (data.byClass || []).length, 'int'],
+          ['Learners Below 80%', below80.length, 'int'],
+          ['Chronic Absentees', chronic.length, 'int'],
         ],
         bullets: actions,
       },
       {
-        heading: 'Attendance',
-        rows: [
-          ['School Attendance Rate', data.schoolAttendanceRate ?? 0],
-          ['Students Below 80%', (data.studentsBelow80Percent || []).length],
-          ['Chronic Absentees', (data.chronicAbsentees || []).length],
+        heading: 'Attendance By Class',
+        rows: [],
+        tables: [
+          {
+            columns: [
+              { header: 'Class', weight: 1.8 },
+              { header: 'Attendance %', kind: 'percent' },
+              { header: 'Absences', kind: 'int' },
+              { header: 'Learners below 80%', kind: 'int' },
+            ],
+            rows: (data.byClass || []).map((row: any) => [formatClassLabel(row.className, row.stream), num(row.attendanceRate), num(row.totalAbsent), num(row.studentsBelow80)]),
+          },
         ],
-        bullets: classBullets,
       },
       {
         heading: 'Correlation',
         rows: [
-          ['Attendance vs Performance', data.attendanceVsPerformanceCorrelation?.correlation ?? 0],
-          ['Interpretation', data.attendanceVsPerformanceCorrelation?.interpretation ?? 'N/A'],
-          ['Attendance Impact Alerts', data.attendanceVsPerformanceCorrelation?.studentsWithAttendanceImpactAlerts ?? 0],
+          ['Attendance vs Performance', data.attendanceVsPerformanceCorrelation?.correlation ?? 0, 'decimal'],
+          ['Interpretation', data.attendanceVsPerformanceCorrelation?.interpretation ?? 'N/A', 'text'],
+          ['Attendance Impact Alerts', data.attendanceVsPerformanceCorrelation?.studentsWithAttendanceImpactAlerts ?? 0, 'int'],
         ],
       },
       {
         heading: 'Trend Highlights',
         rows: [
-          ['Daily Trend Points', (data.byDay || []).length],
-          ['Monthly Trend Points', (data.byMonth || []).length],
+          ['Daily Trend Points', (data.byDay || []).length, 'int'],
+          ['Monthly Trend Points', (data.byMonth || []).length, 'int'],
         ],
-        bullets: [...dayBullets, ...monthBullets],
+        tables: [
+          {
+            title: 'By day of week',
+            columns: [{ header: 'Day' }, { header: 'Attendance %', kind: 'percent' }],
+            rows: (data.byDay || []).map((row: any) => [row.dayOfWeek, num(row.rate)]),
+          },
+          {
+            title: 'By month',
+            columns: [{ header: 'Month' }, { header: 'Attendance %', kind: 'percent' }],
+            rows: (data.byMonth || []).map((row: any) => [row.month, num(row.rate)]),
+          },
+        ],
       },
       {
         heading: 'Learner Follow-Up List',
         rows: [
-          ['Below 80% List', (data.studentsBelow80Percent || []).length],
-          ['Chronic Absentee List', (data.chronicAbsentees || []).length],
+          ['Below 80% List', below80.length, 'int'],
+          ['Chronic Absentee List', chronic.length, 'int'],
         ],
-        bullets: [
-          ...(data.studentsBelow80Percent || [])
-            .slice(0, 12)
-            .map((row: any) => `${row.studentName} (${row.className}) attendance ${Number(row.attendanceRate || 0).toFixed(2)}%, absent ${row.totalAbsent || 0}/${row.totalDays || 0} sessions.`),
-          ...(data.chronicAbsentees || [])
-            .slice(0, 12)
-            .map((row: any) => `Chronic absentee: ${row.studentName} (${row.className}) rate ${Number(row.attendanceRate || 0).toFixed(2)}%, recent absences ${row.consecutiveAbsences || 0}.`),
+        tables: [
+          {
+            title: 'Learners below 80%',
+            columns: [
+              { header: 'Learner', weight: 2.2 },
+              { header: 'Class', weight: 1.4 },
+              { header: 'Attendance %', kind: 'percent' },
+              { header: 'Absent', kind: 'int', weight: 0.8 },
+              { header: 'Sessions', kind: 'int', weight: 0.8 },
+            ],
+            rows: below80.map((row) => [row.studentName, row.className, num(row.attendanceRate), num(row.totalAbsent), num(row.totalDays)]),
+          },
+          {
+            title: 'Chronic absentees',
+            columns: [
+              { header: 'Learner', weight: 2.2 },
+              { header: 'Class', weight: 1.4 },
+              { header: 'Attendance %', kind: 'percent' },
+              { header: 'Recent absences', kind: 'int' },
+            ],
+            rows: chronic.map((row) => [row.studentName, row.className, num(row.attendanceRate), num(row.consecutiveAbsences)]),
+          },
         ],
       },
     ]);

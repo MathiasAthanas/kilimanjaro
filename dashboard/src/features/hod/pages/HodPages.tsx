@@ -11,7 +11,10 @@ import { hodAlerts, hodApprovals, hodInterventions, hodMarks, hodPairings, hodSu
 import { DataError } from '../../../components/feedback/DataError';
 import { EmptyState } from '../../../components/feedback/EmptyState';
 import { SkeletonTable } from '../../../components/common/SkeletonTable';
-import { downloadReportWhenReady, useGenerateReportMutation } from '../../operations/api/operations.hooks';
+import { useOperationsClasses } from '../../operations/api/operations.hooks';
+import { exportReport, formatLabel, type ReportFormat } from '../../../lib/reports/exportReport';
+import { errorMessage } from '../../../lib/api/errors';
+import { formatClassLabel } from '../../../lib/classLabel';
 import {
   useAssessmentById,
   useEscalateAlertMutation,
@@ -607,7 +610,6 @@ export function TeacherDetailPage() {
 
   const { data: allAlerts = [] } = useHodAlerts();
   const { data: teacherAssessments = [], isLoading: histLoading } = useTeacherAssessmentHistory(teacherId ?? '');
-  const generateMutation = useGenerateReportMutation();
   const announcementMutation = useCreateHodAnnouncementMutation();
 
   const [supportExpanded, setSupportExpanded] = useState(false);
@@ -647,20 +649,10 @@ export function TeacherDetailPage() {
   const handleExport = async () => {
     setGenerating(true);
     try {
-      const result = await generateMutation.mutateAsync({
-        reportType: 'TEACHER_PERFORMANCE',
-        scope: 'teacher',
-        filters: { teacherId },
-      }) as any;
-      const jobId = String(result?.id ?? result?.reportId ?? result?.jobId ?? '');
-      if (jobId) {
-        await downloadReportWhenReady(jobId, `${teacher?.name ?? 'Teacher'}-performance-report.pdf`);
-        toast('Report downloaded successfully', 'success');
-      } else {
-        throw new Error('No job ID returned');
-      }
-    } catch {
-      toast('Report generation failed. Please retry.', 'error');
+      await exportReport({ reportType: 'TEACHER_PERFORMANCE', scope: 'teacher', scopeId: teacherId }, `${teacher?.name ?? 'Teacher'}-performance-report`);
+      toast('Report downloaded successfully', 'success');
+    } catch (error) {
+      toast(errorMessage(error, 'Report generation failed. Please retry.'), 'error');
     } finally {
       setGenerating(false);
     }
@@ -891,7 +883,6 @@ export function DepartmentAlertsPage() {
   const createMutation = useCreateHodInterventionMutation();
   const escalateMutation = useEscalateAlertMutation();
   const resolveAlert = useResolveHodAlertMutation();
-  const generateMutation = useGenerateReportMutation();
 
   const [tab, setTab] = useState<'risk' | 'monitoring' | 'improving'>('risk');
   const [search, setSearch] = useState('');
@@ -949,11 +940,9 @@ export function DepartmentAlertsPage() {
   const handleExport = async () => {
     setGenerating(true);
     try {
-      const res = await generateMutation.mutateAsync({ reportType: 'PERFORMANCE_REPORT', scope: 'department' }) as any;
-      const jobId = String(res?.id ?? res?.reportId ?? res?.jobId ?? '');
-      if (jobId) { await downloadReportWhenReady(jobId, 'Department-Performance-Report.pdf'); toast('Report downloaded', 'success'); }
-      else throw new Error();
-    } catch { toast('Report generation failed', 'error'); } finally { setGenerating(false); }
+      await exportReport({ reportType: 'PERFORMANCE_ENGINE', scope: 'school' }, 'Department-Performance-Report');
+      toast('Report downloaded', 'success');
+    } catch (error) { toast(errorMessage(error, 'Report generation failed'), 'error'); } finally { setGenerating(false); }
   };
 
   return (
@@ -1188,7 +1177,6 @@ export function DepartmentPairingsPage() {
   const allPairings = rawPairings as any[];
   const activateMutation = useActivateHodPairingMutation();
   const rejectMutation   = useRejectPairingMutation();
-  const generateMutation = useGenerateReportMutation();
 
   const [tab, setTab] = useState<'SUGGESTED'|'ACTIVE'|'COMPLETED'>('SUGGESTED');
   const [search, setSearch] = useState('');
@@ -1225,11 +1213,9 @@ export function DepartmentPairingsPage() {
   const handleExport = async () => {
     setGenerating(true);
     try {
-      const res = await generateMutation.mutateAsync({ reportType: 'PEER_PAIRINGS', scope: 'department' }) as any;
-      const jobId = String(res?.id??res?.reportId??res?.jobId??'');
-      if (jobId) { await downloadReportWhenReady(jobId, 'Department-Pairings-Report.pdf'); toast('Report downloaded', 'success'); }
-      else throw new Error();
-    } catch { toast('Report generation failed', 'error'); } finally { setGenerating(false); }
+      await exportReport({ reportType: 'PERFORMANCE_ENGINE', scope: 'school' }, 'Department-Pairings-Report');
+      toast('Report downloaded', 'success');
+    } catch (error) { toast(errorMessage(error, 'Report generation failed'), 'error'); } finally { setGenerating(false); }
   };
 
   return (
@@ -1416,7 +1402,6 @@ export function HodPairingDetailPage() {
   const { data: supportHistory = [] } = useStudentInterventionHistory(supportStudentId);
   const createMutation   = useCreateHodInterventionMutation();
   const completeMutation = useCompletePairingMutation();
-  const generateMutation = useGenerateReportMutation();
 
   const [sessionNote, setSessionNote] = useState('');
   const [sessionDate, setSessionDate] = useState('');
@@ -1458,11 +1443,9 @@ export function HodPairingDetailPage() {
   const handleExport = async () => {
     setGenerating(true);
     try {
-      const res = await generateMutation.mutateAsync({ reportType: 'PEER_PAIRINGS', scope: 'pairing', filters: { pairingId } }) as any;
-      const jobId = String(res?.id??res?.reportId??res?.jobId??'');
-      if (jobId) { await downloadReportWhenReady(jobId, `Pairing-Progress-Report.pdf`); toast('Report downloaded', 'success'); }
-      else throw new Error();
-    } catch { toast('Report generation failed', 'error'); } finally { setGenerating(false); }
+      await exportReport({ reportType: 'PERFORMANCE_ENGINE', scope: 'school' }, 'Pairing-Progress-Report');
+      toast('Report downloaded', 'success');
+    } catch (error) { toast(errorMessage(error, 'Report generation failed'), 'error'); } finally { setGenerating(false); }
   };
 
   if (pairingLoading) return <HodWorkspaceShell title="Loading…" eyebrow="Pairing progress"><SkeletonTable cols={4} /></HodWorkspaceShell>;
@@ -1665,7 +1648,6 @@ export function HodStudentPerformancePage() {
   const { data: profile, isLoading: profileLoading } = useHodStudentPerformance(studentId ?? '');
   const { data: interventionHistory = [], isLoading: intLoading } = useStudentInterventionHistory(studentId ?? '');
   const { data: deptSubjects = [] as typeof hodSubjects } = useHodClassSubjects() as unknown as { data: typeof hodSubjects };
-  const generateMutation = useGenerateReportMutation();
   const createMutation   = useCreateHodInterventionMutation();
   const escalateMutation = useEscalateAlertMutation();
 
@@ -1759,11 +1741,9 @@ export function HodStudentPerformancePage() {
   const handleExport = async () => {
     setGenerating(true);
     try {
-      const res = await generateMutation.mutateAsync({ reportType: 'STUDENT_PERFORMANCE', scope: 'student', filters: { studentId } }) as any;
-      const jobId = String(res?.id ?? res?.reportId ?? res?.jobId ?? '');
-      if (jobId) { await downloadReportWhenReady(jobId, `${studentName}-performance-report.pdf`); toast('Report downloaded', 'success'); }
-      else throw new Error();
-    } catch { toast('Report generation failed', 'error'); } finally { setGenerating(false); }
+      await exportReport({ reportType: 'STUDENT_PROFILE', scope: 'student', scopeId: studentId }, `${studentName}-performance-report`);
+      toast('Report downloaded', 'success');
+    } catch (error) { toast(errorMessage(error, 'Report generation failed'), 'error'); } finally { setGenerating(false); }
   };
 
   const copyId = () => {
@@ -2206,7 +2186,6 @@ export function HodInterventionsPage() {
   const { data: deptSubjects = [] as typeof hodSubjects } = useHodClassSubjects() as unknown as { data: typeof hodSubjects };
   const createMutation    = useCreateHodInterventionMutation();
   const updateMutation    = useUpdateInterventionMutation();
-  const generateMutation  = useGenerateReportMutation();
 
   const [activeTab, setActiveTab]   = useState<IntTab>('open');
   const [search, setSearch]         = useState('');
@@ -2296,11 +2275,9 @@ export function HodInterventionsPage() {
   const handleExport = async () => {
     setGenerating(true);
     try {
-      const res = await generateMutation.mutateAsync({ reportType: 'INTERVENTION_SUMMARY', scope: 'department' }) as any;
-      const jobId = String(res?.id ?? res?.reportId ?? res?.jobId ?? '');
-      if (jobId) { await downloadReportWhenReady(jobId, 'department-interventions-report.pdf'); toast('Report downloaded', 'success'); }
-      else throw new Error();
-    } catch { toast('Report generation failed', 'error'); } finally { setGenerating(false); }
+      await exportReport({ reportType: 'PERFORMANCE_ENGINE', scope: 'school' }, 'department-interventions-report');
+      toast('Report downloaded', 'success');
+    } catch (error) { toast(errorMessage(error, 'Report generation failed'), 'error'); } finally { setGenerating(false); }
   };
 
   const tabs: [IntTab, string, number][] = [
@@ -2751,32 +2728,29 @@ export function CreateHodAnnouncementPage() {
 
 // ─── Exports ────────────────────────────────────────────────────────────────
 
-// reportType values map to the backend ReportType enum.
-const hodExportItems: Array<{ title: string; description: string; format: string; reportType: string }> = [
-  { title: 'Class academic report', description: 'Per-class academic performance across the department.', format: 'PDF', reportType: 'CLASS_ACADEMIC' },
-  { title: 'Teacher performance', description: 'Class averages and submission timeliness per teacher.', format: 'PDF', reportType: 'TEACHER_PERFORMANCE' },
-  { title: 'Student profiles', description: 'At-risk and flagged students across all subjects.', format: 'CSV', reportType: 'STUDENT_PROFILE' },
-  { title: 'Attendance summary', description: 'Department attendance trends for the current term.', format: 'PDF', reportType: 'ATTENDANCE_SUMMARY' },
-  { title: 'Performance engine', description: 'Alerts and intervention outcomes from the engine.', format: 'PDF', reportType: 'PERFORMANCE_ENGINE' },
-  { title: 'Term summary', description: 'Complete departmental term summary for governance.', format: 'PDF', reportType: 'TERM_SUMMARY' },
-  { title: 'Department report', description: 'Subject averages, teacher submission rates, at-risk count, approval turnaround.', format: 'PDF', reportType: 'DEPARTMENT_SUMMARY' },
+// reportType values map to the analytics service ReportType enum. A department head can build the
+// attendance, performance-engine and class reports (not the school-wide finance ones).
+const hodExportItems: Array<{ title: string; description: string; reportType: string; needsClass?: boolean }> = [
+  { title: 'Class academic report', description: 'Grade distribution, subject results and ranking for one class.', reportType: 'CLASS_ACADEMIC', needsClass: true },
+  { title: 'Attendance summary', description: 'Attendance by class, day and month, with learners below 80%.', reportType: 'ATTENDANCE_SUMMARY' },
+  { title: 'Performance engine', description: 'Alerts, peer pairings, interventions and success stories.', reportType: 'PERFORMANCE_ENGINE' },
 ];
 
 export function HodExportsPage() {
   const [generating, setGenerating] = useState<string | null>(null);
-  const generateMutation = useGenerateReportMutation();
+  const [classId, setClassId] = useState('');
+  const { data: classes = [] } = useOperationsClasses() as { data: Array<{ id: string; name: string; stream?: unknown }> };
+  const formats: ReportFormat[] = ['PDF', 'XLSX', 'CSV'];
 
-  const handleGenerate = async (item: typeof hodExportItems[0]) => {
-    setGenerating(item.title);
+  const handleGenerate = async (item: (typeof hodExportItems)[0], format: ReportFormat) => {
+    if (item.needsClass && !classId) { toast('Choose a class first', 'warning'); return; }
+    setGenerating(`${item.reportType}:${format}`);
     toast(`Generating "${item.title}"…`, 'info');
     try {
-      const result = await generateMutation.mutateAsync({ reportType: item.reportType, scope: 'school' }) as Record<string, unknown> | undefined;
-      const jobId = String(result?.id ?? result?.reportId ?? result?.jobId ?? '');
-      if (!jobId) throw new Error('No job id returned');
-      await downloadReportWhenReady(jobId, `${item.title}.${item.format.toLowerCase()}`);
+      await exportReport({ reportType: item.reportType, scope: item.needsClass ? 'class' : 'school', scopeId: item.needsClass ? classId : undefined, format }, item.title.replace(/\s+/g, '_'));
       toast(`"${item.title}" downloaded`, 'success');
-    } catch {
-      toast(`Failed to generate "${item.title}". Please try again.`, 'error');
+    } catch (error) {
+      toast(errorMessage(error, `Failed to generate "${item.title}". Please try again.`), 'error');
     } finally {
       setGenerating(null);
     }
@@ -2784,6 +2758,14 @@ export function HodExportsPage() {
 
   return (
     <HodWorkspaceShell title="HOD Export Center" eyebrow="Department reports">
+      <div className="mb-gutter max-w-sm">
+        <label className="text-xs font-black uppercase tracking-widest text-ks-muted">Class (for the class report)
+          <select value={classId} onChange={(e) => setClassId(e.target.value)} className="mt-1 block w-full rounded-xl border border-ks-line bg-white p-3 text-sm font-semibold normal-case tracking-normal text-ks-navy">
+            <option value="">Choose a class…</option>
+            {classes.map((item) => <option key={item.id} value={item.id}>{formatClassLabel(item.name, item.stream ? String(item.stream) : null)}</option>)}
+          </select>
+        </label>
+      </div>
       <div className="grid gap-gutter md:grid-cols-2 xl:grid-cols-3">
         {hodExportItems.map((item) => (
           <Card key={item.title} className="group flex flex-col rounded-xl p-5 transition hover:-translate-y-0.5 hover:shadow-layer">
@@ -2791,20 +2773,22 @@ export function HodExportsPage() {
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-ks-blue/10">
                 <Download className="h-5 w-5 text-ks-blue" />
               </div>
-              <span className="rounded-full border border-ks-slate/15 bg-ks-slate/5 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-ks-slate">
-                {item.format}
-              </span>
             </div>
             <h3 className="mt-4 font-display text-xl font-black text-ks-navy">{item.title}</h3>
             <p className="mt-1 flex-1 text-sm font-semibold text-ks-muted">{item.description}</p>
-            <Button
-              variant="secondary"
-              className="mt-4 w-full rounded-xl"
-              disabled={generating !== null}
-              onClick={() => handleGenerate(item)}
-            >
-              <Download className="h-4 w-4" /> {generating === item.title ? 'Generating…' : 'Generate'}
-            </Button>
+            <div className="mt-4 flex gap-2">
+              {formats.map((format) => (
+                <Button
+                  key={format}
+                  variant="secondary"
+                  className="flex-1 rounded-xl"
+                  disabled={generating !== null}
+                  onClick={() => handleGenerate(item, format)}
+                >
+                  <Download className="h-4 w-4" /> {generating === `${item.reportType}:${format}` ? 'Generating…' : formatLabel(format)}
+                </Button>
+              ))}
+            </div>
           </Card>
         ))}
       </div>

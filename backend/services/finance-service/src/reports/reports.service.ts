@@ -5,6 +5,7 @@ import { RequestUser } from '../common/interfaces/request-user.interface';
 import { schoolScopeFilter } from '../common/helpers/school-scope.helper';
 import { PrismaService } from '../prisma/prisma.service';
 import { StudentClientService } from '../student-client/student-client.service';
+import { StudentStatementPdfService } from './student-statement-pdf.service';
 
 @Injectable()
 export class ReportsService {
@@ -12,6 +13,7 @@ export class ReportsService {
     private readonly prisma: PrismaService,
     private readonly accessControl: AccessControlService,
     private readonly studentClient: StudentClientService,
+    private readonly statementPdf: StudentStatementPdfService,
   ) {}
 
   /** Directors only ever see aggregates; every other role is limited to its own schools. */
@@ -239,6 +241,26 @@ export class ReportsService {
       },
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  /** The statement as a one-learner PDF (same base64 file shape the financial statement export uses). */
+  async studentStatementPdf(studentId: string, filters: { academicYearId?: string }, user: RequestUser) {
+    const invoices = await this.studentStatement(studentId, filters, user);
+    const [brief, withTerms] = await Promise.all([
+      this.studentClient.lookupStudents([studentId]),
+      this.studentClient.withTermNames(invoices),
+    ]);
+    const student = brief.get(studentId);
+    const school = await this.studentClient.schoolProfile(invoices[0]?.schoolId ?? student?.schoolId ?? undefined);
+    const buffer = await this.statementPdf.render({
+      school,
+      studentName: student?.name ?? 'Learner',
+      registrationNumber: student?.registrationNumber ?? '',
+      className: student?.className ?? null,
+      invoices: withTerms as any,
+    });
+    const reg = (student?.registrationNumber || studentId).replace(/[^A-Za-z0-9]+/g, '-');
+    return { filename: `fee-statement-${reg}.pdf`, mimeType: 'application/pdf', base64: buffer.toString('base64') };
   }
 
   async feeDefaulters(filters: { termId?: string; academicYearId?: string; daysOverdue?: string }, user?: RequestUser) {

@@ -67,6 +67,8 @@ async function generateAqaPdf(subjects: any[], teachers: any[], atRisk: any[], a
 
   addHeader('Academic Quality Intelligence Report');
   let y = 48;
+  // Make room BEFORE drawing: a page is only added when the next block needs it, so the report never ends on an empty page.
+  const room = (h: number) => { if (y + h > 270) { addFooter(doc.getNumberOfPages()); doc.addPage(); addHeader('AQA Report (cont.)'); y = 48; } };
 
   const avgCoverage = subjects.length
     ? Math.round(subjects.reduce((s: number, x: any) => s + Math.min(100, ((x.topicsCovered || 0) / Math.max(x.totalTopics || 1, 1)) * 100), 0) / subjects.length) : 0;
@@ -91,6 +93,7 @@ async function generateAqaPdf(subjects: any[], teachers: any[], atRisk: any[], a
   y += 24;
 
   // Syllabus coverage table
+  room(40);
   y = sectionTitle('Syllabus Coverage by Subject', y);
   const scHdrs = ['Subject', 'Topics Covered', 'Total Topics', 'Coverage %', 'Status'];
   const scW = [55, 30, 30, 28, 30];
@@ -99,6 +102,7 @@ async function generateAqaPdf(subjects: any[], teachers: any[], atRisk: any[], a
   scHdrs.forEach((h, i) => { doc.setTextColor('#ffffff'); doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.text(h, cx + 2, y + 5); cx += scW[i]; });
   y += rowH;
   subjects.forEach((s: any, idx: number) => {
+    room(rowH);
     const pct = Math.min(100, Math.round(((s.topicsCovered || 0) / Math.max(s.totalTopics || 1, 1)) * 100));
     const status = pct >= 80 ? 'On Track' : pct >= 50 ? 'In Progress' : 'Behind';
     doc.setFillColor(idx % 2 === 0 ? '#ffffff' : '#f8fafc'); doc.rect(M, y, W - M * 2, rowH, 'F');
@@ -106,11 +110,11 @@ async function generateAqaPdf(subjects: any[], teachers: any[], atRisk: any[], a
     const cells = [s.subjectName || '—', String(s.topicsCovered ?? '—'), String(s.totalTopics ?? '—'), `${pct}%`, status];
     cx = M; cells.forEach((v, i) => { doc.text(v, cx + 2, y + 5); cx += scW[i]; });
     y += rowH;
-    if (y > 268) { addFooter(doc.getNumberOfPages()); doc.addPage(); addHeader('AQA Report (cont.)'); y = 48; }
   });
   y += 6;
 
   // Teacher delivery scorecard
+  room(40);
   y = sectionTitle('Teacher Delivery Scorecard', y);
   const tdHdrs = ['Teacher', 'Subject · Class', 'Coverage', 'Pass Rate', 'Assessments', 'Status'];
   const tdW = [38, 44, 22, 22, 24, 22];
@@ -119,6 +123,7 @@ async function generateAqaPdf(subjects: any[], teachers: any[], atRisk: any[], a
   tdHdrs.forEach((h, i) => { doc.setTextColor('#ffffff'); doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.text(h, cx + 2, y + 5); cx += tdW[i]; });
   y += rowH;
   teachers.forEach((t: any, idx: number) => {
+    room(rowH);
     const cov = Math.min(100, Math.round(((t.topicsCovered || 0) / Math.max(t.totalTopics || 1, 1)) * 100));
     const isOk = t.passRate >= 60 && cov >= 70;
     doc.setFillColor(idx % 2 === 0 ? '#ffffff' : '#f8fafc'); doc.rect(M, y, W - M * 2, rowH, 'F');
@@ -127,12 +132,12 @@ async function generateAqaPdf(subjects: any[], teachers: any[], atRisk: any[], a
       `${(t.passRate || 0).toFixed(1)}%`, String(t.assessmentCount ?? '—'), isOk ? 'On Track' : 'Needs Review'];
     cx = M; cells.forEach((v, i) => { doc.text(v, cx + 2, y + 5); cx += tdW[i]; });
     y += rowH;
-    if (y > 268) { addFooter(doc.getNumberOfPages()); doc.addPage(); addHeader('AQA Report (cont.)'); y = 48; }
   });
   y += 6;
 
   // At-risk
   if (atRisk.length > 0) {
+    room(40);
     y = sectionTitle('At-Risk Student Summary', y);
     const aHdrs = ['Student', 'Class', 'Alert Type', 'Subject'];
     const aW = [55, 35, 50, 42];
@@ -141,12 +146,12 @@ async function generateAqaPdf(subjects: any[], teachers: any[], atRisk: any[], a
     aHdrs.forEach((h, i) => { doc.setTextColor('#ffffff'); doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.text(h, cx + 2, y + 5); cx += aW[i]; });
     y += rowH;
     atRisk.slice(0, 20).forEach((s: any, idx: number) => {
+      room(rowH);
       doc.setFillColor(idx % 2 === 0 ? '#ffffff' : '#f8fafc'); doc.rect(M, y, W - M * 2, rowH, 'F');
       doc.setTextColor('#1e293b'); doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5);
       const cells = [s.studentName || '—', s.className || '—', (s.alertType || '').replace(/_/g, ' '), s.subject || s.subjectName || '—'];
       cx = M; cells.forEach((v, i) => { doc.text(v, cx + 2, y + 5); cx += aW[i]; });
       y += rowH;
-      if (y > 268) { addFooter(doc.getNumberOfPages()); doc.addPage(); addHeader('AQA Report (cont.)'); y = 48; }
     });
   }
 

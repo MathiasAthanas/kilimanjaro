@@ -1,93 +1,99 @@
 import { Injectable } from '@nestjs/common';
-import { createPdf } from './pdf.helper';
+import { createReport } from './pdf.helper';
+import { num, pct, words } from './report.format';
+
+const countRows = (record: Record<string, unknown> | undefined) => Object.entries(record || {}).map(([key, count]) => [words(key), num(count)]);
 
 @Injectable()
 export class PerformanceEngineGenerator {
   async generate(filePath: string, data: any) {
-    const alertTypeBullets = Object.entries(data.alertsSummary?.byType || {}).map(([type, count]) => `${type}: ${count}`);
-    const alertSeverityBullets = Object.entries(data.alertsSummary?.bySeverity || {}).map(([severity, count]) => `${severity}: ${count}`);
-    const interventionBullets = Object.entries(data.interventionSummary?.byType || {}).map(([type, count]) => `${type}: ${count}`);
-    const unresolved = Number(data.alertsSummary?.unresolvedCount ?? 0);
-    const followUpRate = Number(data.interventionSummary?.followUpRate ?? 0);
-    const effectiveness = Number(data.pairingSummary?.effectivenessRate ?? 0);
+    const unresolved = num(data.alertsSummary?.unresolvedCount);
+    const followUpRate = num(data.interventionSummary?.followUpRate);
+    const effectiveness = num(data.pairingSummary?.effectivenessRate);
     const managementActions = [
       unresolved > 0
         ? `${unresolved} unresolved alerts require named owners, target dates, and escalation criteria.`
         : 'No unresolved alerts are currently returned by the performance engine.',
-      followUpRate < 75 && Number(data.interventionSummary?.totalInterventions ?? 0) > 0
-        ? `Intervention follow-up is ${followUpRate.toFixed(2)}%; HODs should audit interventions without follow-up dates.`
-        : `Intervention follow-up rate is ${followUpRate.toFixed(2)}%.`,
+      followUpRate < 75 && num(data.interventionSummary?.totalInterventions) > 0
+        ? `Intervention follow-up is ${pct(followUpRate)}; HODs should audit interventions without follow-up dates.`
+        : `Intervention follow-up rate is ${pct(followUpRate)}.`,
       effectiveness > 0
-        ? `Peer pairing effectiveness is ${effectiveness.toFixed(2)}%; continue monitoring completed outcomes.`
+        ? `Peer pairing effectiveness is ${pct(effectiveness)}; continue monitoring completed outcomes.`
         : 'No positive peer pairing effectiveness is currently available for this period.',
     ];
 
-    await createPdf(filePath, 'Performance Engine Report', [
+    await createReport(filePath, 'Performance Engine Report', [
       {
         heading: 'AQA Management Actions',
         rows: [
-          ['Unresolved Alerts', data.alertsSummary?.unresolvedCount ?? 0],
-          ['Resolution Rate', data.alertsSummary?.resolutionRate ?? 0],
-          ['Follow-Up Rate', data.interventionSummary?.followUpRate ?? 0],
-          ['Pairing Effectiveness', data.pairingSummary?.effectivenessRate ?? 0],
+          ['Unresolved Alerts', data.alertsSummary?.unresolvedCount ?? 0, 'int'],
+          ['Resolution Rate', data.alertsSummary?.resolutionRate ?? 0, 'percent'],
+          ['Follow-Up Rate', data.interventionSummary?.followUpRate ?? 0, 'percent'],
+          ['Pairing Effectiveness', data.pairingSummary?.effectivenessRate ?? 0, 'percent'],
         ],
         bullets: managementActions,
       },
       {
         heading: 'Alerts Summary',
         rows: [
-          ['Total Alerts', data.alertsSummary?.totalAlerts ?? 0],
-          ['Resolved', data.alertsSummary?.resolvedCount ?? 0],
-          ['Unresolved', data.alertsSummary?.unresolvedCount ?? 0],
-          ['Resolution Rate', data.alertsSummary?.resolutionRate ?? 0],
-          ['Average Resolution Days', data.alertsSummary?.averageResolutionDays ?? 0],
+          ['Total Alerts', data.alertsSummary?.totalAlerts ?? 0, 'int'],
+          ['Resolved', data.alertsSummary?.resolvedCount ?? 0, 'int'],
+          ['Unresolved', data.alertsSummary?.unresolvedCount ?? 0, 'int'],
+          ['Resolution Rate', data.alertsSummary?.resolutionRate ?? 0, 'percent'],
+          ['Average Resolution Days', data.alertsSummary?.averageResolutionDays ?? 0, 'decimal'],
         ],
-        bullets: [...alertTypeBullets, ...alertSeverityBullets].length
-          ? [...alertTypeBullets, ...alertSeverityBullets]
-          : ['No alert breakdown records were returned for this period.'],
+        tables: [
+          { title: 'Alerts by type', columns: [{ header: 'Type' }, { header: 'Alerts', kind: 'int' }], rows: countRows(data.alertsSummary?.byType) },
+          { title: 'Alerts by severity', columns: [{ header: 'Severity' }, { header: 'Alerts', kind: 'int' }], rows: countRows(data.alertsSummary?.bySeverity) },
+        ],
       },
       {
         heading: 'Pairing Summary',
         rows: [
-          ['Total Suggested', data.pairingSummary?.totalSuggested ?? 0],
-          ['Activated', data.pairingSummary?.activated ?? 0],
-          ['Rejected', data.pairingSummary?.rejected ?? 0],
-          ['Completed', data.pairingSummary?.completed ?? 0],
-          ['Expired', data.pairingSummary?.expired ?? 0],
-          ['Activation Rate', data.pairingSummary?.activationRate ?? 0],
-          ['Effectiveness', data.pairingSummary?.effectivenessRate ?? 0],
-          ['Positive Outcomes', data.pairingSummary?.positiveOutcomeCount ?? 0],
-          ['Negative Outcomes', data.pairingSummary?.negativeOutcomeCount ?? 0],
-          ['Avg Score Improvement', data.pairingSummary?.averageScoreImprovement ?? 0],
+          ['Total Suggested', data.pairingSummary?.totalSuggested ?? 0, 'int'],
+          ['Activated', data.pairingSummary?.activated ?? 0, 'int'],
+          ['Rejected', data.pairingSummary?.rejected ?? 0, 'int'],
+          ['Completed', data.pairingSummary?.completed ?? 0, 'int'],
+          ['Expired', data.pairingSummary?.expired ?? 0, 'int'],
+          ['Activation Rate', data.pairingSummary?.activationRate ?? 0, 'percent'],
+          ['Effectiveness', data.pairingSummary?.effectivenessRate ?? 0, 'percent'],
+          ['Positive Outcomes', data.pairingSummary?.positiveOutcomeCount ?? 0, 'int'],
+          ['Negative Outcomes', data.pairingSummary?.negativeOutcomeCount ?? 0, 'int'],
+          ['Avg Score Improvement (points)', data.pairingSummary?.averageScoreImprovement ?? 0, 'decimal'],
         ],
       },
       {
         heading: 'Interventions & Hotspots',
         rows: [
-          ['Total Interventions', data.interventionSummary?.totalInterventions ?? 0],
-          ['Followed Up', data.interventionSummary?.followedUpCount ?? 0],
-          ['Follow-Up Rate', data.interventionSummary?.followUpRate ?? 0],
-          ['Most Alerted Subjects', (data.mostAlertedSubjects || []).length],
-          ['Chronic Underperformers', (data.chronicUnderperformers || []).length],
+          ['Total Interventions', data.interventionSummary?.totalInterventions ?? 0, 'int'],
+          ['Followed Up', data.interventionSummary?.followedUpCount ?? 0, 'int'],
+          ['Follow-Up Rate', data.interventionSummary?.followUpRate ?? 0, 'percent'],
+          ['Most Alerted Subjects', (data.mostAlertedSubjects || []).length, 'int'],
+          ['Chronic Underperformers', (data.chronicUnderperformers || []).length, 'int'],
         ],
-        bullets: [
-          ...interventionBullets,
-          ...(data.mostAlertedSubjects || []).slice(0, 10).map((row: any) => `${row.subjectName}: ${row.alertCount || 0} alerts, ${row.resolvedCount || 0} resolved`),
-          ...(data.chronicUnderperformers || []).slice(0, 10).map((row: any) => `${row.studentName}: ${row.subjectCount || 0} active concern subjects`),
-        ].length
-          ? [
-              ...interventionBullets,
-              ...(data.mostAlertedSubjects || []).slice(0, 10).map((row: any) => `${row.subjectName}: ${row.alertCount || 0} alerts, ${row.resolvedCount || 0} resolved.`),
-              ...(data.chronicUnderperformers || []).slice(0, 10).map((row: any) => `${row.studentName}: ${row.subjectCount || 0} active concern subjects.`),
-            ]
-          : ['No intervention, hotspot, or chronic-underperformance records were returned for this period.'],
+        tables: [
+          { title: 'Interventions by type', columns: [{ header: 'Type' }, { header: 'Interventions', kind: 'int' }], rows: countRows(data.interventionSummary?.byType) },
+          {
+            title: 'Most alerted subjects',
+            columns: [{ header: 'Subject' }, { header: 'Alerts', kind: 'int' }, { header: 'Resolved', kind: 'int' }],
+            rows: (data.mostAlertedSubjects || []).map((row: any) => [row.subjectName, num(row.alertCount), num(row.resolvedCount)]),
+          },
+          {
+            title: 'Chronic underperformers',
+            columns: [{ header: 'Learner' }, { header: 'Subjects of concern', kind: 'int' }],
+            rows: (data.chronicUnderperformers || []).map((row: any) => [row.studentName, num(row.subjectCount)]),
+          },
+        ],
       },
       {
         heading: 'Success Stories',
-        rows: [['Total Success Stories', (data.successStories || []).length]],
-        bullets: (data.successStories || [])
-          .slice(0, 10)
-          .map((row: any) => `${row.studentName} ${row.subjectName ? `in ${row.subjectName}` : ''}: ${Number(row.improvement || 0).toFixed(2)} points`),
+        rows: [['Total Success Stories', (data.successStories || []).length, 'int']],
+        tables: [
+          {
+            columns: [{ header: 'Learner', weight: 2.2 }, { header: 'Subject' }, { header: 'Improvement (points)', kind: 'decimal' }],
+            rows: (data.successStories || []).map((row: any) => [row.studentName, row.subjectName || '-', num(row.improvement)]),
+          },
+        ],
       },
     ]);
   }

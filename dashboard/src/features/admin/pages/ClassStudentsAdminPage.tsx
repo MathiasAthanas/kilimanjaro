@@ -5,6 +5,7 @@ import { BookOpenCheck, Download, KeyRound, ShieldAlert, UserPlus, X } from 'luc
 import { AdminShell } from '../components/AdminConsole';
 import { Button } from '../../../components/common/Button';
 import { toast } from '../../../lib/toast';
+import { downloadCsv } from '../../../lib/csv';
 import { api } from '../../../lib/api/client';
 import { payloadOf, arrayFromApi } from '../../../lib/api/response';
 import { useSchoolStore } from '../../../lib/school/schoolStore';
@@ -165,23 +166,30 @@ export function ClassStudentsAdminPage() {
     });
   }
 
-  function exportCsv(missingOnly: boolean) {
-    const rows = missingOnly ? students.filter((s) => !s.profileComplete) : students;
-    const headers = ['Registration', 'Admission', 'Name', 'Gender', 'DOB', 'Guardian', 'Guardian Phone', 'Login', 'Status', 'Missing'];
-    const lines = [headers.join(',')];
-    for (const s of rows) {
-      const cells = [
-        s.registrationNumber, s.legacyAdmissionNumber ?? '', s.fullName, s.gender ?? '', s.dateOfBirth ? String(s.dateOfBirth).slice(0, 10) : '',
-        s.primaryGuardian?.name ?? '', s.primaryGuardian?.phoneNumber ?? '', s.hasAuthAccount ? 'yes' : 'no', s.statusLabel, s.missing.join(' '),
-      ].map((v) => (String(v).includes(',') ? `"${String(v).replace(/"/g, '""')}"` : String(v)));
-      lines.push(cells.join(','));
+  // The roster endpoint answers 200 learners at a time, so the export walks every page: a class of 227 must give 227 rows.
+  async function exportCsv(missingOnly: boolean) {
+    try {
+      const all: ClassStudentRow[] = [];
+      for (let page = 1; page <= 50; page++) {
+        const raw = (await api
+          .get(`/students/classes/${classId}/students`, { params: { ...filters, search: search || undefined, limit: 200, page } })
+          .then(payloadOf)) as { students?: ClassStudentRow[]; pagination?: { totalPages?: number } };
+        all.push(...(raw.students ?? []));
+        if (page >= (raw.pagination?.totalPages ?? 1)) break;
+      }
+      const rows = missingOnly ? all.filter((s) => !s.profileComplete) : all;
+      downloadCsv(
+        `${report?.class?.name ?? 'class'}_${missingOnly ? 'missing_data' : 'students'}.csv`,
+        ['Registration', 'Admission', 'Name', 'Gender', 'DOB', 'Guardian', 'Guardian Phone', 'Login', 'Status', 'Missing'],
+        rows.map((s) => [
+          s.registrationNumber, s.legacyAdmissionNumber ?? '', s.fullName, s.gender ?? '', s.dateOfBirth ? String(s.dateOfBirth).slice(0, 10) : '',
+          s.primaryGuardian?.name ?? '', s.primaryGuardian?.phoneNumber ?? '', s.hasAuthAccount ? 'yes' : 'no', s.statusLabel, s.missing.join(' '),
+        ]),
+      );
+      toast(`${rows.length} learner${rows.length === 1 ? '' : 's'} exported`, 'success');
+    } catch {
+      toast('The export could not be created. Please try again.', 'error');
     }
-    const blob = new Blob([lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `${report?.class?.name ?? 'class'}_${missingOnly ? 'missing_data' : 'students'}.csv`;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 10_000);
   }
 
   const title = report?.class ? formatClassLabel(report.class.name, report.class.stream, ' · ') : 'Class Students';

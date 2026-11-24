@@ -122,7 +122,7 @@ export async function exportFinanceCsv(key: ExportKey): Promise<number> {
       const termName = new Map(terms.map((t) => [text(t.id), text(t.name)]));
       download(`fee-structures-${stamp()}.csv`, structures, [
         ['Fee category', (r) => nested(r.feeCategory, 'name')], ['Class', (r) => className.get(text(r.classId)) ?? ''], ['Stage', (r) => r.educationStage],
-        ['Level', (r) => r.classLevel], ['Student group', (r) => r.studentGroup], ['Term', (r) => termName.get(text(r.termId)) ?? 'All terms'],
+        ['Level', (r) => r.classLevel], ['Student group', (r) => r.studentGroup], ['Residence', (r) => r.residenceType], ['Term', (r) => termName.get(text(r.termId)) ?? 'All terms'],
         ['Amount', (r) => r.amount], ['Active', (r) => (r.isActive ? 'yes' : 'no')],
       ]);
       return structures.length;
@@ -137,7 +137,13 @@ export async function exportFinanceCsv(key: ExportKey): Promise<number> {
       return rows.length;
     }
     case 'audit': {
-      const rows = rowsOf(payload(await api.get('/finance/audit-logs', { params: { limit: 1000 } })));
+      // The audit endpoint answers at most 100 rows a page and has no total, so keep going until a page is short.
+      const rows: Row[] = [];
+      for (let page = 1; page <= 50; page++) {
+        const batch = rowsOf(payload(await api.get('/finance/audit-logs', { params: { limit: 100, page } })));
+        rows.push(...batch);
+        if (batch.length < 100) break;
+      }
       download(`financial-audit-log-${stamp()}.csv`, rows, [
         ['When', (r) => r.createdAt], ['Role', (r) => r.performedByRole], ['Action', (r) => r.action], ['Record type', (r) => r.entityType], ['Record id', (r) => r.entityId],
       ]);

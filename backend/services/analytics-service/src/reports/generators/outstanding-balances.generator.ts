@@ -1,58 +1,87 @@
 import { Injectable } from '@nestjs/common';
-import { createPdf } from './pdf.helper';
+import { createReport } from './pdf.helper';
+import { formatClassLabel } from '../../common/helpers/class-label.helper';
+import { num, tzs } from './report.format';
 
 @Injectable()
 export class OutstandingBalancesGenerator {
-  async generate(filePath: string, data: any) {
-    const money = (v: any) => `TZS ${Number(v?.toString?.() ?? v ?? 0).toLocaleString('en-US')}`;
-    const overdueAmount = Number(data.overdueAnalysis?.overdueAmount?.toString?.() ?? 0);
-    const outstanding = Number(data.billing?.totalOutstanding?.toString?.() ?? 0);
+  /** `list` is every invoice that still owes money (see FinanceAnalyticsService.getOutstandingList). */
+  async generate(filePath: string, data: any, list: any[] = []) {
+    const overdueAmount = num(data.overdueAnalysis?.overdueAmount);
+    const outstanding = num(data.billing?.totalOutstanding);
     const actions = [
       outstanding > 0
-        ? `${money(outstanding)} remains outstanding; split follow-up by class teacher, finance officer, and guardian contact status.`
+        ? `${tzs(outstanding)} remains outstanding across ${list.length || 'the listed'} invoices; split follow-up by class teacher, finance officer, and guardian contact status.`
         : 'No outstanding balance is currently recorded.',
       overdueAmount > 0
-        ? `${money(overdueAmount)} is already overdue and should be separated from ordinary outstanding balances.`
+        ? `${tzs(overdueAmount)} is already overdue and should be separated from ordinary outstanding balances.`
         : 'No overdue amount is currently recorded.',
-      (data.topDefaulters || []).length
-        ? 'Top defaulters should receive written payment plans with dated commitments.'
-        : 'No top defaulter records were returned for this period.',
+      list.length
+        ? 'Learners with the largest balances should receive written payment plans with dated commitments.'
+        : 'No learners with an unpaid balance were returned for this period.',
     ];
 
-    await createPdf(filePath, 'Outstanding Balances Report', [
+    await createReport(filePath, 'Outstanding Balances Report', [
       {
         heading: 'Executive Collections Risk',
         rows: [
-          ['Total Outstanding', data.billing?.totalOutstanding?.toString?.() ?? 0],
-          ['Overdue Amount', data.overdueAnalysis?.overdueAmount?.toString?.() ?? 0],
-          ['Overdue Count', data.overdueAnalysis?.overdueCount ?? 0],
-          ['Collection Rate', data.billing?.collectionRate ?? 0],
+          ['Total Outstanding', data.billing?.totalOutstanding?.toString?.() ?? 0, 'money'],
+          ['Overdue Amount', data.overdueAnalysis?.overdueAmount?.toString?.() ?? 0, 'money'],
+          ['Overdue Count', data.overdueAnalysis?.overdueCount ?? 0, 'int'],
+          ['Collection Rate', data.billing?.collectionRate ?? 0, 'percent'],
         ],
         bullets: actions,
       },
       {
         heading: 'Billing Health',
         rows: [
-          ['Total Invoiced', data.billing?.totalInvoiced?.toString?.() ?? 0],
-          ['Total Collected', data.billing?.totalCollected?.toString?.() ?? 0],
-          ['Total Outstanding', data.billing?.totalOutstanding?.toString?.() ?? 0],
-          ['Collection Rate (%)', data.billing?.collectionRate ?? 0],
+          ['Total Invoiced', data.billing?.totalInvoiced?.toString?.() ?? 0, 'money'],
+          ['Total Collected', data.billing?.totalCollected?.toString?.() ?? 0, 'money'],
+          ['Total Outstanding', data.billing?.totalOutstanding?.toString?.() ?? 0, 'money'],
+          ['Collection Rate (%)', data.billing?.collectionRate ?? 0, 'percent'],
         ],
       },
       {
         heading: 'Overdue Analysis',
         rows: [
-          ['Overdue Count', data.overdueAnalysis?.overdueCount ?? 0],
-          ['Overdue Amount', data.overdueAnalysis?.overdueAmount?.toString?.() ?? 0],
+          ['Overdue Count', data.overdueAnalysis?.overdueCount ?? 0, 'int'],
+          ['Overdue Amount', data.overdueAnalysis?.overdueAmount?.toString?.() ?? 0, 'money'],
         ],
-        bullets: (data.overdueAnalysis?.byDaysOverdue || []).map((row: any) => `${row.bucket}: ${row.count || 0} invoices totaling ${money(row.amount)}.`),
+        tables: [
+          {
+            title: 'Overdue by age',
+            columns: [{ header: 'Age' }, { header: 'Invoices', kind: 'int' }, { header: 'Amount', kind: 'money' }],
+            rows: (data.overdueAnalysis?.byDaysOverdue || []).map((row: any) => [row.bucket, num(row.count), num(row.amount)]),
+          },
+        ],
       },
       {
-        heading: 'Top Defaulters',
-        rows: (data.topDefaulters || []).slice(0, 10).map((row: any) => [row.studentName, row.outstandingBalance?.toString?.() ?? '0']),
-        bullets: (data.topDefaulters || [])
-          .slice(0, 10)
-          .map((row: any) => `${row.studentName} (${row.className}) has ${money(row.outstandingBalance)} outstanding and is overdue ${row.daysOverdue || 0} days.`),
+        heading: 'Learners With Unpaid Balances',
+        rows: [['Invoices With A Balance', list.length, 'int']],
+        tables: [
+          {
+            columns: [
+              { header: 'Learner', weight: 2 },
+              { header: 'Reg. no.', kind: 'text', weight: 1.7 },
+              { header: 'Class', weight: 1.1 },
+              { header: 'Invoice', kind: 'text', weight: 1.6 },
+              { header: 'Total', kind: 'money' },
+              { header: 'Paid', kind: 'money' },
+              { header: 'Balance', kind: 'money' },
+              { header: 'Days overdue', kind: 'int', weight: 0.9 },
+            ],
+            rows: list.map((row) => [
+              row.studentName,
+              row.registrationNumber,
+              formatClassLabel(row.className, row.stream),
+              row.invoiceNumber,
+              num(row.totalAmount),
+              num(row.paidAmount),
+              num(row.outstandingBalance),
+              num(row.daysOverdue),
+            ]),
+          },
+        ],
       },
     ]);
   }

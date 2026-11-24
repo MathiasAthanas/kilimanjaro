@@ -1,7 +1,6 @@
 import { Body, Controller, Get, Param, Post, Query, Res, StreamableFile } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { createReadStream } from 'fs';
-import * as path from 'path';
 import { Response } from 'express';
 import { ROLES } from '../common/constants/roles';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -9,6 +8,12 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { RequestUser } from '../common/interfaces/request-user.interface';
 import { GenerateReportDto } from './reports.dto';
 import { ReportsService } from './reports.service';
+
+const CONTENT_TYPES: Record<string, string> = {
+  PDF: 'application/pdf',
+  XLSX: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  CSV: 'text/csv; charset=utf-8',
+};
 
 @ApiTags('Analytics - Reports')
 @ApiBearerAuth()
@@ -45,10 +50,10 @@ export class ReportsController {
   @Get(':id/download')
   @Roles(ROLES.SYSTEM_ADMIN, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.ACADEMIC_QA, ROLES.MANAGING_DIRECTOR, ROLES.BOARD_DIRECTOR, ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.TEACHER, ROLES.HEAD_OF_DEPARTMENT)
   async download(@Param('id') id: string, @CurrentUser() user: RequestUser, @Res({ passthrough: true }) res: Response): Promise<StreamableFile> {
-    const filePath = await this.service.getDownloadPath(id, user);
+    const { filePath, format, fileName } = await this.service.getDownload(id, user);
     res.set({
-      'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename="${path.basename(filePath)}"`,
+      'Content-Type': CONTENT_TYPES[format] ?? 'application/octet-stream',
+      'Content-Disposition': `attachment; filename="${fileName}"`,
     });
     return new StreamableFile(createReadStream(filePath));
   }

@@ -255,6 +255,57 @@ export class FinanceAnalyticsService {
     return result;
   }
 
+  /**
+   * Every invoice that still owes money, biggest debt first (the overview only lists the ten largest
+   * overdue ones). Capped so one report cannot read an unbounded number of rows.
+   */
+  async getOutstandingList(academicYearId?: string, termId?: string, schoolIds?: string[] | null, limit = 1500) {
+    const yearId = academicYearId || (await this.currentYearId());
+    const scopedTermId = termId || (await this.currentTermId(yearId));
+    const invoices = await this.prisma.invoice.findMany({
+      where: {
+        academicYearId: yearId || undefined,
+        termId: scopedTermId || undefined,
+        status: { notIn: ['CANCELLED', 'PAID'] as any },
+        outstandingBalance: { gt: 0 },
+        ...(schoolIds ? { schoolId: { in: schoolIds } } : {}),
+      },
+      orderBy: { outstandingBalance: 'desc' },
+      take: limit,
+      select: { invoiceNumber: true, studentId: true, classId: true, totalAmount: true, paidAmount: true, outstandingBalance: true, status: true, dueDate: true },
+    });
+    const [students, classes] = await Promise.all([
+      this.prisma.student.findMany({
+        where: { id: { in: [...new Set(invoices.map((row) => row.studentId))] } },
+        select: { id: true, firstName: true, lastName: true, registrationNumber: true },
+      }),
+      this.prisma.class.findMany({
+        where: { id: { in: [...new Set(invoices.map((row) => row.classId))] } },
+        select: { id: true, name: true, stream: true },
+      }),
+    ]);
+    const studentById = new Map(students.map((row) => [row.id, row]));
+    const classById = new Map(classes.map((row) => [row.id, row]));
+    const now = Date.now();
+    return invoices.map((invoice) => {
+      const student = studentById.get(invoice.studentId);
+      const klass = classById.get(invoice.classId);
+      return {
+        studentName: student ? `${student.firstName} ${student.lastName}`.trim() : 'Unknown',
+        registrationNumber: student?.registrationNumber ?? '',
+        className: klass?.name ?? '',
+        stream: klass?.stream ?? null,
+        invoiceNumber: invoice.invoiceNumber,
+        totalAmount: invoice.totalAmount,
+        paidAmount: invoice.paidAmount,
+        outstandingBalance: invoice.outstandingBalance,
+        status: invoice.status,
+        dueDate: invoice.dueDate,
+        daysOverdue: Math.max(0, Math.floor((now - invoice.dueDate.getTime()) / 86400000)),
+      };
+    });
+  }
+
   async getRevenueForecast(academicYearId?: string, schoolIds?: string[] | null) {
     const yearId = academicYearId || (await this.currentYearId());
     const key = `analytics:finance:forecast:${schoolIds ? [...schoolIds].sort().join('+') : 'group'}:${yearId || 'current'}`;

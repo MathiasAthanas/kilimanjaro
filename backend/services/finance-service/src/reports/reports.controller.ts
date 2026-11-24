@@ -72,6 +72,12 @@ export class ReportsController {
     return this.reportsService.studentStatement(studentId, { academicYearId }, user!);
   }
 
+  @Get('student-statement/:studentId/pdf')
+  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN, ROLES.PARENT, ROLES.STUDENT)
+  studentStatementFile(@Param('studentId') studentId: string, @Query('academicYearId') academicYearId?: string, @CurrentUser() user?: RequestUser) {
+    return this.reportsService.studentStatementPdf(studentId, { academicYearId }, user!);
+  }
+
   @Get('fee-defaulters')
   @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
   defaulters(@Query('termId') termId?: string, @Query('academicYearId') academicYearId?: string, @Query('daysOverdue') daysOverdue?: string, @CurrentUser() user?: RequestUser) {

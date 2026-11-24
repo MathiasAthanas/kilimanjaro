@@ -25,6 +25,7 @@ import type { ReactNode } from 'react';
 import React, { useMemo, useState } from 'react';
 import { NavLink, useNavigate, useParams } from 'react-router-dom';
 import { toast } from '../../../lib/toast';
+import { errorMessage } from '../../../lib/api/errors';
 import { Badge } from '../../../components/common/Badge';
 import { BarChart } from '../../analytics/components/Charts';
 import { Button } from '../../../components/common/Button';
@@ -50,12 +51,11 @@ import {
   useActivateAqaPairingMutation,
   useCreateAqaInterventionMutation,
   useCreateAqaAnnouncementMutation,
-  useGenerateAqaReportMutation,
 } from '../api/aqa.hooks';
 import { DataError } from '../../../components/feedback/DataError';
 import { EmptyState } from '../../../components/feedback/EmptyState';
 import { SkeletonTable } from '../../../components/common/SkeletonTable';
-import { downloadReportWhenReady, useGenerateReportMutation } from '../../operations/api/operations.hooks';
+import { downloadReport, exportReport, formatLabel, type ReportFormat } from '../../../lib/reports/exportReport';
 import {
   AlertCard,
   AqaMetricStrip,
@@ -79,8 +79,6 @@ export function AqaHomePage() {
   const { data: apiHeatmap = [] as typeof heatmap } = useAqaHeatmap() as unknown as { data: typeof heatmap };
   const { data: apiAlerts = [] } = useAqaAlerts();
   const { data: apiInterventions = [] } = useAqaInterventions();
-  const generateMutation = useGenerateReportMutation();
-
   const criticalCount = (apiAlerts as Array<{ severity: string }>).filter((a) => a.severity === 'CRITICAL').length;
   const openInterventions = (apiInterventions as Array<{ status: string }>).filter((i) => ['OPEN', 'PENDING'].includes(i.status)).length;
 
@@ -88,13 +86,10 @@ export function AqaHomePage() {
     setExporting(true);
     toast('Generating institutional overview PDF…', 'info');
     try {
-      const result = await generateMutation.mutateAsync({ type: 'aqa-school-overview', format: 'pdf' }) as Record<string, unknown> | undefined;
-      const jobId = String(result?.id ?? result?.jobId ?? '');
-      if (!jobId) throw new Error('No job id');
-      await downloadReportWhenReady(jobId, 'school-overview.pdf');
+      await exportReport({ reportType: 'SCHOOL_OVERVIEW', format: 'PDF' }, 'school-overview');
       toast('PDF downloaded', 'success');
-    } catch {
-      toast('Failed to generate PDF. Please try again.', 'error');
+    } catch (error) {
+      toast(errorMessage(error, 'Failed to generate PDF. Please try again.'), 'error');
     } finally {
       setExporting(false);
     }
@@ -1245,30 +1240,23 @@ export function CreateAqaInterventionPage() {
 
 export function AqaExportsPage() {
   const [generating, setGenerating] = useState<string | null>(null);
-  const generateMutation = useGenerateReportMutation();
 
+  // Only reports the analytics service can really build; each one comes as PDF, Excel or CSV.
   const exportItems = [
-    { title: 'Alert list',            type: 'CSV', icon: AlertTriangle, reportType: 'aqa-alert-list'            },
-    { title: 'At-risk students',      type: 'CSV', icon: XCircle,       reportType: 'aqa-at-risk-students'      },
-    { title: 'Engine configuration',  type: 'PDF', icon: Settings,      reportType: 'aqa-engine-config'         },
-    { title: 'Engine run history',    type: 'CSV', icon: Zap,           reportType: 'aqa-engine-history'        },
-    { title: 'School heatmap',        type: 'PDF', icon: BookOpen,      reportType: 'aqa-school-heatmap'        },
-    { title: 'Pairing effectiveness', type: 'PDF', icon: TrendingUp,    reportType: 'aqa-pairing-effectiveness' },
-    { title: 'Intervention log',      type: 'CSV', icon: CheckCircle2,  reportType: 'aqa-interventions'         },
-    { title: 'Class analytics',       type: 'PDF', icon: ShieldCheck,   reportType: 'aqa-class-analytics'       },
+    { title: 'Performance engine', detail: 'Alerts, peer pairings, interventions and success stories', icon: Zap, reportType: 'PERFORMANCE_ENGINE' },
+    { title: 'Attendance summary', detail: 'By class, day and month, with learners below 80%', icon: AlertTriangle, reportType: 'ATTENDANCE_SUMMARY' },
+    { title: 'School overview', detail: 'Enrolment, academic, finance and attendance summary', icon: BookOpen, reportType: 'SCHOOL_OVERVIEW' },
   ];
+  const formats: ReportFormat[] = ['PDF', 'XLSX', 'CSV'];
 
-  const handleGenerate = async (item: typeof exportItems[0]) => {
-    setGenerating(item.title);
-    toast(`Generating ${item.title} ${item.type}…`, 'info');
+  const handleGenerate = async (item: (typeof exportItems)[0], format: ReportFormat) => {
+    setGenerating(`${item.reportType}:${format}`);
+    toast(`Generating ${item.title} (${formatLabel(format)})…`, 'info');
     try {
-      const result = await generateMutation.mutateAsync({ type: item.reportType, format: item.type.toLowerCase() }) as Record<string, unknown> | undefined;
-      const jobId = String(result?.id ?? result?.jobId ?? '');
-      if (!jobId) throw new Error('No job id');
-      await downloadReportWhenReady(jobId, `${item.title}.${item.type.toLowerCase()}`);
+      await exportReport({ reportType: item.reportType, format }, item.title.replace(/\s+/g, '_'));
       toast(`${item.title} downloaded`, 'success');
-    } catch {
-      toast(`Failed to generate ${item.title}. Please try again.`, 'error');
+    } catch (error) {
+      toast(errorMessage(error, `Failed to generate ${item.title}. Please try again.`), 'error');
     } finally {
       setGenerating(null);
     }
@@ -1276,24 +1264,27 @@ export function AqaExportsPage() {
 
   return (
     <AqaWorkspaceShell title="AQA Export Center" eyebrow="Operational academic QA data">
-      <div className="grid gap-gutter md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-gutter md:grid-cols-2 xl:grid-cols-3">
         {exportItems.map((item) => (
           <Card key={item.title} className="group rounded-xl p-6 transition hover:shadow-layer">
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-ks-blue/10 text-ks-blue transition group-hover:bg-ks-blue group-hover:text-white">
               <item.icon className="h-5 w-5" />
             </div>
             <h3 className="mt-4 font-display text-lg font-black text-ks-navy">{item.title}</h3>
-            <p className="mt-1 text-sm font-semibold text-ks-muted">AQA export · {item.type} format</p>
+            <p className="mt-1 text-sm font-semibold text-ks-muted">{item.detail}</p>
             <div className="mt-4 flex items-center gap-2">
-              <Button
-                variant="secondary"
-                className="flex-1 rounded-xl text-xs"
-                disabled={generating !== null}
-                onClick={() => handleGenerate(item)}
-              >
-                <Download className="h-3.5 w-3.5" />
-                {generating === item.title ? 'Generating…' : `Generate ${item.type}`}
-              </Button>
+              {formats.map((format) => (
+                <Button
+                  key={format}
+                  variant="secondary"
+                  className="flex-1 rounded-xl text-xs"
+                  disabled={generating !== null}
+                  onClick={() => handleGenerate(item, format)}
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  {generating === `${item.reportType}:${format}` ? 'Generating…' : formatLabel(format)}
+                </Button>
+              ))}
             </div>
           </Card>
         ))}
@@ -1729,16 +1720,28 @@ function ReportsPreview() {
 }
 
 function ReportGenerator() {
-  const generateMutation = useGenerateAqaReportMutation();
+  const [busy, setBusy] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
-  const templates = ['School Overview', 'Class Academic', 'Student Profile', 'Performance Engine', 'At-Risk Students'];
+  const [format, setFormat] = useState<ReportFormat>('PDF');
+  // Templates the analytics service can really build (it refuses any other name).
+  const templates: Array<{ label: string; reportType: string }> = [
+    { label: 'School Overview', reportType: 'SCHOOL_OVERVIEW' },
+    { label: 'Performance Engine', reportType: 'PERFORMANCE_ENGINE' },
+    { label: 'Attendance Summary', reportType: 'ATTENDANCE_SUMMARY' },
+  ];
 
-  const handleGenerate = () => {
-    if (!selected) { toast('Please select a report template first', 'warning'); return; }
-    generateMutation.mutate({ template: selected, format: 'PDF' }, {
-      onSuccess: () => toast(`"${selected}" report generated successfully`, 'success'),
-      onError: () => toast('Failed to generate report', 'error'),
-    });
+  const handleGenerate = async () => {
+    const template = templates.find((item) => item.label === selected);
+    if (!template) { toast('Please select a report template first', 'warning'); return; }
+    setBusy(true);
+    try {
+      const name = await exportReport({ reportType: template.reportType, format }, template.label.replace(/\s+/g, '_'));
+      toast(`${name} downloaded`, 'success');
+    } catch (error) {
+      toast(errorMessage(error, 'Failed to generate report'), 'error');
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -1751,25 +1754,30 @@ function ReportGenerator() {
         <div className="space-y-2">
           {templates.map((item) => (
             <button
-              key={item}
-              onClick={() => setSelected(item)}
+              key={item.label}
+              onClick={() => setSelected(item.label)}
               className={`w-full rounded-xl border px-4 py-3 text-left text-sm font-bold transition ${
-                selected === item
+                selected === item.label
                   ? 'border-ks-blue bg-ks-blue/10 text-ks-blue'
                   : 'border-ks-line bg-ks-paper text-ks-navy hover:border-ks-blue hover:bg-ks-mist'
               }`}
             >
-              {item}
+              {item.label}
             </button>
+          ))}
+        </div>
+        <div className="mt-4 flex gap-2">
+          {(['PDF', 'XLSX', 'CSV'] as ReportFormat[]).map((item) => (
+            <button key={item} onClick={() => setFormat(item)} className={`flex-1 rounded-lg border px-3 py-2 text-xs font-black ${format === item ? 'border-ks-blue bg-ks-blue text-white' : 'border-ks-line bg-ks-paper text-ks-navy'}`}>{formatLabel(item)}</button>
           ))}
         </div>
         <Button
           className="mt-5 w-full rounded-xl"
-          disabled={!selected || generateMutation.isPending}
+          disabled={!selected || busy}
           onClick={handleGenerate}
         >
           <Send className="h-4 w-4" />
-          {generateMutation.isPending ? 'Generating…' : 'Generate report'}
+          {busy ? 'Generating…' : 'Generate report'}
         </Button>
       </div>
     </Card>
@@ -1782,10 +1790,10 @@ function ReportTile({ report }: { report: (typeof reports)[number] }) {
     if (report.status !== 'READY') { toast('Report is not yet ready for download', 'warning'); return; }
     setDownloading(true);
     try {
-      await downloadReportWhenReady(String(report.id), `${report.title}.pdf`);
+      await downloadReport(String(report.id));
       toast(`${report.title} downloaded`, 'success');
-    } catch {
-      toast(`Failed to download ${report.title}`, 'error');
+    } catch (error) {
+      toast(errorMessage(error, `Failed to download ${report.title}`), 'error');
     } finally {
       setDownloading(false);
     }
