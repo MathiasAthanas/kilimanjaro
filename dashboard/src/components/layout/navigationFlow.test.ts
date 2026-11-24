@@ -73,12 +73,10 @@ describe('role navigation flow', () => {
     ]));
   });
 
-  it('keeps principal approvals separate from finance posting', () => {
+  it('keeps the principal out of finance posting and finance setup', () => {
     const principal = getSectionsForRole('PRINCIPAL').flatMap((section) => section.items.map((item) => item.to));
-    expect(principal).toEqual(expect.arrayContaining([
-      '/principal/finance', '/principal/finance/approvals', '/principal/finance/fund-approvals',
-      '/principal/finance/statement',
-    ]));
+    expect(principal).toContain('/principal');
+    expect(principal.filter((to) => to.startsWith('/finance'))).toEqual([]);
     expect(principal).not.toContain('/finance/payments/cash');
   });
 });

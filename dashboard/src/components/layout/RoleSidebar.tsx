@@ -674,7 +674,8 @@ export function getSectionsForRole(role: string | undefined): SidebarSection[] {
   if (role === 'HOD')       return [...hodSections,        ...sharedSections];
   if (role === 'AQA')       return [...aqaSections,        ...sharedSections];
   if (role === 'FINANCE')   return [...financeSections,    ...sharedSections];
-  if (role === 'PRINCIPAL') return [...principalSections, ...residenceSections, ...boardingSections, ...billingSetupSections, ...sharedSections];
+  // The principal no longer opens /finance pages (see permissions.ts), so no Billing Setup links here.
+  if (role === 'PRINCIPAL') return [...principalSections, ...residenceSections, ...boardingSections, ...sharedSections];
   if (role === 'ADMIN')     return [...adminSections, ...residenceSections, ...boardingSections, ...billingSetupSections, ...sharedSections];
   if (role === 'ADMISSIONS') return [...admissionsSections, ...residenceSections, ...sharedSections];
   if (role === 'MATRON' || role === 'PATRON') return [...boardingStaffSections, ...sharedSections];
