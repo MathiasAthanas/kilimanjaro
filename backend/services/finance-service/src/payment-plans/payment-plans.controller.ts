@@ -7,7 +7,7 @@ import { RequestUser } from '../common/interfaces/request-user.interface';
 import { ApplyInvoicePlanDto, BulkApplyPlansDto, PreviewPlanDto, SavePaymentPlanDto, SetCustomPlanDto } from './payment-plans.dto';
 import { PaymentPlansService } from './payment-plans.service';
 
-const MANAGE = [ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.HEAD_OF_SCHOOL, ROLES.MANAGER, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN] as const;
+const MANAGE = [ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.HEAD_OF_SCHOOL, ROLES.MANAGER, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN] as const;
 
 @ApiTags('Finance - Payment plans')
 @Controller('finance')

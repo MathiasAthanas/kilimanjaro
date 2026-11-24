@@ -139,7 +139,7 @@ export function PaymentInfoPage() {
             </section>
             <section className="rounded-lg border border-[#d5dde6] bg-[#f7f9fb] p-5 text-sm font-semibold text-[#475569]">
               <p className="font-black text-[#00334f]">Who can change this</p>
-              <p className="mt-1">Finance, the Head of Finance, the Principal, the Manager and administrators. Every change is recorded in the audit log with who made it.</p>
+              <p className="mt-1">Finance, the Head of Finance, the Head of School, the Manager and administrators. Every change is recorded in the audit log with who made it.</p>
             </section>
           </aside>
         </div>

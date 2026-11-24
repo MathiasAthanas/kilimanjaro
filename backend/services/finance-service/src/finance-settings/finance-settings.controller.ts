@@ -7,8 +7,8 @@ import { RequestUser } from '../common/interfaces/request-user.interface';
 import { CreatePaymentAccountDto, UpdateFinanceSettingsDto, UpdatePaymentAccountDto, UploadBrandingImageDto } from './finance-settings.dto';
 import { BrandingKind, FinanceSettingsService } from './finance-settings.service';
 
-/** Finance, the heads of finance and school, the principal, the manager and the administrators can change payment info and invoice branding. */
-const MANAGE = [ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.HEAD_OF_SCHOOL, ROLES.MANAGER, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN] as const;
+/** Finance, the heads of finance and school, the manager and the administrators can change payment info and invoice branding. */
+const MANAGE = [ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.HEAD_OF_SCHOOL, ROLES.MANAGER, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN] as const;
 
 @ApiTags('Finance - Payment info and branding')
 @Controller('finance')

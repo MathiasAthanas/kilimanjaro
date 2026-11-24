@@ -20,7 +20,7 @@ export class InvoicesController {
 
   /** A sample invoice in this school's own look (logo, colours, payment info), for the branding and payment-info screens. */
   @Get('preview/pdf')
-  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
+  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
   async sample(@CurrentUser() user: RequestUser, @Res() res: Response) {
     const file = await this.invoicesService.samplePdf(user);
     res.setHeader('Content-Type', 'application/pdf');
@@ -119,7 +119,7 @@ export class InvoicesController {
   }
 
   @Post(':id/send')
-  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.PRINCIPAL, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
+  @Roles(ROLES.FINANCE, ROLES.HEAD_OF_FINANCE, ROLES.MANAGER, ROLES.HEAD_OF_SCHOOL, ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN)
   send(@Param('id') id: string, @CurrentUser() user: RequestUser) {
     return this.invoicesService.notifyParent(id, user);
   }
