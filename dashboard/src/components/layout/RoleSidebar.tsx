@@ -530,6 +530,8 @@ const boardingSections: SidebarSection[] = [
     title: 'Boarding',
     items: [
       { to: '/boarding/admin', icon: Building2, label: 'Hostel Dashboard', end: true },
+      { to: '/boarding/roll-call-report', icon: PieChart, label: 'Roll Call Report', end: true },
+      { to: '/boarding/roll-calls', icon: ClipboardCheck, label: 'Roll Call History', end: true },
     ],
   },
 ];
@@ -540,6 +542,7 @@ const boardingStaffSections: SidebarSection[] = [
     items: [
       { to: '/boarding/overview', icon: Building2, label: 'Today', end: true },
       { to: '/boarding/roll-calls', icon: ClipboardCheck, label: 'Roll Call', end: true },
+      { to: '/boarding/roll-call-report', icon: PieChart, label: 'Roll Call Report', end: true },
       { to: '/boarding/leaves', icon: CalendarCheck, label: 'Leave & Returns', end: true },
     ],
   },

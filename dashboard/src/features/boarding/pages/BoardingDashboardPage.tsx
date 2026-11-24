@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { NavLink } from 'react-router-dom';
 import { BedDouble, Building2, CalendarCheck, ClipboardCheck, Plus, UserPlus, Users, type LucideIcon } from 'lucide-react';
 import { AwaitingPlacementPanel } from '../components/AwaitingPlacementPanel';
 import { BoardingRollCallTrend } from '../components/BoardingRollCallTrend';
@@ -111,7 +112,7 @@ export function BoardingDashboardPage() {
     <main className="space-y-6 p-4 sm:p-6">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div><p className="text-xs font-black uppercase tracking-[0.2em] text-[#64748b]">Student welfare</p><h1 className="mt-1 text-2xl font-black text-[#00334f]">Boarding & Hostel Dashboard</h1><p className="mt-1 text-sm font-semibold text-[#64748b]">Dormitory rosters, beds, roll call, leave and return tracking.</p></div>
-        {canAdmin && <Button className="rounded-xl" onClick={() => setShowCreate((value) => !value)}><Plus className="h-4 w-4" /> Add Dormitory</Button>}
+        <div className="flex flex-wrap gap-2"><NavLink to="/boarding/roll-call-report"><Button variant="secondary" className="rounded-xl"><ClipboardCheck className="h-4 w-4" /> Roll call report</Button></NavLink>{canAdmin && <Button className="rounded-xl" onClick={() => setShowCreate((value) => !value)}><Plus className="h-4 w-4" /> Add Dormitory</Button>}</div>
       </header>
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">

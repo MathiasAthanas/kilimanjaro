@@ -1139,6 +1139,23 @@ export class UsersService {
     }
   }
 
+  async schoolLeaderIds(schoolId: string): Promise<string[]> {
+    if (!schoolId) return [];
+    const memberships = await this.prisma.schoolMembership.findMany({
+      where: {
+        isActive: true,
+        OR: [
+          { schoolId, role: { in: [Role.HEAD_OF_SCHOOL, Role.PRINCIPAL] } },
+          { schoolId: null, role: Role.MANAGER },
+        ],
+        user: { isActive: true },
+      },
+      select: { authUserId: true },
+    });
+    const managers = await this.prisma.user.findMany({ where: { isActive: true, role: Role.MANAGER }, select: { id: true } });
+    return [...new Set([...memberships.map((m) => m.authUserId), ...managers.map((m) => m.id)])];
+  }
+
   private isSystemAdmin(actorRole?: string): boolean {
     return actorRole === Role.SYSTEM_ADMIN || actorRole === 'ADMIN';
   }

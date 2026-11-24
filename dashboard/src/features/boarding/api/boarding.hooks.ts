@@ -176,6 +176,41 @@ export function useRollCallDetail(dormitoryId?: string, date?: string, session?:
   });
 }
 
+export type RollCallReport = {
+  today: string;
+  deadlines: { MORNING: string; EVENING: string };
+  range: { from: string; to: string; days: number };
+  totals: { dormitories: number; missingNow: number; absentToday: number; completionRate: number | null; presentRate: number | null };
+  sessionsToday: Array<{
+    session: 'MORNING' | 'EVENING';
+    deadline: string;
+    due: boolean;
+    dormitories: Array<{ dormitoryId: string; dormitory: string; rosterSize: number; status: 'DONE' | 'MISSING' | 'NOT_DUE'; total: number; present: number; absent: number; onLeave: number; excused: number }>;
+  }>;
+  absentToday: Array<{ studentId: string; name: string; registrationNumber: string; className: string | null; dormitory: string; session: 'MORNING' | 'EVENING'; note: string | null }>;
+  trend: Array<{ date: string; total: number; present: number; absent: number; recorded: number; expected: number; presentRate: number | null }>;
+  dormitories: Array<{ dormitoryId: string; name: string; rosterSize: number; recorded: number; expected: number; absent: number; completionRate: number | null; presentRate: number | null }>;
+  topAbsent: Array<{ studentId: string; name: string; registrationNumber: string; className: string | null; absences: number }>;
+};
+
+export function useRollCallReport(days: number) {
+  const activeSchoolKey = useActiveSchoolKey();
+  return useQuery({
+    queryKey: [...keys.rollCalls, 'report', days, activeSchoolKey],
+    queryFn: () => api.get('/boarding/roll-call-report', { params: { days } }).then((r) => payloadOf(r) as RollCallReport),
+    refetchInterval: 60_000,
+  });
+}
+
+export function useCheckRollCalls() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { dryRun?: boolean; summary?: boolean }) =>
+      api.post('/boarding/roll-call-report/check-now', body).then((r) => payloadOf(r) as { alerts: { alerts: Array<{ dormitories: string[]; notified: number }> } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.rollCalls }),
+  });
+}
+
 function boardingMutation<T extends Record<string, unknown>>(fn: (input: T) => Promise<unknown>) {
   return () => {
     const qc = useQueryClient();
