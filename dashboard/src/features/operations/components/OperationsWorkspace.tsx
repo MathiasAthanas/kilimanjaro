@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowRight, CheckCircle2, Download, FileText, Grid3X3, Printer, Save, Send } from 'lucide-react';
+import { AlertTriangle, ArrowRight, CheckCircle2, Download, FileText, Grid3X3, Save, Send } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
@@ -12,6 +12,7 @@ import { useOperationsClasses, useReportCatalog } from '../api/operations.hooks'
 import { Badge } from '../../../components/common/Badge';
 import { Button } from '../../../components/common/Button';
 import { exportReasonIsValid, markIsValid, timetableHasConflict } from '../utils/operationsValidation';
+import { ReportWorkflow } from '../../../components/reports/ReportWorkflowDialog';
 
 export function OperationsShell({ title, eyebrow, children }: { title: string; eyebrow: string; children: ReactNode }) {
   return (
@@ -77,6 +78,17 @@ export function DownloadJobButton({ job, className = 'rounded-lg py-1.5 text-xs'
 }
 
 export function ExportCenterDrawer({ jobs }: { jobs: ExportJob[] }) {
+  const [downloading, setDownloading] = useState<string | null>(null);
+  const download = async (job: ExportJob) => {
+    setDownloading(job.id);
+    try {
+      await downloadReport(job.id);
+    } catch (error) {
+      toast(errorMessage(error, 'The file could not be downloaded.'), 'error');
+    } finally {
+      setDownloading(null);
+    }
+  };
   return (
     <div className="rounded-2xl border border-ks-line bg-white p-5 shadow-sm">
       <h2 className="font-display text-xl font-black text-ks-navy">Export Center</h2>
@@ -87,7 +99,7 @@ export function ExportCenterDrawer({ jobs }: { jobs: ExportJob[] }) {
             <div className="flex items-center justify-between gap-3"><p className="font-black text-ks-navy">{job.name}</p><Badge tone={job.status === 'COMPLETED' ? 'emerald' : job.status === 'FAILED' ? 'rose' : 'amber'}>{job.status === 'COMPLETED' ? 'READY' : job.status}</Badge></div>
             <p className="mt-1 text-xs font-bold text-ks-muted">{[formatLabel(job.format), job.requestedBy, job.created ? job.created.slice(0, 16).replace('T', ' ') : '', sizeLabel(job.sizeBytes)].filter(Boolean).join(' / ')}</p>
             {job.status === 'FAILED' && job.error && <p className="mt-1 text-xs font-semibold text-ks-rose">{job.error}</p>}
-            <DownloadJobButton job={job} className="mt-3 rounded-lg py-1.5 text-xs" />
+            <ReportWorkflow title={job.name} description={[job.requestedBy, job.created ? job.created.slice(0, 16).replace('T', ' ') : ''].filter(Boolean).join(' · ')} format={formatLabel(job.format)} rows={[{ id: job.id, report: job.name, status: job.status === 'COMPLETED' ? 'READY' : job.status, requestedBy: job.requestedBy ?? '', created: job.created ?? '' }]} disabled={job.status !== 'COMPLETED'} busy={downloading === job.id} onDownload={() => download(job)} />
           </div>
         ))}
       </div>

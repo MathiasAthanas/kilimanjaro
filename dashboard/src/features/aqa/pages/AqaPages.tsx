@@ -69,6 +69,7 @@ import {
   ThresholdEditor,
 } from '../components/AqaWorkspaceShell';
 import { hasUnsavedThresholdChanges, validateThresholdOrder } from '../utils/aqaEngine';
+import { ReportWorkflow } from '../../../components/reports/ReportWorkflowDialog';
 
 
 // ─── Home ────────────────────────────────────────────────────────────────────
@@ -1240,6 +1241,12 @@ export function CreateAqaInterventionPage() {
 
 export function AqaExportsPage() {
   const [generating, setGenerating] = useState<string | null>(null);
+  const { data: alerts = [] } = useAqaAlerts();
+  const { data: interventions = [] } = useAqaInterventions();
+  const { data: pairings = [] } = useAqaPairings();
+  const { data: heatmapRows = [] } = useAqaHeatmap();
+  const { data: engineRuns = [] } = useEngineRuns();
+  const { data: engineConfig } = useEngineConfig();
 
   // Only reports the analytics service can really build; each one comes as PDF, Excel or CSV.
   const exportItems = [
@@ -1262,6 +1269,13 @@ export function AqaExportsPage() {
     }
   };
 
+  // Live preview data only where the page already holds rows that match the report.
+  const previewRows = (item: (typeof exportItems)[0]) => {
+    if (item.reportType === 'PERFORMANCE_ENGINE') return alerts as Array<Record<string, string | number | boolean | null | undefined>>;
+    if (item.reportType === 'SCHOOL_OVERVIEW') return heatmapRows as Array<Record<string, string | number | boolean | null | undefined>>;
+    return [];
+  };
+
   return (
     <AqaWorkspaceShell title="AQA Export Center" eyebrow="Operational academic QA data">
       <div className="grid gap-gutter md:grid-cols-2 xl:grid-cols-3">
@@ -1272,20 +1286,17 @@ export function AqaExportsPage() {
             </div>
             <h3 className="mt-4 font-display text-lg font-black text-ks-navy">{item.title}</h3>
             <p className="mt-1 text-sm font-semibold text-ks-muted">{item.detail}</p>
-            <div className="mt-4 flex items-center gap-2">
-              {formats.map((format) => (
-                <Button
-                  key={format}
-                  variant="secondary"
-                  className="flex-1 rounded-xl text-xs"
-                  disabled={generating !== null}
-                  onClick={() => handleGenerate(item, format)}
-                >
-                  <Download className="h-3.5 w-3.5" />
-                  {generating === `${item.reportType}:${format}` ? 'Generating…' : formatLabel(format)}
-                </Button>
-              ))}
-            </div>
+            <ReportWorkflow
+              title={item.title}
+              description={item.detail}
+              formats={formats}
+              rows={previewRows(item)}
+              emptyMessage="A live preview is not available for this report. Download it to see the full document."
+              fields={[{ key: 'search', label: 'Search report', type: 'search', placeholder: 'Student, class, subject or status…' }]}
+              busy={generating?.startsWith(`${item.reportType}:`) ?? false}
+              disabled={generating !== null && !generating.startsWith(`${item.reportType}:`)}
+              onDownload={(_filters, format) => handleGenerate(item, (format ?? 'PDF') as ReportFormat)}
+            />
           </Card>
         ))}
       </div>
@@ -1722,7 +1733,9 @@ function ReportsPreview() {
 function ReportGenerator() {
   const [busy, setBusy] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
-  const [format, setFormat] = useState<ReportFormat>('PDF');
+  const { data: alerts = [] } = useAqaAlerts();
+  const { data: heatmapRows = [] } = useAqaHeatmap();
+  const formats: ReportFormat[] = ['PDF', 'XLSX', 'CSV'];
   // Templates the analytics service can really build (it refuses any other name).
   const templates: Array<{ label: string; reportType: string }> = [
     { label: 'School Overview', reportType: 'SCHOOL_OVERVIEW' },
@@ -1730,7 +1743,7 @@ function ReportGenerator() {
     { label: 'Attendance Summary', reportType: 'ATTENDANCE_SUMMARY' },
   ];
 
-  const handleGenerate = async () => {
+  const handleGenerate = async (format: ReportFormat) => {
     const template = templates.find((item) => item.label === selected);
     if (!template) { toast('Please select a report template first', 'warning'); return; }
     setBusy(true);
@@ -1743,6 +1756,12 @@ function ReportGenerator() {
       setBusy(false);
     }
   };
+  const selectedTemplate = templates.find((item) => item.label === selected);
+  const rows = (selectedTemplate?.reportType === 'PERFORMANCE_ENGINE'
+    ? alerts
+    : selectedTemplate?.reportType === 'SCHOOL_OVERVIEW'
+      ? heatmapRows
+      : []) as Array<Record<string, string | number | boolean | null | undefined>>;
 
   return (
     <Card className="sticky top-24 h-fit overflow-hidden rounded-xl">
@@ -1766,19 +1785,18 @@ function ReportGenerator() {
             </button>
           ))}
         </div>
-        <div className="mt-4 flex gap-2">
-          {(['PDF', 'XLSX', 'CSV'] as ReportFormat[]).map((item) => (
-            <button key={item} onClick={() => setFormat(item)} className={`flex-1 rounded-lg border px-3 py-2 text-xs font-black ${format === item ? 'border-ks-blue bg-ks-blue text-white' : 'border-ks-line bg-ks-paper text-ks-navy'}`}>{formatLabel(item)}</button>
-          ))}
-        </div>
-        <Button
-          className="mt-5 w-full rounded-xl"
-          disabled={!selected || busy}
-          onClick={handleGenerate}
-        >
-          <Send className="h-4 w-4" />
-          {busy ? 'Generating…' : 'Generate report'}
-        </Button>
+        {selectedTemplate && (
+          <ReportWorkflow
+            title={selectedTemplate.label}
+            description="Academic QA report generated from the current school scope."
+            formats={formats}
+            rows={rows}
+            emptyMessage="A live preview is not available for this report. Download it to see the full document."
+            fields={[{ key: 'search', label: 'Search report', type: 'search' }]}
+            busy={busy}
+            onDownload={(_filters, format) => handleGenerate((format ?? 'PDF') as ReportFormat)}
+          />
+        )}
       </div>
     </Card>
   );
@@ -1809,14 +1827,15 @@ function ReportTile({ report }: { report: (typeof reports)[number] }) {
       <p className="mt-3 text-[11px] font-black uppercase tracking-wider text-ks-muted">{report.type}</p>
       <h3 className="mt-1 font-display text-lg font-black text-ks-navy">{report.title}</h3>
       <p className="mt-1 text-xs font-semibold text-ks-muted">{report.generatedAt}</p>
-      <Button
-        variant="secondary"
-        className="mt-4 w-full rounded-xl text-xs"
-        disabled={downloading}
-        onClick={handleDownload}
-      >
-        <Download className="h-3.5 w-3.5" /> {downloading ? 'Downloading…' : 'Download'}
-      </Button>
+      <ReportWorkflow
+        title={report.title}
+        description={`${report.type} · generated ${report.generatedAt}`}
+        format="PDF"
+        rows={[{ id: report.id, report: report.title, type: report.type, status: report.status, generatedAt: report.generatedAt }]}
+        disabled={report.status !== 'READY'}
+        busy={downloading}
+        onDownload={handleDownload}
+      />
     </Card>
   );
 }

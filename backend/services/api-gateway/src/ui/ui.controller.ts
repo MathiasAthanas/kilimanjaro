@@ -875,6 +875,41 @@ export class UiController {
     return this.ui.envelope(this.withCounts(data, ['users', 'classes', 'terms', 'feeCategories']), warnings);
   }
 
+  /**
+   * One chart-ready read model for the Admin control centre. It contains only
+   * operational data covered by the Admin sidebar (people, students, academic
+   * setup, attendance, learning quality, notifications and health), not
+   * finance ledger or collection data.
+   */
+  @Get('admin/dashboard/analytics')
+  @Roles(...ADMIN_ROLES)
+  async adminDashboardAnalytics(
+    @CurrentUser() user: GatewayUser,
+    @Query('academicYearId') academicYearId?: string,
+    @Query('termId') termId?: string,
+  ): Promise<UiEnvelope> {
+    const schoolIds = user.scope === 'GROUP' && !user.activeSchoolId
+      ? ''
+      : (user.activeSchoolId ? [user.activeSchoolId] : (user.schoolIds ?? []).filter((id) => id && id !== '*')).join(',');
+    const { data, warnings } = await this.ui.collect({
+      users: { service: 'auth', path: '/auth/internal/dashboard-analytics', params: { schoolIds }, fallback: null },
+      students: { service: 'student', path: '/students/admin/dashboard-analytics', fallback: null },
+      attendance: { service: 'analytics', path: '/analytics/attendance/overview', params: { academicYearId, termId }, fallback: null },
+      academics: { service: 'analytics', path: '/analytics/academic/overview', params: { academicYearId, termId }, fallback: null },
+      notifications: { service: 'notification', path: '/notifications/stats', fallback: null },
+      systemHealth: { service: 'analytics', path: '/analytics/health', fallback: null },
+    }, user);
+    return this.ui.envelope({
+      scope: {
+        type: user.scope ?? 'SCHOOL',
+        activeSchoolId: user.activeSchoolId ?? null,
+        academicYearId: academicYearId ?? null,
+        termId: termId ?? null,
+      },
+      ...data,
+    }, warnings);
+  }
+
   @Get('admin/audit/system')
   @Roles(...ADMIN_ROLES)
   async adminSystemAudit(@CurrentUser() user: GatewayUser): Promise<UiEnvelope> {

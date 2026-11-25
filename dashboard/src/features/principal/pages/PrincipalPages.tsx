@@ -14,8 +14,25 @@ import {
   WalletCards,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import {
+  Bar,
+  BarChart as RBarChart,
+  CartesianGrid,
+  ComposedChart,
+  Legend,
+  Line,
+  PolarAngleAxis,
+  PolarGrid,
+  PolarRadiusAxis,
+  Radar,
+  RadarChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import { NavLink, useNavigate, useParams } from 'react-router-dom';
 import { toast } from '../../../lib/toast';
 import { api } from '../../../lib/api/client';
@@ -34,7 +51,7 @@ import type {
   StaffMember,
 } from '../types/principal.types';
 
-type SchoolHealthWithStats = SchoolHealth & { atRisk?: number; critical?: number; passRate?: number };
+type SchoolHealthWithStats = SchoolHealth & { atRisk?: number; critical?: number; passRate?: number; totalStudents?: number };
 import {
   usePendingMarkApprovals,
   useMarksForApproval,
@@ -89,6 +106,14 @@ import { DataError } from '../../../components/feedback/DataError';
 import { EmptyState } from '../../../components/feedback/EmptyState';
 import { SkeletonTable } from '../../../components/common/SkeletonTable';
 import type { Loose } from '../../../lib/loose';
+import {
+  EXECUTIVE_COLORS,
+  ExecutiveChartCard,
+  ExecutiveChartFrame,
+  ExecutiveDonut,
+  ExecutiveLegend,
+  ExecutiveTooltip,
+} from '../../../components/charts/ExecutiveCharts';
 
 const money = (n: number) => `TZS ${n.toLocaleString('en-US')}`;
 
@@ -98,15 +123,72 @@ const EMPTY_HEALTH: SchoolHealth = { score: 0, academic: 0, finance: 0, operatio
 // ─── Home dashboard ───────────────────────────────────────────────────────────
 
 export function PrincipalHomePage() {
-  const { data: apiHealth = EMPTY_HEALTH } = usePrincipalSchoolHealth() as { data: SchoolHealth };
+  const healthQuery = usePrincipalSchoolHealth() as { data?: SchoolHealthWithStats };
+  const apiHealth: SchoolHealthWithStats = healthQuery.data ?? EMPTY_HEALTH;
   const { data: apiAudit = [] as PrincipalAuditEvent[] } = usePrincipalAudit() as { data: PrincipalAuditEvent[] };
   const { data: apiAssessments = [] as PrincipalAssessment[] } = usePendingMarkApprovals() as { data: PrincipalAssessment[] };
   const { data: apiPublishClasses = [] as PublishClass[] } = usePublishReadiness() as { data: PublishClass[] };
+  const { data: students = [] as PrincipalStudent[] } = usePrincipalStudents() as { data: PrincipalStudent[] };
+  const { data: staff = [] as StaffMember[] } = usePrincipalStaff() as { data: StaffMember[] };
+  const { data: incidents = [] as DisciplineIncident[] } = usePrincipalDiscipline() as { data: DisciplineIncident[] };
 
   const marksCount    = apiAssessments.length;
   const resultsCount  = apiPublishClasses.filter((c) => c.missingItems === 0 && c.reportCardReadiness >= 80).length;
   const reportCards   = apiPublishClasses.reduce((s, c) => s + (c.students ?? 0), 0);
   const totalPending  = marksCount;
+
+  const healthData = useMemo(() => [
+    { metric: 'Academic', score: apiHealth.academic ?? 0 },
+    { metric: 'Attendance', score: apiHealth.operations ?? 0 },
+    { metric: 'Pass rate', score: apiHealth.passRate ?? 0 },
+    { metric: 'Overall', score: apiHealth.score ?? 0 },
+  ], [apiHealth]);
+
+  const riskData = useMemo(() => {
+    const counts = new Map<string, number>();
+    students.forEach((student) => {
+      const raw = String(student.alertStatus || 'Unclassified').replaceAll('_', ' ').toLowerCase();
+      const label = raw.replace(/\b\w/g, (character) => character.toUpperCase());
+      counts.set(label, (counts.get(label) ?? 0) + 1);
+    });
+    const colors = [EXECUTIVE_COLORS.emerald, EXECUTIVE_COLORS.amber, EXECUTIVE_COLORS.rose, EXECUTIVE_COLORS.blue];
+    return Array.from(counts, ([name, value], index) => ({ name, value, color: colors[index % colors.length] }));
+  }, [students]);
+
+  const attendanceBands = useMemo(() => {
+    const bands = [
+      { name: 'Below 60%', minimum: 0, maximum: 59.999, students: 0 },
+      { name: '60–79%', minimum: 60, maximum: 79.999, students: 0 },
+      { name: '80–89%', minimum: 80, maximum: 89.999, students: 0 },
+      { name: '90–100%', minimum: 90, maximum: 100, students: 0 },
+    ];
+    students.forEach((student) => {
+      const value = Number(student.attendance ?? 0);
+      const band = bands.find((item) => value >= item.minimum && value <= item.maximum);
+      if (band) band.students += 1;
+    });
+    return bands;
+  }, [students]);
+
+  const readinessData = useMemo(() => apiPublishClasses.slice(0, 12).map((item) => ({
+    name: item.className,
+    readiness: item.reportCardReadiness ?? 0,
+    missing: item.missingItems ?? 0,
+    students: item.students ?? 0,
+  })), [apiPublishClasses]);
+
+  const staffData = useMemo(() => [...staff]
+    .sort((left, right) => (right.syllabus + right.onTime) - (left.syllabus + left.onTime))
+    .slice(0, 10)
+    .map((member) => ({ name: member.name, syllabus: member.syllabus, onTime: member.onTime })), [staff]);
+
+  const disciplineData = useMemo(() => {
+    const open = incidents.filter((incident) => incident.status === 'OPEN').length;
+    return [
+      { name: 'Open', value: open, color: EXECUTIVE_COLORS.rose },
+      { name: 'Resolved', value: Math.max(0, incidents.length - open), color: EXECUTIVE_COLORS.emerald },
+    ];
+  }, [incidents]);
 
   return (
     <PrincipalWorkspaceShell title="Executive Decision Room" eyebrow="Headmaster command center">
@@ -150,6 +232,81 @@ export function PrincipalHomePage() {
           meta={['Comments', 'Sign-off']}
         />
       </div>
+
+      <div className="grid gap-gutter xl:grid-cols-3">
+        <ExecutiveChartCard title="School performance radar" subtitle="Academic, attendance and results health">
+          <ExecutiveChartFrame height={280} empty={healthData.every((item) => item.score === 0)}>
+            <ResponsiveContainer width="100%" height="100%">
+              <RadarChart data={healthData} outerRadius="72%">
+                <PolarGrid stroke="#E2E8F0" />
+                <PolarAngleAxis dataKey="metric" tick={{ fontSize: 11, fill: '#475569', fontWeight: 800 }} />
+                <PolarRadiusAxis domain={[0, 100]} tick={{ fontSize: 9, fill: '#94A3B8' }} />
+                <Radar dataKey="score" name="Score" stroke={EXECUTIVE_COLORS.indigo} fill={EXECUTIVE_COLORS.indigo} fillOpacity={0.3} strokeWidth={2.5} />
+                <Tooltip content={<ExecutiveTooltip suffix="%" />} />
+              </RadarChart>
+            </ResponsiveContainer>
+          </ExecutiveChartFrame>
+        </ExecutiveChartCard>
+
+        <ExecutiveChartCard title="Student risk profile" subtitle="Current academic intervention status">
+          <ExecutiveDonut data={riskData} centerLabel="Students" />
+          <ExecutiveLegend data={riskData} />
+        </ExecutiveChartCard>
+
+        <ExecutiveChartCard title="Discipline resolution" subtitle="Open and resolved cases in the school">
+          <ExecutiveDonut data={disciplineData} centerLabel="Cases" />
+          <ExecutiveLegend data={disciplineData} />
+        </ExecutiveChartCard>
+      </div>
+
+      <div className="grid gap-gutter xl:grid-cols-2">
+        <ExecutiveChartCard title="Attendance distribution" subtitle="Students grouped by attendance rate">
+          <ExecutiveChartFrame height={300} empty={students.length === 0}>
+            <ResponsiveContainer width="100%" height="100%">
+              <RBarChart data={attendanceBands}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#EEF2F7" vertical={false} />
+                <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#475569', fontWeight: 800 }} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#94A3B8' }} />
+                <Tooltip content={<ExecutiveTooltip />} />
+                <Bar dataKey="students" name="Students" fill={EXECUTIVE_COLORS.teal} radius={[8, 8, 0, 0]} maxBarSize={58} />
+              </RBarChart>
+            </ResponsiveContainer>
+          </ExecutiveChartFrame>
+        </ExecutiveChartCard>
+
+        <ExecutiveChartCard title="Results publishing readiness" subtitle="Readiness line against missing class items">
+          <ExecutiveChartFrame height={300} empty={readinessData.length === 0}>
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={readinessData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#EEF2F7" vertical={false} />
+                <XAxis dataKey="name" interval={0} angle={-20} textAnchor="end" height={58} tick={{ fontSize: 10, fill: '#475569', fontWeight: 800 }} />
+                <YAxis yAxisId="percent" domain={[0, 100]} unit="%" tick={{ fontSize: 10, fill: '#94A3B8' }} />
+                <YAxis yAxisId="count" orientation="right" allowDecimals={false} tick={{ fontSize: 10, fill: '#94A3B8' }} />
+                <Tooltip content={<ExecutiveTooltip />} />
+                <Legend iconType="circle" wrapperStyle={{ fontSize: 11, fontWeight: 700 }} />
+                <Bar yAxisId="count" dataKey="missing" name="Missing items" fill={EXECUTIVE_COLORS.rose} radius={[6, 6, 0, 0]} maxBarSize={28} />
+                <Line yAxisId="percent" type="monotone" dataKey="readiness" name="Readiness" stroke={EXECUTIVE_COLORS.emerald} strokeWidth={3} dot={{ r: 4 }} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </ExecutiveChartFrame>
+        </ExecutiveChartCard>
+      </div>
+
+      <ExecutiveChartCard title="Staff delivery overview" subtitle="Syllabus completion and submission timeliness" className="w-full">
+        <ExecutiveChartFrame height={320} empty={staffData.length === 0}>
+          <ResponsiveContainer width="100%" height="100%">
+            <RBarChart data={staffData} layout="vertical" margin={{ left: 20, right: 18 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#EEF2F7" horizontal={false} />
+              <XAxis type="number" domain={[0, 100]} unit="%" tick={{ fontSize: 10, fill: '#94A3B8' }} />
+              <YAxis type="category" dataKey="name" width={135} tick={{ fontSize: 10, fill: '#475569', fontWeight: 800 }} />
+              <Tooltip content={<ExecutiveTooltip suffix="%" />} />
+              <Legend iconType="circle" wrapperStyle={{ fontSize: 11, fontWeight: 700 }} />
+              <Bar dataKey="syllabus" name="Syllabus" fill={EXECUTIVE_COLORS.indigo} radius={[0, 6, 6, 0]} />
+              <Bar dataKey="onTime" name="On time" fill={EXECUTIVE_COLORS.emerald} radius={[0, 6, 6, 0]} />
+            </RBarChart>
+          </ResponsiveContainer>
+        </ExecutiveChartFrame>
+      </ExecutiveChartCard>
 
       {/* Main grid: health + audit / charts */}
       <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_400px]">

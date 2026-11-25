@@ -1,5 +1,92 @@
+import { api } from '../../../lib/api/client';
+
 export type AdminStatus = 'ACTIVE' | 'INACTIVE' | 'LOCKED' | 'PENDING';
 export type ServiceState = 'ONLINE' | 'DEGRADED' | 'OFFLINE' | 'UNKNOWN';
+
+/** Chart-ready, scoped Admin dashboard contract. This module intentionally
+ * exposes the API without changing the existing dashboard UI. */
+export type AdminDashboardAnalytics = {
+  scope: { type: 'GROUP' | 'SCHOOL'; activeSchoolId: string | null; academicYearId: string | null; termId: string | null };
+  users: { total: number; active: number; inactive: number; locked: number; byRole: Record<string, number>; createdByMonth: Array<{ month: string; users: number }> } | null;
+  students: {
+    generatedAt: string;
+    students: { total: number; byStatus: Record<string, number>; byGender: Record<string, number>; byResidenceType: Record<string, number> };
+    enrolment: { byClass: Array<{ classId: string; className: string; stream: string | null; stage: string; enrolled: number; capacity: number; utilizationPercent: number }>; byStage: Record<string, number>; monthlyAdmissions: Array<{ month: string; admissions: number }> };
+  } | null;
+  attendance: { schoolAttendanceRate: number; byClass: Array<{ className: string; stream: string | null; attendanceRate: number; totalDays: number; totalPresent: number; totalAbsent: number; studentsBelow80: number }>; byDay: Array<{ dayOfWeek: string; rate: number }>; byMonth: Array<{ month: string; rate: number }> } | null;
+  academics: { schoolAverage: number; passRate: number; gradeDistribution: Record<string, number>; subjectRankings: Array<{ subjectName: string; average: number; passRate: number; rank: number }>; classRankings: Array<{ className: string; average: number; passRate: number; rank: number }>; termOverTermComparison: Array<{ termName: string; schoolAverage: number; passRate: number; totalStudents: number }>; atRiskStudents: number } | null;
+  notifications: { totalSent: number; byChannel: Record<string, number>; byStatus: Record<string, number>; deliveryRate: number; last24Hours: { sent: number; delivered: number; failed: number } } | null;
+  systemHealth: unknown;
+};
+
+export type AdminDashboardAnalyticsFilters = { academicYearId?: string; termId?: string };
+
+/** Metadata returned by the gateway alongside the chart data. */
+export type AdminDashboardAnalyticsMeta = {
+  generatedAt?: string;
+  source?: string;
+  partial?: boolean;
+  warnings?: string[];
+};
+
+/** The page keeps the chart data flat while retaining gateway availability information. */
+type CompleteAdminDashboardAnalytics = {
+  [Key in keyof AdminDashboardAnalytics]: NonNullable<AdminDashboardAnalytics[Key]>;
+};
+
+export type AdminDashboardAnalyticsResult = CompleteAdminDashboardAnalytics & {
+  meta: AdminDashboardAnalyticsMeta;
+};
+
+type AdminDashboardAnalyticsEnvelope = {
+  data: AdminDashboardAnalytics;
+  meta?: AdminDashboardAnalyticsMeta;
+};
+
+function dashboardDefaults(data: AdminDashboardAnalytics): CompleteAdminDashboardAnalytics {
+  return {
+    scope: data.scope,
+    users: data.users ?? {
+      total: 0, active: 0, inactive: 0, locked: 0, byRole: {}, createdByMonth: [],
+    },
+    students: data.students ?? {
+      generatedAt: '',
+      students: { total: 0, byStatus: {}, byGender: {}, byResidenceType: {} },
+      enrolment: { byClass: [], byStage: {}, monthlyAdmissions: [] },
+    },
+    attendance: data.attendance ?? {
+      schoolAttendanceRate: 0, byClass: [], byDay: [], byMonth: [],
+    },
+    academics: data.academics ?? {
+      schoolAverage: 0,
+      passRate: 0,
+      gradeDistribution: {},
+      subjectRankings: [],
+      classRankings: [],
+      termOverTermComparison: [],
+      atRiskStudents: 0,
+    },
+    notifications: data.notifications ?? {
+      totalSent: 0,
+      byChannel: {},
+      byStatus: {},
+      deliveryRate: 0,
+      last24Hours: { sent: 0, delivered: 0, failed: 0 },
+    },
+    systemHealth: data.systemHealth ?? {},
+  };
+}
+
+/** Fetch all Admin dashboard graph data in one school-scoped request. */
+export async function fetchAdminDashboardAnalytics(
+  filters: AdminDashboardAnalyticsFilters = {},
+): Promise<AdminDashboardAnalyticsResult> {
+  const response = await api.get<AdminDashboardAnalyticsEnvelope>('/admin/dashboard/analytics', { params: filters });
+  return {
+    ...dashboardDefaults(response.data.data),
+    meta: response.data.meta ?? {},
+  };
+}
 
 export const adminUsers = [
   { id: 'usr-admin', name: 'System Admin', email: 'admin@ks.ac.tz', role: 'ADMIN', status: 'ACTIVE' as AdminStatus, linked: 'System', lastLogin: '2026-05-21T08:20:00Z', createdAt: '2026-01-03T10:00:00Z' },

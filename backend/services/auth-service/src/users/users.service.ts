@@ -1044,6 +1044,46 @@ export class UsersService {
     return { total, active: activeCount, inactive: total - activeCount, byRole };
   }
 
+  /** Compact, non-PII distributions for the system-admin dashboard. */
+  async dashboardAnalytics(schoolIds: string[] = []) {
+    const scopedSchoolIds = schoolIds.filter((id) => id && id !== '*');
+    const where: Prisma.UserWhereInput = scopedSchoolIds.length
+      ? { schoolMemberships: { some: { isActive: true, schoolId: { in: scopedSchoolIds } } } }
+      : {};
+    const twelveMonthsAgo = new Date();
+    twelveMonthsAgo.setUTCDate(1);
+    twelveMonthsAgo.setUTCHours(0, 0, 0, 0);
+    twelveMonthsAgo.setUTCMonth(twelveMonthsAgo.getUTCMonth() - 11);
+
+    const [total, active, locked, byRoleRaw, created] = await Promise.all([
+      this.prisma.user.count({ where }),
+      this.prisma.user.count({ where: { ...where, isActive: true } }),
+      this.prisma.user.count({ where: { ...where, lockedUntil: { gt: new Date() } } }),
+      this.prisma.user.groupBy({ by: ['role'], where, _count: { _all: true } }),
+      this.prisma.user.findMany({ where: { ...where, createdAt: { gte: twelveMonthsAgo } }, select: { createdAt: true } }),
+    ]);
+    const createdByMonth = Array.from({ length: 12 }, (_, index) => {
+      const date = new Date(Date.UTC(twelveMonthsAgo.getUTCFullYear(), twelveMonthsAgo.getUTCMonth() + index, 1));
+      return { month: date.toISOString().slice(0, 7), users: 0 };
+    });
+    const monthIndex = new Map(createdByMonth.map((row, index) => [row.month, index]));
+    for (const user of created) {
+      const index = monthIndex.get(user.createdAt.toISOString().slice(0, 7));
+      if (index !== undefined) createdByMonth[index].users += 1;
+    }
+    return {
+      total,
+      active,
+      inactive: total - active,
+      locked,
+      byRole: byRoleRaw.reduce<Record<string, number>>((acc, row) => {
+        acc[row.role] = row._count._all;
+        return acc;
+      }, {}),
+      createdByMonth,
+    };
+  }
+
   private generateTemporaryPassword(): string {
     const random = Math.random().toString(36).slice(2, 10);
     return `Temp-${random}-Kili`;

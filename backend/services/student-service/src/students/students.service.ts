@@ -99,19 +99,27 @@ export class StudentsService {
     throw new BadRequestException('Unable to allocate a registration number — sequence exhausted');
   }
 
-  private buildStudentProfileInclude(): Prisma.StudentInclude {
+  private buildStudentProfileInclude(includeHistory = false): Prisma.StudentInclude {
     return {
       school: true,
-      enrolments: {
-        where: { isActive: true },
-        include: {
-          class: true,
-          academicYear: true,
-          term: true,
+      enrolments: includeHistory
+        ? {
+            include: { class: true, academicYear: true, term: true },
+            orderBy: { enrolledAt: 'desc' },
+          }
+        : {
+            where: { isActive: true },
+            include: { class: true, academicYear: true, term: true },
+            orderBy: { enrolledAt: 'desc' },
+            take: 1,
+          },
+      ...(includeHistory ? {
+        residenceChanges: { orderBy: { createdAt: 'desc' as const } },
+        dormitoryAssignments: {
+          include: { dormitory: true, bed: true },
+          orderBy: { assignedAt: 'desc' as const },
         },
-        orderBy: { enrolledAt: 'desc' },
-        take: 1,
-      },
+      } : {}),
       parentLinks: {
         where: { isActive: true },
         include: { guardian: true },
@@ -317,6 +325,79 @@ export class StudentsService {
     return { total, byStatus };
   }
 
+  /**
+   * A compact analytics contract for the admin control centre. All data stays
+   * inside the caller's current school/group scope and contains no student PII.
+   */
+  async dashboardAnalytics(user?: RequestUser) {
+    const scope = schoolScopeFilter(user);
+    const twelveMonthsAgo = new Date();
+    twelveMonthsAgo.setUTCDate(1);
+    twelveMonthsAgo.setUTCHours(0, 0, 0, 0);
+    twelveMonthsAgo.setUTCMonth(twelveMonthsAgo.getUTCMonth() - 11);
+
+    const [studentsByStatus, studentsByGender, studentsByResidence, classes, activeEnrolments, admissions] = await Promise.all([
+      this.prisma.student.groupBy({ by: ['status'], where: scope, _count: { _all: true } }),
+      this.prisma.student.groupBy({ by: ['gender'], where: scope, _count: { _all: true } }),
+      this.prisma.student.groupBy({ by: ['residenceType'], where: scope, _count: { _all: true } }),
+      this.prisma.class.findMany({
+        where: scope,
+        select: { id: true, name: true, stream: true, educationStage: true, capacity: true },
+        orderBy: [{ educationStage: 'asc' }, { level: 'asc' }, { name: 'asc' }],
+      }),
+      this.prisma.enrolment.groupBy({ by: ['classId'], where: { ...scope, isActive: true }, _count: { _all: true } }),
+      this.prisma.student.findMany({ where: { ...scope, admissionDate: { gte: twelveMonthsAgo } }, select: { admissionDate: true } }),
+    ]);
+
+    const countMap = (rows: Array<{ _count: { _all: number } }>, key: (row: any) => string | null | undefined) =>
+      rows.reduce<Record<string, number>>((acc, row) => {
+        acc[String(key(row) ?? 'UNCLASSIFIED')] = row._count._all;
+        return acc;
+      }, {});
+    const enrolmentByClass = new Map(activeEnrolments.map((row) => [row.classId, row._count._all]));
+    const monthlyAdmissions = Array.from({ length: 12 }, (_, index) => {
+      const date = new Date(Date.UTC(twelveMonthsAgo.getUTCFullYear(), twelveMonthsAgo.getUTCMonth() + index, 1));
+      return { month: date.toISOString().slice(0, 7), admissions: 0 };
+    });
+    const monthIndex = new Map(monthlyAdmissions.map((row, index) => [row.month, index]));
+    for (const student of admissions) {
+      const index = monthIndex.get(student.admissionDate.toISOString().slice(0, 7));
+      if (index !== undefined) monthlyAdmissions[index].admissions += 1;
+    }
+
+    const classEnrolment = classes.map((klass) => {
+      const enrolled = enrolmentByClass.get(klass.id) ?? 0;
+      return {
+        classId: klass.id,
+        className: klass.name,
+        stream: klass.stream,
+        stage: klass.educationStage,
+        enrolled,
+        capacity: klass.capacity,
+        utilizationPercent: klass.capacity > 0 ? Number(((enrolled / klass.capacity) * 100).toFixed(1)) : 0,
+      };
+    });
+    const enrolmentByStage = classEnrolment.reduce<Record<string, number>>((acc, row) => {
+      acc[row.stage] = (acc[row.stage] ?? 0) + row.enrolled;
+      return acc;
+    }, {});
+
+    return {
+      generatedAt: new Date().toISOString(),
+      students: {
+        total: studentsByStatus.reduce((total, row) => total + row._count._all, 0),
+        byStatus: countMap(studentsByStatus, (row) => row.status),
+        byGender: countMap(studentsByGender, (row) => row.gender),
+        byResidenceType: countMap(studentsByResidence, (row) => row.residenceType),
+      },
+      enrolment: {
+        byClass: classEnrolment,
+        byStage: enrolmentByStage,
+        monthlyAdmissions,
+      },
+    };
+  }
+
   async list(query: ListStudentsDto, user?: RequestUser): Promise<unknown> {
     const pagination = paginate(query.page, query.limit);
 
@@ -385,7 +466,7 @@ export class StudentsService {
 
     const student = await this.prisma.student.findUnique({
       where: { id },
-      include: this.buildStudentProfileInclude(),
+      include: this.buildStudentProfileInclude(true),
     });
 
     if (!student) {
@@ -410,7 +491,7 @@ export class StudentsService {
 
     const student = await this.prisma.student.findUnique({
       where: { registrationNumber },
-      include: this.buildStudentProfileInclude(),
+      include: this.buildStudentProfileInclude(true),
     });
 
     if (!student) {
@@ -453,7 +534,7 @@ export class StudentsService {
         ...rest,
         ...(rest.dateOfBirth ? { dateOfBirth: new Date(rest.dateOfBirth) } : {}),
       },
-      include: this.buildStudentProfileInclude(),
+      include: this.buildStudentProfileInclude(true),
     });
 
     await this.redis.del(`student:${id}:profile`, `student:reg:${existing.registrationNumber}`);

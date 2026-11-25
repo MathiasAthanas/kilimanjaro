@@ -1,0 +1,198 @@
+KILIMANJARO — ADMIN DASHBOARD ANALYTICS API CONSUMPTION GUIDE
+================================================================
+
+PURPOSE
+-------
+This guide describes the chart-ready Admin dashboard API. It was added without
+changing the existing Admin dashboard UI. It is intentionally an operational
+overview: users, students, academic setup/performance, attendance,
+notifications and service health. It does NOT expose invoice, payment,
+collection, balance, or other finance-ledger data.
+
+ACCESS AND SCOPE
+----------------
+Endpoint: GET /api/v1/admin/dashboard/analytics
+Role: SYSTEM_ADMIN only (the dashboard's ADMIN role maps to SYSTEM_ADMIN in
+the backend).
+
+The endpoint always uses the authenticated session's scope:
+- A school-scoped Admin receives only assigned-school data.
+- A group-scoped Admin receives group data until an active school is selected.
+- An active-school selection narrows the response to that one school.
+- The response includes data.scope so the UI can state exactly what is shown.
+
+Optional query parameters:
+- academicYearId: scope academic and attendance analytics to a year.
+- termId: scope academic and attendance analytics to a term.
+
+Examples:
+  GET /api/v1/admin/dashboard/analytics
+  GET /api/v1/admin/dashboard/analytics?academicYearId=<year-id>&termId=<term-id>
+
+FRONTEND ENTRY POINT
+--------------------
+File: dashboard/src/features/admin/api/adminApi.ts
+
+Import and call:
+
+  import {
+    fetchAdminDashboardAnalytics,
+    type AdminDashboardAnalytics,
+  } from '../api/adminApi';
+
+  const data = await fetchAdminDashboardAnalytics({
+    academicYearId,
+    termId,
+  });
+
+For React Query, keep the school and filters in the key:
+
+  useQuery({
+    queryKey: ['admin-dashboard-analytics', activeSchoolId, academicYearId, termId],
+    queryFn: () => fetchAdminDashboardAnalytics({ academicYearId, termId }),
+    staleTime: 60_000,
+  });
+
+Never send schoolId in the query. The authenticated active-school context is
+the security boundary and is supplied by the existing API client headers.
+
+RESPONSE SHAPE
+--------------
+{
+  scope: {
+    type: 'SCHOOL' | 'GROUP',
+    activeSchoolId: string | null,
+    academicYearId: string | null,
+    termId: string | null
+  },
+  users: {
+    total, active, inactive, locked,
+    byRole: Record<string, number>,
+    createdByMonth: [{ month: 'YYYY-MM', users: number }]
+  },
+  students: {
+    generatedAt: ISO date,
+    students: {
+      total,
+      byStatus: Record<string, number>,
+      byGender: Record<string, number>,
+      byResidenceType: Record<string, number>
+    },
+    enrolment: {
+      byClass: [{ classId, className, stream, stage, enrolled, capacity,
+                  utilizationPercent }],
+      byStage: Record<string, number>,
+      monthlyAdmissions: [{ month: 'YYYY-MM', admissions: number }]
+    }
+  },
+  attendance: {
+    schoolAttendanceRate,
+    byClass: [{ className, stream, attendanceRate, totalDays, totalPresent,
+               totalAbsent, studentsBelow80 }],
+    byDay: [{ dayOfWeek, rate }],
+    byMonth: [{ month, rate }]
+  },
+  academics: {
+    schoolAverage, passRate, atRiskStudents,
+    gradeDistribution: Record<string, number>,
+    subjectRankings: [{ subjectName, average, passRate, rank }],
+    classRankings: [{ className, average, passRate, rank }],
+    termOverTermComparison: [{ termName, schoolAverage, passRate,
+                               totalStudents }]
+  },
+  notifications: {
+    totalSent, deliveryRate,
+    byChannel: Record<string, number>,
+    byStatus: Record<string, number>,
+    last24Hours: { sent, delivered, failed }
+  },
+  systemHealth: object | null
+}
+
+The standard gateway envelope also includes meta.generatedAt, meta.partial,
+and meta.warnings. If meta.partial is true, show a non-blocking "Some data is
+temporarily unavailable" state and still render the non-null areas.
+
+CHART RECOMMENDATIONS
+---------------------
+Use the data as-is; no extra API requests are needed for the Admin overview.
+
+1. KPI cards
+   - users.total / users.locked
+   - students.students.total
+   - attendance.schoolAttendanceRate
+   - academics.schoolAverage and academics.atRiskStudents
+   - notifications.last24Hours.failed
+
+2. Horizontal bar chart: users.byRole
+   Good for staff/role distribution. Sort by value descending and replace
+   underscores in role labels with spaces.
+
+3. Line chart: users.createdByMonth
+   X = month, Y = users. This is a rolling 12-month account creation trend.
+
+4. Donut or stacked bar: students.students.byStatus
+   Use for Active, Transferred, Graduated and other valid lifecycle states.
+
+5. Grouped bar: students.students.byGender and byResidenceType
+   The residence chart must retain UNCLASSIFIED. Do not treat unclassified
+   students as Boarding or Day Scholar.
+
+6. Mixed column + line chart: students.enrolment.byClass
+   Columns = enrolled. Line = capacity. Colour a class when
+   utilizationPercent >= 100. This is the best class-capacity chart.
+
+7. Stacked or simple bar: students.enrolment.byStage
+   Shows PRIMARY, O_LEVEL and A_LEVEL distributions. Keep actual API enum
+   labels or map them only for presentation.
+
+8. Line/area chart: students.enrolment.monthlyAdmissions
+   X = month; Y = admissions. It is based on admissionDate, not UI creation
+   time, so it represents real admissions movement.
+
+9. Mixed attendance chart:
+   - Line: attendance.byMonth.rate (long-term trend)
+   - Bar: attendance.byClass.attendanceRate (class comparison)
+   - Optional risk callout: studentsBelow80 per class.
+
+10. Academic graphs:
+    - Histogram/bar: academics.gradeDistribution.
+    - Ranked bar: academics.subjectRankings by average or passRate.
+    - Grouped bars: academics.classRankings average + passRate.
+    - Line: academics.termOverTermComparison schoolAverage + passRate.
+
+11. Notification operational view:
+    - Donut: notifications.byChannel.
+    - Stacked bar: notifications.byStatus.
+    - Alert/KPI: notifications.last24Hours.failed.
+
+12. System health:
+    Keep it as status chips/table. Do not infer an uptime percentage when the
+    source does not provide one. Render null/unavailable responses as Unknown.
+
+EMPTY, LOADING AND ERROR STATES
+-------------------------------
+- A zero is a valid value, not an error. Show a clear zero-data chart state.
+- `academics` can be zero/empty when no published results exist for the term.
+- `attendance` can be zero/empty before attendance is recorded.
+- Check meta.partial and meta.warnings. Avoid failing the entire dashboard
+  because one downstream service is temporarily unavailable.
+- Do not fabricate sample chart points.
+
+LOCAL DATA OBSERVED DURING API DESIGN (READ-ONLY)
+-------------------------------------------------
+The local data set currently contains 3 schools, 220 active students, 19
+classes and 9,512 attendance records. It has 6 Boarding students and 214
+students whose residence type is intentionally still UNCLASSIFIED. This is
+why the residence distribution must render UNCLASSIFIED explicitly.
+
+BACKEND OWNERSHIP
+-----------------
+- Gateway aggregation: api-gateway GET /admin/dashboard/analytics.
+- Student analytics: student-service GET /students/admin/dashboard-analytics.
+- User analytics: auth-service internal GET /auth/internal/dashboard-analytics.
+- Attendance and academic analytics reuse their existing analytics-service
+  overview endpoints.
+- Notification statistics reuse the existing notification-service endpoint.
+
+No database schema change or migration is required for this dashboard API.

@@ -61,6 +61,7 @@ import { DataError } from '../../../components/feedback/DataError';
 import { EmptyState } from '../../../components/feedback/EmptyState';
 import { SkeletonTable } from '../../../components/common/SkeletonTable';
 import { SkeletonCards } from '../../../components/common/SkeletonCards';
+import { ReportWorkflow } from '../../../components/reports/ReportWorkflowDialog';
 
 // Lists below are empty-until-loaded; keep the original local type names readable.
 type Row = Record<string, any>;
@@ -1760,6 +1761,14 @@ export function TeacherExportsPage() {
     },
   ];
 
+  const previewRows = (key: ExportKey): Array<Record<string, string | number | boolean | null | undefined>> => {
+    if (key === 'class-list') return registers.map((item) => ({ id: item.classId, className: item.label, school: school(item.schoolId), classTeacher: item.isClassTeacher }));
+    if (key === 'attendance') return ((attendance.data ?? []) as Row[]).map((item) => ({ id: String(item.id ?? `${item.classId}-${item.studentId}-${item.date}`), date: String(item.date ?? '').slice(0, 10), className: registers.find((row) => row.classId === item.classId)?.label ?? String(item.classId ?? ''), studentId: String(item.studentId ?? ''), status: String(item.status ?? '') }));
+    if (key === 'marks-blank' || key === 'marks-results') return (sheet?.rows ?? []).map((row) => ({ id: row.id, registration: row.registration, student: row.name, score: key === 'marks-blank' ? '' : row.score, status: row.exempt ? 'Exempt' : row.notSat ? 'Not sat' : row.absent ? 'Absent' : row.score === '' ? 'No result' : 'Scored' }));
+    if (key === 'syllabus') return classes.map((item) => ({ id: item.id, subject: item.subject, className: item.className, school: school(item.schoolId), covered: item.syllabusCovered, total: item.syllabusTotal, percent: item.syllabus, note: item.syllabusNotes }));
+    return visible(alerts as unknown as Alert[]).map((item) => ({ id: item.id, student: item.student, subject: item.subject, severity: item.severity, reason: item.reason }));
+  };
+
   return (
     <TeacherWorkspaceShell title="Downloads" eyebrow="Lists and sheets you can take away">
       <div className="grid gap-gutter md:grid-cols-2 xl:grid-cols-3">
@@ -1772,9 +1781,16 @@ export function TeacherExportsPage() {
             <h3 className="mt-4 font-display text-xl font-black text-ks-slate">{item.title}</h3>
             <p className="mt-1 flex-1 text-sm font-semibold text-ks-muted">{item.description}</p>
             {item.extra}
-            <Button variant="secondary" className="mt-4 w-full" disabled={item.disabled || busy !== null} loading={busy === item.key} onClick={run(item.key, item.go)}>
-              {busy === item.key ? 'Preparing…' : 'Download'}
-            </Button>
+            <ReportWorkflow
+              title={item.title}
+              description={item.description}
+              format={item.format}
+              rows={previewRows(item.key)}
+              fields={[{ key: 'search', label: 'Search report', type: 'search', placeholder: 'Student, class, subject or status…' }]}
+              disabled={item.disabled || (busy !== null && busy !== item.key)}
+              busy={busy === item.key}
+              onDownload={run(item.key, item.go)}
+            />
           </Card>
         ))}
       </div>

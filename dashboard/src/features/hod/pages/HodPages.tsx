@@ -57,6 +57,7 @@ import {
 import { isOutlier, rejectReasonIsValid, sortOldestApprovalsFirst } from '../utils/hodReview';
 import { useDepartmentByUser, useAllDisciplineRecords, useResolveDisciplineMutation } from '../../admin/api/admin.hooks';
 import { useAuthStore } from '../../../lib/auth/authStore';
+import { ReportWorkflow } from '../../../components/reports/ReportWorkflowDialog';
 
 // ─── Home ──────────────────────────────────────────────────────────────────
 
@@ -2741,6 +2742,12 @@ export function HodExportsPage() {
   const [classId, setClassId] = useState('');
   const { data: classes = [] } = useOperationsClasses() as { data: Array<{ id: string; name: string; stream?: unknown }> };
   const formats: ReportFormat[] = ['PDF', 'XLSX', 'CSV'];
+  const { data: alerts = [] } = useHodAlerts();
+  const { data: interventions = [] } = useHodInterventions();
+  const { data: pairings = [] } = useHodPairings();
+  const { data: teachers = [] } = useHodTeachersList();
+  const { data: subjects = [] } = useHodClassSubjects();
+  const { data: approvals = [] } = useHodPendingApprovals();
 
   const handleGenerate = async (item: (typeof hodExportItems)[0], format: ReportFormat) => {
     if (item.needsClass && !classId) { toast('Choose a class first', 'warning'); return; }
@@ -2754,6 +2761,20 @@ export function HodExportsPage() {
     } finally {
       setGenerating(null);
     }
+  };
+
+  const flatPreview = (rows: unknown[]) => rows.map((row) => Object.fromEntries(
+    Object.entries(row as Record<string, unknown>).map(([key, value]) => [
+      key,
+      value && typeof value === 'object' ? JSON.stringify(value) : value as string | number | boolean | null | undefined,
+    ]),
+  ));
+
+  // Live preview data only where the page already holds rows that match the report.
+  const previewRows = (item: (typeof hodExportItems)[0]) => {
+    if (item.reportType === 'PERFORMANCE_ENGINE') return flatPreview(alerts);
+    if (item.reportType === 'CLASS_ACADEMIC') return flatPreview(subjects);
+    return [];
   };
 
   return (
@@ -2776,19 +2797,17 @@ export function HodExportsPage() {
             </div>
             <h3 className="mt-4 font-display text-xl font-black text-ks-navy">{item.title}</h3>
             <p className="mt-1 flex-1 text-sm font-semibold text-ks-muted">{item.description}</p>
-            <div className="mt-4 flex gap-2">
-              {formats.map((format) => (
-                <Button
-                  key={format}
-                  variant="secondary"
-                  className="flex-1 rounded-xl"
-                  disabled={generating !== null}
-                  onClick={() => handleGenerate(item, format)}
-                >
-                  <Download className="h-4 w-4" /> {generating === `${item.reportType}:${format}` ? 'Generating…' : formatLabel(format)}
-                </Button>
-              ))}
-            </div>
+            <ReportWorkflow
+              title={item.title}
+              description={item.description}
+              formats={formats}
+              rows={previewRows(item)}
+              emptyMessage="A live preview is not available for this report. Download it to see the full document."
+              fields={[{ key: 'search', label: 'Search report', type: 'search', placeholder: 'Teacher, student, class, subject or status…' }]}
+              busy={generating?.startsWith(`${item.reportType}:`) ?? false}
+              disabled={generating !== null && !generating.startsWith(`${item.reportType}:`)}
+              onDownload={(_filters, format) => handleGenerate(item, (format ?? 'PDF') as ReportFormat)}
+            />
           </Card>
         ))}
       </div>

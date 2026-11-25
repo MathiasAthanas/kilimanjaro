@@ -69,7 +69,7 @@ export class PerformanceService {
       }),
       this.prisma.performanceSnapshot.findMany({
         where: { studentId },
-        include: { term: true },
+        include: { term: true, academicYear: true },
         orderBy: [{ term: { startDate: 'asc' } }, { createdAt: 'asc' }],
       }),
     ]);
@@ -82,7 +82,10 @@ export class PerformanceService {
       return acc;
     }, {});
 
-    const payload = { trends, alerts, pairings, chartData };
+    // Keep the existing aggregates and expose their source snapshots so the
+    // student profile can render an accurate term-by-term lifecycle without
+    // guessing labels or scores on the client.
+    const payload = { trends, alerts, pairings, chartData, snapshots };
     await this.redis.set(cacheKey, payload, 900);
     await this.redis.set(alertsCacheKey, alerts, 300);
     return payload;

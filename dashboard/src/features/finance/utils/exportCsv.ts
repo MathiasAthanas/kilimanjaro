@@ -65,6 +65,34 @@ export const EXPORTS: Array<{ key: ExportKey; label: string; description: string
   { key: 'audit', label: 'Audit log', description: 'The financial audit trail you are allowed to see.' },
 ];
 
+/** Loads the same scoped records used by CSV exports for the pre-download preview. */
+export async function loadFinanceExportRows(key: ExportKey): Promise<Array<Record<string, string | number | boolean | null | undefined>>> {
+  switch (key) {
+    case 'invoices':
+      return (await allPages('/finance/invoices')).map((r) => ({ id: text(r.id), invoice: text(r.invoiceNumber), student: text(r.studentName), registration: text(r.registrationNumber), className: text(r.className), term: text(r.termName), total: Number(r.totalAmount ?? 0), paid: Number(r.paidAmount ?? 0), outstanding: Number(r.outstandingBalance ?? 0), status: text(r.status), date: day(r.dueDate) }));
+    case 'payments':
+      return (await allPages('/finance/payments')).map((r) => ({ id: text(r.id), payment: text(r.paymentNumber), student: text(r.studentName), invoice: text(r.invoiceNumber), method: text(r.method), amount: Number(r.amount ?? 0), status: text(r.status), reference: text(r.referenceNumber), date: day(r.paidAt) }));
+    case 'receipts':
+      return (await allPages('/finance/receipts')).map((r) => ({ id: text(r.id), receipt: text(r.receiptNumber), payment: text(r.paymentNumber), student: text(r.studentName), amount: Number(r.amount ?? 0), method: text(r.method), status: r.isVoided ? 'VOID' : 'ACTIVE', date: day(r.issuedAt) }));
+    case 'outstanding':
+      return rowsOf(payload(await api.get('/finance/reports/outstanding-balances'))).map((r) => ({ id: text(r.id ?? r.invoiceId), student: text(r.studentName), registration: text(r.registrationNumber), className: text(r.className), invoice: text(r.invoiceNumber), total: Number(r.totalAmount ?? 0), paid: Number(r.paidAmount ?? 0), outstanding: Number(r.outstanding ?? r.outstandingBalance ?? 0), daysOverdue: Number(r.daysOverdue ?? 0), date: day(r.dueDate) }));
+    case 'collection': {
+      const raw = payload(await api.get('/finance/reports/collection-summary')) as { byClass?: Row[] };
+      return (raw.byClass ?? []).map((r) => ({ id: text(r.classId ?? r.className), className: text(r.className), invoices: Number(r.invoiceCount ?? 0), billed: Number(r.billed ?? 0), collected: Number(r.collected ?? 0), outstanding: Number(r.outstanding ?? 0), collectionRate: Number(r.collectionRate ?? 0) }));
+    }
+    case 'fee-structures': {
+      const [structures, classes, terms] = await Promise.all([api.get('/finance/fee-structures').then((r) => rowsOf(payload(r))), api.get('/students/classes').then((r) => rowsOf(payload(r))), api.get('/students/terms').then((r) => rowsOf(payload(r)))]);
+      const className = new Map(classes.map((c) => [text(c.id), formatClassLabel(text(c.name), text(c.stream))]));
+      const termName = new Map(terms.map((t) => [text(t.id), text(t.name)]));
+      return structures.map((r) => ({ id: text(r.id), category: text(nested(r.feeCategory, 'name')), className: className.get(text(r.classId)) ?? '', stage: text(r.educationStage), term: termName.get(text(r.termId)) ?? 'All terms', amount: Number(r.amount ?? 0), status: r.isActive ? 'ACTIVE' : 'INACTIVE' }));
+    }
+    case 'assets':
+      return rowsOf(payload(await api.get('/finance/assets'))).map((r) => ({ id: text(r.id), assetNumber: text(r.assetNumber), name: text(r.name), category: text(r.category), location: text(r.location), condition: text(r.condition), status: text(r.status), purchaseCost: Number(r.purchaseCost ?? 0), currentValue: Number(r.currentValue ?? 0), date: day(r.purchaseDate) }));
+    case 'audit':
+      return rowsOf(payload(await api.get('/finance/audit-logs', { params: { limit: 1000 } }))).map((r) => ({ id: text(r.id), date: text(r.createdAt), role: text(r.performedByRole), action: text(r.action), entityType: text(r.entityType), entityId: text(r.entityId) }));
+  }
+}
+
 export async function exportFinanceCsv(key: ExportKey): Promise<number> {
   switch (key) {
     case 'invoices': {

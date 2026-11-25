@@ -8,12 +8,23 @@ import { errorMessage } from '../../../lib/api/errors';
 import { formatClassLabel } from '../../../lib/classLabel';
 import { buildCreateTermPayload } from '../utils/termPayload';
 import { Badge } from '../../../components/common/Badge';
-import { BarChart } from '../../analytics/components/Charts';
 import { Button } from '../../../components/common/Button';
+import {
+  Activity, BarChart3, Bell, Building2,
+  GraduationCap, RefreshCw, ShieldAlert, TrendingDown, TrendingUp,
+  UserCheck, Users,
+} from 'lucide-react';
+import {
+  Area, AreaChart, Bar, BarChart as RBarChart, CartesianGrid, Cell,
+  ComposedChart, Legend, Line, LineChart, Pie, PieChart as RPieChart,
+  PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart,
+  ResponsiveContainer, Tooltip, XAxis, YAxis,
+} from 'recharts';
+import { useAdminDashboardAnalytics } from '../api/admin.hooks';
 import {
   adminAuditEvents, adminClasses, adminStudents, adminSubjects,
   adminUsers, assessmentTypes, classPathways, gradingScales, notificationLogs,
-  notificationTemplates, reportJobs, serviceHealth,
+  notificationTemplates, reportJobs,
   subjectCombinations,
 } from '../api/adminApi';
 import {
@@ -21,7 +32,6 @@ import {
   useAdminClasses,
   useAdminStudent,
   useAdminReportJobs,
-  useAdminStudents,
   useAdminStudentsPage,
   useClassStudents,
   useAdminSubjects,
@@ -118,10 +128,10 @@ import { useFeeCategories } from '../../finance/api/finance.hooks';
 import { useAnnouncements } from '../../common/common.hooks';
 import {
   AdminDataTable, AdminFormSection, AdminMetricStrip, AdminQuickCard,
-  AdminShell, AdminStatusIndicator, AssessmentTypeEditor, CsvImportZone,
+  AdminShell, AssessmentTypeEditor, CsvImportZone,
   DangerActionDialog, FeatureToggle, Field, GradingBoundaryEditor,
   NotificationTemplateEditor,
-  SelectField, TablePagination, Td,
+  SelectField, Td,
 } from '../components/AdminConsole';
 import { assessmentWeightsTotal, roleRisk } from '../utils/adminValidation';
 import { DEPARTMENT_REQUIRED_ROLES, GROUP_ROLE_OPTIONS, canGrantGroupRoles, departmentOptionsForRole } from '../utils/userForm';
@@ -132,66 +142,866 @@ import { useTableControls, TableToolbar, SortHeader, DataPagination } from '../.
 import { SkeletonTable } from '../../../components/common/SkeletonTable';
 import { ConfirmDialog } from '../../../components/feedback/ConfirmDialog';
 import { BulkUserEditDialog } from '../components/BulkUserEditDialog';
+import { ReportWorkflow } from '../../../components/reports/ReportWorkflowDialog';
+import { StudentLifecyclePanel } from '../components/StudentLifecyclePanel';
+
+// ─── Admin Dashboard helpers ────────────────────────────────────────────────
+const KILI = {
+  indigo: '#4338CA', navy: '#1E1B4B', slate: '#64748B',
+  emerald: '#10B981', amber: '#F59E0B', rose: '#F43F5E',
+  sky: '#0EA5E9', violet: '#8B5CF6', teal: '#14B8A6', fuchsia: '#D946EF',
+};
+const STAGE_COLORS: Record<string, string> = {
+  NURSERY: KILI.teal, PRIMARY: KILI.emerald, O_LEVEL: KILI.indigo, A_LEVEL: KILI.amber,
+};
+const STATUS_COLORS: Record<string, string> = {
+  ACTIVE: KILI.emerald, INACTIVE: KILI.slate, LOCKED: KILI.amber,
+  TRANSFERRED: KILI.sky, GRADUATED: KILI.violet,
+  UNCLASSIFIED: KILI.fuchsia, BOARDING: KILI.indigo, DAY_SCHOLAR: KILI.teal,
+};
+const toneFor = (v: number, good = 80, warn = 60) =>
+  v >= good ? KILI.emerald : v >= warn ? KILI.amber : KILI.rose;
+
+const titleCase = (s: string) =>
+  s.replaceAll('_', ' ').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+const monthLabel = (iso: string) => {
+  const [y, m] = iso.split('-');
+  if (!y || !m) return iso;
+  return new Date(Number(y), Number(m) - 1, 1)
+    .toLocaleDateString(undefined, { month: 'short', year: '2-digit' });
+};
+const pct = (n: number) => `${Math.round(n * 10) / 10}%`;
+const num = (n: number) => n.toLocaleString();
+
+function DashCard({ title, subtitle, action, children, className = '' }: {
+  title: string; subtitle?: string; action?: React.ReactNode;
+  children: React.ReactNode; className?: string;
+}) {
+  return (
+    <div className={`rounded-2xl border border-slate-200 bg-white p-5 shadow-sm ${className}`}>
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div>
+          <h3 className="font-display text-base font-black text-slate-900">{title}</h3>
+          {subtitle && <p className="mt-0.5 text-xs font-semibold text-slate-500">{subtitle}</p>}
+        </div>
+        {action}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function ChartFrame({ height = 260, empty, children }: {
+  height?: number; empty?: boolean; children?: React.ReactNode;
+}) {
+  if (empty) {
+    return (
+      <div className="flex items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 text-xs font-semibold text-slate-400"
+        style={{ height }}>
+        No data recorded for this period yet.
+      </div>
+    );
+  }
+  return <div style={{ width: '100%', height }}>{children}</div>;
+}
+
+const KiliTooltip = ({ active, payload, label, suffix = '' }: any) => {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white/95 px-3 py-2 shadow-lg backdrop-blur">
+      {label !== undefined && (
+        <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">
+          {typeof label === 'string' ? titleCase(label) : label}
+        </p>
+      )}
+      {payload.map((p: any, i: number) => (
+        <p key={i} className="flex items-center gap-2 text-xs font-bold text-slate-700">
+          <span className="h-2 w-2 rounded-full" style={{ background: p.color ?? p.fill }} />
+          {titleCase(String(p.name ?? ''))}:
+          <span className="font-mono font-black text-slate-900">
+            {typeof p.value === 'number' ? num(p.value) : String(p.value)}{suffix}
+          </span>
+        </p>
+      ))}
+    </div>
+  );
+};
+
+function KpiCard({ label, value, detail, tone = KILI.indigo, icon, trend, spark }: {
+  label: string; value: string; detail?: string; tone?: string;
+  icon?: React.ReactNode; trend?: { value: string; up: boolean };
+  spark?: number[];
+}) {
+  const sparkData = (spark ?? []).map((v, i) => ({ i, v }));
+  return (
+    <div className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+      <div aria-hidden
+        className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full opacity-15 blur-2xl transition group-hover:opacity-25"
+        style={{ background: tone }} />
+      <div className="flex items-start justify-between">
+        <div className="flex items-center gap-2">
+          {icon && (
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl text-white shadow-sm" style={{ background: tone }}>
+              {icon}
+            </span>
+          )}
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">{label}</p>
+        </div>
+        {trend && (
+          <span className={`inline-flex items-center gap-1 rounded-lg px-1.5 py-0.5 text-[10px] font-black ${
+            trend.up ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
+            {trend.up ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+            {trend.value}
+          </span>
+        )}
+      </div>
+      <p className="mt-2 font-display text-3xl font-black text-slate-900">{value}</p>
+      {detail && <p className="mt-0.5 text-xs font-semibold text-slate-500">{detail}</p>}
+      {sparkData.length > 1 && (
+        <div className="mt-3 h-10">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={sparkData} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
+              <defs>
+                <linearGradient id={`spark-${label.replace(/\s/g, '-')}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={tone} stopOpacity={0.55} />
+                  <stop offset="100%" stopColor={tone} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <Area type="monotone" dataKey="v" stroke={tone} strokeWidth={2}
+                fill={`url(#spark-${label.replace(/\s/g, '-')})`} isAnimationActive />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Donut3D({ data, height = 240 }: { data: Array<{ name: string; value: number; color?: string }>; height?: number }) {
+  const total = data.reduce((s, d) => s + d.value, 0);
+  if (!total) return <ChartFrame height={height} empty />;
+  return (
+    <div className="relative" style={{ height }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <RPieChart>
+          <defs>
+            <filter id="donut-shadow" x="-20%" y="-20%" width="140%" height="140%">
+              <feDropShadow dx="0" dy="4" stdDeviation="4" floodColor="#0f172a" floodOpacity="0.18" />
+            </filter>
+          </defs>
+          <Pie data={data} dataKey="value" nameKey="name" innerRadius="62%" outerRadius="92%"
+            paddingAngle={2} stroke="#fff" strokeWidth={2} filter="url(#donut-shadow)" isAnimationActive>
+            {data.map((d, i) => (
+              <Cell key={i} fill={d.color ?? Object.values(KILI)[i % Object.keys(KILI).length]} />
+            ))}
+          </Pie>
+          <Tooltip content={<KiliTooltip />} />
+        </RPieChart>
+      </ResponsiveContainer>
+      <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+        <p className="font-display text-2xl font-black text-slate-900">{num(total)}</p>
+        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total</p>
+      </div>
+    </div>
+  );
+}
+
+function Legend2({ items }: { items: Array<{ name: string; color: string; value?: string }> }) {
+  return (
+    <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5">
+      {items.map((it) => (
+        <span key={it.name} className="inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-600">
+          <span className="h-2.5 w-2.5 rounded-sm" style={{ background: it.color }} />
+          {titleCase(it.name)}{it.value ? ` · ${it.value}` : ''}
+        </span>
+      ))}
+    </div>
+  );
+}
 
 // â"€â"€â"€ Home â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 export function AdminHomePage() {
-  const { data: apiServiceHealth = [] as typeof serviceHealth } = useServiceHealth() as unknown as { data: typeof serviceHealth };
-  const { data: apiUsers = [] as typeof adminUsers } = useAdminUsers() as unknown as { data: typeof adminUsers };
-  const { data: studentPage } = useAdminStudentsPage({ page: 1, limit: 1, status: 'ACTIVE' }) as unknown as {
-    data?: { students: typeof adminStudents; meta?: { total?: number } };
-  };
-  const { data: apiAudit = [] as typeof adminAuditEvents } = useAdminAuditEvents() as unknown as { data: typeof adminAuditEvents };
-  const { data: apiLogs = [] as typeof notificationLogs } = useNotificationLogs() as unknown as { data: typeof notificationLogs };
-  const { data: apiClasses = [] as typeof adminClasses } = useAdminClasses() as unknown as { data: typeof adminClasses };
+  // ── Filters ──────────────────────────────────────────────────────────────
+  const { data: years = [] } = useAcademicYears();
+  const { data: terms = [] } = useTerms();
+  const [academicYearId, setAcademicYearId] = useState('');
+  const [termId, setTermId] = useState('');
 
-  const studentTotal = Number(studentPage?.meta?.total ?? studentPage?.students?.length ?? 0);
-  const lockedCount = apiUsers.filter((u: { status: string }) => u.status === 'LOCKED').length;
-  const failedSms = apiLogs.filter((l: { status: string; channel: string }) => l.status === 'FAILED' && l.channel === 'SMS').length;
+  const activeSchool = useSchoolStore((s) => s.activeSchool);
+  const { data, isLoading, isError, isFetching, refetch } =
+    useAdminDashboardAnalytics({ academicYearId: academicYearId || undefined, termId: termId || undefined });
 
+  const scope = data?.scope;
+  const partial = data?.meta.partial ?? false;
+  const warnings = data?.meta.warnings ?? [];
+
+  // Term list filtered to selected year
+  const termOptions = useMemo(() => {
+    const list = (terms as any[]).filter((t) =>
+      !academicYearId || String(t.academicYearId) === String(academicYearId));
+    return list.map((t) => ({ value: String(t.id), label: String(t.name ?? t.term ?? t.id) }));
+  }, [terms, academicYearId]);
+
+  // ── Chart-ready derived data (memoized; never fabricates points) ─────────
+  const roleData = useMemo(() => {
+    if (!data?.users?.byRole) return [];
+    return Object.entries(data.users.byRole)
+      .map(([role, count]) => ({ name: titleCase(role), value: Number(count) }))
+      .sort((a, b) => b.value - a.value);
+  }, [data?.users?.byRole]);
+
+  const createdByMonth = useMemo(
+    () => (data?.users?.createdByMonth ?? []).map((p) => ({ month: monthLabel(p.month), users: p.users })),
+    [data?.users?.createdByMonth],
+  );
+
+  const statusData = useMemo(() => {
+    if (!data?.students?.students?.byStatus) return [];
+    return Object.entries(data.students.students.byStatus)
+      .map(([name, v]) => ({ name: titleCase(name), value: Number(v), color: STATUS_COLORS[name.toUpperCase()] }));
+  }, [data?.students?.students?.byStatus]);
+
+  const genderData = useMemo(() => {
+    if (!data?.students?.students?.byGender) return [];
+    return Object.entries(data.students.students.byGender)
+      .map(([name, v]) => ({ name: titleCase(name), value: Number(v) }));
+  }, [data?.students?.students?.byGender]);
+
+  const residenceData = useMemo(() => {
+    if (!data?.students?.students?.byResidenceType) return [];
+    // Keep UNCLASSIFIED visible, never merged
+    return Object.entries(data.students.students.byResidenceType)
+      .map(([name, v]) => ({
+        name: titleCase(name),
+        value: Number(v),
+        color: STATUS_COLORS[name.toUpperCase()] ?? KILI.slate,
+      }))
+      .sort((a, b) => b.value - a.value);
+  }, [data?.students?.students?.byResidenceType]);
+
+  const classCapacity = useMemo(() => {
+    const rows = data?.students?.enrolment?.byClass ?? [];
+    return rows
+      .slice()
+      .sort((a, b) => b.enrolled - a.enrolled)
+      .slice(0, 10)
+      .map((c) => ({
+        name: `${c.className}${c.stream ? ` ${c.stream}` : ''}`,
+        enrolled: c.enrolled,
+        capacity: c.capacity,
+        utilization: c.utilizationPercent,
+        over: c.utilizationPercent >= 100,
+      }));
+  }, [data?.students?.enrolment?.byClass]);
+
+  const stageData = useMemo(() => {
+    const rows = data?.students?.enrolment?.byStage ?? {};
+    return Object.entries(rows).map(([name, v]) => ({
+      name: titleCase(name), value: Number(v), color: STAGE_COLORS[name.toUpperCase()] ?? KILI.slate,
+    }));
+  }, [data?.students?.enrolment?.byStage]);
+
+  const admissionsTrend = useMemo(
+    () => (data?.students?.enrolment?.monthlyAdmissions ?? []).map((p) => ({ month: monthLabel(p.month), admissions: p.admissions })),
+    [data?.students?.enrolment?.monthlyAdmissions],
+  );
+
+  const attendanceByMonth = useMemo(
+    () => (data?.attendance?.byMonth ?? []).map((p) => ({ month: monthLabel(p.month), rate: p.rate })),
+    [data?.attendance?.byMonth],
+  );
+
+  const attendanceByClass = useMemo(() => {
+    const rows = data?.attendance?.byClass ?? [];
+    return rows
+      .slice()
+      .sort((a, b) => a.attendanceRate - b.attendanceRate)
+      .slice(0, 8)
+      .map((c) => ({
+        name: `${c.className}${c.stream ? ` ${c.stream}` : ''}`,
+        rate: c.attendanceRate,
+        below80: c.studentsBelow80,
+        color: toneFor(c.attendanceRate),
+      }));
+  }, [data?.attendance?.byClass]);
+
+  const attendanceByDay = useMemo(
+    () => (data?.attendance?.byDay ?? []).map((p) => ({ day: titleCase(p.dayOfWeek), rate: p.rate })),
+    [data?.attendance?.byDay],
+  );
+
+  const gradeData = useMemo(() => {
+    const rows = data?.academics?.gradeDistribution ?? {};
+    return Object.entries(rows)
+      .map(([name, v]) => ({ grade: name, count: Number(v) }))
+      .sort((a, b) => a.grade.localeCompare(b.grade, undefined, { numeric: true }));
+  }, [data?.academics?.gradeDistribution]);
+
+  const subjectRank = useMemo(
+    () => (data?.academics?.subjectRankings ?? []).slice(0, 8).map((s) => ({
+      name: s.subjectName, average: s.average, passRate: s.passRate,
+    })),
+    [data?.academics?.subjectRankings],
+  );
+
+  const classRank = useMemo(
+    () => (data?.academics?.classRankings ?? []).slice(0, 8).map((c) => ({
+      name: c.className, average: c.average, passRate: c.passRate,
+    })),
+    [data?.academics?.classRankings],
+  );
+
+  const termComparison = useMemo(
+    () => (data?.academics?.termOverTermComparison ?? []).map((t) => ({
+      term: t.termName, average: t.schoolAverage, passRate: t.passRate,
+    })),
+    [data?.academics?.termOverTermComparison],
+  );
+
+  const channelData = useMemo(() => {
+    const rows = data?.notifications?.byChannel ?? {};
+    return Object.entries(rows).map(([name, v]) => ({ name: titleCase(name), value: Number(v) }));
+  }, [data?.notifications?.byChannel]);
+
+  const notifStatus = useMemo(() => {
+    const rows = data?.notifications?.byStatus ?? {};
+    return Object.entries(rows).map(([name, v]) => ({ name: titleCase(name), value: Number(v) }));
+  }, [data?.notifications?.byStatus]);
+
+  const healthEntries = useMemo(() => {
+    if (!data?.systemHealth) return [];
+    return Object.entries(data.systemHealth).map(([k, v]) => ({ name: k, value: v }));
+  }, [data?.systemHealth]);
+
+  // ── KPI values ──────────────────────────────────────────────────────────
+  const usersSpark = createdByMonth.map((p) => p.users);
+  const attendanceSpark = attendanceByMonth.map((p) => p.rate);
+
+  // ── Render ──────────────────────────────────────────────────────────────
   return (
     <AdminShell title="System Control Center" eyebrow="Admin operations console">
-      <AdminMetricStrip items={[
-        { label: 'Users',      value: String(apiUsers.length),    detail: 'All roles',            tone: 'blue'  },
-        { label: 'Students',   value: String(studentTotal),       detail: 'Active registry',       tone: 'green' },
-        { label: 'Locked',     value: String(lockedCount),        detail: 'Needs unlock',          tone: 'amber' },
-        { label: 'Classes',    value: String(apiClasses.length),  detail: 'Active academic year',  tone: 'blue'  },
-        { label: 'Audit',      value: String(apiAudit.length),    detail: 'Recent events',         tone: 'rose'  },
-        { label: 'Failed SMS', value: String(failedSms),          detail: 'Notification logs',     tone: 'rose'  },
-      ]} />
-
-      <div className="grid gap-gutter lg:grid-cols-2">
-        <BarChart title="Staff by role" subtitle="Current user directory · compare active role counts" values={Object.entries(apiUsers.reduce((counts: Record<string, number>, user: { role: string }) => { const role = user.role || 'Other'; counts[role] = (counts[role] ?? 0) + 1; return counts; }, {})).map(([label, value]) => ({ label: label.replaceAll('_', ' '), value: Number(value) })).sort((a, b) => b.value - a.value).slice(0, 8)} />
-        <BarChart title="Class enrolment" subtitle="Current class directory · students per class" values={apiClasses.map((row: { name: string; students: number }) => ({ label: row.name, value: Number(row.students ?? 0) })).sort((a, b) => b.value - a.value).slice(0, 8)} />
-      </div>
-
-      <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_380px]">
-        <div className="space-y-4">
-          <p className="text-[11px] font-black uppercase tracking-[0.28em] text-slate-400">Quick Access</p>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <AdminQuickCard title="Create User"            detail="Role-bound account with linked profile."          to="/admin/users/create"            icon="shield" />
-            <AdminQuickCard title="Enrol Student"          detail="Manual enrolment and class-list import."          to="/admin/students/enrol"                        />
-            <AdminQuickCard title="Academic Setup"         detail="Years, terms, classes, subjects, grading."        to="/admin/academic/setup"                        />
-            <AdminQuickCard title="Notification Templates" detail="Edit and preview SMS / email / push templates."   to="/admin/notifications/templates"               />
-            <AdminQuickCard title="Run Engine"             detail="Performance engine thresholds and manual run."    to="/admin/performance/engine"                    />
-            <AdminQuickCard title="System Audit"           detail="Security and settings events."                    to="/admin/audit/system"            icon="eye"    />
-            <AdminQuickCard title="System Status"          detail="Live service health and incident surface."         to="/admin/system-status"           icon="eye"    />
-            <AdminQuickCard title="System Settings"        detail="Providers, versions, feature flags."              to="/admin/settings/system"                       />
-            <AdminQuickCard title="Departments"           detail="Department registry, HOD assignments."            to="/admin/departments"             icon="shield"  />
+      {/* Context bar: school + filters + refresh */}
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+        <div className="flex items-center gap-3">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl text-white" style={{ background: KILI.indigo }}>
+            <Building2 className="h-4 w-4" />
+          </span>
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Scope</p>
+            <p className="text-sm font-black text-slate-900">
+              {scope?.type === 'GROUP' ? 'Group-wide (all schools)' : (activeSchool?.name ?? 'School')}
+            </p>
           </div>
         </div>
-        <div className="space-y-4">
-          <p className="text-[11px] font-black uppercase tracking-[0.28em] text-slate-400">Service Health</p>
-          <div className="space-y-2.5">
-            {apiServiceHealth.map((item: typeof serviceHealth[number]) => <AdminStatusIndicator key={item.service} {...item} />)}
-          </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            value={academicYearId}
+            onChange={(e) => { setAcademicYearId(e.target.value); setTermId(''); }}
+            className="h-9 rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-bold text-slate-700 outline-none focus:border-[#4338CA]"
+          >
+            <option value="">All years</option>
+            {(years as any[]).map((y) => (
+              <option key={y.id} value={String(y.id)}>{String(y.name ?? y.year ?? y.id)}</option>
+            ))}
+          </select>
+          <select
+            value={termId}
+            onChange={(e) => setTermId(e.target.value)}
+            className="h-9 rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-bold text-slate-700 outline-none focus:border-[#4338CA]"
+          >
+            <option value="">All terms</option>
+            {termOptions.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+          </select>
+          <button
+            onClick={() => refetch()}
+            disabled={isFetching}
+            className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? 'animate-spin' : ''}`} />
+            {isFetching ? 'Refreshing…' : 'Refresh'}
+          </button>
+          <button
+            onClick={() => window.print()}
+            className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-[#4338CA] px-3 text-xs font-black text-white hover:bg-[#3730a3]"
+          >
+            <Download className="h-3.5 w-3.5" /> Export
+          </button>
         </div>
       </div>
 
-      <div className="space-y-4">
-        <p className="text-[11px] font-black uppercase tracking-[0.28em] text-slate-400">Recent Audit Events</p>
-        <AuditPanel />
-      </div>
+      {/* Partial-data warning */}
+      {partial && (
+        <div className="mb-4 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <div>
+            <p>Some data is temporarily unavailable. Showing what we have.</p>
+            {warnings.length > 0 && (
+              <ul className="mt-1 list-disc pl-4 text-xs font-semibold text-amber-800">
+                {warnings.slice(0, 3).map((w) => <li key={w}>{w}</li>)}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Loading / error */}
+      {isLoading && <SkeletonTable cols={4} />}
+      {isError && !data && (
+        <DataError onRetry={refetch} />
+      )}
+
+      {data && (
+        <>
+          {/* ── KPI STRIP ─────────────────────────────────────────────── */}
+          <section className="mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+            <KpiCard
+              label="Users"
+              value={num(data.users.total)}
+              detail={`${data.users.active} active · ${data.users.locked} locked`}
+              tone={KILI.indigo}
+              icon={<Users className="h-4 w-4" />}
+              spark={usersSpark}
+            />
+            <KpiCard
+              label="Students"
+              value={num(data.students.students.total)}
+              detail={`${Object.keys(data.students.students.byStatus).length} lifecycle states`}
+              tone={KILI.emerald}
+              icon={<GraduationCap className="h-4 w-4" />}
+            />
+            <KpiCard
+              label="Attendance"
+              value={pct(data.attendance.schoolAttendanceRate)}
+              detail="School-wide average"
+              tone={toneFor(data.attendance.schoolAttendanceRate)}
+              icon={<UserCheck className="h-4 w-4" />}
+              spark={attendanceSpark}
+            />
+            <KpiCard
+              label="Academic Avg"
+              value={pct(data.academics.schoolAverage)}
+              detail={`Pass rate ${pct(data.academics.passRate)}`}
+              tone={KILI.violet}
+              icon={<BarChart3 className="h-4 w-4" />}
+            />
+            <KpiCard
+              label="At Risk"
+              value={num(data.academics.atRiskStudents)}
+              detail="Students below threshold"
+              tone={KILI.rose}
+              icon={<ShieldAlert className="h-4 w-4" />}
+            />
+            <KpiCard
+              label="Notif Failed (24h)"
+              value={num(data.notifications.last24Hours.failed)}
+              detail={`Delivery ${pct(data.notifications.deliveryRate)}`}
+              tone={data.notifications.last24Hours.failed > 0 ? KILI.rose : KILI.emerald}
+              icon={<Bell className="h-4 w-4" />}
+              trend={{ value: `${data.notifications.last24Hours.sent} sent`, up: data.notifications.last24Hours.failed === 0 }}
+            />
+          </section>
+
+          {/* ── TOP ANALYTICS ROW ─────────────────────────────────────── */}
+          <section className="mb-5 grid gap-gutter xl:grid-cols-3">
+            <DashCard
+              title="Staff by role"
+              subtitle="Distribution across the current user directory"
+              className="xl:col-span-2"
+            >
+              <ChartFrame height={300} empty={roleData.length === 0}>
+                <ResponsiveContainer>
+                  <RBarChart data={roleData} layout="vertical" margin={{ left: 10, right: 16 }}>
+                    <defs>
+                      <linearGradient id="role-bar" x1="0" y1="0" x2="1" y2="0">
+                        <stop offset="0%" stopColor={KILI.indigo} stopOpacity={0.9} />
+                        <stop offset="100%" stopColor={KILI.violet} stopOpacity={0.9} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#EEF2F7" horizontal={false} />
+                    <XAxis type="number" tick={{ fontSize: 11, fill: '#94A3B8', fontWeight: 700 }} />
+                    <YAxis type="category" dataKey="name" width={130}
+                      tick={{ fontSize: 11, fill: '#475569', fontWeight: 800 }} />
+                    <Tooltip content={<KiliTooltip />} />
+                    <Bar dataKey="value" fill="url(#role-bar)" radius={[0, 8, 8, 0]} />
+                  </RBarChart>
+                </ResponsiveContainer>
+              </ChartFrame>
+            </DashCard>
+
+            <DashCard title="Account creation" subtitle="Rolling 12 months">
+              <ChartFrame height={300} empty={createdByMonth.length === 0}>
+                <ResponsiveContainer>
+                  <AreaChart data={createdByMonth}>
+                    <defs>
+                      <linearGradient id="area-users" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={KILI.indigo} stopOpacity={0.55} />
+                        <stop offset="100%" stopColor={KILI.indigo} stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#EEF2F7" vertical={false} />
+                    <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#94A3B8', fontWeight: 700 }} />
+                    <YAxis tick={{ fontSize: 11, fill: '#94A3B8', fontWeight: 700 }} />
+                    <Tooltip content={<KiliTooltip />} />
+                    <Area type="monotone" dataKey="users" stroke={KILI.indigo} strokeWidth={2.5}
+                      fill="url(#area-users)" isAnimationActive />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </ChartFrame>
+            </DashCard>
+          </section>
+
+          {/* ── STUDENT INSIGHT ROW (donut + grouped + residence) ─────── */}
+          <section className="mb-5 grid gap-gutter xl:grid-cols-3">
+            <DashCard title="Student lifecycle" subtitle="Status distribution">
+              <Donut3D data={statusData} />
+              <Legend2 items={statusData.map((d) => ({ name: d.name, color: d.color ?? KILI.indigo, value: num(d.value) }))} />
+            </DashCard>
+
+            <DashCard title="Gender" subtitle="Active enrolment">
+              <ChartFrame height={240} empty={genderData.length === 0}>
+                <ResponsiveContainer>
+                  <RBarChart data={genderData}>
+                    <defs>
+                      <linearGradient id="gender-bar" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={KILI.sky} />
+                        <stop offset="100%" stopColor={KILI.indigo} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#EEF2F7" vertical={false} />
+                    <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#475569', fontWeight: 800 }} />
+                    <YAxis tick={{ fontSize: 11, fill: '#94A3B8', fontWeight: 700 }} />
+                    <Tooltip content={<KiliTooltip />} />
+                    <Bar dataKey="value" fill="url(#gender-bar)" radius={[8, 8, 0, 0]} maxBarSize={56} />
+                  </RBarChart>
+                </ResponsiveContainer>
+              </ChartFrame>
+            </DashCard>
+
+            <DashCard title="Residence type" subtitle="Boarding vs. day (UNCLASSIFIED retained)">
+              <ChartFrame height={240} empty={residenceData.length === 0}>
+                <ResponsiveContainer>
+                  <RBarChart data={residenceData} layout="vertical" margin={{ left: 8, right: 16 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#EEF2F7" horizontal={false} />
+                    <XAxis type="number" tick={{ fontSize: 11, fill: '#94A3B8', fontWeight: 700 }} />
+                    <YAxis type="category" dataKey="name" width={110}
+                      tick={{ fontSize: 11, fill: '#475569', fontWeight: 800 }} />
+                    <Tooltip content={<KiliTooltip />} />
+                    <Bar dataKey="value" radius={[0, 8, 8, 0]}>
+                      {residenceData.map((d, i) => <Cell key={i} fill={d.color} />)}
+                    </Bar>
+                  </RBarChart>
+                </ResponsiveContainer>
+              </ChartFrame>
+            </DashCard>
+          </section>
+
+          {/* ── CLASS CAPACITY MIXED + ADMISSIONS AREA ───────────────── */}
+          <section className="mb-5 grid gap-gutter xl:grid-cols-2">
+            <DashCard
+              title="Class capacity & utilization"
+              subtitle="Columns = enrolled · Line = capacity · Red = over capacity"
+            >
+              <ChartFrame height={320} empty={classCapacity.length === 0}>
+                <ResponsiveContainer>
+                  <ComposedChart data={classCapacity}>
+                    <defs>
+                      <linearGradient id="enrolled-bar" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={KILI.indigo} />
+                        <stop offset="100%" stopColor={KILI.violet} stopOpacity={0.85} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#EEF2F7" vertical={false} />
+                    <XAxis dataKey="name" interval={0} angle={-25} textAnchor="end" height={60}
+                      tick={{ fontSize: 10, fill: '#475569', fontWeight: 800 }} />
+                    <YAxis yAxisId="left" tick={{ fontSize: 11, fill: '#94A3B8', fontWeight: 700 }} />
+                    <YAxis yAxisId="right" orientation="right"
+                      tick={{ fontSize: 11, fill: '#94A3B8', fontWeight: 700 }} />
+                    <Tooltip content={<KiliTooltip />} />
+                    <Legend iconType="circle" wrapperStyle={{ fontSize: 11, fontWeight: 700 }} />
+                    <Bar yAxisId="left" dataKey="enrolled" name="Enrolled" fill="url(#enrolled-bar)"
+                      radius={[8, 8, 0, 0]} maxBarSize={38}>
+                      {classCapacity.map((c, i) => (
+                        <Cell key={i} fill={c.over ? KILI.rose : 'url(#enrolled-bar)'} />
+                      ))}
+                    </Bar>
+                    <Line yAxisId="right" type="monotone" dataKey="capacity" name="Capacity"
+                      stroke={KILI.amber} strokeWidth={2.5} dot={{ r: 3, fill: KILI.amber }} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </ChartFrame>
+            </DashCard>
+
+            <DashCard title="Monthly admissions" subtitle="Trend by admission date">
+              <ChartFrame height={320} empty={admissionsTrend.length === 0}>
+                <ResponsiveContainer>
+                  <AreaChart data={admissionsTrend}>
+                    <defs>
+                      <linearGradient id="area-adm" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={KILI.emerald} stopOpacity={0.55} />
+                        <stop offset="100%" stopColor={KILI.emerald} stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#EEF2F7" vertical={false} />
+                    <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#94A3B8', fontWeight: 700 }} />
+                    <YAxis tick={{ fontSize: 11, fill: '#94A3B8', fontWeight: 700 }} />
+                    <Tooltip content={<KiliTooltip />} />
+                    <Area type="monotone" dataKey="admissions" stroke={KILI.emerald} strokeWidth={2.5}
+                      fill="url(#area-adm)" isAnimationActive />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </ChartFrame>
+            </DashCard>
+          </section>
+
+          {/* ── STAGE STACKED + ATTENDANCE (line + bars) ──────────────── */}
+          <section className="mb-5 grid gap-gutter xl:grid-cols-2">
+            <DashCard title="Enrolment by stage" subtitle="Nursery · Primary · O-Level · A-Level">
+              <ChartFrame height={300} empty={stageData.length === 0}>
+                <ResponsiveContainer>
+                  <RBarChart data={[stageData.reduce((acc, d) => ({ ...acc, [d.name]: d.value }), {} as Record<string, number>)]}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#EEF2F7" vertical={false} />
+                    <XAxis dataKey={() => ''} hide />
+                    <YAxis tick={{ fontSize: 11, fill: '#94A3B8', fontWeight: 700 }} />
+                    <Tooltip content={<KiliTooltip />} />
+                    <Legend iconType="circle" wrapperStyle={{ fontSize: 11, fontWeight: 700 }} />
+                    {stageData.map((d) => (
+                      <Bar key={d.name} dataKey={d.name} stackId="a" fill={d.color} radius={[6, 6, 0, 0]} maxBarSize={80} />
+                    ))}
+                  </RBarChart>
+                </ResponsiveContainer>
+              </ChartFrame>
+            </DashCard>
+
+            <DashCard title="Attendance long-term trend" subtitle="Monthly school-wide rate">
+              <ChartFrame height={300} empty={attendanceByMonth.length === 0}>
+                <ResponsiveContainer>
+                  <LineChart data={attendanceByMonth}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#EEF2F7" vertical={false} />
+                    <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#94A3B8', fontWeight: 700 }} />
+                    <YAxis domain={[0, 100]} unit="%" tick={{ fontSize: 11, fill: '#94A3B8', fontWeight: 700 }} />
+                    <Tooltip content={<KiliTooltip suffix="%" />} />
+                    <Line type="monotone" dataKey="rate" stroke={KILI.teal} strokeWidth={3}
+                      dot={{ r: 4, fill: KILI.teal }} activeDot={{ r: 6 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </ChartFrame>
+            </DashCard>
+          </section>
+
+          {/* ── ATTENDANCE BY CLASS (risk callout) + BY DAY ───────────── */}
+          <section className="mb-5 grid gap-gutter xl:grid-cols-3">
+            <DashCard title="Attendance by class" subtitle="Lowest performers first" className="xl:col-span-2">
+              <ChartFrame height={320} empty={attendanceByClass.length === 0}>
+                <ResponsiveContainer>
+                  <RBarChart data={attendanceByClass} layout="vertical" margin={{ left: 8, right: 16 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#EEF2F7" horizontal={false} />
+                    <XAxis type="number" domain={[0, 100]} unit="%"
+                      tick={{ fontSize: 11, fill: '#94A3B8', fontWeight: 700 }} />
+                    <YAxis type="category" dataKey="name" width={130}
+                      tick={{ fontSize: 10, fill: '#475569', fontWeight: 800 }} />
+                    <Tooltip content={<KiliTooltip suffix="%" />} />
+                    <Bar dataKey="rate" radius={[0, 8, 8, 0]} maxBarSize={26}>
+                      {attendanceByClass.map((c, i) => <Cell key={i} fill={c.color} />)}
+                    </Bar>
+                  </RBarChart>
+                </ResponsiveContainer>
+              </ChartFrame>
+              {attendanceByClass.some((c) => c.below80 > 0) && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {attendanceByClass.filter((c) => c.below80 > 0).slice(0, 4).map((c) => (
+                    <span key={c.name} className="inline-flex items-center gap-1.5 rounded-lg bg-rose-50 px-2.5 py-1 text-[11px] font-black text-rose-700">
+                      <AlertTriangle className="h-3 w-3" /> {c.name}: {c.below80} below 80%
+                    </span>
+                  ))}
+                </div>
+              )}
+            </DashCard>
+
+            <DashCard title="Attendance by day" subtitle="Weekly pattern">
+              <ChartFrame height={320} empty={attendanceByDay.length === 0}>
+                <ResponsiveContainer>
+                  <RadarChart data={attendanceByDay} outerRadius="78%">
+                    <PolarGrid stroke="#E2E8F0" />
+                    <PolarAngleAxis dataKey="day" tick={{ fontSize: 11, fill: '#475569', fontWeight: 800 }} />
+                    <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fontSize: 9, fill: '#94A3B8' }} />
+                    <Radar dataKey="rate" stroke={KILI.indigo} fill={KILI.indigo} fillOpacity={0.35} strokeWidth={2} />
+                    <Tooltip content={<KiliTooltip suffix="%" />} />
+                  </RadarChart>
+                </ResponsiveContainer>
+              </ChartFrame>
+            </DashCard>
+          </section>
+
+          {/* ── ACADEMICS: grade histogram + subject rankings ─────────── */}
+          <section className="mb-5 grid gap-gutter xl:grid-cols-3">
+            <DashCard title="Grade distribution" subtitle="School-wide histogram">
+              <ChartFrame height={300} empty={gradeData.length === 0}>
+                <ResponsiveContainer>
+                  <RBarChart data={gradeData}>
+                    <defs>
+                      <linearGradient id="grade-bar" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={KILI.violet} />
+                        <stop offset="100%" stopColor={KILI.indigo} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#EEF2F7" vertical={false} />
+                    <XAxis dataKey="grade" tick={{ fontSize: 11, fill: '#475569', fontWeight: 800 }} />
+                    <YAxis tick={{ fontSize: 11, fill: '#94A3B8', fontWeight: 700 }} />
+                    <Tooltip content={<KiliTooltip />} />
+                    <Bar dataKey="count" fill="url(#grade-bar)" radius={[8, 8, 0, 0]} maxBarSize={42} />
+                  </RBarChart>
+                </ResponsiveContainer>
+              </ChartFrame>
+            </DashCard>
+
+            <DashCard title="Subject rankings" subtitle="Average vs. pass rate" className="xl:col-span-2">
+              <ChartFrame height={300} empty={subjectRank.length === 0}>
+                <ResponsiveContainer>
+                  <ComposedChart data={subjectRank}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#EEF2F7" vertical={false} />
+                    <XAxis dataKey="name" interval={0} angle={-18} textAnchor="end" height={50}
+                      tick={{ fontSize: 10, fill: '#475569', fontWeight: 800 }} />
+                    <YAxis tick={{ fontSize: 11, fill: '#94A3B8', fontWeight: 700 }} />
+                    <Tooltip content={<KiliTooltip />} />
+                    <Legend iconType="circle" wrapperStyle={{ fontSize: 11, fontWeight: 700 }} />
+                    <Bar dataKey="average" name="Average" fill={KILI.indigo} radius={[8, 8, 0, 0]} maxBarSize={30} />
+                    <Line type="monotone" dataKey="passRate" name="Pass rate" stroke={KILI.amber} strokeWidth={2.5}
+                      dot={{ r: 3, fill: KILI.amber }} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </ChartFrame>
+            </DashCard>
+          </section>
+
+          {/* ── CLASS RANKINGS + TERM COMPARISON ──────────────────────── */}
+          <section className="mb-5 grid gap-gutter xl:grid-cols-2">
+            <DashCard title="Class rankings" subtitle="Average and pass rate by class">
+              <ChartFrame height={320} empty={classRank.length === 0}>
+                <ResponsiveContainer>
+                  <RBarChart data={classRank}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#EEF2F7" vertical={false} />
+                    <XAxis dataKey="name" interval={0} angle={-25} textAnchor="end" height={60}
+                      tick={{ fontSize: 10, fill: '#475569', fontWeight: 800 }} />
+                    <YAxis tick={{ fontSize: 11, fill: '#94A3B8', fontWeight: 700 }} />
+                    <Tooltip content={<KiliTooltip />} />
+                    <Legend iconType="circle" wrapperStyle={{ fontSize: 11, fontWeight: 700 }} />
+                    <Bar dataKey="average" name="Average" fill={KILI.indigo} radius={[6, 6, 0, 0]} maxBarSize={26} />
+                    <Bar dataKey="passRate" name="Pass rate" fill={KILI.teal} radius={[6, 6, 0, 0]} maxBarSize={26} />
+                  </RBarChart>
+                </ResponsiveContainer>
+              </ChartFrame>
+            </DashCard>
+
+            <DashCard title="Term-over-term" subtitle="School average and pass rate">
+              <ChartFrame height={320} empty={termComparison.length === 0}>
+                <ResponsiveContainer>
+                  <LineChart data={termComparison}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#EEF2F7" vertical={false} />
+                    <XAxis dataKey="term" tick={{ fontSize: 11, fill: '#475569', fontWeight: 800 }} />
+                    <YAxis tick={{ fontSize: 11, fill: '#94A3B8', fontWeight: 700 }} />
+                    <Tooltip content={<KiliTooltip />} />
+                    <Legend iconType="circle" wrapperStyle={{ fontSize: 11, fontWeight: 700 }} />
+                    <Line type="monotone" dataKey="average" name="Average" stroke={KILI.indigo} strokeWidth={3}
+                      dot={{ r: 4, fill: KILI.indigo }} />
+                    <Line type="monotone" dataKey="passRate" name="Pass rate" stroke={KILI.emerald} strokeWidth={3}
+                      dot={{ r: 4, fill: KILI.emerald }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </ChartFrame>
+            </DashCard>
+          </section>
+
+          {/* ── NOTIFICATIONS + SYSTEM HEALTH ─────────────────────────── */}
+          <section className="mb-5 grid gap-gutter xl:grid-cols-3">
+            <DashCard title="Notifications by channel" subtitle="Delivery mix">
+              <Donut3D data={channelData.map((c, i) => ({ ...c, color: [KILI.indigo, KILI.teal, KILI.amber, KILI.violet, KILI.rose][i % 5] }))} />
+              <Legend2 items={channelData.map((c, i) => ({ name: c.name, color: [KILI.indigo, KILI.teal, KILI.amber, KILI.violet, KILI.rose][i % 5], value: num(c.value) }))} />
+            </DashCard>
+
+            <DashCard title="Notification status" subtitle="Operational status breakdown">
+              <ChartFrame height={240} empty={notifStatus.length === 0}>
+                <ResponsiveContainer>
+                  <RBarChart data={notifStatus}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#EEF2F7" vertical={false} />
+                    <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#475569', fontWeight: 800 }} />
+                    <YAxis tick={{ fontSize: 11, fill: '#94A3B8', fontWeight: 700 }} />
+                    <Tooltip content={<KiliTooltip />} />
+                    <Bar dataKey="value" radius={[8, 8, 0, 0]} maxBarSize={44}>
+                      {notifStatus.map((s, i) => (
+                        <Cell key={i} fill={s.name.toLowerCase().includes('fail') ? KILI.rose : s.name.toLowerCase().includes('deliver') ? KILI.emerald : KILI.indigo} />
+                      ))}
+                    </Bar>
+                  </RBarChart>
+                </ResponsiveContainer>
+              </ChartFrame>
+            </DashCard>
+
+            <DashCard title="System health" subtitle="Live service indicators">
+              {healthEntries.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-xs font-semibold text-slate-400">
+                  Health data unavailable.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {healthEntries.map(({ name, value }) => {
+                    const raw = typeof value === 'string' ? value : JSON.stringify(value);
+                    const ok = /ok|up|healthy|operational/i.test(raw);
+                    const warn = /warn|degraded/i.test(raw);
+                    const tone = ok ? KILI.emerald : warn ? KILI.amber : KILI.rose;
+                    return (
+                      <div key={name} className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
+                        <span className="text-xs font-black text-slate-700">{titleCase(name)}</span>
+                        <span className="inline-flex items-center gap-1.5 rounded-lg px-2 py-0.5 text-[11px] font-black text-white" style={{ background: tone }}>
+                          <Activity className="h-3 w-3" />
+                          {raw.length > 24 ? raw.slice(0, 24) + '…' : raw}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </DashCard>
+          </section>
+
+          {/* ── QUICK ACCESS + RECENT AUDIT ───────────────────────────── */}
+          <section className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_380px]">
+            <div className="space-y-4">
+              <p className="text-[11px] font-black uppercase tracking-[0.28em] text-slate-400">Quick Access</p>
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                <AdminQuickCard title="Create User" detail="Role-bound account with linked profile." to="/admin/users/create" icon="shield" />
+                <AdminQuickCard title="Enrol Student" detail="Manual enrolment and class-list import." to="/admin/students/enrol" />
+                <AdminQuickCard title="Academic Setup" detail="Years, terms, classes, subjects, grading." to="/admin/academic/setup" />
+                <AdminQuickCard title="Notification Templates" detail="Edit and preview SMS / email / push templates." to="/admin/notifications/templates" />
+                <AdminQuickCard title="Run Engine" detail="Performance engine thresholds and manual run." to="/admin/performance/engine" />
+                <AdminQuickCard title="System Audit" detail="Security and settings events." to="/admin/audit/system" icon="eye" />
+                <AdminQuickCard title="System Status" detail="Live service health and incident surface." to="/admin/system-status" icon="eye" />
+                <AdminQuickCard title="System Settings" detail="Providers, versions, feature flags." to="/admin/settings/system" />
+                <AdminQuickCard title="Departments" detail="Department registry, HOD assignments." to="/admin/departments" icon="shield" />
+              </div>
+            </div>
+            <div className="space-y-4">
+              <p className="text-[11px] font-black uppercase tracking-[0.28em] text-slate-400">Service Health</p>
+              <div className="space-y-2.5">
+                {healthEntries.map(({ name, value }) => {
+                  const raw = typeof value === 'string' ? value : JSON.stringify(value);
+                  return (
+                    <div key={name} className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+                      <span className="text-xs font-black text-slate-700">{titleCase(name)}</span>
+                      <span className="text-[11px] font-bold text-slate-500">{raw}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </section>
+
+          <div className="mt-6 space-y-4">
+            <p className="text-[11px] font-black uppercase tracking-[0.28em] text-slate-400">Recent Audit Events</p>
+            <AuditPanel />
+          </div>
+        </>
+      )}
     </AdminShell>
   );
 }
@@ -4086,6 +4896,7 @@ export function StudentAdminProfilePage({ basePath = '/admin' }: { basePath?: st
     { key: 'portal', label: 'Portal Account' },
     { key: 'attendance', label: 'Attendance' },
     { key: 'performance', label: 'Performance' },
+    { key: 'lifecycle', label: 'Student Lifecycle' },
     { key: 'finance', label: 'Finance' },
     { key: 'discipline', label: 'Discipline' },
     { key: 'audit', label: 'Audit Trail' },
@@ -4268,6 +5079,16 @@ export function StudentAdminProfilePage({ basePath = '/admin' }: { basePath?: st
                       </div>
                     )}
                   </div>
+                )}
+                {key === 'lifecycle' && (
+                  <StudentLifecyclePanel
+                    student={student as any}
+                    attendance={attendance}
+                    performance={performance ?? []}
+                    finance={finance}
+                    discipline={discipline ?? []}
+                    guardians={guardians ?? []}
+                  />
                 )}
                 {key === 'finance' && (
                   <div className="space-y-4">
@@ -4740,9 +5561,17 @@ export function AdminReportDetailPage() {
         { label: 'Scope', value: job.scope, detail: job.role },
         { label: 'Requested', value: job.requestedBy, detail: job.created.slice(0, 10) },
       ]} />
-      <Button className="rounded-xl bg-[#4338CA]" disabled={downloading} onClick={handleDownload}>
-        <Download className="h-4 w-4" /> {downloading ? 'Downloading…' : 'Download'}
-      </Button>
+      <div className="max-w-sm">
+        <ReportWorkflow
+          title={job.name}
+          description={`${job.scope} · requested by ${job.requestedBy}`}
+          format={job.format ?? 'PDF'}
+          rows={[{ id: job.id, report: job.name, status: job.status, scope: job.scope, role: job.role, requestedBy: job.requestedBy, createdAt: job.created }]}
+          disabled={job.status !== 'COMPLETED'}
+          busy={downloading}
+          onDownload={handleDownload}
+        />
+      </div>
     </AdminShell>
   );
 }
