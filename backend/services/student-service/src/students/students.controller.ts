@@ -83,6 +83,18 @@ export class StudentsController {
     return this.studentsService.stats(user);
   }
 
+  /**
+   * Chart-ready, school-scoped aggregates for the System Admin dashboard.
+   * This deliberately exposes counts and distributions only: no student PII is
+   * returned to a dashboard chart.
+   */
+  @Get('admin/dashboard-analytics')
+  @Roles('SYSTEM_ADMIN')
+  @ApiOperation({ summary: 'System-admin student dashboard analytics' })
+  async dashboardAnalytics(@CurrentUser() user?: RequestUser) {
+    return this.studentsService.dashboardAnalytics(user);
+  }
+
   @Get()
   @Roles('SYSTEM_ADMIN', 'PRINCIPAL', 'MANAGER', 'HEAD_OF_SCHOOL', 'SUPER_ADMIN', 'ACADEMIC_QA', 'FINANCE', 'HEAD_OF_FINANCE', 'HEAD_OF_DEPARTMENT', 'TEACHER', 'ADMISSIONS', 'MATRON', 'PATRON')
   @ApiOperation({ summary: 'Paginated list of students with filters' })

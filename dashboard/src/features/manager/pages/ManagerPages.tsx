@@ -1,5 +1,19 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart as RBarChart,
+  CartesianGrid,
+  ComposedChart,
+  Legend,
+  Line,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import {
   AlertTriangle, ArrowRight, BadgeCheck, Banknote, ChevronRight,
   LayoutGrid, Table2, TrendingDown, TrendingUp, UserCheck,
@@ -29,6 +43,15 @@ import { useGenerateReportMutation, downloadReportWhenReady } from '../../operat
 import { useReportsList } from '../../analytics/api/analytics.hooks';
 import { SchoolGallery } from '../components/SchoolGallery';
 import { FundRequestBoard, FundRequestDetailView } from '../../finance/components/FundRequestBoard';
+import {
+  EXECUTIVE_COLORS,
+  ExecutiveChartCard,
+  ExecutiveChartFrame,
+  ExecutiveDonut,
+  ExecutiveLegend,
+  ExecutiveTooltip,
+} from '../../../components/charts/ExecutiveCharts';
+import { ReportWorkflow } from '../../../components/reports/ReportWorkflowDialog';
 
 // ─── Shared shell (mirrors the finance design language) ──────────────────────
 
@@ -211,10 +234,46 @@ function CompareBars({ schools }: { schools: SchoolScorecard[] }) {
 
 export function ManagerOverviewPage() {
   const { data, isLoading, isError, refetch } = useGroupOverview();
+  const { data: groupFinance } = useGroupFinance();
   const enterSchool = useEnterSchool();
   const session = useAuthStore((s) => s.session);
-  const visibleSchools = data?.schools.filter((school) => canSelectSchool(session?.user.scope, session?.user.schoolIds ?? [], school.id)) ?? [];
-  const visibleAttention = data?.attention.filter((item) => visibleSchools.some((school) => school.id === item.id)) ?? [];
+  const visibleSchools = useMemo(
+    () => data?.schools.filter((school) => canSelectSchool(session?.user.scope, session?.user.schoolIds ?? [], school.id)) ?? [],
+    [data?.schools, session?.user.scope, session?.user.schoolIds],
+  );
+  const visibleAttention = useMemo(
+    () => data?.attention.filter((item) => visibleSchools.some((school) => school.id === item.id)) ?? [],
+    [data?.attention, visibleSchools],
+  );
+  const comparisonData = useMemo(() => visibleSchools.filter((school) => school.isActive).map((school) => ({
+    name: school.code || school.name,
+    academic: school.academicMean ?? 0,
+    attendance: school.attendanceRate ?? 0,
+    collection: school.collectionRate ?? 0,
+  })), [visibleSchools]);
+  const populationData = useMemo(() => visibleSchools.filter((school) => school.isActive).map((school) => ({
+    name: school.code || school.name,
+    students: school.students,
+    atRisk: school.atRisk,
+  })), [visibleSchools]);
+  const healthData = useMemo(() => {
+    const states = [
+      { name: 'Good', value: 0, color: EXECUTIVE_COLORS.emerald },
+      { name: 'Watch', value: 0, color: EXECUTIVE_COLORS.amber },
+      { name: 'Critical', value: 0, color: EXECUTIVE_COLORS.rose },
+    ];
+    visibleSchools.forEach((school) => {
+      const item = states.find((state) => state.name.toUpperCase() === school.health);
+      if (item) item.value += 1;
+    });
+    return states;
+  }, [visibleSchools]);
+  const financeTrend = useMemo(() => (groupFinance?.trend ?? []).map((entry) => ({
+    period: entry.period,
+    invoiced: entry.invoiced,
+    collected: entry.collected,
+    rate: entry.rate,
+  })), [groupFinance]);
 
   return (
     <ManagerWorkspaceShell title="Group Dashboard" eyebrow="Every school at a glance"
@@ -227,6 +286,70 @@ export function ManagerOverviewPage() {
             <MetricCard label="Collection Rate" value={data.totals.collectionRate != null ? `${data.totals.collectionRate}%` : '—'} detail={`${formatTZS(data.totals.collected)} of ${formatTZS(data.totals.invoiced)}`} tone={(data.totals.collectionRate ?? 0) >= 75 ? 'green' : 'gold'} progress={data.totals.collectionRate ?? 0} />
             <MetricCard label="Academic Mean" value={data.totals.academicMean != null ? `${data.totals.academicMean}%` : '—'} detail="enrolment-weighted, published marks" tone="navy" />
             <MetricCard label="Needs Attention" value={String(data.totals.needingAttention)} detail={`${data.totals.atRisk} students flagged at risk`} tone={data.totals.needingAttention > 0 ? 'red' : 'green'} trend={data.totals.needingAttention > 0 ? 'down' : 'up'} />
+          </div>
+
+          <div className="grid gap-gutter xl:grid-cols-3">
+            <ExecutiveChartCard title="School health distribution" subtitle="Schools currently healthy, watched or critical">
+              <ExecutiveDonut data={healthData} centerLabel="Schools" />
+              <ExecutiveLegend data={healthData} />
+            </ExecutiveChartCard>
+
+            <ExecutiveChartCard title="Academic, attendance & collection" subtitle="Comparable rates across active schools" className="xl:col-span-2">
+              <ExecutiveChartFrame height={300} empty={comparisonData.length === 0}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={comparisonData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#EEF2F7" vertical={false} />
+                    <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#475569', fontWeight: 800 }} />
+                    <YAxis domain={[0, 100]} unit="%" tick={{ fontSize: 10, fill: '#94A3B8' }} />
+                    <Tooltip content={<ExecutiveTooltip suffix="%" />} />
+                    <Legend iconType="circle" wrapperStyle={{ fontSize: 11, fontWeight: 700 }} />
+                    <Bar dataKey="academic" name="Academic" fill={EXECUTIVE_COLORS.indigo} radius={[6, 6, 0, 0]} maxBarSize={34} />
+                    <Bar dataKey="collection" name="Collection" fill={EXECUTIVE_COLORS.emerald} radius={[6, 6, 0, 0]} maxBarSize={34} />
+                    <Line type="monotone" dataKey="attendance" name="Attendance" stroke={EXECUTIVE_COLORS.amber} strokeWidth={3} dot={{ r: 4 }} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </ExecutiveChartFrame>
+            </ExecutiveChartCard>
+          </div>
+
+          <div className="grid gap-gutter xl:grid-cols-2">
+            <ExecutiveChartCard title="Enrolment and student risk" subtitle="Population scale with at-risk students by school">
+              <ExecutiveChartFrame height={310} empty={populationData.length === 0}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <RBarChart data={populationData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#EEF2F7" vertical={false} />
+                    <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#475569', fontWeight: 800 }} />
+                    <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: '#94A3B8' }} />
+                    <Tooltip content={<ExecutiveTooltip />} />
+                    <Legend iconType="circle" wrapperStyle={{ fontSize: 11, fontWeight: 700 }} />
+                    <Bar dataKey="students" name="Students" fill={EXECUTIVE_COLORS.blue} radius={[7, 7, 0, 0]} />
+                    <Bar dataKey="atRisk" name="At risk" fill={EXECUTIVE_COLORS.rose} radius={[7, 7, 0, 0]} />
+                  </RBarChart>
+                </ResponsiveContainer>
+              </ExecutiveChartFrame>
+            </ExecutiveChartCard>
+
+            <ExecutiveChartCard title="Group collection trend" subtitle="Actual invoiced and collected values by term">
+              <ExecutiveChartFrame height={310} empty={financeTrend.length === 0}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={financeTrend}>
+                    <defs>
+                      <linearGradient id="manager-collected" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={EXECUTIVE_COLORS.emerald} stopOpacity={0.5} />
+                        <stop offset="100%" stopColor={EXECUTIVE_COLORS.emerald} stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#EEF2F7" vertical={false} />
+                    <XAxis dataKey="period" tick={{ fontSize: 10, fill: '#475569', fontWeight: 800 }} />
+                    <YAxis tick={{ fontSize: 10, fill: '#94A3B8' }} />
+                    <Tooltip content={<ExecutiveTooltip valueFormatter={(value) => formatTZS(Number(value))} />} />
+                    <Legend iconType="circle" wrapperStyle={{ fontSize: 11, fontWeight: 700 }} />
+                    <Area type="monotone" dataKey="collected" name="Collected" stroke={EXECUTIVE_COLORS.emerald} fill="url(#manager-collected)" strokeWidth={3} />
+                    <Line type="monotone" dataKey="invoiced" name="Invoiced" stroke={EXECUTIVE_COLORS.navy} strokeWidth={2.5} dot={{ r: 3 }} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </ExecutiveChartFrame>
+            </ExecutiveChartCard>
           </div>
 
           <div className="grid gap-gutter xl:grid-cols-[minmax(0,1fr)_380px]">
@@ -342,7 +465,15 @@ export function GroupFinancePage() {
   const enterSchoolFinance = useEnterSchool('/finance/invoices');
   const session = useAuthStore((s) => s.session);
   const isManager = session?.user.role === 'MANAGER' || session?.user.role === 'SUPER_ADMIN';
-  const visibleSchoolFinance = data?.bySchool.filter((school) => canSelectSchool(session?.user.scope, session?.user.schoolIds ?? [], school.id)) ?? [];
+  const visibleSchoolFinance = useMemo(
+    () => data?.bySchool.filter((school) => canSelectSchool(session?.user.scope, session?.user.schoolIds ?? [], school.id)) ?? [],
+    [data?.bySchool, session?.user.scope, session?.user.schoolIds],
+  );
+  const outstandingDistribution = useMemo(() => visibleSchoolFinance.map((school, index) => ({
+    name: school.code || school.name,
+    value: school.outstanding,
+    color: [EXECUTIVE_COLORS.rose, EXECUTIVE_COLORS.amber, EXECUTIVE_COLORS.indigo, EXECUTIVE_COLORS.blue, EXECUTIVE_COLORS.violet][index % 5],
+  })), [visibleSchoolFinance]);
 
   return (
     <ManagerWorkspaceShell title="Group Finance" eyebrow="Every shilling, every school">
@@ -355,6 +486,47 @@ export function GroupFinancePage() {
             <MetricCard label="Outstanding" value={formatTZS(data.totals.outstanding)} detail="awaiting payment" tone="red" trend="down" />
             <MetricCard label="Collection Rate" value={data.totals.collectionRate != null ? `${data.totals.collectionRate}%` : '—'} detail="group-wide" tone={(data.totals.collectionRate ?? 0) >= 75 ? 'green' : 'gold'} progress={data.totals.collectionRate ?? 0} />
           </div>
+
+          <div className="grid gap-gutter xl:grid-cols-3">
+            <ExecutiveChartCard title="Outstanding distribution" subtitle="Share of receivables by school">
+              <ExecutiveDonut data={outstandingDistribution} centerLabel="Outstanding" />
+              <ExecutiveLegend data={outstandingDistribution} />
+            </ExecutiveChartCard>
+
+            <ExecutiveChartCard title="Invoiced, collected and outstanding" subtitle="Consolidated position for every visible school" className="xl:col-span-2">
+              <ExecutiveChartFrame height={310} empty={visibleSchoolFinance.length === 0}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <RBarChart data={visibleSchoolFinance} layout="vertical" margin={{ left: 12, right: 20 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#EEF2F7" horizontal={false} />
+                    <XAxis type="number" tick={{ fontSize: 10, fill: '#94A3B8' }} />
+                    <YAxis type="category" dataKey="code" width={90} tick={{ fontSize: 10, fill: '#475569', fontWeight: 800 }} />
+                    <Tooltip content={<ExecutiveTooltip valueFormatter={(value) => formatTZS(Number(value))} />} />
+                    <Legend iconType="circle" wrapperStyle={{ fontSize: 11, fontWeight: 700 }} />
+                    <Bar dataKey="collected" name="Collected" stackId="position" fill={EXECUTIVE_COLORS.emerald} radius={[6, 0, 0, 6]} />
+                    <Bar dataKey="outstanding" name="Outstanding" stackId="position" fill={EXECUTIVE_COLORS.rose} radius={[0, 6, 6, 0]} />
+                  </RBarChart>
+                </ResponsiveContainer>
+              </ExecutiveChartFrame>
+            </ExecutiveChartCard>
+          </div>
+
+          <ExecutiveChartCard title="Collection performance by term" subtitle="Amount trend with the collection-rate line">
+            <ExecutiveChartFrame height={330} empty={data.trend.length === 0}>
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={data.trend}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#EEF2F7" vertical={false} />
+                  <XAxis dataKey="period" tick={{ fontSize: 10, fill: '#475569', fontWeight: 800 }} />
+                  <YAxis yAxisId="amount" tick={{ fontSize: 10, fill: '#94A3B8' }} />
+                  <YAxis yAxisId="rate" orientation="right" domain={[0, 100]} unit="%" tick={{ fontSize: 10, fill: '#94A3B8' }} />
+                  <Tooltip content={<ExecutiveTooltip />} />
+                  <Legend iconType="circle" wrapperStyle={{ fontSize: 11, fontWeight: 700 }} />
+                  <Bar yAxisId="amount" dataKey="invoiced" name="Invoiced" fill={EXECUTIVE_COLORS.navy} radius={[7, 7, 0, 0]} maxBarSize={48} />
+                  <Bar yAxisId="amount" dataKey="collected" name="Collected" fill={EXECUTIVE_COLORS.emerald} radius={[7, 7, 0, 0]} maxBarSize={48} />
+                  <Line yAxisId="rate" type="monotone" dataKey="rate" name="Collection rate" stroke={EXECUTIVE_COLORS.amber} strokeWidth={3} dot={{ r: 4 }} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </ExecutiveChartFrame>
+          </ExecutiveChartCard>
 
           <div className="grid gap-gutter xl:grid-cols-2">
             <section className="rounded-lg border border-[#d5dde6] bg-white p-6">
@@ -477,16 +649,15 @@ const MANAGER_REPORTS: Array<{ type: string; title: string; desc: string; scope:
 
 function ReportRow({ report, schools }: { report: (typeof MANAGER_REPORTS)[number]; schools: Array<{ id: string; name: string }> }) {
   const generate = useGenerateReportMutation();
-  const [schoolId, setSchoolId] = useState('');
   const [busy, setBusy] = useState(false);
 
-  const handle = async () => {
+  const handle = async (filters: Record<string, string>) => {
     setBusy(true);
     try {
       const result = (await generate.mutateAsync({
         reportType: report.type,
         scope: report.scope,
-        schoolId: report.perSchool && schoolId ? schoolId : undefined,
+        schoolId: report.perSchool && filters.schoolId ? filters.schoolId : undefined,
       })) as Record<string, unknown>;
       await downloadReportWhenReady(String(result.reportId), `${report.title.replace(/\s+/g, '_')}.pdf`);
       toast('Report downloaded', 'success');
@@ -503,20 +674,16 @@ function ReportRow({ report, schools }: { report: (typeof MANAGER_REPORTS)[numbe
         <p className="font-black text-[#00334f]">{report.title}</p>
         <p className="text-xs font-semibold text-[#64748b]">{report.desc}</p>
       </div>
-      <div className="flex items-center gap-2">
-        {report.perSchool && (
-          <select
-            value={schoolId}
-            onChange={(e) => setSchoolId(e.target.value)}
-            className="h-10 rounded-xl border border-[#d5dde6] bg-white px-3 text-sm font-semibold outline-none focus:border-[#00334f]"
-          >
-            <option value="">All schools (group)</option>
-            {schools.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>
-        )}
-        <Button className="rounded-xl" disabled={busy} onClick={handle}>
-          {busy ? 'Generating...' : 'Generate & Download'}
-        </Button>
+      <div className="min-w-[260px]">
+        <ReportWorkflow
+          title={report.title}
+          description={report.desc}
+          rows={schools.map((school) => ({ id: school.id, schoolId: school.id, school: school.name, scope: report.scope, report: report.title }))}
+          fields={report.perSchool ? [{ key: 'schoolId', label: 'School', type: 'select', options: schools.map((school) => ({ value: school.id, label: school.name })), placeholder: 'All schools (group)' }] : []}
+          busy={busy}
+          onDownload={handle}
+          compact
+        />
       </div>
     </div>
   );
@@ -553,15 +720,7 @@ function ReportHistoryRow({ r }: { r: { id: string; reportType: string; title: s
       </div>
       <div className="flex items-center gap-3">
         <span className={`rounded-full border px-2.5 py-0.5 text-[11px] font-black uppercase tracking-wide ${cfg.cls}`}>{cfg.label}</span>
-        {r.status === 'READY' && (
-          <button
-            disabled={downloading}
-            onClick={handleDownload}
-            className="rounded-xl bg-[#00334f] px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50"
-          >
-            {downloading ? 'Downloading...' : 'Download'}
-          </button>
-        )}
+        {r.status === 'READY' && <ReportWorkflow title={r.title || r.reportType} description="Previously generated report file." format="PDF" rows={[{ id: r.id, report: r.title || r.reportType, status: r.status, createdAt: r.createdAt, completedAt: r.completedAt ?? '' }]} busy={downloading} onDownload={handleDownload} compact />}
       </div>
     </div>
   );

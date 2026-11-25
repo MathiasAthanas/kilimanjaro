@@ -116,6 +116,15 @@ export class UsersInternalController {
     return this.usersService.stats();
   }
 
+  /** Dashboard-only aggregates. It is internal because the gateway applies the
+   * caller's role and passes the already-authorized school scope. */
+  @Get('dashboard-analytics')
+  async dashboardAnalytics(@Query('schoolIds') schoolIds = '') {
+    return this.usersService.dashboardAnalytics(
+      schoolIds.split(',').map((id) => id.trim()).filter(Boolean),
+    );
+  }
+
   /**
    * Internal hard-delete used to roll back an orphaned account when a
    * service-to-service flow (e.g. student import) fails after account creation.

@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowRight, CheckCircle2, Download, FileText, Grid3X3, Printer, Save, Send } from 'lucide-react';
+import { AlertTriangle, ArrowRight, CheckCircle2, FileText, Grid3X3, Save, Send } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
@@ -6,6 +6,9 @@ import { NavLink } from 'react-router-dom';
 import { Badge } from '../../../components/common/Badge';
 import { Button } from '../../../components/common/Button';
 import { exportReasonIsValid, markIsValid, reportBuilderIsValid, timetableHasConflict } from '../utils/operationsValidation';
+import { ReportWorkflow } from '../../../components/reports/ReportWorkflowDialog';
+import { downloadReportWhenReady } from '../api/operations.hooks';
+import { toast } from '../../../lib/toast';
 
 export function OperationsShell({ title, eyebrow, children }: { title: string; eyebrow: string; children: ReactNode }) {
   return (
@@ -44,6 +47,18 @@ export function Td({ children, className = '' }: { children: ReactNode; classNam
 }
 
 export function ExportCenterDrawer({ jobs }: { jobs: Array<{ id: string; name: string; status: string; format: string; requestedBy: string; expiry: string }> }) {
+  const [downloading, setDownloading] = useState<string | null>(null);
+  const download = async (job: (typeof jobs)[number]) => {
+    setDownloading(job.id);
+    try {
+      await downloadReportWhenReady(job.id, `${job.name.replace(/\s+/g, '-').toLowerCase()}.${job.format.toLowerCase()}`);
+      toast(`${job.name} downloaded`, 'success');
+    } catch {
+      toast(`Could not download ${job.name}`, 'error');
+    } finally {
+      setDownloading(null);
+    }
+  };
   return (
     <div className="rounded-2xl border border-ks-line bg-white p-5 shadow-sm">
       <h2 className="font-display text-xl font-black text-ks-navy">Export Center</h2>
@@ -52,7 +67,7 @@ export function ExportCenterDrawer({ jobs }: { jobs: Array<{ id: string; name: s
           <div key={job.id} className="rounded-xl border border-ks-line bg-ks-paper p-4">
             <div className="flex items-center justify-between gap-3"><p className="font-black text-ks-navy">{job.name}</p><Badge tone={job.status === 'COMPLETED' ? 'emerald' : job.status === 'FAILED' ? 'rose' : 'amber'}>{job.status}</Badge></div>
             <p className="mt-1 text-xs font-bold text-ks-muted">{job.format} / {job.requestedBy} / expires {job.expiry}</p>
-            <Button disabled={job.status !== 'COMPLETED'} variant="secondary" className="mt-3 rounded-lg py-1.5 text-xs"><Download className="h-3.5 w-3.5" /> Download</Button>
+            <ReportWorkflow title={job.name} description={`${job.requestedBy} · expires ${job.expiry}`} format={job.format} rows={[{ id: job.id, report: job.name, status: job.status, requestedBy: job.requestedBy, expiry: job.expiry }]} disabled={job.status !== 'COMPLETED'} busy={downloading === job.id} onDownload={() => download(job)} />
           </div>
         ))}
       </div>

@@ -2,7 +2,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../lib/api/client';
 import { arrayFromApi, dedupeById, payloadOf } from '../../../lib/api/response';
 import { useSchoolStore } from '../../../lib/school/schoolStore';
-import type { AdminStatus } from './adminApi';
+import {
+  fetchAdminDashboardAnalytics,
+  type AdminDashboardAnalyticsFilters,
+  type AdminStatus,
+} from './adminApi';
 
 /** Key fragment that scopes admin queries to the selected school so switching
  *  schools refetches (and caches) per school instead of serving stale data. */
@@ -30,6 +34,21 @@ export async function fetchAllUsers(params: Record<string, unknown> = {}): Promi
     if (page > 200) break; // safety valve
   }
   return raw;
+}
+
+export function useAdminDashboardAnalytics(filters: AdminDashboardAnalyticsFilters = {}) {
+  const activeSchoolKey = useActiveSchoolKey();
+  return useQuery({
+    queryKey: [
+      ...adminKeys.dashboard(),
+      'analytics',
+      activeSchoolKey,
+      filters.academicYearId ?? null,
+      filters.termId ?? null,
+    ] as const,
+    queryFn: () => fetchAdminDashboardAnalytics(filters),
+    staleTime: 60_000,
+  });
 }
 
 export type AdminUserRow = {
@@ -1491,6 +1510,14 @@ export function useStudentPerformance(id: string | undefined) {
           const d = r.data?.data ?? r.data;
           if (Array.isArray(d)) return d;
           if (Array.isArray(d?.snapshots)) return d.snapshots;
+          if (d?.chartData && typeof d.chartData === 'object') {
+            const names = new Map(
+              (Array.isArray(d?.trends) ? d.trends : []).map((trend: Record<string, unknown>) => [String(trend.subjectId ?? ''), String(trend.subjectName ?? 'Subject')]),
+            );
+            return Object.entries(d.chartData as Record<string, Array<Record<string, unknown>>>).flatMap(([subjectId, points]) =>
+              (Array.isArray(points) ? points : []).map((point) => ({ ...point, subjectId, subjectName: names.get(subjectId) ?? 'Subject' })),
+            );
+          }
           if (Array.isArray(d?.trends)) return d.trends;
           return [];
         }).catch(() => [] as unknown[])
@@ -1510,9 +1537,20 @@ export function useStudentFinance(id: string | undefined) {
         const invoices = Array.isArray(invoicesPayload) ? invoicesPayload : arrayFromApi(invoicesPayload, ['items', 'invoices']);
         const balance = invoices.reduce((sum, inv) => sum + Number((inv as Record<string, unknown>).outstandingBalance ?? 0), 0);
         const totalPaid = invoices.reduce((sum, inv) => sum + Number((inv as Record<string, unknown>).paidAmount ?? 0), 0);
+        const totalInvoiced = invoices.reduce((sum, inv) => sum + Number((inv as Record<string, unknown>).totalAmount ?? 0), 0);
+        const payments = invoices.flatMap((inv) => {
+          const invoice = inv as Record<string, unknown>;
+          return arrayFromApi(invoice.payments).map((payment) => ({
+            ...(payment as Record<string, unknown>),
+            invoiceNumber: invoice.invoiceNumber,
+          }));
+        });
         return {
           balance,
           totalPaid,
+          totalInvoiced,
+          invoices,
+          payments,
           transactions: invoices.map((inv) => ({
             date: (inv as Record<string, unknown>).dueDate ?? (inv as Record<string, unknown>).createdAt,
             description: (inv as Record<string, unknown>).invoiceNumber ?? 'Invoice',

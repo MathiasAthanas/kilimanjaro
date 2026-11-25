@@ -54,6 +54,7 @@ import {
 import { isOutlier, rejectReasonIsValid, sortOldestApprovalsFirst } from '../utils/hodReview';
 import { useDepartmentByUser, useAllDisciplineRecords, useResolveDisciplineMutation } from '../../admin/api/admin.hooks';
 import { useAuthStore } from '../../../lib/auth/authStore';
+import { ReportWorkflow } from '../../../components/reports/ReportWorkflowDialog';
 
 // ─── Home ──────────────────────────────────────────────────────────────────
 
@@ -2765,6 +2766,12 @@ const hodExportItems: Array<{ title: string; description: string; format: string
 export function HodExportsPage() {
   const [generating, setGenerating] = useState<string | null>(null);
   const generateMutation = useGenerateReportMutation();
+  const { data: alerts = [] } = useHodAlerts();
+  const { data: interventions = [] } = useHodInterventions();
+  const { data: pairings = [] } = useHodPairings();
+  const { data: teachers = [] } = useHodTeachersList();
+  const { data: subjects = [] } = useHodClassSubjects();
+  const { data: approvals = [] } = useHodPendingApprovals();
 
   const handleGenerate = async (item: typeof hodExportItems[0]) => {
     setGenerating(item.title);
@@ -2782,6 +2789,21 @@ export function HodExportsPage() {
     }
   };
 
+  const flatPreview = (rows: unknown[]) => rows.map((row) => Object.fromEntries(
+    Object.entries(row as Record<string, unknown>).map(([key, value]) => [
+      key,
+      value && typeof value === 'object' ? JSON.stringify(value) : value as string | number | boolean | null | undefined,
+    ]),
+  ));
+
+  const previewRows = (item: typeof hodExportItems[0]) => {
+    if (item.reportType === 'TEACHER_PERFORMANCE') return flatPreview(teachers);
+    if (item.reportType === 'STUDENT_PROFILE' || item.reportType === 'PERFORMANCE_ENGINE') return flatPreview(alerts);
+    if (item.reportType === 'CLASS_ACADEMIC' || item.reportType === 'DEPARTMENT_SUMMARY') return flatPreview(subjects);
+    if (item.reportType === 'ATTENDANCE_SUMMARY') return flatPreview(approvals);
+    return flatPreview([...interventions, ...pairings]).slice(0, 200);
+  };
+
   return (
     <HodWorkspaceShell title="HOD Export Center" eyebrow="Department reports">
       <div className="grid gap-gutter md:grid-cols-2 xl:grid-cols-3">
@@ -2797,14 +2819,16 @@ export function HodExportsPage() {
             </div>
             <h3 className="mt-4 font-display text-xl font-black text-ks-navy">{item.title}</h3>
             <p className="mt-1 flex-1 text-sm font-semibold text-ks-muted">{item.description}</p>
-            <Button
-              variant="secondary"
-              className="mt-4 w-full rounded-xl"
-              disabled={generating !== null}
-              onClick={() => handleGenerate(item)}
-            >
-              <Download className="h-4 w-4" /> {generating === item.title ? 'Generating…' : 'Generate'}
-            </Button>
+            <ReportWorkflow
+              title={item.title}
+              description={item.description}
+              format={item.format}
+              rows={previewRows(item)}
+              fields={[{ key: 'search', label: 'Search report', type: 'search', placeholder: 'Teacher, student, class, subject or status…' }]}
+              busy={generating === item.title}
+              disabled={generating !== null && generating !== item.title}
+              onDownload={() => handleGenerate(item)}
+            />
           </Card>
         ))}
       </div>

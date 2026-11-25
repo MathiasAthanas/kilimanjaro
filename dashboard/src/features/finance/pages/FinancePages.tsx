@@ -44,6 +44,19 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate, NavLink, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import {
+  Area,
+  Bar,
+  BarChart as RBarChart,
+  CartesianGrid,
+  ComposedChart,
+  Legend,
+  Line,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import { PaymentApprovalQueue } from '../../principal/components/PaymentApprovalQueue';
 import { usePendingApprovalsPage } from '../../principal/api/principal.hooks';
 import { downloadReportWhenReady, useGenerateReportMutation } from '../../operations/api/operations.hooks';
@@ -134,7 +147,7 @@ import {
   downloadInvoicePdf,
   getLogoBase64,
 } from '../components/FinanceWorkspaceShell';
-import { EXPORTS, exportFinanceCsv } from '../utils/exportCsv';
+import { EXPORTS, exportFinanceCsv, loadFinanceExportRows } from '../utils/exportCsv';
 import type { ExportKey } from '../utils/exportCsv';
 import { LedgerPager, LedgerSearch, LedgerTabs, selectClass, useDebounced, useLedgerView } from '../components/LedgerControls';
 import { groupClassesByLevel, priceTarget, structuresFor, type ClassLevelGroup } from '../utils/classLevels';
@@ -154,6 +167,15 @@ import { SkeletonTable } from '../../../components/common/SkeletonTable';
 import { SkeletonCards } from '../../../components/common/SkeletonCards';
 import { errorMessage } from '../../../lib/api/errors';
 import type { Loose } from '../../../lib/loose';
+import {
+  EXECUTIVE_COLORS,
+  ExecutiveChartCard,
+  ExecutiveChartFrame,
+  ExecutiveDonut,
+  ExecutiveLegend,
+  ExecutiveTooltip,
+} from '../../../components/charts/ExecutiveCharts';
+import { ReportWorkflow } from '../../../components/reports/ReportWorkflowDialog';
 
 // Zero-value overview — shown when API hasn't returned data yet (no fake numbers)
 const EMPTY_OVERVIEW: typeof financeOverview = { totalInvoiced: 0, totalCollected: 0, outstanding: 0, collectionRate: 0, today: 0, overdueInvoices: 0 };
@@ -181,6 +203,9 @@ export function FinanceHomePage() {
   const { data: fundRequests = [] } = useFundRequests({ status: 'SUBMITTED' }) as unknown as { data: Array<{ id: string; title: string; department: string; amount: number; status: string; requestNumber: string; neededBy: string }> };
   const { data: collectionData } = useCollectionSummary() as unknown as { data?: { byPaymentMethod?: Array<{ method: string; amount: number; count: number }> } };
   const { data: expenseSummary } = useExpenseSummary() as unknown as { data?: { totalSpent: number; byCategory: Array<{ category: string; total: number }> } };
+  const { data: dailyCollections = [] } = useDailyCollections() as unknown as {
+    data: Array<{ date: string; totalAmount: number; transactionCount: number }>;
+  };
 
   const [studentSearch, setStudentSearch] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
@@ -215,6 +240,20 @@ export function FinanceHomePage() {
 
   // Fund requests needing FO action
   const foFundRequests = fundRequests.filter((f) => f.status === 'SUBMITTED' || f.status === 'APPROVED').slice(0, 4);
+  const paymentMethodChart = byMethod.map((method, index) => ({
+    name: methodLabels[method.method] ?? method.method,
+    value: method.amount,
+    color: [EXECUTIVE_COLORS.navy, EXECUTIVE_COLORS.emerald, EXECUTIVE_COLORS.amber, EXECUTIVE_COLORS.indigo][index % 4],
+  }));
+  const dailyCollectionChart = dailyCollections.map((entry) => ({
+    date: entry.date ? new Date(entry.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) : '—',
+    amount: entry.totalAmount,
+    transactions: entry.transactionCount,
+  }));
+  const expenseChart = (expenseSummary?.byCategory ?? []).slice(0, 10).map((entry) => ({
+    name: entry.category || 'Uncategorised',
+    amount: entry.total,
+  }));
 
   return (
     <FinanceWorkspaceShell title="Finance Operations Desk" eyebrow="Command Centre">
@@ -349,6 +388,50 @@ export function FinanceHomePage() {
         { label: 'Outstanding', value: formatTZS(apiOverview.outstanding), detail: `${apiOverview.overdueInvoices} overdue · ${formatTZS(apiOverview.totalInvoiced)} invoiced`, tone: 'red', trend: overdue.length > 0 ? 'down' : undefined },
         { label: 'Payment Queue', value: String(pendingCount), detail: pendingCount > 0 ? 'Awaiting approval' : 'Queue is clear', tone: pendingCount > 0 ? 'gold' : 'navy' },
       ]} />
+
+      <div className="grid gap-gutter xl:grid-cols-3">
+        <ExecutiveChartCard title="Payment method mix" subtitle="Confirmed collections by channel">
+          <ExecutiveDonut data={paymentMethodChart} centerLabel="Collected" />
+          <ExecutiveLegend data={paymentMethodChart} />
+        </ExecutiveChartCard>
+
+        <ExecutiveChartCard title="Daily collection movement" subtitle="Collection amount with transaction volume" className="xl:col-span-2">
+          <ExecutiveChartFrame height={300} empty={dailyCollectionChart.length === 0}>
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={dailyCollectionChart}>
+                <defs>
+                  <linearGradient id="finance-daily-area" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={EXECUTIVE_COLORS.emerald} stopOpacity={0.5} />
+                    <stop offset="100%" stopColor={EXECUTIVE_COLORS.emerald} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#EEF2F7" vertical={false} />
+                <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#475569', fontWeight: 800 }} />
+                <YAxis yAxisId="amount" tick={{ fontSize: 10, fill: '#94A3B8' }} />
+                <YAxis yAxisId="count" orientation="right" allowDecimals={false} tick={{ fontSize: 10, fill: '#94A3B8' }} />
+                <Tooltip content={<ExecutiveTooltip />} />
+                <Legend iconType="circle" wrapperStyle={{ fontSize: 11, fontWeight: 700 }} />
+                <Area yAxisId="amount" type="monotone" dataKey="amount" name="Collected" stroke={EXECUTIVE_COLORS.emerald} fill="url(#finance-daily-area)" strokeWidth={3} />
+                <Line yAxisId="count" type="monotone" dataKey="transactions" name="Transactions" stroke={EXECUTIVE_COLORS.amber} strokeWidth={2.5} dot={{ r: 3 }} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </ExecutiveChartFrame>
+        </ExecutiveChartCard>
+      </div>
+
+      <ExecutiveChartCard title="Expenditure by category" subtitle="Recorded spending distribution for the current scope">
+        <ExecutiveChartFrame height={300} empty={expenseChart.length === 0}>
+          <ResponsiveContainer width="100%" height="100%">
+            <RBarChart data={expenseChart} layout="vertical" margin={{ left: 12, right: 18 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#EEF2F7" horizontal={false} />
+              <XAxis type="number" tick={{ fontSize: 10, fill: '#94A3B8' }} />
+              <YAxis type="category" dataKey="name" width={130} tick={{ fontSize: 10, fill: '#475569', fontWeight: 800 }} />
+              <Tooltip content={<ExecutiveTooltip valueFormatter={(value) => formatTZS(Number(value))} />} />
+              <Bar dataKey="amount" name="Spent" fill={EXECUTIVE_COLORS.violet} radius={[0, 7, 7, 0]} maxBarSize={28} />
+            </RBarChart>
+          </ResponsiveContainer>
+        </ExecutiveChartFrame>
+      </ExecutiveChartCard>
 
       {/* ── Main three-column grid ── */}
       <div className="grid gap-gutter xl:grid-cols-[280px_minmax(0,1fr)_300px]">
@@ -5477,10 +5560,20 @@ export function FinanceExportsPage() {
             </div>
             <h3 className="mt-4 font-display text-lg font-black text-[#00334f]">{item.label}</h3>
             <p className="mt-2 grow text-sm font-semibold text-[#64748b]">{item.description}</p>
-            <Button className="mt-4 w-full rounded bg-[#00334f] hover:bg-[#001e30] hover:shadow-none" disabled={generating !== null}
-              onClick={() => handleExport(item)}>
-              <Download className="h-4 w-4" /> {generating === item.key ? 'Preparing…' : 'Download CSV'}
-            </Button>
+            <ReportWorkflow
+              title={item.label}
+              description={item.description}
+              format="CSV"
+              loadRows={() => loadFinanceExportRows(item.key)}
+              fields={[
+                { key: 'search', label: 'Search report', type: 'search', placeholder: 'Student, reference, class or record…' },
+                { key: 'fromDate', label: 'From date', type: 'date' },
+                { key: 'toDate', label: 'To date', type: 'date' },
+              ]}
+              busy={generating === item.key}
+              disabled={generating !== null && generating !== item.key}
+              onDownload={() => handleExport(item)}
+            />
           </div>
         ))}
       </div>

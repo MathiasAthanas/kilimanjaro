@@ -69,6 +69,7 @@ import {
   ThresholdEditor,
 } from '../components/AqaWorkspaceShell';
 import { hasUnsavedThresholdChanges, validateThresholdOrder } from '../utils/aqaEngine';
+import { ReportWorkflow } from '../../../components/reports/ReportWorkflowDialog';
 
 
 // ─── Home ────────────────────────────────────────────────────────────────────
@@ -1246,6 +1247,12 @@ export function CreateAqaInterventionPage() {
 export function AqaExportsPage() {
   const [generating, setGenerating] = useState<string | null>(null);
   const generateMutation = useGenerateReportMutation();
+  const { data: alerts = [] } = useAqaAlerts();
+  const { data: interventions = [] } = useAqaInterventions();
+  const { data: pairings = [] } = useAqaPairings();
+  const { data: heatmapRows = [] } = useAqaHeatmap();
+  const { data: engineRuns = [] } = useEngineRuns();
+  const { data: engineConfig } = useEngineConfig();
 
   const exportItems = [
     { title: 'Alert list',            type: 'CSV', icon: AlertTriangle, reportType: 'aqa-alert-list'            },
@@ -1274,6 +1281,15 @@ export function AqaExportsPage() {
     }
   };
 
+  const previewRows = (item: typeof exportItems[0]) => {
+    if (item.reportType.includes('alert') || item.reportType.includes('risk')) return alerts as Array<Record<string, string | number | boolean | null | undefined>>;
+    if (item.reportType.includes('intervention')) return interventions as Array<Record<string, string | number | boolean | null | undefined>>;
+    if (item.reportType.includes('pairing')) return pairings as Array<Record<string, string | number | boolean | null | undefined>>;
+    if (item.reportType.includes('heatmap') || item.reportType.includes('analytics')) return heatmapRows as Array<Record<string, string | number | boolean | null | undefined>>;
+    if (item.reportType.includes('history')) return engineRuns as Array<Record<string, string | number | boolean | null | undefined>>;
+    return engineConfig && typeof engineConfig === 'object' ? [engineConfig as Record<string, string | number | boolean | null | undefined>] : [];
+  };
+
   return (
     <AqaWorkspaceShell title="AQA Export Center" eyebrow="Operational academic QA data">
       <div className="grid gap-gutter md:grid-cols-2 xl:grid-cols-4">
@@ -1284,17 +1300,16 @@ export function AqaExportsPage() {
             </div>
             <h3 className="mt-4 font-display text-lg font-black text-ks-navy">{item.title}</h3>
             <p className="mt-1 text-sm font-semibold text-ks-muted">AQA export · {item.type} format</p>
-            <div className="mt-4 flex items-center gap-2">
-              <Button
-                variant="secondary"
-                className="flex-1 rounded-xl text-xs"
-                disabled={generating !== null}
-                onClick={() => handleGenerate(item)}
-              >
-                <Download className="h-3.5 w-3.5" />
-                {generating === item.title ? 'Generating…' : `Generate ${item.type}`}
-              </Button>
-            </div>
+            <ReportWorkflow
+              title={item.title}
+              description={`AQA export · ${item.type} format`}
+              format={item.type}
+              rows={previewRows(item)}
+              fields={[{ key: 'search', label: 'Search report', type: 'search', placeholder: 'Student, class, subject or status…' }]}
+              busy={generating === item.title}
+              disabled={generating !== null && generating !== item.title}
+              onDownload={() => handleGenerate(item)}
+            />
           </Card>
         ))}
       </div>
@@ -1731,15 +1746,25 @@ function ReportsPreview() {
 function ReportGenerator() {
   const generateMutation = useGenerateAqaReportMutation();
   const [selected, setSelected] = useState<string | null>(null);
+  const { data: alerts = [] } = useAqaAlerts();
+  const { data: heatmapRows = [] } = useAqaHeatmap();
+  const { data: interventions = [] } = useAqaInterventions();
   const templates = ['School Overview', 'Class Academic', 'Student Profile', 'Performance Engine', 'At-Risk Students'];
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     if (!selected) { toast('Please select a report template first', 'warning'); return; }
-    generateMutation.mutate({ template: selected, format: 'PDF' }, {
-      onSuccess: () => toast(`"${selected}" report generated successfully`, 'success'),
-      onError: () => toast('Failed to generate report', 'error'),
-    });
+    try {
+      await generateMutation.mutateAsync({ template: selected, format: 'PDF' });
+      toast(`"${selected}" report generated successfully`, 'success');
+    } catch {
+      toast('Failed to generate report', 'error');
+    }
   };
+  const rows = selected?.includes('At-Risk') || selected?.includes('Student')
+    ? alerts
+    : selected?.includes('Performance')
+      ? interventions
+      : heatmapRows;
 
   return (
     <Card className="sticky top-24 h-fit overflow-hidden rounded-xl">
@@ -1763,14 +1788,7 @@ function ReportGenerator() {
             </button>
           ))}
         </div>
-        <Button
-          className="mt-5 w-full rounded-xl"
-          disabled={!selected || generateMutation.isPending}
-          onClick={handleGenerate}
-        >
-          <Send className="h-4 w-4" />
-          {generateMutation.isPending ? 'Generating…' : 'Generate report'}
-        </Button>
+        {selected && <ReportWorkflow title={selected} description="Academic QA report generated from the current school scope." format="PDF" rows={rows as Array<Record<string, string | number | boolean | null | undefined>>} fields={[{ key: 'search', label: 'Search report', type: 'search' }]} busy={generateMutation.isPending} onDownload={handleGenerate} />}
       </div>
     </Card>
   );
@@ -1801,14 +1819,15 @@ function ReportTile({ report }: { report: (typeof reports)[number] }) {
       <p className="mt-3 text-[11px] font-black uppercase tracking-wider text-ks-muted">{report.type}</p>
       <h3 className="mt-1 font-display text-lg font-black text-ks-navy">{report.title}</h3>
       <p className="mt-1 text-xs font-semibold text-ks-muted">{report.generatedAt}</p>
-      <Button
-        variant="secondary"
-        className="mt-4 w-full rounded-xl text-xs"
-        disabled={downloading}
-        onClick={handleDownload}
-      >
-        <Download className="h-3.5 w-3.5" /> {downloading ? 'Downloading…' : 'Download'}
-      </Button>
+      <ReportWorkflow
+        title={report.title}
+        description={`${report.type} · generated ${report.generatedAt}`}
+        format="PDF"
+        rows={[{ id: report.id, report: report.title, type: report.type, status: report.status, generatedAt: report.generatedAt }]}
+        disabled={report.status !== 'READY'}
+        busy={downloading}
+        onDownload={handleDownload}
+      />
     </Card>
   );
 }
